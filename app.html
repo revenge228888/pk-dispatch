@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PK Dispatch</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f1319;--surf:#171d27;--surf2:#1e2535;--bdr:#2a3347;
+  --acc:#f5a623;--grn:#34c759;--rd:#ff453a;--blu:#4a9eff;
+  --tx:#e8ecf2;--mu:#6b7a94;
+  --sans:'Sarabun',sans-serif;--mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{background:var(--bg);color:var(--tx);font-family:var(--sans);min-height:100vh;}
+
+/* ── HEADER ── */
+header{
+  background:var(--surf);border-bottom:1px solid var(--bdr);
+  padding:0 18px;height:54px;display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;
+}
+.logo{font-family:var(--mono);font-size:14px;color:var(--acc);letter-spacing:3px;}
+.logo small{color:var(--mu);font-size:11px;margin-left:8px;letter-spacing:1px;}
+.hbtns{display:flex;gap:8px;align-items:center;}
+.hbtn{
+  background:none;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.7);
+  font-size:12px;padding:5px 12px;border-radius:6px;cursor:pointer;
+  font-family:var(--sans);transition:all .15s;text-decoration:none;
+}
+.hbtn:hover{background:rgba(255,255,255,.06);color:#fff;}
+.hbtn.danger{color:#ff8a80;border-color:rgba(255,69,58,.4);}
+.hbtn.danger:hover{background:rgba(255,69,58,.1);}
+
+.user-chip{
+  font-size:12px;color:var(--mu);display:flex;align-items:center;gap:6px;
+  padding:5px 10px;background:rgba(255,255,255,.03);border-radius:20px;
+}
+.user-chip b{color:var(--tx);font-weight:600;}
+.role-badge{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;}
+.role-office{background:rgba(245,166,35,.15);color:var(--acc);}
+.role-sales{background:rgba(74,158,255,.15);color:var(--blu);}
+.role-tech{background:rgba(52,199,89,.15);color:var(--grn);}
+
+/* ── LOGIN SCREEN ── */
+.login-screen{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  padding:24px 16px;background:radial-gradient(ellipse at center, rgba(245,166,35,.05), transparent);
+}
+.login-box{
+  background:var(--surf);border:1px solid var(--bdr);border-radius:16px;
+  padding:36px 32px;width:100%;max-width:380px;
+}
+.login-logo{font-family:var(--mono);font-size:20px;color:var(--acc);letter-spacing:4px;text-align:center;margin-bottom:6px;}
+.login-sub{font-size:13px;color:var(--mu);text-align:center;margin-bottom:28px;}
+.login-fg{margin-bottom:14px;}
+.login-fl{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;display:block;}
+.login-fi{
+  width:100%;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;
+  padding:11px 14px;font-size:14px;font-family:var(--sans);color:var(--tx);
+  transition:border-color .15s;
+}
+.login-fi:focus{outline:none;border-color:var(--acc);}
+.login-btn{
+  width:100%;background:var(--acc);color:#000;border:none;border-radius:8px;
+  padding:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--sans);
+  transition:all .15s;margin-top:8px;
+}
+.login-btn:hover:not(:disabled){background:#ffc235;}
+.login-btn:disabled{opacity:.5;cursor:not-allowed;}
+.login-err{color:var(--rd);font-size:13px;margin-top:12px;min-height:18px;text-align:center;}
+.login-foot{
+  margin-top:22px;padding-top:18px;border-top:1px solid var(--bdr);
+  font-size:11px;color:var(--mu);text-align:center;line-height:1.6;
+}
+
+/* ── MAIN APP ── */
+.wrap{max-width:1280px;margin:0 auto;padding:20px;}
+.empty-section{
+  text-align:center;padding:60px 20px;color:var(--mu);
+}
+.empty-section h2{font-size:18px;color:var(--tx);margin-bottom:8px;font-weight:600;}
+.empty-section p{font-size:13px;line-height:1.6;}
+
+.card{
+  background:var(--surf);border:1px solid var(--bdr);
+  border-radius:12px;margin-bottom:14px;overflow:hidden;
+}
+.card-head{
+  padding:14px 18px;background:var(--surf2);border-bottom:1px solid var(--bdr);
+  display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:1px;
+}
+.card-body{padding:18px;}
+
+/* ── SETTINGS MODAL ── */
+.modal-bg{
+  position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);
+  z-index:200;display:none;align-items:center;justify-content:center;padding:16px;
+}
+.modal-bg.on{display:flex;}
+.modal{
+  background:var(--surf);border:1px solid var(--bdr);border-radius:14px;
+  width:100%;max-width:420px;max-height:90vh;overflow-y:auto;
+}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(70px);
+  background:var(--surf2);border:1px solid var(--bdr);color:var(--tx);
+  border-radius:10px;padding:11px 18px;font-size:13px;z-index:300;
+  opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;
+  box-shadow:0 8px 24px rgba(0,0,0,.5);
+}
+.toast.on{transform:translateX(-50%) translateY(0);opacity:1;}
+
+/* ── LOADING ── */
+.loading{
+  position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;
+  align-items:center;justify-content:center;gap:12px;flex-direction:column;
+  z-index:400;color:#fff;font-size:14px;
+}
+.loading.on{display:flex;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{
+  width:38px;height:38px;border:3px solid rgba(255,255,255,.15);
+  border-top-color:var(--acc);border-radius:50%;animation:spin .75s linear infinite;
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════
+     LOGIN SCREEN
+     ════════════════════════════════════════ -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-box">
+    <div class="login-logo">PK DISPATCH</div>
+    <div class="login-sub">เข้าสู่ระบบจ่ายงาน</div>
+
+    <div class="login-fg">
+      <label class="login-fl">Username</label>
+      <input id="lgUser" class="login-fi" type="text" autocomplete="username" placeholder="">
+    </div>
+    <div class="login-fg">
+      <label class="login-fl">Password</label>
+      <input id="lgPass" class="login-fi" type="password" autocomplete="current-password" placeholder="">
+    </div>
+
+    <button class="login-btn" id="lgBtn" onclick="doLogin()">เข้าสู่ระบบ</button>
+    <div class="login-err" id="lgErr"></div>
+
+    <div class="login-foot">
+      หากเป็นการเข้าใช้ครั้งแรก ใช้ <b>admin / admin</b><br>
+      <span id="lgUrl" style="cursor:pointer;text-decoration:underline;" onclick="showUrlSettings()">ตั้งค่า API URL</span>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     MAIN APP (หลัง login)
+     ════════════════════════════════════════ -->
+<div id="mainApp" style="display:none;">
+  <header>
+    <div class="logo">PK <span style="color:#fff;">DISPATCH</span> <small id="hdrRoleLabel"></small></div>
+    <div class="hbtns">
+      <div class="user-chip">
+        <span id="hdrRoleBadge" class="role-badge"></span>
+        <b id="hdrName"></b>
+      </div>
+      <button class="hbtn" onclick="showUrlSettings()">⚙</button>
+      <button class="hbtn danger" onclick="logout()">🚪 ออก</button>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <!-- เนื้อหาภายในจะเปลี่ยนตาม role -->
+    <div id="roleContent"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     URL SETTINGS MODAL
+     ════════════════════════════════════════ -->
+<div class="modal-bg" id="urlModal">
+  <div class="modal">
+    <div class="card-head">
+      ตั้งค่า API URL
+      <button onclick="document.getElementById('urlModal').classList.remove('on')" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button>
+    </div>
+    <div class="card-body">
+      <div style="font-size:12px;color:var(--mu);margin-bottom:8px;">URL ของ Apps Script Web App</div>
+      <input class="login-fi" id="apiUrlInput" type="text" placeholder="https://script.google.com/macros/s/.../exec" style="margin-bottom:14px;">
+      <button class="login-btn" onclick="saveApiUrl()">บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<div class="loading" id="loading"><div class="spinner"></div><span id="loadMsg">กำลังโหลด...</span></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════
+let API = localStorage.getItem('pk_api') || '';
+let CURRENT_USER = null;   // { username, role, name, token }
+
+// ════════════════════════════════════════
+//  API CALL
+// ════════════════════════════════════════
+async function call(body){
+  if (!API) { toast('ตั้งค่า URL ก่อน (กด ⚙)'); throw new Error('no api'); }
+  try {
+    const r = await fetch(API, {
+      method:'POST', redirect:'follow',
+      headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify(body)
+    });
+    return await r.json();
+  } catch(e) {
+    toast('❌ เชื่อมต่อไม่ได้');
+    throw e;
+  }
+}
+
+// ════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', async () => {
+  // setup input UX
+  ['lgUser','lgPass'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', e => {
+      if (e.key === 'Enter') doLogin();
+    });
+  });
+
+  // ตรวจ session เก่า
+  const savedUser = localStorage.getItem('pk_user');
+  if (savedUser) {
+    try {
+      const u = JSON.parse(savedUser);
+      if (u.username && u.token && API) {
+        showLoad('กำลังตรวจสอบ session...');
+        const r = await call({ action:'pk_checkSession', username:u.username, token:u.token });
+        hideLoad();
+        if (r.ok && r.valid) {
+          CURRENT_USER = { ...u, ...r.user };
+          enterApp();
+          return;
+        } else {
+          // session ไม่ valid → kick
+          localStorage.removeItem('pk_user');
+          toast(r.error || 'Session หมดอายุ — กรุณา login ใหม่');
+        }
+      }
+    } catch(e) {
+      localStorage.removeItem('pk_user');
+    }
+  }
+
+  // ถ้ายังไม่ได้ตั้ง URL — เปิด modal ให้ตั้ง
+  if (!API) {
+    setTimeout(showUrlSettings, 100);
+  }
+});
+
+// ════════════════════════════════════════
+//  URL SETTINGS
+// ════════════════════════════════════════
+function showUrlSettings(){
+  document.getElementById('apiUrlInput').value = API;
+  document.getElementById('urlModal').classList.add('on');
+}
+function saveApiUrl(){
+  const v = document.getElementById('apiUrlInput').value.trim();
+  if (!v) { toast('กรุณากรอก URL'); return; }
+  API = v;
+  localStorage.setItem('pk_api', API);
+  document.getElementById('urlModal').classList.remove('on');
+  toast('✓ บันทึก URL แล้ว');
+}
+document.getElementById('urlModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('on');
+});
+
+// ════════════════════════════════════════
+//  LOGIN
+// ════════════════════════════════════════
+async function doLogin(){
+  const username = document.getElementById('lgUser').value.trim();
+  const password = document.getElementById('lgPass').value;
+  const err = document.getElementById('lgErr');
+  err.textContent = '';
+
+  if (!username || !password) { err.textContent = 'กรอกข้อมูลให้ครบ'; return; }
+  if (!API) { err.textContent = 'ตั้งค่า API URL ก่อน (กดข้างล่าง)'; return; }
+
+  const btn = document.getElementById('lgBtn');
+  btn.disabled = true;
+  btn.textContent = 'กำลังเข้าสู่ระบบ...';
+
+  try {
+    const r = await call({ action:'pk_login', username, password });
+    if (r.ok) {
+      CURRENT_USER = { username:r.user.username, role:r.user.role, name:r.user.name, token:r.token };
+      localStorage.setItem('pk_user', JSON.stringify(CURRENT_USER));
+      enterApp();
+    } else {
+      err.textContent = r.error || 'เข้าสู่ระบบไม่สำเร็จ';
+    }
+  } catch(e) {
+    err.textContent = 'เชื่อมต่อไม่ได้: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'เข้าสู่ระบบ';
+  }
+}
+
+function logout(){
+  if (!confirm('ออกจากระบบ?')) return;
+  localStorage.removeItem('pk_user');
+  CURRENT_USER = null;
+  document.getElementById('mainApp').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('lgUser').value = '';
+  document.getElementById('lgPass').value = '';
+  document.getElementById('lgErr').textContent = '';
+}
+
+// ════════════════════════════════════════
+//  ENTER APP — render ตาม role
+// ════════════════════════════════════════
+function enterApp(){
+  if (!CURRENT_USER) return;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+
+  // header
+  const roleLabel = { office:'ออฟฟิศ', sales:'เซลล์', tech:'ช่าง' }[CURRENT_USER.role] || CURRENT_USER.role;
+  document.getElementById('hdrRoleLabel').textContent = '· ' + roleLabel;
+  document.getElementById('hdrName').textContent = CURRENT_USER.name || CURRENT_USER.username;
+  const badge = document.getElementById('hdrRoleBadge');
+  badge.className = 'role-badge role-' + CURRENT_USER.role;
+  badge.textContent = roleLabel.toUpperCase();
+
+  // render content ตาม role
+  const c = document.getElementById('roleContent');
+  if (CURRENT_USER.role === 'office')      c.innerHTML = renderOfficeStub();
+  else if (CURRENT_USER.role === 'sales')  c.innerHTML = renderSalesStub();
+  else if (CURRENT_USER.role === 'tech')   c.innerHTML = renderTechStub();
+  else                                      c.innerHTML = '<div class="empty-section"><h2>ไม่รู้จัก role</h2><p>กรุณาติดต่อผู้ดูแลระบบ</p></div>';
+
+  // ตั้ง interval เช็ค session ทุก 60 วินาที — ถ้า user ถูกลบ จะ kick
+  if (window._pkSessionInterval) clearInterval(window._pkSessionInterval);
+  window._pkSessionInterval = setInterval(async () => {
+    try {
+      const r = await call({ action:'pk_checkSession', username:CURRENT_USER.username, token:CURRENT_USER.token });
+      if (!r.valid) {
+        clearInterval(window._pkSessionInterval);
+        toast('❌ ' + (r.error || 'Session ถูกยกเลิก'));
+        setTimeout(() => {
+          localStorage.removeItem('pk_user');
+          location.reload();
+        }, 2000);
+      }
+    } catch(e) {}
+  }, 60000);
+}
+
+// ════════════════════════════════════════
+//  ROLE CONTENT (Stub — Step 1 ยังว่าง)
+//  จะใส่ฟีเจอร์จริงใน Step 2-4
+// ════════════════════════════════════════
+function renderOfficeStub(){
+  return `
+    <div class="card">
+      <div class="card-head">📋 ระบบออฟฟิศ</div>
+      <div class="card-body">
+        <div class="empty-section">
+          <h2>เข้าสู่ระบบสำเร็จ ✅</h2>
+          <p>
+            ในขั้นถัดไปจะเพิ่ม:<br>
+            • Dashboard สรุปงาน<br>
+            • จ่ายงาน / กำหนดคิว / สมาชิกทีม<br>
+            • ลงคิววัดงาน / ลงคิวติดตั้ง<br>
+            • รายการงานทั้งหมด<br>
+            • จัดการ user
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSalesStub(){
+  return `
+    <div class="card">
+      <div class="card-head">💰 ระบบเซลล์</div>
+      <div class="card-body">
+        <div class="empty-section">
+          <h2>เข้าสู่ระบบสำเร็จ ✅</h2>
+          <p>
+            ในขั้นถัดไปจะเพิ่ม:<br>
+            • ขอคิวติดตั้ง (กรอกฟอร์ม / พิมพ์ยาว)<br>
+            • เช็คคิวว่าง<br>
+            • ดูคิวที่ลงไว้
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTechStub(){
+  return `
+    <div class="card">
+      <div class="card-head">🔧 ระบบช่าง</div>
+      <div class="card-body">
+        <div class="empty-section">
+          <h2>เข้าสู่ระบบสำเร็จ ✅</h2>
+          <p>
+            สำหรับช่าง แนะนำให้ใช้ผ่าน <b>tech.html</b> บนมือถือ<br>
+            (GPS แม่นยำกว่า + ใช้กล้องได้)<br><br>
+            ในขั้นถัดไปจะรวมหน้า tech มาที่นี่ด้วย<br>
+            พร้อม login PIN ป้องกัน
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ════════════════════════════════════════
+//  UTILS
+// ════════════════════════════════════════
+function showLoad(msg){ document.getElementById('loadMsg').textContent = msg || 'กำลังโหลด...'; document.getElementById('loading').classList.add('on'); }
+function hideLoad(){ document.getElementById('loading').classList.remove('on'); }
+function toast(m){
+  const t = document.getElementById('toast');
+  t.textContent = m;
+  t.classList.add('on');
+  setTimeout(() => t.classList.remove('on'), 2800);
+}
+</script>
+</body>
+</html>
