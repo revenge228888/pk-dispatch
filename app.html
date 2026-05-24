@@ -355,7 +355,7 @@ function enterApp(){
 
   const c = document.getElementById('roleContent');
   if (CURRENT_USER.role === 'office')      { c.innerHTML = renderOfficeShell(); officeInit(); }
-  else if (CURRENT_USER.role === 'sales')  { c.innerHTML = renderSalesStub();   document.getElementById('btnRefresh').style.display='none'; }
+  else if (CURRENT_USER.role === 'sales')  { c.innerHTML = renderSalesStub();   _showRefreshForSales(); }
   else if (CURRENT_USER.role === 'tech')   { c.innerHTML = renderTechStub();    document.getElementById('btnRefresh').style.display='none'; }
   else                                      c.innerHTML = '<div class="empty-section"><h2>ไม่รู้จัก role</h2></div>';
 
@@ -905,7 +905,397 @@ document.getElementById('mapModal').addEventListener('click', e => { if (e.targe
 //  SALES / TECH (stub — Step 3-5)
 // ════════════════════════════════════════
 function renderSalesStub(){
-  return `<div class="card"><div class="card-head">💰 ระบบเซลล์</div><div class="card-body"><div class="empty-section"><h2>เข้าสู่ระบบสำเร็จ ✅</h2><p>Step 3 จะเพิ่ม:<br>• ขอคิวติดตั้ง (กรอกฟอร์ม / พิมพ์ยาว)<br>• เช็คคิวว่าง<br>• ดูคิวที่ลงไว้</p></div></div></div>`;
+  return `
+    <div class="card">
+      <div class="tabs">
+        <button class="tab on" onclick="setSalesTab('booking',this)">➕ ขอคิวติดตั้ง</button>
+        <button class="tab" onclick="setSalesTab('my',this)">📋 คิวของฉัน</button>
+      </div>
+
+      <!-- BOOKING -->
+      <div id="sTabBooking">
+        <div class="section-pad">
+          <!-- รูปแบบ -->
+          <div class="row-form" style="margin-bottom:14px;">
+            <div class="fg" style="flex:1;">
+              <label class="fl">รูปแบบลงคิว</label>
+              <div style="display:flex;gap:8px;">
+                <button class="bk-mode-btn on" id="sBkModeForm" onclick="setSalesBkMode('form')">📋 กรอกตามช่อง</button>
+                <button class="bk-mode-btn" id="sBkModeRaw" onclick="setSalesBkMode('raw')">📝 พิมพ์แบบ LINE</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- FORM -->
+          <div id="sBkForm">
+            <div class="row-form" style="margin-bottom:10px;">
+              <div class="fg" style="flex:1;min-width:160px;">
+                <label class="fl">วันที่ <span style="color:var(--rd)">*</span></label>
+                <div class="date-wrap">
+                  <input class="fi" id="sBkDate" type="date" oninput="updateDateDisplay(this);salesCheckSlot()">
+                  <span class="date-display empty" data-for="sBkDate">เลือกวันที่</span>
+                </div>
+              </div>
+              <div class="fg" style="flex:2;min-width:200px;">
+                <label class="fl">ชื่อลูกค้า <span style="color:var(--rd)">*</span></label>
+                <input class="fi" id="sBkCustomer" type="text" placeholder="ชื่อลูกค้า / ชื่อร้าน">
+              </div>
+            </div>
+            <div class="row-form" style="margin-bottom:10px;">
+              <div class="fg" style="flex:1;width:100%;">
+                <label class="fl">ที่อยู่</label>
+                <input class="fi" id="sBkAddress" type="text" placeholder="ที่อยู่ลูกค้า (วาง link Google Maps ได้)">
+              </div>
+            </div>
+            <div class="row-form" style="margin-bottom:10px;">
+              <div class="fg" style="flex:1;width:100%;">
+                <label class="fl">รายการงาน</label>
+                <input class="fi" id="sBkJob" type="text" placeholder="เช่น ติดตั้งมุ้งจีบ 3 ช่อง">
+              </div>
+            </div>
+            <div class="row-form" style="margin-bottom:10px;">
+              <div class="fg" style="min-width:100px;">
+                <label class="fl">คะแนน (1-5)</label>
+                <input class="fi" id="sBkScore" type="number" min="1" max="5" step="0.5" value="1" oninput="salesCheckSlot()">
+              </div>
+              <div class="fg" style="flex:1;min-width:140px;">
+                <label class="fl">ยอดเงิน</label>
+                <input class="fi" id="sBkAmount" type="number" min="0" placeholder="0" step="100">
+              </div>
+            </div>
+          </div>
+
+          <!-- RAW -->
+          <div id="sBkRaw" style="display:none;">
+            <div class="fg" style="margin-bottom:10px;">
+              <label class="fl">พิมพ์ตามรูปแบบ LINE (บรรทัดละข้อมูล)</label>
+              <textarea class="fi" id="sBkRawText" rows="8" style="font-family:var(--mono);resize:vertical;" placeholder="ตัวอย่าง:
+22/05/2026
+ร้านงามวิไล ผ้าม่าน
+29 ซ.หทัยราษฎร์ 39
+ติดตั้งมุ้งจีบ 3 ช่อง
+2
+14500"></textarea>
+              <div style="font-size:11px;color:var(--mu);margin-top:6px;line-height:1.6;">
+                บรรทัด: <b>วันที่</b> → <b>ลูกค้า</b> → <b>ที่อยู่</b> → <b>รายการงาน</b> → <b>คะแนน</b> → <b>ยอดเงิน</b>
+              </div>
+            </div>
+          </div>
+
+          <!-- Slot indicator -->
+          <div id="sSlotIndicator" style="margin:12px 0;"></div>
+
+          <button class="btn btn-p" onclick="salesSubmitBooking()">💾 ขอคิวติดตั้ง (รอ CF)</button>
+          <button class="btn btn-g" style="margin-left:6px;" onclick="salesClearForm()">ล้างฟอร์ม</button>
+        </div>
+      </div>
+
+      <!-- MY QUEUE -->
+      <div id="sTabMy" style="display:none;">
+        <div class="section-pad row-form">
+          <div class="fg" style="min-width:130px;">
+            <label class="fl">สถานะ</label>
+            <select class="fi" id="sFilterStatus" onchange="salesLoadMy()">
+              <option value="all">ทั้งหมด</option>
+              <option value="รอ CF" selected>รอ CF</option>
+              <option value="ยืนยันแล้ว">ยืนยันแล้ว</option>
+            </select>
+          </div>
+          <div class="fg" style="min-width:150px;">
+            <label class="fl">วันที่จาก</label>
+            <div class="date-wrap">
+              <input class="fi" id="sFilterFrom" type="date" oninput="updateDateDisplay(this);salesLoadMy()">
+              <span class="date-display empty" data-for="sFilterFrom">เลือกวันที่</span>
+            </div>
+          </div>
+          <div class="fg" style="min-width:150px;">
+            <label class="fl">ถึง</label>
+            <div class="date-wrap">
+              <input class="fi" id="sFilterTo" type="date" oninput="updateDateDisplay(this);salesLoadMy()">
+              <span class="date-display empty" data-for="sFilterTo">เลือกวันที่</span>
+            </div>
+          </div>
+          <button class="btn btn-p" onclick="salesLoadMy()">โหลด</button>
+        </div>
+        <div id="sMyList" style="padding:0 16px 16px;"><div class="loading-row">เลือกตัวกรองแล้วกด "โหลด"</div></div>
+      </div>
+    </div>
+
+    <!-- Edit modal -->
+    <div class="modal-bg" id="sEditModal">
+      <div class="modal large">
+        <div class="card-head">แก้ไขคิว <span id="sEditId" style="color:var(--acc);"></span>
+          <button onclick="document.getElementById('sEditModal').classList.remove('on')" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button>
+        </div>
+        <div class="card-body">
+          <div class="row-form" style="margin-bottom:10px;">
+            <div class="fg" style="flex:1;min-width:160px;">
+              <label class="fl">วันที่</label>
+              <div class="date-wrap">
+                <input class="fi" id="sEditDate" type="date" oninput="updateDateDisplay(this)">
+                <span class="date-display empty" data-for="sEditDate">เลือกวันที่</span>
+              </div>
+            </div>
+            <div class="fg" style="flex:2;min-width:200px;">
+              <label class="fl">ลูกค้า</label>
+              <input class="fi" id="sEditCustomer" type="text">
+            </div>
+          </div>
+          <div class="fg" style="margin-bottom:10px;">
+            <label class="fl">ที่อยู่</label>
+            <input class="fi" id="sEditAddress" type="text">
+          </div>
+          <div class="fg" style="margin-bottom:10px;">
+            <label class="fl">รายการงาน</label>
+            <input class="fi" id="sEditJob" type="text">
+          </div>
+          <div class="row-form" style="margin-bottom:14px;">
+            <div class="fg" style="min-width:100px;">
+              <label class="fl">คะแนน</label>
+              <input class="fi" id="sEditScore" type="number" min="1" max="5" step="0.5">
+            </div>
+            <div class="fg" style="flex:1;min-width:140px;">
+              <label class="fl">ยอดเงิน</label>
+              <input class="fi" id="sEditAmount" type="number" min="0">
+            </div>
+          </div>
+          <button class="btn btn-p" onclick="salesSaveEdit()">💾 บันทึก</button>
+          <button class="btn btn-g" style="margin-left:6px;" onclick="document.getElementById('sEditModal').classList.remove('on')">ยกเลิก</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ════════════════════════════════════════
+//  SALES — Booking
+// ════════════════════════════════════════
+let _sBkMode = 'form';
+let _sSlotTimer = null;
+let _sEditingId = null;
+
+function setSalesTab(t, btn){
+  ['Booking','My'].forEach(x => {
+    const el = document.getElementById('sTab'+x); if (el) el.style.display = 'none';
+  });
+  const tgt = document.getElementById('sTab'+t.charAt(0).toUpperCase()+t.slice(1));
+  if (tgt) tgt.style.display = 'block';
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  if (t === 'booking') initSalesBooking();
+  if (t === 'my') initSalesMy();
+}
+
+function initSalesBooking(){
+  const dt = document.getElementById('sBkDate');
+  if (dt && !dt.value) {
+    dt.value = new Date().toISOString().split('T')[0];
+    updateDateDisplay(dt);
+    salesCheckSlot();
+  }
+}
+function initSalesMy(){
+  const to = document.getElementById('sFilterTo');
+  const fr = document.getElementById('sFilterFrom');
+  if (to && !to.value) {
+    const t = new Date();
+    const f = new Date(); f.setDate(f.getDate() - 30);
+    to.value = t.toISOString().split('T')[0];
+    fr.value = f.toISOString().split('T')[0];
+    updateDateDisplay(to);
+    updateDateDisplay(fr);
+  }
+  salesLoadMy();
+}
+
+function setSalesBkMode(m){
+  _sBkMode = m;
+  document.getElementById('sBkModeForm').classList.toggle('on', m==='form');
+  document.getElementById('sBkModeRaw').classList.toggle('on', m==='raw');
+  document.getElementById('sBkForm').style.display = (m==='form') ? 'block' : 'none';
+  document.getElementById('sBkRaw').style.display = (m==='raw') ? 'block' : 'none';
+}
+
+// debounce slot check
+async function salesCheckSlot(){
+  clearTimeout(_sSlotTimer);
+  _sSlotTimer = setTimeout(async () => {
+    const date = document.getElementById('sBkDate').value;
+    const score = parseFloat(document.getElementById('sBkScore').value) || 0;
+    const indicator = document.getElementById('sSlotIndicator');
+    if (!date) { indicator.innerHTML = ''; return; }
+    try {
+      const r = await call({ action:'pk_checkSlot', date, score });
+      if (!r.ok) { indicator.innerHTML = ''; return; }
+      let color, icon, msg;
+      if (r.level === 'full') {
+        color = 'rgba(255,69,58,.15)'; icon = '⚠️';
+        msg = `วันนี้คิว<b>เกินจุดเต็ม</b> (${r.totalAfter}/${r.maxScore}) — บันทึกได้แต่ทับโซนอื่น`;
+      } else if (r.level === 'warn') {
+        color = 'rgba(245,166,35,.15)'; icon = '💛';
+        msg = `วันนี้คิว<b>ใกล้เต็ม</b> (${r.totalAfter}/${r.maxScore})`;
+      } else {
+        color = 'rgba(52,199,89,.12)'; icon = '✅';
+        msg = `วันนี้คิวยังว่าง (${r.currentLoad} + ${r.newScore} = ${r.totalAfter}/${r.maxScore})`;
+      }
+      indicator.innerHTML = `<div style="padding:10px 14px;background:${color};border-radius:8px;font-size:13px;">${icon} ${msg}</div>`;
+    } catch(e) { indicator.innerHTML = ''; }
+  }, 400);
+}
+
+async function salesSubmitBooking(){
+  const body = { action:'pk_salesAddBooking', username: CURRENT_USER.username };
+
+  if (_sBkMode === 'form') {
+    const date     = document.getElementById('sBkDate').value;
+    const customer = document.getElementById('sBkCustomer').value.trim();
+    const address  = document.getElementById('sBkAddress').value.trim();
+    const job      = document.getElementById('sBkJob').value.trim();
+    const score    = document.getElementById('sBkScore').value;
+    const amount   = document.getElementById('sBkAmount').value;
+    if (!date || !customer) { toast('กรอก วันที่ และ ชื่อลูกค้า'); return; }
+
+    // ถ้าเกินจุดเต็ม → ขอ confirm
+    const r = await call({ action:'pk_checkSlot', date, score });
+    if (r.ok && r.level === 'full') {
+      if (!confirm(`⚠️ วันนี้คิวเกินจุดเต็มแล้ว (${r.totalAfter}/${r.maxScore})\nต้องการลงคิวต่อไหม?`)) return;
+    }
+    Object.assign(body, { date, customer, address, job, score, amount });
+  } else {
+    const raw = document.getElementById('sBkRawText').value.trim();
+    if (!raw) { toast('พิมพ์ข้อมูลก่อน'); return; }
+    body.raw = raw;
+  }
+
+  showLoad('กำลังบันทึก...');
+  try {
+    const r = await call(body);
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error || 'ผิดพลาด')); return; }
+    toast(`✅ ลงคิวสำเร็จ #${r.id} — รอ CF`);
+    salesClearForm();
+    document.getElementById('sSlotIndicator').innerHTML = '';
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+function salesClearForm(){
+  if (_sBkMode === 'form') {
+    document.getElementById('sBkCustomer').value = '';
+    document.getElementById('sBkAddress').value = '';
+    document.getElementById('sBkJob').value = '';
+    document.getElementById('sBkScore').value = '1';
+    document.getElementById('sBkAmount').value = '';
+  } else {
+    document.getElementById('sBkRawText').value = '';
+  }
+}
+
+// ════════════════════════════════════════
+//  SALES — My Queue
+// ════════════════════════════════════════
+async function salesLoadMy(){
+  const statusFilter = document.getElementById('sFilterStatus').value;
+  const fromDate = document.getElementById('sFilterFrom').value;
+  const toDate = document.getElementById('sFilterTo').value;
+  const w = document.getElementById('sMyList');
+  w.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  try {
+    const r = await call({
+      action: 'pk_salesListMy',
+      username: CURRENT_USER.username,
+      statusFilter, fromDate, toDate
+    });
+    if (!r.ok) { w.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
+    if (!r.items.length) { w.innerHTML = '<div class="loading-row">ไม่มีคิวในช่วงที่เลือก</div>'; return; }
+    w.innerHTML = `<div style="overflow-x:auto;"><table>
+      <thead><tr>
+        <th>ID</th><th>วันที่</th><th>ลูกค้า</th><th>รายการ</th><th>ยอด</th><th>สถานะ</th><th>ทีม</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${r.items.map(j => `<tr>
+          <td style="font-family:var(--mono);font-size:11px;color:var(--mu);">${j.id}</td>
+          <td style="font-family:var(--mono);font-size:12px;">${j.date}</td>
+          <td><div style="font-weight:600;font-size:13px;">${j.customer}</div>
+              <div style="font-size:11px;color:var(--mu);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${j.address}">${j.address}${j.mapLink?` <a class="lnk" href="${j.mapLink}" target="_blank">🗺</a>`:''}</div></td>
+          <td style="font-size:12px;max-width:160px;">${j.job||'-'}</td>
+          <td style="font-family:var(--mono);font-size:12px;color:var(--acc);">${j.amount?'฿'+fmt(j.amount):'-'}</td>
+          <td><span class="badge ${j.status==='ยืนยันแล้ว'?'bd':'bp'}">${j.status}</span></td>
+          <td style="font-size:12px;color:${j.team?'var(--blu)':'var(--mu)'};">${j.team||'-'}</td>
+          <td>
+            ${j.status==='รอ CF' ? `
+              <button class="btn btn-g btn-sm" onclick='salesOpenEdit(${JSON.stringify(j).replace(/'/g,"\\'")})'>แก้</button>
+              <button class="btn btn-d btn-sm" onclick="salesDelete('${j.id}')">ลบ</button>
+            ` : '<span style="font-size:11px;color:var(--mu);">—</span>'}
+          </td>
+        </tr>`).join('')}
+      </tbody></table></div>`;
+  } catch(e) { w.innerHTML = '<div class="loading-row">โหลดไม่ได้</div>'; }
+}
+
+function salesOpenEdit(j){
+  _sEditingId = j.id;
+  document.getElementById('sEditId').textContent = '#' + j.id;
+  // แปลง dd/mm/yyyy → yyyy-mm-dd สำหรับ input
+  let dateIso = '';
+  const m = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/.exec(j.date);
+  if (m) {
+    const yr = m[3].length === 2 ? '20' + m[3] : m[3];
+    dateIso = `${yr}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  }
+  document.getElementById('sEditDate').value = dateIso;
+  updateDateDisplay(document.getElementById('sEditDate'));
+  document.getElementById('sEditCustomer').value = j.customer || '';
+  document.getElementById('sEditAddress').value = j.rawAddress || j.address || '';
+  document.getElementById('sEditJob').value = j.job || '';
+  document.getElementById('sEditScore').value = j.score || 1;
+  document.getElementById('sEditAmount').value = j.amount || 0;
+  document.getElementById('sEditModal').classList.add('on');
+}
+
+async function salesSaveEdit(){
+  if (!_sEditingId) return;
+  const body = {
+    action: 'pk_salesUpdate',
+    username: CURRENT_USER.username,
+    id: _sEditingId,
+    date: document.getElementById('sEditDate').value,
+    customer: document.getElementById('sEditCustomer').value.trim(),
+    address: document.getElementById('sEditAddress').value.trim(),
+    job: document.getElementById('sEditJob').value.trim(),
+    score: document.getElementById('sEditScore').value,
+    amount: document.getElementById('sEditAmount').value
+  };
+  showLoad('กำลังบันทึก...');
+  try {
+    const r = await call(body);
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error || 'ผิดพลาด')); return; }
+    toast('✅ บันทึกแล้ว');
+    document.getElementById('sEditModal').classList.remove('on');
+    _sEditingId = null;
+    salesLoadMy();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+async function salesDelete(id){
+  if (!confirm(`ลบคิว ${id}?\n(ลบได้เฉพาะคิวที่ยัง "รอ CF")`)) return;
+  showLoad('กำลังลบ...');
+  try {
+    const r = await call({ action:'pk_salesDelete', id, username: CURRENT_USER.username });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error || 'ผิดพลาด')); return; }
+    toast('✅ ลบแล้ว');
+    salesLoadMy();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// แสดง refresh button สำหรับ sales ด้วย
+function _showRefreshForSales(){
+  document.getElementById('btnRefresh').style.display = '';
+  document.getElementById('btnRefresh').onclick = () => {
+    const myTab = document.getElementById('sTabMy');
+    if (myTab && myTab.style.display !== 'none') salesLoadMy();
+  };
 }
 function renderTechStub(){
   return `<div class="card"><div class="card-head">🔧 ระบบช่าง</div><div class="card-body"><div class="empty-section"><h2>เข้าสู่ระบบสำเร็จ ✅</h2><p>สำหรับช่าง แนะนำให้ใช้ผ่าน <b>tech.html</b> บนมือถือ<br>(GPS แม่นยำกว่า + ใช้กล้องได้)<br><br>Step 5 จะรวมหน้า tech มาที่นี่</p></div></div></div>`;
