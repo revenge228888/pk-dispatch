@@ -134,6 +134,24 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 .spinner{width:38px;height:38px;border:3px solid rgba(255,255,255,.15);border-top-color:var(--acc);border-radius:50%;animation:spin .75s linear infinite;}
 .loading-row{text-align:center;padding:28px;color:var(--mu);font-size:13px;}
 
+/* ── BOOKING tab ── */
+.bk-type-btn, .bk-mode-btn{
+  flex:1;padding:11px 16px;border-radius:8px;border:1px solid var(--bdr);
+  background:var(--bg);color:var(--mu);font-size:13px;font-weight:600;
+  cursor:pointer;font-family:var(--sans);transition:all .15s;
+}
+.bk-type-btn:hover, .bk-mode-btn:hover{border-color:var(--acc);color:var(--tx);}
+.bk-type-btn.on, .bk-mode-btn.on{
+  background:rgba(245,166,35,.12);border-color:var(--acc);color:var(--acc);
+}
+.bk-recent-item{
+  background:rgba(52,199,89,.07);border:1px solid rgba(52,199,89,.3);
+  border-radius:8px;padding:10px 14px;margin-top:8px;font-size:13px;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}
+.bk-recent-item .bk-id{font-family:var(--mono);color:var(--grn);font-weight:700;}
+.bk-recent-item .bk-meta{color:var(--mu);font-size:12px;}
+
 /* ── DATE INPUT (custom display dd/mm/yy) ── */
 .date-wrap{position:relative;display:inline-block;width:100%;}
 .date-wrap input[type="date"]{
@@ -363,6 +381,7 @@ function renderOfficeShell(){
       <div class="tabs">
         <button class="tab on" onclick="setTab('dash',this)">📊 Dashboard</button>
         <button class="tab" onclick="setTab('access',this)">📅 กำหนดคิว + สมาชิก</button>
+        <button class="tab" onclick="setTab('booking',this)">➕ ลงคิวใหม่</button>
         <button class="tab" onclick="setTab('jobs',this)">📋 รายการงาน</button>
       </div>
 
@@ -405,6 +424,103 @@ function renderOfficeShell(){
         <div class="mem-existing">
           <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">คิวที่กำหนดไว้</div>
           <div id="accList"><div class="loading-row">กำลังโหลด...</div></div>
+        </div>
+      </div>
+
+      <!-- BOOKING (ลงคิวใหม่) -->
+      <div id="tabBooking" style="display:none;">
+        <div class="section-pad">
+
+          <!-- ประเภท -->
+          <div class="row-form" style="margin-bottom:14px;">
+            <div class="fg" style="flex:1;">
+              <label class="fl">ประเภทคิว</label>
+              <div style="display:flex;gap:8px;">
+                <button class="bk-type-btn on" id="bkTypeMeasure" onclick="setBookingType('measure')">📐 วัดงาน</button>
+                <button class="bk-type-btn" id="bkTypeInstall" onclick="setBookingType('install')">🔧 ติดตั้ง</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- รูปแบบ -->
+          <div class="row-form" style="margin-bottom:14px;">
+            <div class="fg" style="flex:1;">
+              <label class="fl">รูปแบบลงคิว</label>
+              <div style="display:flex;gap:8px;">
+                <button class="bk-mode-btn on" id="bkModeForm" onclick="setBookingMode('form')">📋 กรอกตามช่อง</button>
+                <button class="bk-mode-btn" id="bkModeRaw" onclick="setBookingMode('raw')">📝 พิมพ์แบบ LINE</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- FORM MODE -->
+          <div id="bkForm">
+            <div class="row-form" style="margin-bottom:10px;">
+              <div class="fg" style="flex:1;min-width:160px;">
+                <label class="fl">วันที่ <span style="color:var(--rd)">*</span></label>
+                <div class="date-wrap">
+                  <input class="fi" id="bkDate" type="date" oninput="updateDateDisplay(this)">
+                  <span class="date-display empty" data-for="bkDate">เลือกวันที่</span>
+                </div>
+              </div>
+              <div class="fg" style="flex:2;min-width:200px;">
+                <label class="fl">ชื่อลูกค้า <span style="color:var(--rd)">*</span></label>
+                <input class="fi" id="bkCustomer" type="text" placeholder="ชื่อลูกค้า / ชื่อร้าน">
+              </div>
+            </div>
+            <div class="row-form" style="margin-bottom:10px;">
+              <div class="fg" style="flex:1;width:100%;">
+                <label class="fl">ที่อยู่</label>
+                <input class="fi" id="bkAddress" type="text" placeholder="ที่อยู่ลูกค้า (ใส่ลิงก์ Google Maps ก็ได้)">
+              </div>
+            </div>
+            <div class="row-form" style="margin-bottom:10px;">
+              <div class="fg" style="flex:1;width:100%;">
+                <label class="fl">รายการงาน</label>
+                <input class="fi" id="bkJob" type="text" placeholder="เช่น ติดตั้งมุ้งจีบ 3 ช่อง">
+              </div>
+            </div>
+            <div class="row-form" style="margin-bottom:10px;">
+              <div class="fg" style="min-width:100px;">
+                <label class="fl">คะแนน (1-5)</label>
+                <input class="fi" id="bkScore" type="number" min="1" max="5" step="0.5" value="1">
+              </div>
+              <div class="fg" style="flex:1;min-width:140px;">
+                <label class="fl">ยอดเงิน</label>
+                <input class="fi" id="bkAmount" type="number" min="0" placeholder="0" step="100">
+              </div>
+              <div class="fg" style="flex:1;min-width:140px;">
+                <label class="fl">ทีม (ไม่บังคับ)</label>
+                <select class="fi" id="bkTeam"><option value="">— ไม่ระบุ —</option></select>
+              </div>
+            </div>
+          </div>
+
+          <!-- RAW MODE (พิมพ์แบบ LINE) -->
+          <div id="bkRaw" style="display:none;">
+            <div class="fg" style="margin-bottom:10px;">
+              <label class="fl">พิมพ์แบบเดียวกับ LINE Bot (บรรทัดละข้อมูล)</label>
+              <textarea class="fi" id="bkRawText" rows="9" style="font-family:var(--mono);resize:vertical;" placeholder="ตัวอย่าง:
+ลงคิวติดตั้ง
+22/05/2026
+ร้านงามวิไล ผ้าม่าน
+29 ซ.หทัยราษฎร์ 39
+ติดตั้งมุ้งจีบ 3 ช่อง
+2
+14500
+ช่างทีม A"></textarea>
+              <div style="font-size:11px;color:var(--mu);margin-top:6px;line-height:1.6;">
+                บรรทัด: <b>ประเภท (ลงคิว...)</b> → <b>วันที่</b> → <b>ชื่อลูกค้า</b> → <b>ที่อยู่</b> → <b>รายการงาน</b> → <b>คะแนน</b> → <b>ยอดเงิน</b> → <b>ทีม (ไม่บังคับ)</b><br>
+                บรรทัดแรกถ้าเริ่มด้วย "ลงคิว" จะถูกข้าม (เลือกประเภทจากปุ่มด้านบนได้เลย)
+              </div>
+            </div>
+          </div>
+
+          <button class="btn btn-p" style="margin-top:8px;" onclick="submitBooking()">💾 บันทึกคิว (สถานะ "รอ CF")</button>
+          <button class="btn btn-g" style="margin-top:8px;margin-left:6px;" onclick="clearBookingForm()">ล้างฟอร์ม</button>
+
+          <!-- รายการที่เพิ่งลง -->
+          <div id="bkRecent" style="margin-top:18px;"></div>
         </div>
       </div>
 
@@ -478,7 +594,7 @@ function fillTeamDropdowns(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Jobs'].forEach(x => {
+  ['Dash','Access','Booking','Jobs'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -486,6 +602,103 @@ function setTab(t, btn){
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
   if (t === 'dash') loadDashboard();
+  if (t === 'booking') initBookingTab();
+}
+
+// ════════════════════════════════════════
+//  BOOKING (ลงคิวใหม่)
+// ════════════════════════════════════════
+let _bkType = 'install';  // measure | install
+let _bkMode = 'form';     // form | raw
+let _bkRecent = [];
+
+function initBookingTab(){
+  // set วันที่เป็นวันนี้ ถ้ายังว่าง
+  const dt = document.getElementById('bkDate');
+  if (dt && !dt.value) {
+    dt.value = new Date().toISOString().split('T')[0];
+    updateDateDisplay(dt);
+  }
+  // เติม dropdown ทีม
+  const tm = document.getElementById('bkTeam');
+  if (tm && tm.options.length <= 1) {
+    _teams.forEach(t => { const o=document.createElement('option'); o.value=t; o.textContent=t; tm.appendChild(o); });
+  }
+}
+
+function setBookingType(t){
+  _bkType = t;
+  document.getElementById('bkTypeMeasure').classList.toggle('on', t==='measure');
+  document.getElementById('bkTypeInstall').classList.toggle('on', t==='install');
+}
+function setBookingMode(m){
+  _bkMode = m;
+  document.getElementById('bkModeForm').classList.toggle('on', m==='form');
+  document.getElementById('bkModeRaw').classList.toggle('on', m==='raw');
+  document.getElementById('bkForm').style.display = (m==='form') ? 'block' : 'none';
+  document.getElementById('bkRaw').style.display = (m==='raw') ? 'block' : 'none';
+}
+
+async function submitBooking(){
+  const body = { action:'pk_addBooking', type:_bkType };
+
+  if (_bkMode === 'form') {
+    const date     = document.getElementById('bkDate').value;
+    const customer = document.getElementById('bkCustomer').value.trim();
+    const address  = document.getElementById('bkAddress').value.trim();
+    const job      = document.getElementById('bkJob').value.trim();
+    const score    = document.getElementById('bkScore').value;
+    const amount   = document.getElementById('bkAmount').value;
+    const team     = document.getElementById('bkTeam').value;
+    if (!date || !customer) { toast('กรอก วันที่ และ ชื่อลูกค้า'); return; }
+    Object.assign(body, { date, customer, address, job, score, amount, team });
+  } else {
+    const raw = document.getElementById('bkRawText').value.trim();
+    if (!raw) { toast('พิมพ์ข้อมูลก่อน'); return; }
+    body.raw = raw;
+  }
+
+  showLoad('กำลังบันทึก...');
+  try {
+    const r = await call(body);
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error || 'ผิดพลาด')); return; }
+    toast(`✅ ลงคิว ${r.sheet} #${r.id} สำเร็จ`);
+    addRecentBooking(r);
+    clearBookingForm();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+function addRecentBooking(r){
+  _bkRecent.unshift(r);
+  if (_bkRecent.length > 5) _bkRecent.pop();
+  renderRecentBookings();
+}
+function renderRecentBookings(){
+  const w = document.getElementById('bkRecent');
+  if (!w) return;
+  if (!_bkRecent.length) { w.innerHTML = ''; return; }
+  w.innerHTML = `<div style="font-size:11px;color:var(--mu);font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">บันทึกล่าสุด (รอบนี้)</div>` +
+    _bkRecent.map(r => `
+      <div class="bk-recent-item">
+        <span class="bk-id">${r.sheet} #${r.id}</span>
+        <span>${r.customer}</span>
+        <span class="bk-meta">${r.date}${r.team?' · '+r.team:''} · ฿${fmt(r.amount)} · รอ CF</span>
+      </div>
+    `).join('');
+}
+
+function clearBookingForm(){
+  if (_bkMode === 'form') {
+    document.getElementById('bkCustomer').value = '';
+    document.getElementById('bkAddress').value = '';
+    document.getElementById('bkJob').value = '';
+    document.getElementById('bkScore').value = '1';
+    document.getElementById('bkAmount').value = '';
+    document.getElementById('bkTeam').value = '';
+  } else {
+    document.getElementById('bkRawText').value = '';
+  }
 }
 
 // ─── DASHBOARD ───
