@@ -133,6 +133,27 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spinner{width:38px;height:38px;border:3px solid rgba(255,255,255,.15);border-top-color:var(--acc);border-radius:50%;animation:spin .75s linear infinite;}
 .loading-row{text-align:center;padding:28px;color:var(--mu);font-size:13px;}
+
+/* ── DATE INPUT (custom display dd/mm/yy) ── */
+.date-wrap{position:relative;display:inline-block;width:100%;}
+.date-wrap input[type="date"]{
+  width:100%;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;
+  padding:10px 12px;font-size:13px;font-family:var(--sans);color:transparent;
+  cursor:pointer;caret-color:transparent;
+}
+.date-wrap input[type="date"]:focus{outline:none;border-color:var(--acc);}
+/* ซ่อนข้อความ native ของ input */
+.date-wrap input[type="date"]::-webkit-datetime-edit{color:transparent;}
+.date-wrap input[type="date"]::-webkit-calendar-picker-indicator{
+  filter:invert(1) opacity(.6);cursor:pointer;
+}
+/* แสดง dd/mm/yy ทับลงไป */
+.date-wrap .date-display{
+  position:absolute;left:12px;top:50%;transform:translateY(-50%);
+  font-size:13px;font-family:var(--mono);color:var(--tx);pointer-events:none;
+  letter-spacing:.5px;
+}
+.date-wrap .date-display.empty{color:var(--mu);font-family:var(--sans);}
 </style>
 </head>
 <body>
@@ -348,7 +369,12 @@ function renderOfficeShell(){
       <!-- DASHBOARD -->
       <div id="tabDash">
         <div class="section-pad row-form">
-          <div class="fg"><label class="fl">เลือกวันที่</label><input class="fi" id="dashDate" type="date" onchange="loadDashboard()"></div>
+          <div class="fg"><label class="fl">เลือกวันที่</label>
+            <div class="date-wrap">
+              <input class="fi" id="dashDate" type="date" onchange="loadDashboard();updateDateDisplay(this)" oninput="updateDateDisplay(this)">
+              <span class="date-display empty" data-for="dashDate">เลือกวันที่</span>
+            </div>
+          </div>
           <button class="btn btn-p" onclick="loadDashboard()">ดูสรุป</button>
         </div>
         <div id="dashContent"><div class="loading-row">เลือกวันที่เพื่อดูสรุปงาน</div></div>
@@ -362,7 +388,12 @@ function renderOfficeShell(){
           </div>
           <div class="row-form" style="margin-bottom:12px;">
             <div class="fg"><label class="fl">ทีม</label><select class="fi" id="accTeam" style="min-width:130px;"></select></div>
-            <div class="fg"><label class="fl">วันที่อนุญาต</label><input class="fi" id="accDate" type="date"></div>
+            <div class="fg"><label class="fl">วันที่อนุญาต</label>
+              <div class="date-wrap">
+                <input class="fi" id="accDate" type="date" oninput="updateDateDisplay(this)">
+                <span class="date-display empty" data-for="accDate">เลือกวันที่</span>
+              </div>
+            </div>
             <div class="fg" style="flex:1;min-width:140px;"><label class="fl">หมายเหตุ</label><input class="fi" id="accNote" type="text" placeholder="(ถ้ามี)"></div>
           </div>
           <div class="fg" style="margin-bottom:6px;"><label class="fl">เพิ่มชื่อสมาชิก (พิมพ์แล้วกด Enter)</label>
@@ -381,7 +412,12 @@ function renderOfficeShell(){
       <div id="tabJobs" style="display:none;">
         <div class="section-pad row-form">
           <div class="fg"><label class="fl">ทีม</label><select class="fi" id="jTeam"><option value="__ALL__">ทุกทีม</option></select></div>
-          <div class="fg"><label class="fl">วันที่</label><input class="fi" id="jDate" type="date"></div>
+          <div class="fg"><label class="fl">วันที่</label>
+            <div class="date-wrap">
+              <input class="fi" id="jDate" type="date" oninput="updateDateDisplay(this)">
+              <span class="date-display empty" data-for="jDate">เลือกวันที่</span>
+            </div>
+          </div>
           <div class="fg"><label class="fl">สถานะ</label>
             <select class="fi" id="jStatus">
               <option value="">ทุกสถานะ</option>
@@ -406,6 +442,7 @@ function renderOfficeShell(){
 function officeInit(){
   const today = new Date().toISOString().split('T')[0];
   ['dashDate','jDate'].forEach(id => { const el = document.getElementById(id); if (el) el.value = today; });
+  refreshAllDateDisplays();
   reloadAll();
 }
 
@@ -629,6 +666,24 @@ function renderSalesStub(){
 }
 function renderTechStub(){
   return `<div class="card"><div class="card-head">🔧 ระบบช่าง</div><div class="card-body"><div class="empty-section"><h2>เข้าสู่ระบบสำเร็จ ✅</h2><p>สำหรับช่าง แนะนำให้ใช้ผ่าน <b>tech.html</b> บนมือถือ<br>(GPS แม่นยำกว่า + ใช้กล้องได้)<br><br>Step 5 จะรวมหน้า tech มาที่นี่</p></div></div></div>`;
+}
+
+// ════════════════════════════════════════
+//  DATE DISPLAY (dd/mm/yy เสมอ)
+// ════════════════════════════════════════
+function updateDateDisplay(input){
+  if (!input) return;
+  const span = document.querySelector(`.date-display[data-for="${input.id}"]`);
+  if (!span) return;
+  const v = input.value;
+  if (!v) { span.textContent='เลือกวันที่'; span.classList.add('empty'); return; }
+  const p = v.split('-');
+  if (p.length !== 3) { span.textContent='เลือกวันที่'; span.classList.add('empty'); return; }
+  span.textContent = `${p[2]}/${p[1]}/${p[0].slice(2)}`;
+  span.classList.remove('empty');
+}
+function refreshAllDateDisplays(){
+  document.querySelectorAll('input[type="date"]').forEach(updateDateDisplay);
 }
 
 // ════════════════════════════════════════
