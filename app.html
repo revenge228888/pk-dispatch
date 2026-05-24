@@ -250,7 +250,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 // ════════════════════════════════════════
 let API = localStorage.getItem('pk_api') || '';
 let CURRENT_USER = null;
-let _teams=[], _accessDates=[], _allMembers=[], _memDraft=[], _mapObj=null;
+let _teams=[], _salesTeams=[], _accessDates=[], _allMembers=[], _memDraft=[], _mapObj=null;
 
 // ════════════════════════════════════════
 //  API CALL
@@ -568,6 +568,7 @@ async function reloadAll(){
   try {
     const b = await call({ action:'pk_bootstrap' });
     _teams = b.teams || [];
+    _salesTeams = b.salesTeams || [];
     _accessDates = b.access || [];
     _allMembers = b.members || [];
     fillTeamDropdowns();
@@ -591,13 +592,24 @@ function fillTeamDropdowns(){
     _teams.forEach(t => { const o=document.createElement('option'); o.value=t; o.textContent=t; jt.appendChild(o); });
     if (jv) jt.value = jv;
   }
+  // bkTeam ใช้ฟังก์ชันแยก เพราะต้องเปลี่ยนตาม _bkType
+  fillBookingTeam();
+}
+
+// เติม dropdown ทีมในแท็บลงคิว ตามประเภทปัจจุบัน
+function fillBookingTeam(){
   const bt = document.getElementById('bkTeam');
-  if (bt) {
-    const bv = bt.value;
-    bt.innerHTML = '<option value="">— ไม่ระบุ —</option>';
-    _teams.forEach(t => { const o=document.createElement('option'); o.value=t; o.textContent=t; bt.appendChild(o); });
-    if (bv) bt.value = bv;
+  if (!bt) return;
+  const list = (typeof _bkType !== 'undefined' && _bkType === 'measure') ? _salesTeams : _teams;
+  const label = (typeof _bkType !== 'undefined' && _bkType === 'measure') ? 'เซลล์' : 'ช่าง';
+  bt.innerHTML = '<option value="">— ไม่ระบุ —</option>';
+  if (!list.length) {
+    const o = document.createElement('option');
+    o.disabled = true; o.textContent = `(ยังไม่มีทีม${label}ในระบบ)`;
+    bt.appendChild(o);
+    return;
   }
+  list.forEach(t => { const o=document.createElement('option'); o.value=t; o.textContent=t; bt.appendChild(o); });
 }
 
 function setTab(t, btn){
@@ -627,22 +639,27 @@ async function initBookingTab(){
     updateDateDisplay(dt);
   }
   // ถ้า _teams ยังว่าง ให้โหลดก่อน
-  if (!_teams.length) {
+  if (!_teams.length && !_salesTeams.length) {
     try {
       const b = await call({ action:'pk_bootstrap' });
       _teams = b.teams || [];
+      _salesTeams = b.salesTeams || [];
       _accessDates = b.access || [];
       _allMembers = b.members || [];
     } catch(e) {}
   }
   // เติม dropdown ทุกครั้ง (ให้ค่าล่าสุดเสมอ)
   fillTeamDropdowns();
+  // เติม bkTeam ตามประเภทปัจจุบัน
+  fillBookingTeam();
 }
 
 function setBookingType(t){
   _bkType = t;
   document.getElementById('bkTypeMeasure').classList.toggle('on', t==='measure');
   document.getElementById('bkTypeInstall').classList.toggle('on', t==='install');
+  // เปลี่ยน dropdown ทีมตามประเภท
+  fillBookingTeam();
 }
 function setBookingMode(m){
   _bkMode = m;
