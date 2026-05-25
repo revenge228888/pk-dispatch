@@ -134,6 +134,27 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 .spinner{width:38px;height:38px;border:3px solid rgba(255,255,255,.15);border-top-color:var(--acc);border-radius:50%;animation:spin .75s linear infinite;}
 .loading-row{text-align:center;padding:28px;color:var(--mu);font-size:13px;}
 
+/* ── TECH Card งาน ── */
+.t-count{display:inline-block;background:rgba(255,255,255,.1);padding:1px 7px;border-radius:10px;font-family:var(--mono);font-size:10px;margin-left:5px;}
+.t-jobcard{
+  background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;
+  padding:12px 14px;margin-bottom:10px;
+}
+.t-jobcard.working{border-color:rgba(74,158,255,.4);background:rgba(74,158,255,.04);}
+.t-jobcard.done{border-color:rgba(52,199,89,.3);background:rgba(52,199,89,.04);opacity:.85;}
+.t-jobhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.t-jobnum{font-family:var(--mono);font-size:11px;color:var(--mu);font-weight:600;}
+.t-jobname{font-size:14px;font-weight:700;color:var(--tx);line-height:1.3;margin-bottom:4px;}
+.t-jobaddr{font-size:12px;color:var(--mu);margin-bottom:3px;line-height:1.4;}
+.t-jobdesc{font-size:12px;color:var(--blu);margin-bottom:3px;line-height:1.4;}
+.t-jobmeta{display:flex;gap:14px;font-size:12px;margin-top:4px;flex-wrap:wrap;}
+.t-jobtime{font-size:11px;color:var(--grn);margin-top:4px;}
+.t-jobnote{
+  background:rgba(245,166,35,.1);border-left:3px solid var(--acc);
+  padding:6px 10px;font-size:12px;color:var(--acc);margin-top:8px;border-radius:0 6px 6px 0;
+}
+.t-jobbtns{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+
 /* ── BOOKING tab ── */
 .bk-type-btn, .bk-mode-btn{
   flex:1;padding:11px 16px;border-radius:8px;border:1px solid var(--bdr);
@@ -237,7 +258,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 //  ⚠️ ตั้งให้ตรงกับ Cloudflare Worker ของคุณ
 // ════════════════════════════════════════
 const WORKER_URL   = 'https://pk-discord-relay.revenge2288.workers.dev';
-const API          = 'https://pk-discord-relay.revenge2288.workers.dev/api';
+const API          = 'https://pk-discord-relay.revenge2288.workers.dev//api';
 const API_SECRET   = '2389';   // ค่าเดียวกับ PK_SECRET ใน Cloudflare Worker
 
 let CURRENT_USER = null;
@@ -1316,8 +1337,7 @@ function renderTechStub(){
         <h2>⚠️ ยังไม่ได้กำหนดทีม</h2>
         <p>
           user นี้ยังไม่ได้ระบุ <b>"ทีม"</b> ใน Sheet Users<br>
-          กรุณาแจ้งออฟฟิศให้เพิ่มทีมในคอลัมน์ "team"<br>
-          เช่น "ช่างทีม A"
+          กรุณาแจ้งออฟฟิศให้เพิ่มทีมในคอลัมน์ "team"
         </p>
       </div>
     </div></div>`;
@@ -1336,27 +1356,58 @@ function renderTechStub(){
               <option value="">— เลือกวันที่ —</option>
             </select>
           </div>
-          <div class="fg" style="flex:1;min-width:140px;">
-            <label class="fl">ชื่อคุณ</label>
-            <select class="fi" id="tWorker">
-              <option value="">— เลือกชื่อ —</option>
-            </select>
-          </div>
         </div>
-        <div id="tInfo" style="margin-top:14px;"></div>
+        <div id="tMembersDisplay" style="margin-top:10px;"></div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-head">📋 งานในวันที่เลือก</div>
-      <div class="card-body">
-        <div class="empty-section">
-          <p style="font-size:13px;color:var(--mu);">
-            <i>Phase 2 จะแสดง Card งานในนี้</i><br>
-            ตอนนี้แค่ตรวจสอบว่า:<br>
-            ✓ Login ได้<br>
-            ✓ รู้ทีม<br>
-            ✓ เลือกวันที่/ชื่อ ได้
-          </p>
+
+    <div class="card" id="tJobsCard" style="display:none;">
+      <div class="tabs">
+        <button class="tab on" onclick="techSetTab('current',this)" id="tTabCurBtn">📋 งานปัจจุบัน <span id="tCntCur" class="t-count">0</span></button>
+        <button class="tab" onclick="techSetTab('done',this)">✅ เสร็จแล้ว <span id="tCntDone" class="t-count">0</span></button>
+      </div>
+      <div id="tJobsList" style="padding:12px;"></div>
+    </div>
+
+    <!-- Done Job Modal -->
+    <div class="modal-bg" id="tDoneModal">
+      <div class="modal">
+        <div class="card-head">📍 จบงาน <span id="tDoneId" style="color:var(--acc);"></span>
+          <button onclick="techCloseModal()" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button>
+        </div>
+        <div class="card-body">
+          <!-- Worker name -->
+          <div class="fg" style="margin-bottom:12px;">
+            <label class="fl">ผู้ทำงาน <span style="color:var(--rd)">*</span></label>
+            <input class="fi" id="tDoneWorker" type="text" placeholder="ชื่อช่างที่ทำงาน">
+          </div>
+
+          <!-- Photo upload -->
+          <div class="fg" style="margin-bottom:12px;">
+            <label class="fl">รูปงาน (กล้องมือถือ)</label>
+            <input class="fi" id="tDonePhoto" type="file" accept="image/*" capture="environment" onchange="techPhotoSelected()">
+            <div id="tPhotoPreview" style="margin-top:8px;"></div>
+          </div>
+
+          <!-- GPS -->
+          <div class="fg" style="margin-bottom:14px;">
+            <label class="fl">ตำแหน่ง GPS</label>
+            <div id="tGpsStatus" style="padding:9px 12px;background:var(--surf2);border-radius:7px;font-size:12px;color:var(--mu);">
+              กดปุ่ม "📍 ดึงพิกัด" เพื่อบันทึก
+            </div>
+            <button class="btn btn-g" style="margin-top:6px;" onclick="techStartGps()">📍 ดึงพิกัด GPS</button>
+          </div>
+
+          <!-- Continue note -->
+          <div class="fg" style="margin-bottom:14px;">
+            <label class="fl">โน้ต (ถ้ามีงานต่อในวันถัดไป)</label>
+            <textarea class="fi" id="tDoneNote" rows="2" placeholder="(เว้นว่าง = จบงาน · ใส่ข้อความ = ต่องาน)" style="resize:vertical;"></textarea>
+            <div style="font-size:11px;color:var(--mu);margin-top:4px;">
+              💡 ใส่โน้ต = "➡ ต่องาน" · เว้นว่าง = "✅ จบงาน"
+            </div>
+          </div>
+
+          <button class="btn btn-p" style="width:100%;justify-content:center;" onclick="techSubmitDone()">💾 บันทึก</button>
         </div>
       </div>
     </div>
@@ -1364,13 +1415,23 @@ function renderTechStub(){
 }
 
 // ════════════════════════════════════════
-//  TECH — Phase 1 logic
+//  TECH STATE
 // ════════════════════════════════════════
 let _techAccess = [];
 let _techMembers = [];
+let _techJobs = [];
+let _techTab = 'current';   // current | done
+let _techDate = '';
+let _techRefreshTimer = null;
+
+// Done modal state
+let _doneJobId = null;
+let _donePhotoData = null;
+let _doneGpsWatch = null;
+let _doneGps = null;
 
 async function initTech(){
-  if (!CURRENT_USER.team) return;  // ไม่ทำอะไรถ้าไม่มีทีม
+  if (!CURRENT_USER.team) return;
 
   const sync = document.getElementById('tSync');
   if (sync) sync.textContent = 'กำลังโหลด...';
@@ -1385,6 +1446,11 @@ async function initTech(){
     _techMembers = r.members || [];
     fillTechDates();
     if (sync) sync.textContent = 'อัปเดต ' + new Date().toLocaleTimeString('th-TH',{timeStyle:'short'});
+    // start auto-refresh
+    if (_techRefreshTimer) clearInterval(_techRefreshTimer);
+    _techRefreshTimer = setInterval(() => {
+      if (_techDate) techLoadJobs();
+    }, 30000);
   } catch(e) {
     if (sync) sync.textContent = '❌ เชื่อมต่อไม่ได้';
   }
@@ -1394,8 +1460,9 @@ function fillTechDates(){
   const dd = document.getElementById('tDate');
   if (!dd) return;
   const today = new Date(); today.setHours(0,0,0,0);
-  // เรียงวันที่ใหม่สุดก่อน + เว้นวันที่ผ่านมาเกิน 30 วัน
   const sorted = [..._techAccess].sort((a,b) => b.date.localeCompare(a.date));
+  // เก็บค่าเดิม
+  const prevValue = dd.value;
   dd.innerHTML = '<option value="">— เลือกวันที่ —</option>';
   sorted.forEach(a => {
     const d = new Date(a.date); d.setHours(0,0,0,0);
@@ -1415,29 +1482,299 @@ function fillTechDates(){
     const o = document.createElement('option');
     o.disabled = true; o.textContent = '(ออฟฟิศยังไม่ได้กำหนดวันให้)';
     dd.appendChild(o);
+  } else {
+    // auto-select วันนี้ ถ้ามี
+    const todayStr = new Date().toISOString().split('T')[0];
+    const hasToday = sorted.find(a => a.date === todayStr);
+    if (prevValue && sorted.find(a => a.date === prevValue)) {
+      dd.value = prevValue;
+    } else if (hasToday) {
+      dd.value = todayStr;
+      techOnDateChange();
+    }
   }
 }
 
 function techOnDateChange(){
   const date = document.getElementById('tDate').value;
-  const wd = document.getElementById('tWorker');
-  wd.innerHTML = '<option value="">— เลือกชื่อ —</option>';
-  if (!date) return;
+  const w = document.getElementById('tMembersDisplay');
+  const jobsCard = document.getElementById('tJobsCard');
+  _techDate = date;
+
+  if (!date) {
+    w.innerHTML = '';
+    jobsCard.style.display = 'none';
+    return;
+  }
+
+  // แสดงสมาชิก
   const mem = _techMembers.find(m => m.date === date);
   const names = mem && mem.members ? mem.members : [];
   if (!names.length) {
-    const o = document.createElement('option');
-    o.disabled = true; o.textContent = '(ออฟฟิศยังไม่ได้ใส่ชื่อสมาชิก)';
-    wd.appendChild(o);
+    w.innerHTML = `<div style="padding:10px 14px;background:rgba(255,255,255,.03);border-radius:8px;font-size:12px;color:var(--mu);">— ออฟฟิศยังไม่ได้ใส่ชื่อสมาชิก —</div>`;
+  } else {
+    w.innerHTML = `
+      <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">
+        👥 สมาชิกทีมในวันนี้ (${names.length} คน)
+      </div>
+      <div class="mem-chips">
+        ${names.map(n => `<div class="mem-chip" style="cursor:default;">${n}</div>`).join('')}
+      </div>
+    `;
+  }
+
+  // แสดง jobs card + โหลดงาน
+  jobsCard.style.display = 'block';
+  techLoadJobs();
+}
+
+async function techLoadJobs(){
+  if (!_techDate) return;
+  try {
+    const r = await call({ action:'pk_techGetJobs', date: _techDate });
+    if (!r.ok) {
+      document.getElementById('tJobsList').innerHTML = `<div class="loading-row">${r.error||'โหลดไม่ได้'}</div>`;
+      return;
+    }
+    _techJobs = r.jobs || [];
+    techRenderJobs();
+  } catch(e) {
+    document.getElementById('tJobsList').innerHTML = '<div class="loading-row">โหลดไม่ได้</div>';
+  }
+}
+
+function techSetTab(tab, btn){
+  _techTab = tab;
+  document.querySelectorAll('#tJobsCard .tab').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  techRenderJobs();
+}
+
+function techRenderJobs(){
+  const w = document.getElementById('tJobsList');
+  if (!_techJobs.length) {
+    w.innerHTML = '<div class="loading-row">ไม่มีงานในวันที่เลือก</div>';
+    document.getElementById('tCntCur').textContent = 0;
+    document.getElementById('tCntDone').textContent = 0;
     return;
   }
-  names.forEach(n => {
-    const o = document.createElement('option');
-    o.value = n; o.textContent = n;
-    wd.appendChild(o);
-  });
-  // ถ้ามีแค่ชื่อเดียว auto-select
-  if (names.length === 1) wd.value = names[0];
+
+  // แยกงาน
+  const current = _techJobs.filter(j => j.status !== 'done');
+  const done = _techJobs.filter(j => j.status === 'done');
+  document.getElementById('tCntCur').textContent = current.length;
+  document.getElementById('tCntDone').textContent = done.length;
+
+  const showList = (_techTab === 'current') ? current : done;
+  if (!showList.length) {
+    w.innerHTML = `<div class="loading-row">ไม่มีงานใน${_techTab==='current'?'หมวดงานปัจจุบัน':'หมวดเสร็จแล้ว'}</div>`;
+    return;
+  }
+
+  const statusLabel = {pending:'รอรับงาน', working:'กำลังทำ', done:'✅ เสร็จแล้ว'};
+  const statusClass = {pending:'bp', working:'bw', done:'bd'};
+
+  w.innerHTML = showList.map(j => {
+    const isContinued = !!(j.continueNote && j.status !== 'done');
+    return `
+      <div class="t-jobcard ${j.status}">
+        <div class="t-jobhead">
+          <div class="t-jobnum">${j.orderLabel}</div>
+          <span class="badge ${statusClass[j.status]||'bp'}">${isContinued ? '➡ ต่องาน' : statusLabel[j.status]}</span>
+        </div>
+        <div class="t-jobname">${j.name}</div>
+        ${j.address ? `<div class="t-jobaddr">📍 ${j.address}</div>` : ''}
+        ${j.description ? `<div class="t-jobdesc">🔧 ${j.description}</div>` : ''}
+        <div class="t-jobmeta">
+          ${j.amount ? `<span style="color:var(--acc);font-family:var(--mono);">฿${fmt(j.amount)}</span>` : ''}
+          ${j.worker ? `<span style="color:var(--blu);">👤 ${j.worker}</span>` : ''}
+        </div>
+        ${j.status === 'done' && j.doneAt ? `<div class="t-jobtime">⏱ จบงาน ${new Date(Number(j.doneAt)).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}</div>` : ''}
+        ${j.continueNote ? `<div class="t-jobnote">📝 ${j.continueNote}</div>` : ''}
+
+        <div class="t-jobbtns">
+          ${j.mapLink ? `<a class="btn btn-g btn-sm" href="${j.mapLink}" target="_blank">🗺 นำทาง</a>` : ''}
+          ${techJobButtons(j)}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function techJobButtons(j){
+  if (j.status === 'pending') {
+    return `<button class="btn btn-p btn-sm" onclick="techAcceptJob('${j.id}')">▶ รับงาน</button>`;
+  } else if (j.status === 'working') {
+    return `
+      <button class="btn btn-d btn-sm" onclick="techCancelAccept('${j.id}')">✕ ยกเลิกรับงาน</button>
+      <button class="btn btn-p btn-sm" onclick="techOpenDone('${j.id}')">📍 จบงาน</button>
+    `;
+  } else if (j.status === 'done') {
+    return `<button class="btn btn-g btn-sm" onclick="techUndoDone('${j.id}')">↩ ยกเลิกการจบงาน</button>`;
+  }
+  return '';
+}
+
+// ── รับงาน ──
+async function techAcceptJob(id){
+  if (!confirm('รับงานนี้?')) return;
+  showLoad('กำลังรับงาน...');
+  try {
+    const r = await call({
+      action: 'pk_techUpdateJobStatus',
+      id, status: 'working',
+      startAt: Date.now()
+    });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast('✅ รับงานแล้ว');
+    techLoadJobs();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// ── ยกเลิกรับงาน ──
+async function techCancelAccept(id){
+  if (!confirm('ยกเลิกการรับงาน?\nงานจะกลับเป็น "รอรับงาน"')) return;
+  showLoad('กำลังยกเลิก...');
+  try {
+    const r = await call({
+      action: 'pk_techUpdateJobStatus',
+      id, status: 'pending',
+      startAt: '', doneAt: '', lat: '', lng: '',
+      continueNote: '', photos: [], worker: ''
+    });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast('↩ ยกเลิกแล้ว');
+    techLoadJobs();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// ── ยกเลิกการจบงาน ──
+async function techUndoDone(id){
+  if (!confirm('ยกเลิกการจบงานนี้?\nงานจะกลับเป็น "รอรับงาน" และข้อมูล GPS/รูป/เวลา จะถูกล้าง')) return;
+  showLoad('กำลังยกเลิก...');
+  try {
+    const r = await call({
+      action: 'pk_techUpdateJobStatus',
+      id, status: 'pending',
+      startAt: '', doneAt: '', lat: '', lng: '',
+      continueNote: '', photos: [], worker: ''
+    });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast('↩ ยกเลิกการจบงานแล้ว');
+    techLoadJobs();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// ── เปิด Modal จบงาน ──
+function techOpenDone(id){
+  const j = _techJobs.find(x => x.id === id);
+  if (!j) return;
+  _doneJobId = id;
+  _donePhotoData = null;
+  _doneGps = null;
+  document.getElementById('tDoneId').textContent = '#' + (j.orderLabel || id);
+  document.getElementById('tDoneWorker').value = j.worker || '';
+  document.getElementById('tDonePhoto').value = '';
+  document.getElementById('tPhotoPreview').innerHTML = '';
+  document.getElementById('tDoneNote').value = '';
+  document.getElementById('tGpsStatus').innerHTML = 'กดปุ่ม "📍 ดึงพิกัด" เพื่อบันทึก';
+  document.getElementById('tDoneModal').classList.add('on');
+}
+
+function techCloseModal(){
+  document.getElementById('tDoneModal').classList.remove('on');
+  if (_doneGpsWatch) { navigator.geolocation.clearWatch(_doneGpsWatch); _doneGpsWatch = null; }
+  _doneJobId = null;
+}
+
+// ── แนบรูป — แปลงเป็น base64 (compress) ──
+function techPhotoSelected(){
+  const input = document.getElementById('tDonePhoto');
+  const file = input.files[0];
+  if (!file) { _donePhotoData = null; document.getElementById('tPhotoPreview').innerHTML = ''; return; }
+  // resize + compress
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const maxW = 1024, maxH = 1024;
+      let w = img.width, h = img.height;
+      if (w > maxW || h > maxH) {
+        const ratio = Math.min(maxW/w, maxH/h);
+        w = Math.round(w * ratio); h = Math.round(h * ratio);
+      }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      _donePhotoData = dataUrl;
+      document.getElementById('tPhotoPreview').innerHTML = `<img src="${dataUrl}" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--bdr);">`;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── ดึง GPS — ใช้ watchPosition รอ accuracy < 30m ──
+function techStartGps(){
+  if (!navigator.geolocation) {
+    document.getElementById('tGpsStatus').innerHTML = '❌ เบราว์เซอร์ไม่รองรับ GPS';
+    return;
+  }
+  if (_doneGpsWatch) navigator.geolocation.clearWatch(_doneGpsWatch);
+  document.getElementById('tGpsStatus').innerHTML = '⏳ กำลังหาตำแหน่ง... (อยู่นิ่งสักครู่)';
+  let bestAcc = 9999;
+  _doneGpsWatch = navigator.geolocation.watchPosition(pos => {
+    const acc = pos.coords.accuracy;
+    if (acc < bestAcc) {
+      bestAcc = acc;
+      _doneGps = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc };
+      const sym = acc < 30 ? '✅' : '⏳';
+      document.getElementById('tGpsStatus').innerHTML = `${sym} ${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)} <br><span style="color:var(--mu);font-size:11px;">ความแม่นยำ ±${Math.round(acc)}m ${acc < 30 ? '(พร้อมบันทึก)' : '(รออีกสักครู่)'}</span>`;
+      if (acc < 30) {
+        // ได้ผลลัพธ์ที่ดีแล้ว หยุด
+        navigator.geolocation.clearWatch(_doneGpsWatch);
+        _doneGpsWatch = null;
+      }
+    }
+  }, err => {
+    document.getElementById('tGpsStatus').innerHTML = '❌ ' + err.message;
+  }, { enableHighAccuracy:true, timeout:60000, maximumAge:0 });
+}
+
+// ── ส่งข้อมูลจบงาน ──
+async function techSubmitDone(){
+  const worker = document.getElementById('tDoneWorker').value.trim();
+  const note = document.getElementById('tDoneNote').value.trim();
+  if (!worker) { toast('กรอกชื่อผู้ทำงาน'); return; }
+
+  const body = {
+    action: 'pk_techUpdateJobStatus',
+    id: _doneJobId,
+    status: 'done',
+    doneAt: Date.now(),
+    worker,
+    continueNote: note,
+    photos: _donePhotoData ? [_donePhotoData] : [],
+    notify: { event: note ? 'continue' : 'done' }
+  };
+  if (_doneGps) {
+    body.lat = _doneGps.lat;
+    body.lng = _doneGps.lng;
+  }
+
+  showLoad('กำลังบันทึก...');
+  try {
+    const r = await call(body);
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast(note ? '➡ บันทึกต่องาน' : '✅ จบงานแล้ว');
+    techCloseModal();
+    techLoadJobs();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
 // ════════════════════════════════════════
