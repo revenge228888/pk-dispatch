@@ -943,7 +943,9 @@ function showOfficePhoto(jobIdx){
 function renderOfficePhoto(){
   const j = _officePhotoJob;
   if (!j) return;
-  document.getElementById('officePhotoFull').src = j.photos[_officePhotoIdx];
+  const img = document.getElementById('officePhotoFull');
+  img.src = fixDriveUrl(j.photos[_officePhotoIdx]);
+  img.setAttribute('referrerpolicy', 'no-referrer');
   document.getElementById('officePhotoCaption').textContent = `${j.id} · ${j.name} · รูปที่ ${_officePhotoIdx+1}/${j.photos.length}`;
   document.getElementById('officePhotoPrev').style.visibility = _officePhotoIdx > 0 ? 'visible' : 'hidden';
   document.getElementById('officePhotoNext').style.visibility = _officePhotoIdx < j.photos.length - 1 ? 'visible' : 'hidden';
@@ -1639,7 +1641,7 @@ function techRenderJobs(){
         ${j.continueNote ? `<div class="t-jobnote">📝 ${j.continueNote}</div>` : ''}
         ${j.status === 'done' && j.photos && j.photos.length ? `
           <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-            ${j.photos.map((p, i) => `<img src="${p}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--bdr);cursor:pointer;" onclick="techShowPhoto('${j.id}', ${i})">`).join('')}
+            ${j.photos.map((p, i) => `<img src="${fixDriveUrl(p)}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--bdr);cursor:pointer;" onclick="techShowPhoto('${j.id}', ${i})" referrerpolicy="no-referrer" onerror="this.style.opacity='0.3';this.title='โหลดรูปไม่ได้';">`).join('')}
           </div>
         ` : ''}
 
@@ -1805,7 +1807,9 @@ function techRemovePhoto(idx){
 function techShowPhoto(jobId, photoIdx){
   const j = _techJobs.find(x => x.id === jobId);
   if (!j || !j.photos || !j.photos[photoIdx]) return;
-  document.getElementById('tPhotoFull').src = j.photos[photoIdx];
+  const img = document.getElementById('tPhotoFull');
+  img.src = fixDriveUrl(j.photos[photoIdx]);
+  img.setAttribute('referrerpolicy', 'no-referrer');
   document.getElementById('tPhotoCaption').textContent = `${j.id} · ${j.name} · รูปที่ ${photoIdx+1}/${j.photos.length}`;
   document.getElementById('tPhotoModal').classList.add('on');
 }
@@ -1872,6 +1876,17 @@ async function techSubmitDone(){
 // ════════════════════════════════════════
 //  DATE DISPLAY (dd/mm/yy เสมอ)
 // ════════════════════════════════════════
+// แปลง URL Drive รูปแบบเก่า → ใหม่ (สำหรับแสดงใน <img>)
+function fixDriveUrl(url){
+  if (!url || typeof url !== 'string') return url;
+  // ถ้าเป็น base64 (เก่า) → คืนตรงๆ
+  if (url.startsWith('data:')) return url;
+  // ถ้าเป็น uc?export=view → แปลงเป็น lh3
+  const m = url.match(/drive\.google\.com\/uc\?(?:export=view&)?id=([\w-]+)/);
+  if (m) return 'https://lh3.googleusercontent.com/d/' + m[1];
+  // ถ้าเป็น lh3 อยู่แล้ว → ไม่แตะ
+  return url;
+}
 function updateDateDisplay(input){
   if (!input) return;
   const span = document.querySelector(`.date-display[data-for="${input.id}"]`);
