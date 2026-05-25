@@ -1765,7 +1765,7 @@ function techPhotoSelected(){
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxW = 1024, maxH = 1024;
+        const maxW = 1280, maxH = 1280;
         let w = img.width, h = img.height;
         if (w > maxW || h > maxH) {
           const ratio = Math.min(maxW/w, maxH/h);
@@ -1773,7 +1773,7 @@ function techPhotoSelected(){
         }
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
         _donePhotos[idx] = dataUrl;
         processed++;
         if (processed === targets.length) techRenderPhotoPreview();
@@ -1858,7 +1858,7 @@ async function techSubmitDone(){
     body.lng = _doneGps.lng;
   }
 
-  showLoad('กำลังบันทึก...');
+  showLoad(_donePhotos.length ? 'กำลังอัปโหลดรูปและบันทึก...' : 'กำลังบันทึก...');
   try {
     const r = await call(body);
     hideLoad();
