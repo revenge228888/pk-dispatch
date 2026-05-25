@@ -1663,6 +1663,11 @@ function techJobButtons(j){
       <button class="btn btn-p btn-sm" onclick="techOpenDone('${j.id}')">📍 จบงาน</button>
     `;
   } else if (j.status === 'done') {
+    // แยกปุ่ม: ถ้าเป็น "ต่องาน" (มี continueNote) → ปุ่มยกเลิกต่องาน
+    //         ถ้าเป็น "จบงาน" จริงๆ → ปุ่มยกเลิกการจบงาน
+    if (j.continueNote) {
+      return `<button class="btn btn-g btn-sm" onclick="techUndoContinue('${j.id}')">↩ ยกเลิกต่องาน</button>`;
+    }
     return `<button class="btn btn-g btn-sm" onclick="techUndoDone('${j.id}')">↩ ยกเลิกการจบงาน</button>`;
   }
   return '';
@@ -1704,7 +1709,7 @@ async function techCancelAccept(id){
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
-// ── ยกเลิกการจบงาน ──
+// ── ยกเลิกการจบงาน (จบงานจริงๆ → กลับเป็น pending ล้างทุกอย่าง) ──
 async function techUndoDone(id){
   if (!confirm('ยกเลิกการจบงานนี้?\nงานจะกลับเป็น "รอรับงาน" และข้อมูล GPS/รูป/เวลา จะถูกล้าง')) return;
   showLoad('กำลังยกเลิก...');
@@ -1718,6 +1723,32 @@ async function techUndoDone(id){
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast('↩ ยกเลิกการจบงานแล้ว');
+    techLoadJobs();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// ── ยกเลิกต่องาน (ไม่ใช่จบจริง → กลับเป็น working + เก็บรูป/GPS) ──
+async function techUndoContinue(id){
+  if (!confirm('ยกเลิกการต่องานนี้?\nงานจะกลับเป็น "กำลังทำ" (รูป/GPS ที่บันทึกไว้จะคงอยู่)')) return;
+  const j = _techJobs.find(x => x.id === id);
+  if (!j) return;
+  showLoad('กำลังยกเลิก...');
+  try {
+    const r = await call({
+      action: 'pk_techUpdateJobStatus',
+      id, status: 'working',
+      // เก็บ startAt, lat, lng, photos, worker ไว้
+      startAt: j.startAt || '',
+      doneAt: '',           // ล้าง doneAt (ยังไม่จบ)
+      lat: j.lat || '',
+      lng: j.lng || '',
+      continueNote: '',     // ล้าง note ต่องาน
+      photos: j.photos || [],
+      worker: j.worker || ''
+    });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast('↩ ยกเลิกการต่องานแล้ว · งานกลับมาเป็น "กำลังทำ"');
     techLoadJobs();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
