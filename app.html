@@ -192,8 +192,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
     <button class="login-btn" id="lgBtn" onclick="doLogin()">เข้าสู่ระบบ</button>
     <div class="login-err" id="lgErr"></div>
     <div class="login-foot">
-      หากเข้าใช้ครั้งแรก ใช้ <b>admin / admin</b><br>
-      <span style="cursor:pointer;text-decoration:underline;" onclick="showUrlSettings()">ตั้งค่า API URL</span>
+      หากเข้าใช้ครั้งแรก ใช้ <b>admin / admin</b>
     </div>
   </div>
 </div>
@@ -209,25 +208,10 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
         <b id="hdrName"></b>
       </div>
       <button class="hbtn" id="btnRefresh" onclick="reloadAll()" title="รีเฟรช">↺</button>
-      <button class="hbtn" onclick="showUrlSettings()">⚙</button>
       <button class="hbtn danger" onclick="logout()">🚪</button>
     </div>
   </header>
   <div class="wrap"><div id="roleContent"></div></div>
-</div>
-
-<!-- URL SETTINGS MODAL -->
-<div class="modal-bg" id="urlModal">
-  <div class="modal">
-    <div class="card-head">ตั้งค่า API URL
-      <button onclick="document.getElementById('urlModal').classList.remove('on')" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button>
-    </div>
-    <div class="card-body">
-      <div style="font-size:12px;color:var(--mu);margin-bottom:8px;">URL ของ Apps Script Web App</div>
-      <input class="login-fi" id="apiUrlInput" type="text" placeholder="https://script.google.com/macros/s/.../exec" style="margin-bottom:14px;">
-      <button class="login-btn" onclick="saveApiUrl()">บันทึก</button>
-    </div>
-  </div>
 </div>
 
 <!-- MAP MODAL -->
@@ -248,18 +232,55 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 // ════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════
-let API = localStorage.getItem('pk_api') || '';
+// ════════════════════════════════════════
+//  CONFIG — Worker URL + Secret
+//  ⚠️ ตั้งให้ตรงกับ Cloudflare Worker ของคุณ
+// ════════════════════════════════════════
+const WORKER_URL   = 'https://pk-discord-relay.revenge2288.workers.dev';
+const API          = 'https://pk-discord-relay.revenge2288.workers.dev/api';
+const API_SECRET   = '2389';   // ค่าเดียวกับ PK_SECRET ใน Cloudflare Worker
+
 let CURRENT_USER = null;
 let _teams=[], _salesTeams=[], _accessDates=[], _allMembers=[], _memDraft=[], _mapObj=null;
 
 // ════════════════════════════════════════
-//  API CALL
+//  API CALL — auto-attach token + secret
 // ════════════════════════════════════════
 async function call(body){
-  if (!API) { toast('ตั้งค่า URL ก่อน (กด ⚙)'); throw new Error('no api'); }
+  // Auto-attach username + token (ยกเว้น pk_login ที่ส่ง username/password)
+  if (CURRENT_USER && body.action !== 'pk_login') {
+    if (body.username == null) body.username = CURRENT_USER.username;
+    if (body.token == null)    body.token    = CURRENT_USER.token;
+  }
   try {
-    const r = await fetch(API, { method:'POST', redirect:'follow', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(body) });
-    return await r.json();
+    const r = await fetch(API, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-PK-Secret': API_SECRET
+      },
+      body: JSON.stringify(body)
+    });
+    const data = await r.json();
+
+    // ถ้า server บอกว่า session ไม่ valid → kick กลับหน้า login
+    if (data && data.ok === false && data.error &&
+        (data.error.indexOf('session') !== -1 ||
+         data.error.indexOf('login ใหม่') !== -1 ||
+         data.error.indexOf('user ถูก') !== -1)) {
+      if (CURRENT_USER) {
+        // อย่า kick ตอน checkSession ปกติ — มันจัดการเอง
+        if (body.action !== 'pk_checkSession') {
+          toast('⚠️ ' + data.error);
+          setTimeout(() => {
+            localStorage.removeItem('pk_user');
+            location.reload();
+          }, 1500);
+        }
+      }
+    }
+    return data;
   } catch(e) { toast('❌ เชื่อมต่อไม่ได้'); throw e; }
 }
 
@@ -274,35 +295,18 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (savedUser) {
     try {
       const u = JSON.parse(savedUser);
-      if (u.username && u.token && API) {
+      if (u.username && u.token) {
         showLoad('กำลังตรวจสอบ session...');
+        // ตอนเช็ค session — ส่ง username/token แบบ explicit ไม่ผ่าน CURRENT_USER
         const r = await call({ action:'pk_checkSession', username:u.username, token:u.token });
         hideLoad();
         if (r.ok && r.valid) { CURRENT_USER = { ...u, ...r.user }; enterApp(); return; }
         localStorage.removeItem('pk_user');
-        toast(r.error || 'Session หมดอายุ');
+        if (r && r.error) toast(r.error);
       }
     } catch(e) { localStorage.removeItem('pk_user'); }
   }
-  if (!API) setTimeout(showUrlSettings, 100);
 });
-
-// ════════════════════════════════════════
-//  URL SETTINGS
-// ════════════════════════════════════════
-function showUrlSettings(){
-  document.getElementById('apiUrlInput').value = API;
-  document.getElementById('urlModal').classList.add('on');
-}
-function saveApiUrl(){
-  const v = document.getElementById('apiUrlInput').value.trim();
-  if (!v) { toast('กรุณากรอก URL'); return; }
-  API = v;
-  localStorage.setItem('pk_api', API);
-  document.getElementById('urlModal').classList.remove('on');
-  toast('✓ บันทึก URL แล้ว');
-}
-document.getElementById('urlModal').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('on'); });
 
 // ════════════════════════════════════════
 //  LOGIN / LOGOUT
@@ -313,7 +317,6 @@ async function doLogin(){
   const err = document.getElementById('lgErr');
   err.textContent = '';
   if (!username || !password) { err.textContent = 'กรอกข้อมูลให้ครบ'; return; }
-  if (!API) { err.textContent = 'ตั้งค่า API URL ก่อน'; return; }
   const btn = document.getElementById('lgBtn');
   btn.disabled = true; btn.textContent = 'กำลังเข้าสู่ระบบ...';
   try {
