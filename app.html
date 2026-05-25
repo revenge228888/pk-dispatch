@@ -359,7 +359,16 @@ function enterApp(){
   const c = document.getElementById('roleContent');
   if (CURRENT_USER.role === 'office')      { c.innerHTML = renderOfficeShell(); officeInit(); }
   else if (CURRENT_USER.role === 'sales')  { c.innerHTML = renderSalesStub();   _showRefreshForSales(); }
-  else if (CURRENT_USER.role === 'tech')   { c.innerHTML = renderTechStub();    document.getElementById('btnRefresh').style.display='none'; }
+  else if (CURRENT_USER.role === 'tech')   {
+    c.innerHTML = renderTechStub();
+    if (CURRENT_USER.team) {
+      document.getElementById('btnRefresh').style.display = '';
+      document.getElementById('btnRefresh').onclick = initTech;
+      initTech();
+    } else {
+      document.getElementById('btnRefresh').style.display = 'none';
+    }
+  }
   else                                      c.innerHTML = '<div class="empty-section"><h2>ไม่รู้จัก role</h2></div>';
 
   if (window._pkSessionInterval) clearInterval(window._pkSessionInterval);
@@ -1301,7 +1310,134 @@ function _showRefreshForSales(){
   };
 }
 function renderTechStub(){
-  return `<div class="card"><div class="card-head">🔧 ระบบช่าง</div><div class="card-body"><div class="empty-section"><h2>เข้าสู่ระบบสำเร็จ ✅</h2><p>สำหรับช่าง แนะนำให้ใช้ผ่าน <b>tech.html</b> บนมือถือ<br>(GPS แม่นยำกว่า + ใช้กล้องได้)<br><br>Step 5 จะรวมหน้า tech มาที่นี่</p></div></div></div>`;
+  if (!CURRENT_USER.team) {
+    return `<div class="card"><div class="card-head">🔧 ระบบช่าง</div><div class="card-body">
+      <div class="empty-section">
+        <h2>⚠️ ยังไม่ได้กำหนดทีม</h2>
+        <p>
+          user นี้ยังไม่ได้ระบุ <b>"ทีม"</b> ใน Sheet Users<br>
+          กรุณาแจ้งออฟฟิศให้เพิ่มทีมในคอลัมน์ "team"<br>
+          เช่น "ช่างทีม A"
+        </p>
+      </div>
+    </div></div>`;
+  }
+  return `
+    <div class="card">
+      <div class="card-head">
+        <span>🔧 ${CURRENT_USER.team}</span>
+        <span id="tSync" style="font-size:11px;color:var(--mu);font-weight:400;text-transform:none;letter-spacing:0;"></span>
+      </div>
+      <div class="section-pad">
+        <div class="row-form" style="margin-bottom:8px;">
+          <div class="fg" style="flex:1;min-width:160px;">
+            <label class="fl">วันที่ทำงาน</label>
+            <select class="fi" id="tDate" onchange="techOnDateChange()">
+              <option value="">— เลือกวันที่ —</option>
+            </select>
+          </div>
+          <div class="fg" style="flex:1;min-width:140px;">
+            <label class="fl">ชื่อคุณ</label>
+            <select class="fi" id="tWorker">
+              <option value="">— เลือกชื่อ —</option>
+            </select>
+          </div>
+        </div>
+        <div id="tInfo" style="margin-top:14px;"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">📋 งานในวันที่เลือก</div>
+      <div class="card-body">
+        <div class="empty-section">
+          <p style="font-size:13px;color:var(--mu);">
+            <i>Phase 2 จะแสดง Card งานในนี้</i><br>
+            ตอนนี้แค่ตรวจสอบว่า:<br>
+            ✓ Login ได้<br>
+            ✓ รู้ทีม<br>
+            ✓ เลือกวันที่/ชื่อ ได้
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ════════════════════════════════════════
+//  TECH — Phase 1 logic
+// ════════════════════════════════════════
+let _techAccess = [];
+let _techMembers = [];
+
+async function initTech(){
+  if (!CURRENT_USER.team) return;  // ไม่ทำอะไรถ้าไม่มีทีม
+
+  const sync = document.getElementById('tSync');
+  if (sync) sync.textContent = 'กำลังโหลด...';
+
+  try {
+    const r = await call({ action:'pk_techBootstrap' });
+    if (!r.ok) {
+      if (sync) sync.textContent = '❌ ' + (r.error || 'โหลดไม่ได้');
+      return;
+    }
+    _techAccess = r.access || [];
+    _techMembers = r.members || [];
+    fillTechDates();
+    if (sync) sync.textContent = 'อัปเดต ' + new Date().toLocaleTimeString('th-TH',{timeStyle:'short'});
+  } catch(e) {
+    if (sync) sync.textContent = '❌ เชื่อมต่อไม่ได้';
+  }
+}
+
+function fillTechDates(){
+  const dd = document.getElementById('tDate');
+  if (!dd) return;
+  const today = new Date(); today.setHours(0,0,0,0);
+  // เรียงวันที่ใหม่สุดก่อน + เว้นวันที่ผ่านมาเกิน 30 วัน
+  const sorted = [..._techAccess].sort((a,b) => b.date.localeCompare(a.date));
+  dd.innerHTML = '<option value="">— เลือกวันที่ —</option>';
+  sorted.forEach(a => {
+    const d = new Date(a.date); d.setHours(0,0,0,0);
+    const diff = Math.round((d - today) / 86400000);
+    let label = fmtD(a.date);
+    if (diff === 0) label += ' (วันนี้)';
+    else if (diff === 1) label += ' (พรุ่งนี้)';
+    else if (diff === -1) label += ' (เมื่อวาน)';
+    else if (diff > 1) label += ` (อีก ${diff} วัน)`;
+    else label += ` (ผ่านมา ${-diff} วัน)`;
+    const o = document.createElement('option');
+    o.value = a.date;
+    o.textContent = label;
+    dd.appendChild(o);
+  });
+  if (!sorted.length) {
+    const o = document.createElement('option');
+    o.disabled = true; o.textContent = '(ออฟฟิศยังไม่ได้กำหนดวันให้)';
+    dd.appendChild(o);
+  }
+}
+
+function techOnDateChange(){
+  const date = document.getElementById('tDate').value;
+  const wd = document.getElementById('tWorker');
+  wd.innerHTML = '<option value="">— เลือกชื่อ —</option>';
+  if (!date) return;
+  const mem = _techMembers.find(m => m.date === date);
+  const names = mem && mem.members ? mem.members : [];
+  if (!names.length) {
+    const o = document.createElement('option');
+    o.disabled = true; o.textContent = '(ออฟฟิศยังไม่ได้ใส่ชื่อสมาชิก)';
+    wd.appendChild(o);
+    return;
+  }
+  names.forEach(n => {
+    const o = document.createElement('option');
+    o.value = n; o.textContent = n;
+    wd.appendChild(o);
+  });
+  // ถ้ามีแค่ชื่อเดียว auto-select
+  if (names.length === 1) wd.value = names[0];
 }
 
 // ════════════════════════════════════════
