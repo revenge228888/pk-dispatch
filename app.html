@@ -175,6 +175,37 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 .rec-btns{display:flex;gap:5px;flex-wrap:wrap;}
 .rec-btns .btn{font-size:11px;padding:5px 10px;}
 
+/* ── Record Form Modal ── */
+.recm-bg{position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(4px);z-index:600;display:none;overflow-y:auto;padding:0;}
+.recm-bg.on{display:block;}
+.recm-wrap{max-width:760px;margin:0 auto;background:var(--bg);min-height:100vh;}
+.recm-head{position:sticky;top:0;background:var(--surf);border-bottom:1px solid var(--bdr);padding:12px 18px;display:flex;align-items:center;gap:10px;z-index:5;}
+.recm-title{flex:1;font-size:15px;font-weight:700;color:var(--tx);}
+.recm-body{padding:16px 18px 100px;}
+.recm-section{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:14px;margin-bottom:14px;}
+.recm-section-head{font-size:11px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
+.recm-entry{background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:14px;margin-bottom:12px;}
+.recm-entry-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--bdr);}
+.recm-entry-num{font-size:12px;font-weight:700;color:var(--acc);font-family:var(--mono);}
+.recm-size-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;}
+.recm-size-row .fg{margin:0;}
+.recm-check-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;margin-bottom:8px;}
+.recm-check{display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:6px;cursor:pointer;font-size:12px;user-select:none;}
+.recm-check:hover{border-color:var(--acc);}
+.recm-check input{margin:0;cursor:pointer;width:14px;height:14px;}
+.recm-check.checked{background:rgba(245,166,35,.1);border-color:var(--acc);color:var(--acc);}
+.recm-rang-row{display:flex;gap:8px;margin-top:6px;}
+.recm-rang-row .recm-check{flex:1;}
+.recm-add-btn{width:100%;padding:14px;background:rgba(245,166,35,.06);border:2px dashed var(--acc);border-radius:10px;color:var(--acc);font-weight:600;cursor:pointer;font-size:13px;transition:all .15s;}
+.recm-add-btn:hover{background:rgba(245,166,35,.15);}
+.recm-save-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surf);border-top:1px solid var(--bdr);padding:10px 18px;display:flex;align-items:center;gap:10px;z-index:5;}
+.recm-save-status{flex:1;font-size:11px;color:var(--mu);}
+.recm-readonly input,.recm-readonly textarea,.recm-readonly select{pointer-events:none;opacity:.8;}
+.recm-readonly .recm-check{pointer-events:none;opacity:.85;}
+.recm-readonly .recm-rm-entry,.recm-readonly .recm-add-btn{display:none;}
+.recm-rm-entry{background:none;border:1px solid var(--rd);color:var(--rd);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;}
+.recm-rm-entry:hover{background:var(--rd);color:#fff;}
+
 /* ── BOOKING tab ── */
 .bk-type-btn, .bk-mode-btn{
   flex:1;padding:11px 16px;border-radius:8px;border:1px solid var(--bdr);
@@ -288,6 +319,23 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
     </div>
     <div class="card-body" id="tdmBody" style="max-height:78vh;overflow-y:auto;">
       <div class="loading-row">กำลังโหลด...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 📐 RECORD FORM MODAL -->
+<div class="recm-bg" id="recmModal">
+  <div class="recm-wrap">
+    <div class="recm-head">
+      <div class="recm-title" id="recmTitle">📐 บันทึกขนาด</div>
+      <button class="hbtn" id="recmExportBtn" onclick="recordExportImg()" style="display:none;" title="Export PNG A4">🖼️</button>
+      <button class="hbtn danger" onclick="recordCloseModal()">×</button>
+    </div>
+    <div class="recm-body" id="recmBody"></div>
+    <div class="recm-save-bar" id="recmSaveBar">
+      <span class="recm-save-status" id="recmSaveStatus">—</span>
+      <button class="btn btn-d" onclick="recordCloseModal()">ยกเลิก</button>
+      <button class="btn btn-p" id="recmSaveBtn" onclick="recordSubmit()">💾 บันทึก</button>
     </div>
   </div>
 </div>
@@ -2175,10 +2223,415 @@ function recordsRender(){
   }).join('');
 }
 
-// Placeholder functions — จะทำใน C2
-function recordOpenNew(){ toast('🔧 C2 จะทำ — Modal ฟอร์มสร้าง'); }
-function recordOpenView(id){ toast('🔧 C2 จะทำ — Modal ดู: ' + id); }
-function recordOpenEdit(id){ toast('🔧 C2 จะทำ — Modal แก้: ' + id); }
+// ════════════════════════════════════════
+//  📐 RECORD FORM MODAL (C2)
+// ════════════════════════════════════════
+const REC_MAX_ENTRIES = 50;
+
+// State
+let _recForm = {
+  mode: 'new',         // new | edit | view
+  id: null,
+  customer: { name:'', phone:'' },
+  linkedJobId: '',
+  entries: [],
+  recentJobs: [],
+  draftKey: null,
+  draftTimer: null,
+  lastSavedAt: null,
+  dirty: false
+};
+
+function recordEmptyEntry(no){
+  return {
+    no, isEmpty: true, location: '',
+    width: null, height: null, qty: null,
+    muang: [], krachok: [], rang: null, detail: ''
+  };
+}
+
+// ── New ──
+async function recordOpenNew(prefill){
+  prefill = prefill || {};
+  _recForm = {
+    mode: 'new', id: null,
+    customer: { name: prefill.customerName || '', phone: prefill.customerPhone || '' },
+    linkedJobId: prefill.linkedJobId || '',
+    entries: [ recordEmptyEntry(1) ],
+    recentJobs: [], draftKey: 'pk_record_draft_new',
+    draftTimer: null, lastSavedAt: null, dirty: false
+  };
+  await recordLoadRecentJobs();
+  // ถาม recover draft (เฉพาะตอน new ไม่มี prefill)
+  if (!prefill.customerName && !prefill.linkedJobId) {
+    const draft = localStorage.getItem(_recForm.draftKey);
+    if (draft) {
+      if (confirm('พบ draft ที่บันทึกค้างไว้ — โหลดกลับ?')) {
+        try { Object.assign(_recForm, JSON.parse(draft)); }
+        catch(e) { localStorage.removeItem(_recForm.draftKey); }
+      } else {
+        localStorage.removeItem(_recForm.draftKey);
+      }
+    }
+  }
+  document.getElementById('recmTitle').textContent = '📐 บันทึกขนาด — สร้างใหม่';
+  document.getElementById('recmSaveBar').style.display = 'flex';
+  document.getElementById('recmSaveBtn').textContent = '💾 บันทึก';
+  document.getElementById('recmExportBtn').style.display = 'none';
+  recordRenderForm();
+  recordOpenModal();
+  recordStartAutosave();
+}
+
+// ── View (readonly) ──
+async function recordOpenView(id){
+  showLoad('กำลังโหลด...');
+  try {
+    const r = await call({ action:'pk_recordGet', id });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
+    const rec = r.record;
+    _recForm = {
+      mode: 'view', id,
+      customer: rec.customer || { name:'', phone:'' },
+      linkedJobId: rec.linkedJobId || '',
+      entries: (rec.entries && rec.entries.length) ? rec.entries : [ recordEmptyEntry(1) ],
+      recentJobs: [], draftKey: null,
+      draftTimer: null, lastSavedAt: null, dirty: false
+    };
+    document.getElementById('recmTitle').textContent = '📐 ดู Record — ' + id;
+    document.getElementById('recmSaveBar').style.display = 'none';
+    document.getElementById('recmExportBtn').style.display = '';  // Phase C4 จะใช้
+    recordRenderForm();
+    recordOpenModal();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// ── Edit ──
+async function recordOpenEdit(id){
+  showLoad('กำลังโหลด...');
+  try {
+    const r = await call({ action:'pk_recordGet', id });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
+    const rec = r.record;
+    _recForm = {
+      mode: 'edit', id,
+      customer: rec.customer || { name:'', phone:'' },
+      linkedJobId: rec.linkedJobId || '',
+      entries: (rec.entries && rec.entries.length) ? rec.entries : [ recordEmptyEntry(1) ],
+      recentJobs: [], draftKey: 'pk_record_draft_' + id,
+      draftTimer: null, lastSavedAt: null, dirty: false
+    };
+    await recordLoadRecentJobs();
+    // ถาม recover draft
+    const draft = localStorage.getItem(_recForm.draftKey);
+    if (draft) {
+      if (confirm('พบ draft ของ record นี้ที่บันทึกค้างไว้ — โหลดกลับ?')) {
+        try {
+          const d = JSON.parse(draft);
+          _recForm.customer = d.customer || _recForm.customer;
+          _recForm.linkedJobId = d.linkedJobId || _recForm.linkedJobId;
+          _recForm.entries = d.entries || _recForm.entries;
+        } catch(e) { localStorage.removeItem(_recForm.draftKey); }
+      } else {
+        localStorage.removeItem(_recForm.draftKey);
+      }
+    }
+    document.getElementById('recmTitle').textContent = '📐 แก้ไข — ' + id;
+    document.getElementById('recmSaveBar').style.display = 'flex';
+    document.getElementById('recmSaveBtn').textContent = '💾 อัปเดต';
+    document.getElementById('recmExportBtn').style.display = 'none';
+    recordRenderForm();
+    recordOpenModal();
+    recordStartAutosave();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+function recordOpenModal(){
+  document.getElementById('recmModal').classList.add('on');
+  document.body.style.overflow = 'hidden';
+}
+
+function recordCloseModal(){
+  if (_recForm.dirty && _recForm.mode !== 'view') {
+    if (!confirm('มีการแก้ไขที่ยังไม่บันทึก — ปิดเลย?\n(Draft จะถูกเก็บไว้ใน browser)')) return;
+  }
+  recordStopAutosave();
+  document.getElementById('recmModal').classList.remove('on');
+  document.body.style.overflow = '';
+}
+
+async function recordLoadRecentJobs(){
+  try {
+    const r = await call({ action:'pk_recordListRecentJobs' });
+    if (r.ok) _recForm.recentJobs = r.jobs || [];
+  } catch(e) {}
+}
+
+// ── Render Form ──
+function recordRenderForm(){
+  const body = document.getElementById('recmBody');
+  const ro = _recForm.mode === 'view';
+  body.className = 'recm-body' + (ro ? ' recm-readonly' : '');
+
+  const c = _recForm.customer || { name:'', phone:'' };
+  const jobOptions = ['<option value="">— ไม่ผูกกับงาน —</option>']
+    .concat(_recForm.recentJobs.map(j => {
+      const sel = j.id === _recForm.linkedJobId ? ' selected' : '';
+      return `<option value="${j.id}"${sel}>${j.id} · ${j.name||''} · ${fmtD(j.date)}</option>`;
+    }));
+  // ถ้า linkedJobId เก่ามีแต่ไม่อยู่ใน recent (เกิน 30 วัน) — เพิ่มไว้ด้วย
+  if (_recForm.linkedJobId && !_recForm.recentJobs.find(j => j.id === _recForm.linkedJobId)) {
+    jobOptions.push(`<option value="${_recForm.linkedJobId}" selected>${_recForm.linkedJobId} · (เก่า)</option>`);
+  }
+
+  let html = `
+    <div class="recm-section">
+      <div class="recm-section-head">ข้อมูลลูกค้า</div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label class="fl">👤 ชื่อลูกค้า <span style="color:var(--rd)">*</span></label>
+        <input class="fi" id="recmCustName" type="text" value="${escAttr(c.name)}" oninput="recordOnChange()">
+      </div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label class="fl">📞 เบอร์โทร</label>
+        <input class="fi" id="recmCustPhone" type="tel" value="${escAttr(c.phone)}" oninput="recordOnChange()">
+      </div>
+      <div class="fg">
+        <label class="fl">🔗 ผูกกับงาน (Optional)</label>
+        <select class="fi" id="recmLinkedJob" onchange="recordOnChange()">${jobOptions.join('')}</select>
+      </div>
+    </div>
+  `;
+
+  _recForm.entries.forEach((e, idx) => {
+    html += recordRenderEntry(e, idx, ro);
+  });
+
+  if (!ro) {
+    html += `
+      <button class="recm-add-btn" onclick="recordAddEntry()">+ เพิ่มรายการ</button>
+    `;
+  }
+
+  body.innerHTML = html;
+  recordUpdateSaveStatus();
+}
+
+function recordRenderEntry(e, idx, ro){
+  const num = idx + 1;
+  const muangBoxes = MUANG_OPTIONS.map(opt => {
+    const ch = (e.muang||[]).indexOf(opt) !== -1;
+    return `<label class="recm-check${ch?' checked':''}">
+      <input type="checkbox" ${ch?'checked':''} onchange="recordToggleMuang(${idx},'${opt}',this)">
+      ${opt}
+    </label>`;
+  }).join('');
+  const krachokBoxes = KRACHOK_OPTIONS.map(opt => {
+    const ch = (e.krachok||[]).indexOf(opt) !== -1;
+    return `<label class="recm-check${ch?' checked':''}">
+      <input type="checkbox" ${ch?'checked':''} onchange="recordToggleKrachok(${idx},'${opt}',this)">
+      ${opt}
+    </label>`;
+  }).join('');
+  const rt = e.rang === 'รางธรรมดา';
+  const re_ = e.rang === 'รางเตี้ย';
+  return `
+    <div class="recm-entry">
+      <div class="recm-entry-head">
+        <div class="recm-entry-num">รายการที่ ${num}</div>
+        ${!ro?`<button class="recm-rm-entry" onclick="recordRemoveEntry(${idx})">× ลบ</button>`:''}
+      </div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label class="fl">📍 ตำแหน่ง</label>
+        <input class="fi" type="text" placeholder="เช่น ห้องนอน / ระเบียง" value="${escAttr(e.location||'')}" oninput="recordOnEntryChange(${idx},'location',this.value)">
+      </div>
+      <div class="recm-size-row">
+        <div class="fg">
+          <label class="fl">📏 กว้าง (cm)</label>
+          <input class="fi" type="number" inputmode="decimal" value="${e.width??''}" placeholder="0" oninput="recordOnEntryChange(${idx},'width',this.value===''?null:parseFloat(this.value))">
+        </div>
+        <div class="fg">
+          <label class="fl">📐 สูง (cm)</label>
+          <input class="fi" type="number" inputmode="decimal" value="${e.height??''}" placeholder="0" oninput="recordOnEntryChange(${idx},'height',this.value===''?null:parseFloat(this.value))">
+        </div>
+        <div class="fg">
+          <label class="fl">🔢 จำนวน</label>
+          <input class="fi" type="number" inputmode="numeric" value="${e.qty??''}" placeholder="1" min="1" oninput="recordOnEntryChange(${idx},'qty',this.value===''?null:parseInt(this.value))">
+        </div>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">🪟 มุ้งลวด</div>
+        <div class="recm-check-grid">${muangBoxes}</div>
+        <div class="recm-rang-row">
+          <label class="recm-check${rt?' checked':''}">
+            <input type="radio" name="rang_${idx}" ${rt?'checked':''} onclick="recordSetRang(${idx},'รางธรรมดา')">
+            รางธรรมดา
+          </label>
+          <label class="recm-check${re_?' checked':''}">
+            <input type="radio" name="rang_${idx}" ${re_?'checked':''} onclick="recordSetRang(${idx},'รางเตี้ย')">
+            รางเตี้ย
+          </label>
+          ${(rt||re_)&&!ro?`<button class="recm-rm-entry" onclick="recordSetRang(${idx},null)" style="white-space:nowrap;">× ล้างราง</button>`:''}
+        </div>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">🪞 กระจกอลูมิเนียม</div>
+        <div class="recm-check-grid">${krachokBoxes}</div>
+      </div>
+
+      <div class="fg">
+        <label class="fl">📝 รายละเอียดเพิ่มเติม</label>
+        <textarea class="fi" rows="2" oninput="recordOnEntryChange(${idx},'detail',this.value)">${escHtml(e.detail||'')}</textarea>
+      </div>
+    </div>
+  `;
+}
+
+function escAttr(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function escHtml(s){ return String(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Event Handlers ──
+function recordOnChange(){
+  _recForm.customer.name = document.getElementById('recmCustName').value;
+  _recForm.customer.phone = document.getElementById('recmCustPhone').value;
+  _recForm.linkedJobId = document.getElementById('recmLinkedJob').value;
+  _recForm.dirty = true;
+}
+function recordOnEntryChange(idx, field, val){
+  if (!_recForm.entries[idx]) return;
+  _recForm.entries[idx][field] = val;
+  // recompute isEmpty
+  const e = _recForm.entries[idx];
+  e.isEmpty = !e.location && !e.width && !e.height && !e.qty && !e.detail
+              && (!e.muang || !e.muang.length) && (!e.krachok || !e.krachok.length) && !e.rang;
+  _recForm.dirty = true;
+}
+function recordToggleMuang(idx, opt, el){
+  if (!_recForm.entries[idx]) return;
+  const e = _recForm.entries[idx];
+  if (!e.muang) e.muang = [];
+  const i = e.muang.indexOf(opt);
+  if (i === -1) e.muang.push(opt);
+  else e.muang.splice(i, 1);
+  el.parentElement.classList.toggle('checked', i === -1);
+  recordOnEntryChange(idx, 'muang', e.muang);
+}
+function recordToggleKrachok(idx, opt, el){
+  if (!_recForm.entries[idx]) return;
+  const e = _recForm.entries[idx];
+  if (!e.krachok) e.krachok = [];
+  const i = e.krachok.indexOf(opt);
+  if (i === -1) e.krachok.push(opt);
+  else e.krachok.splice(i, 1);
+  el.parentElement.classList.toggle('checked', i === -1);
+  recordOnEntryChange(idx, 'krachok', e.krachok);
+}
+function recordSetRang(idx, val){
+  if (!_recForm.entries[idx]) return;
+  _recForm.entries[idx].rang = val;
+  recordOnEntryChange(idx, 'rang', val);
+  recordRenderForm();  // re-render to update radio state
+}
+
+function recordAddEntry(){
+  if (_recForm.entries.length >= REC_MAX_ENTRIES) {
+    toast('สูงสุด ' + REC_MAX_ENTRIES + ' รายการ'); return;
+  }
+  _recForm.entries.push(recordEmptyEntry(_recForm.entries.length + 1));
+  _recForm.dirty = true;
+  recordRenderForm();
+  // scroll ไปท้าย
+  setTimeout(() => {
+    document.getElementById('recmModal').scrollTop = 99999;
+  }, 50);
+}
+
+function recordRemoveEntry(idx){
+  if (_recForm.entries.length <= 1) { toast('ต้องมีอย่างน้อย 1 รายการ'); return; }
+  if (!confirm('ลบรายการที่ ' + (idx+1) + '?')) return;
+  _recForm.entries.splice(idx, 1);
+  // renumber
+  _recForm.entries.forEach((e, i) => e.no = i + 1);
+  _recForm.dirty = true;
+  recordRenderForm();
+}
+
+// ── Auto-save Draft ──
+function recordStartAutosave(){
+  recordStopAutosave();
+  _recForm.draftTimer = setInterval(() => {
+    if (!_recForm.dirty || !_recForm.draftKey) return;
+    try {
+      localStorage.setItem(_recForm.draftKey, JSON.stringify({
+        customer: _recForm.customer,
+        linkedJobId: _recForm.linkedJobId,
+        entries: _recForm.entries
+      }));
+      _recForm.lastSavedAt = Date.now();
+      _recForm.dirty = false;
+      recordUpdateSaveStatus();
+    } catch(e) {}
+  }, 5000);
+}
+function recordStopAutosave(){
+  if (_recForm.draftTimer) clearInterval(_recForm.draftTimer);
+  _recForm.draftTimer = null;
+}
+function recordUpdateSaveStatus(){
+  const el = document.getElementById('recmSaveStatus');
+  if (!el) return;
+  if (_recForm.mode === 'view') { el.textContent = '🔒 โหมดดู (readonly)'; return; }
+  if (_recForm.lastSavedAt) {
+    const t = new Date(_recForm.lastSavedAt).toLocaleTimeString('th-TH',{timeStyle:'short'});
+    el.textContent = '💾 draft บันทึกใน browser · ล่าสุด ' + t;
+  } else {
+    el.textContent = 'auto-save draft ทุก 5 วินาที';
+  }
+}
+
+// ── Submit (Save / Update) ──
+async function recordSubmit(){
+  // validate
+  if (!_recForm.customer.name || !_recForm.customer.name.trim()) {
+    toast('กรอกชื่อลูกค้า'); return;
+  }
+  const nonEmpty = _recForm.entries.filter(e => !e.isEmpty);
+  if (!nonEmpty.length) {
+    toast('ต้องมีอย่างน้อย 1 รายการที่กรอกข้อมูล'); return;
+  }
+
+  const body = {
+    customer: _recForm.customer,
+    linkedJobId: _recForm.linkedJobId,
+    entries: _recForm.entries
+  };
+
+  showLoad(_recForm.mode === 'edit' ? 'กำลังอัปเดต...' : 'กำลังบันทึก...');
+  try {
+    let r;
+    if (_recForm.mode === 'edit') {
+      r = await call({ action:'pk_recordUpdate', id: _recForm.id, ...body });
+    } else {
+      r = await call({ action:'pk_recordCreate', ...body });
+    }
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast(_recForm.mode === 'edit' ? '✅ อัปเดตแล้ว' : '✅ บันทึกแล้ว');
+    // ลบ draft
+    if (_recForm.draftKey) localStorage.removeItem(_recForm.draftKey);
+    _recForm.dirty = false;
+    recordStopAutosave();
+    document.getElementById('recmModal').classList.remove('on');
+    document.body.style.overflow = '';
+    recordsLoad();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// Placeholder for C4 Export
+function recordExportImg(){ toast('🔧 C4 จะทำ — Export PNG A4'); }
 
 async function recordDelete(id){
   if (!confirm('ลบ record นี้?\n(สามารถกู้คืนได้โดย office)')) return;
