@@ -250,13 +250,15 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 </div>
 
 <!-- OFFICE PHOTO MODAL -->
-<div class="modal-bg" id="officePhotoModal" style="z-index:500;">
-  <div style="position:relative;max-width:95vw;max-height:95vh;">
-    <button onclick="document.getElementById('officePhotoModal').classList.remove('on')" style="position:absolute;top:-40px;right:0;background:rgba(255,255,255,.1);color:#fff;border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:20px;">×</button>
-    <button id="officePhotoPrev" onclick="officePhotoPrev()" style="position:absolute;left:-50px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);color:#fff;border:none;width:40px;height:60px;border-radius:8px;cursor:pointer;font-size:24px;">‹</button>
-    <button id="officePhotoNext" onclick="officePhotoNext()" style="position:absolute;right:-50px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);color:#fff;border:none;width:40px;height:60px;border-radius:8px;cursor:pointer;font-size:24px;">›</button>
-    <img id="officePhotoFull" style="max-width:95vw;max-height:90vh;border-radius:8px;">
-    <div style="text-align:center;margin-top:10px;color:#fff;font-size:13px;" id="officePhotoCaption"></div>
+<div class="modal-bg" id="officePhotoModal" style="z-index:500;" onclick="if(event.target===this)this.classList.remove('on')">
+  <button onclick="document.getElementById('officePhotoModal').classList.remove('on')" style="position:fixed;top:14px;right:14px;background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.3);width:42px;height:42px;border-radius:50%;cursor:pointer;font-size:22px;line-height:1;z-index:10;">×</button>
+  <div style="position:relative;max-width:95vw;max-height:90vh;display:flex;align-items:center;justify-content:center;">
+    <button id="officePhotoPrev" onclick="event.stopPropagation();officePhotoPrev()" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.3);width:42px;height:62px;border-radius:8px;cursor:pointer;font-size:24px;z-index:5;">‹</button>
+    <button id="officePhotoNext" onclick="event.stopPropagation();officePhotoNext()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.3);width:42px;height:62px;border-radius:8px;cursor:pointer;font-size:24px;z-index:5;">›</button>
+    <div style="display:flex;flex-direction:column;align-items:center;max-width:95vw;">
+      <img id="officePhotoFull" style="max-width:90vw;max-height:80vh;border-radius:8px;" onclick="event.stopPropagation()">
+      <div style="text-align:center;margin-top:10px;color:#fff;font-size:13px;background:rgba(0,0,0,.6);padding:6px 14px;border-radius:6px;" id="officePhotoCaption"></div>
+    </div>
   </div>
 </div>
 
@@ -339,6 +341,23 @@ window.addEventListener('DOMContentLoaded', async () => {
   ['lgUser','lgPass'].forEach(id => {
     document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   });
+
+  // ESC ปิด modal บนสุดที่เปิดอยู่
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    // หา modal ที่ on อยู่ — เลือกตัวที่ z-index สูงสุด (รูปก่อน team detail)
+    const photoModals = ['tPhotoModal','officePhotoModal'];
+    for (const id of photoModals) {
+      const m = document.getElementById(id);
+      if (m && m.classList.contains('on')) { m.classList.remove('on'); return; }
+    }
+    const others = ['teamDetailModal','tDoneModal','mapModal'];
+    for (const id of others) {
+      const m = document.getElementById(id);
+      if (m && m.classList.contains('on')) { m.classList.remove('on'); return; }
+    }
+  });
+
   const savedUser = localStorage.getItem('pk_user');
   if (savedUser) {
     try {
@@ -1515,11 +1534,11 @@ function renderTechStub(){
     </div>
 
     <!-- Photo Lightbox Modal -->
-    <div class="modal-bg" id="tPhotoModal" style="z-index:500;">
-      <div style="position:relative;max-width:95vw;max-height:95vh;">
-        <button onclick="document.getElementById('tPhotoModal').classList.remove('on')" style="position:absolute;top:-40px;right:0;background:rgba(255,255,255,.1);color:#fff;border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:20px;">×</button>
-        <img id="tPhotoFull" style="max-width:95vw;max-height:90vh;border-radius:8px;">
-        <div style="text-align:center;margin-top:10px;color:#fff;font-size:13px;" id="tPhotoCaption"></div>
+    <div class="modal-bg" id="tPhotoModal" style="z-index:500;" onclick="if(event.target===this)this.classList.remove('on')">
+      <button onclick="document.getElementById('tPhotoModal').classList.remove('on')" style="position:fixed;top:14px;right:14px;background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.3);width:42px;height:42px;border-radius:50%;cursor:pointer;font-size:22px;line-height:1;z-index:10;">×</button>
+      <div style="display:flex;flex-direction:column;align-items:center;max-width:95vw;">
+        <img id="tPhotoFull" style="max-width:90vw;max-height:80vh;border-radius:8px;" onclick="event.stopPropagation()">
+        <div style="text-align:center;margin-top:10px;color:#fff;font-size:13px;background:rgba(0,0,0,.6);padding:6px 14px;border-radius:6px;" id="tPhotoCaption"></div>
       </div>
     </div>
 
