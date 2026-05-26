@@ -3546,8 +3546,8 @@ function quoteRenderEntry(e, idx, ro){
       return `<option value="${c.id}"${sel}>${c.label} (${c.group})</option>`;
     }));
 
-  // คำนวณก่อน
-  if (!e._calc) e._calc = e.isEmpty ? { total:0, breakdown:[] } : quoteCalcEntry(e);
+  // คำนวณก่อนทุกครั้ง (เพื่อรองรับการเปลี่ยน priceType/mainColor/raคา)
+  e._calc = e.isEmpty ? { total:0, breakdown:[] } : quoteCalcEntry(e);
 
   // Type checkboxes
   const typesHtml = QUO_TYPE_ORDER.map(tid => {
@@ -3912,7 +3912,8 @@ function updateDateDisplay(input){
   if (!v) { span.textContent='เลือกวันที่'; span.classList.add('empty'); return; }
   const p = v.split('-');
   if (p.length !== 3) { span.textContent='เลือกวันที่'; span.classList.add('empty'); return; }
-  span.textContent = `${p[2]}/${p[1]}/${p[0].slice(2)}`;
+  span.textContent = `${p[2]}/${p[1]}
+/${p[0].slice(2)}`;
   span.classList.remove('empty');
 }
 function refreshAllDateDisplays(){
