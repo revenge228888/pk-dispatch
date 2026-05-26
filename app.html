@@ -158,6 +158,23 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 }
 .t-jobbtns{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
 
+/* ── Records (📐 จดขนาด) ── */
+.rec-toolbar{display:flex;gap:8px;align-items:center;padding:12px 16px;flex-wrap:wrap;border-bottom:1px solid var(--bdr);}
+.rec-search{flex:1;min-width:160px;}
+.rec-list{padding:12px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;}
+.rec-card{background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:12px 14px;transition:all .15s;}
+.rec-card:hover{border-color:var(--acc);transform:translateY(-1px);}
+.rec-card.deleted{opacity:.55;border-style:dashed;}
+.rec-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;}
+.rec-id{font-family:var(--mono);font-size:10px;color:var(--mu);}
+.rec-when{font-size:10px;color:var(--mu);text-align:right;}
+.rec-cust{font-size:14px;font-weight:700;color:var(--tx);margin-bottom:4px;}
+.rec-meta{font-size:11px;color:var(--mu);margin-bottom:8px;display:flex;gap:10px;flex-wrap:wrap;}
+.rec-meta b{color:var(--tx);font-weight:600;}
+.rec-link{display:inline-block;background:rgba(74,158,255,.12);color:var(--blu);padding:2px 8px;border-radius:10px;font-size:11px;font-family:var(--mono);}
+.rec-btns{display:flex;gap:5px;flex-wrap:wrap;}
+.rec-btns .btn{font-size:11px;padding:5px 10px;}
+
 /* ── BOOKING tab ── */
 .bk-type-btn, .bk-mode-btn{
   flex:1;padding:11px 16px;border-radius:8px;border:1px solid var(--bdr);
@@ -462,6 +479,7 @@ function renderOfficeShell(){
         <button class="tab" onclick="setTab('access',this)">📅 กำหนดคิว + สมาชิก</button>
         <button class="tab" onclick="setTab('booking',this)">➕ ลงคิวใหม่</button>
         <button class="tab" onclick="setTab('jobs',this)">📋 รายการงาน</button>
+        <button class="tab" onclick="setTab('records',this)">📐 จดขนาด</button>
       </div>
 
       <!-- DASHBOARD -->
@@ -630,6 +648,21 @@ function renderOfficeShell(){
           <tbody id="jTbody"><tr><td colspan="8" class="loading-row">เลือกวันที่แล้วกด "ดูรายการ"</td></tr></tbody></table>
         </div>
       </div>
+
+      <!-- RECORDS (📐 จดขนาด) -->
+      <div id="tabRecords" style="display:none;">
+        <div class="rec-toolbar">
+          <div class="fg rec-search"><label class="fl">ค้นหา</label>
+            <input class="fi" id="recSearch" type="text" placeholder="ลูกค้า / เบอร์ / ID / Job">
+          </div>
+          <button class="btn btn-g" onclick="recordsLoad()">🔄 รีเฟรช</button>
+          <button class="btn btn-p" onclick="recordOpenNew()">+ สร้างใหม่</button>
+          ${CURRENT_USER.role === 'office' ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;">
+            <input type="checkbox" id="recShowDeleted" onchange="recordsLoad()"> รวมที่ถูกลบ
+          </label>` : ''}
+        </div>
+        <div id="recList" class="rec-list"><div class="loading-row" style="grid-column:1/-1;">กดรีเฟรชเพื่อโหลด records</div></div>
+      </div>
     </div>
   `;
 }
@@ -692,7 +725,7 @@ function fillBookingTeam(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Records'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -701,6 +734,7 @@ function setTab(t, btn){
   btn.classList.add('on');
   if (t === 'dash') loadDashboard();
   if (t === 'booking') initBookingTab();
+  if (t === 'records') recordsInit();
 }
 
 // ════════════════════════════════════════
@@ -1107,6 +1141,7 @@ function renderSalesStub(){
       <div class="tabs">
         <button class="tab on" onclick="setSalesTab('booking',this)">➕ ขอคิวติดตั้ง</button>
         <button class="tab" onclick="setSalesTab('my',this)">📋 คิวของฉัน</button>
+        <button class="tab" onclick="setSalesTab('records',this)">📐 จดขนาด</button>
       </div>
 
       <!-- BOOKING -->
@@ -1216,6 +1251,18 @@ function renderSalesStub(){
         </div>
         <div id="sMyList" style="padding:0 16px 16px;"><div class="loading-row">เลือกตัวกรองแล้วกด "โหลด"</div></div>
       </div>
+
+      <!-- RECORDS (📐 จดขนาด) -->
+      <div id="sTabRecords" style="display:none;">
+        <div class="rec-toolbar">
+          <div class="fg rec-search"><label class="fl">ค้นหา</label>
+            <input class="fi" id="recSearch" type="text" placeholder="ลูกค้า / เบอร์ / ID / Job">
+          </div>
+          <button class="btn btn-g" onclick="recordsLoad()">🔄 รีเฟรช</button>
+          <button class="btn btn-p" onclick="recordOpenNew()">+ สร้างใหม่</button>
+        </div>
+        <div id="recList" class="rec-list"><div class="loading-row" style="grid-column:1/-1;">กดรีเฟรชเพื่อโหลด records</div></div>
+      </div>
     </div>
 
     <!-- Edit modal -->
@@ -1272,7 +1319,7 @@ let _sSlotTimer = null;
 let _sEditingId = null;
 
 function setSalesTab(t, btn){
-  ['Booking','My'].forEach(x => {
+  ['Booking','My','Records'].forEach(x => {
     const el = document.getElementById('sTab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('sTab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -1281,6 +1328,7 @@ function setSalesTab(t, btn){
   btn.classList.add('on');
   if (t === 'booking') initSalesBooking();
   if (t === 'my') initSalesMy();
+  if (t === 'records') recordsInit();
 }
 
 function initSalesBooking(){
@@ -1533,6 +1581,21 @@ function renderTechStub(){
       <div id="tJobsList" style="padding:12px;"></div>
     </div>
 
+    <!-- TECH: 📐 RECORDS CARD -->
+    <div class="card">
+      <div class="card-head">
+        <span>📐 จดขนาด</span>
+        <button class="btn btn-p btn-sm" onclick="recordOpenNew()">+ สร้างใหม่</button>
+      </div>
+      <div class="rec-toolbar">
+        <div class="fg rec-search"><label class="fl">ค้นหา</label>
+          <input class="fi" id="recSearch" type="text" placeholder="ลูกค้า / เบอร์ / ID / Job">
+        </div>
+        <button class="btn btn-g" onclick="recordsLoad()">🔄</button>
+      </div>
+      <div id="recList" class="rec-list" style="padding:12px;"><div class="loading-row" style="grid-column:1/-1;">กดรีเฟรชเพื่อโหลด records</div></div>
+    </div>
+
     <!-- Photo Lightbox Modal -->
     <div class="modal-bg" id="tPhotoModal" style="z-index:500;" onclick="if(event.target===this)this.classList.remove('on')">
       <button onclick="document.getElementById('tPhotoModal').classList.remove('on')" style="position:fixed;top:14px;right:14px;background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.3);width:42px;height:42px;border-radius:50%;cursor:pointer;font-size:22px;line-height:1;z-index:10;">×</button>
@@ -1625,6 +1688,8 @@ async function initTech(){
     _techRefreshTimer = setInterval(() => {
       if (_techDate) techLoadJobs();
     }, 30000);
+    // ── load records auto for tech ──
+    setTimeout(recordsLoad, 200);
   } catch(e) {
     if (sync) sync.textContent = '❌ เชื่อมต่อไม่ได้';
   }
@@ -2028,6 +2093,114 @@ async function techSubmitDone(){
     toast(note ? '➡ บันทึกต่องาน' : '✅ จบงานแล้ว');
     techCloseModal();
     techLoadJobs();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// ════════════════════════════════════════
+//  📐 RECORDS — จดขนาด (C1)
+// ════════════════════════════════════════
+const MUANG_OPTIONS = [
+  'เก็บซ้าย','เก็บขวา','แยกกลาง','อิสระ',
+  '4 มือจับ','มุ้งบานเลื่อน','มุ้งบานเลื่อนแยกกลาง',
+  'มุ้งบานเปิด','มุ้งบานเปิดแยกกลาง'
+];
+const KRACHOK_OPTIONS = [
+  'บานเลื่อนแบ่ง 2','บานเลื่อนแบ่ง 4','บานกระทุ้ง',
+  'บานเลื่อนแขวน','บานเปิด'
+];
+
+let _records = [];
+let _recordSearchTimer = null;
+
+function recordsInit(){
+  // bind search
+  const s = document.getElementById('recSearch');
+  if (s && !s._bound) {
+    s._bound = true;
+    s.addEventListener('input', () => {
+      if (_recordSearchTimer) clearTimeout(_recordSearchTimer);
+      _recordSearchTimer = setTimeout(recordsLoad, 400);
+    });
+  }
+  recordsLoad();
+}
+
+async function recordsLoad(){
+  const w = document.getElementById('recList');
+  if (!w) return;
+  w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div>';
+  const search = (document.getElementById('recSearch')?.value || '').trim();
+  const showDeletedEl = document.getElementById('recShowDeleted');
+  const includeDeleted = showDeletedEl ? showDeletedEl.checked : false;
+  try {
+    const r = await call({ action:'pk_recordList', search, includeDeleted, limit: 200 });
+    if (!r.ok) { w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
+    _records = r.records || [];
+    recordsRender();
+  } catch(e) { w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">เชื่อมต่อไม่ได้</div>'; }
+}
+
+function recordsRender(){
+  const w = document.getElementById('recList');
+  if (!_records.length) {
+    w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">ไม่มี records<br><small style="color:var(--mu);">กด "+ สร้างใหม่" เพื่อเริ่มจด</small></div>';
+    return;
+  }
+  const isOffice = CURRENT_USER.role === 'office';
+  w.innerHTML = _records.map(r => {
+    const isDel = !!r.deletedAt;
+    const updatedDate = new Date(r.updatedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'});
+    const canEdit = !isDel && (CURRENT_USER.role === 'office' || r.createdBy === CURRENT_USER.username);
+    return `
+      <div class="rec-card ${isDel?'deleted':''}">
+        <div class="rec-head">
+          <div class="rec-id">${r.id}</div>
+          <div class="rec-when">${updatedDate}</div>
+        </div>
+        <div class="rec-cust">👤 ${r.customerName || '(ไม่มีชื่อ)'}</div>
+        <div class="rec-meta">
+          ${r.customerPhone ? `<span>📞 ${r.customerPhone}</span>` : ''}
+          <span>📋 <b>${r.entryCount}</b> รายการ</span>
+          ${r.linkedJobId ? `<span class="rec-link">🔗 ${r.linkedJobId}</span>` : ''}
+        </div>
+        ${isOffice && r.createdBy !== CURRENT_USER.username ? `<div style="font-size:11px;color:var(--mu);margin-bottom:6px;">โดย ${r.createdBy}${r.team?' · '+r.team:''}</div>` : ''}
+        <div class="rec-btns">
+          <button class="btn btn-g" onclick="recordOpenView('${r.id}')">👁 ดู</button>
+          ${canEdit ? `<button class="btn btn-p" onclick="recordOpenEdit('${r.id}')">✏️ แก้</button>` : ''}
+          ${canEdit ? `<button class="btn btn-d" onclick="recordDelete('${r.id}')">🗑 ลบ</button>` : ''}
+          ${isDel && isOffice ? `<button class="btn btn-g" onclick="recordRestore('${r.id}')">↩ กู้คืน</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Placeholder functions — จะทำใน C2
+function recordOpenNew(){ toast('🔧 C2 จะทำ — Modal ฟอร์มสร้าง'); }
+function recordOpenView(id){ toast('🔧 C2 จะทำ — Modal ดู: ' + id); }
+function recordOpenEdit(id){ toast('🔧 C2 จะทำ — Modal แก้: ' + id); }
+
+async function recordDelete(id){
+  if (!confirm('ลบ record นี้?\n(สามารถกู้คืนได้โดย office)')) return;
+  showLoad('กำลังลบ...');
+  try {
+    const r = await call({ action:'pk_recordDelete', id });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast('🗑 ลบแล้ว');
+    recordsLoad();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+async function recordRestore(id){
+  if (!confirm('กู้คืน record นี้?')) return;
+  showLoad('กำลังกู้คืน...');
+  try {
+    const r = await call({ action:'pk_recordRestore', id });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast('↩ กู้คืนแล้ว');
+    recordsLoad();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
