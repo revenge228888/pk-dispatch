@@ -554,6 +554,7 @@ function renderOfficeShell(){
         <button class="tab" onclick="setTab('booking',this)">➕ ลงคิวใหม่</button>
         <button class="tab" onclick="setTab('jobs',this)">📋 รายการงาน</button>
         <button class="tab" onclick="setTab('records',this)">📐 จดขนาด</button>
+        <button class="tab" onclick="setTab('quotes',this)">💰 คำนวณราคา</button>
       </div>
 
       <!-- DASHBOARD -->
@@ -737,6 +738,21 @@ function renderOfficeShell(){
         </div>
         <div id="recList" class="rec-list"><div class="loading-row" style="grid-column:1/-1;">กดรีเฟรชเพื่อโหลด records</div></div>
       </div>
+
+      <!-- QUOTES (💰 คำนวณราคา) -->
+      <div id="tabQuotes" style="display:none;">
+        <div class="rec-toolbar">
+          <div class="fg rec-search"><label class="fl">ค้นหา</label>
+            <input class="fi" id="quoSearch" type="text" placeholder="ลูกค้า / เบอร์ / ID / Job">
+          </div>
+          <button class="btn btn-g" onclick="quotesLoad()">🔄 รีเฟรช</button>
+          <button class="btn btn-p" onclick="quoteOpenNew()">+ คำนวณใหม่</button>
+          ${CURRENT_USER.role === 'office' ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;">
+            <input type="checkbox" id="quoShowDeleted" onchange="quotesLoad()"> รวมที่ถูกลบ
+          </label>` : ''}
+        </div>
+        <div id="quoList" class="rec-list"><div class="loading-row" style="grid-column:1/-1;">กดรีเฟรชเพื่อโหลด quotes</div></div>
+      </div>
     </div>
   `;
 }
@@ -799,7 +815,7 @@ function fillBookingTeam(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Records'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Records','Quotes'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -809,6 +825,7 @@ function setTab(t, btn){
   if (t === 'dash') loadDashboard();
   if (t === 'booking') initBookingTab();
   if (t === 'records') recordsInit();
+  if (t === 'quotes') quotesInit();
 }
 
 // ════════════════════════════════════════
@@ -1284,6 +1301,7 @@ function renderSalesStub(){
         <button class="tab on" onclick="setSalesTab('booking',this)">➕ ขอคิวติดตั้ง</button>
         <button class="tab" onclick="setSalesTab('my',this)">📋 คิวของฉัน</button>
         <button class="tab" onclick="setSalesTab('records',this)">📐 จดขนาด</button>
+        <button class="tab" onclick="setSalesTab('quotes',this)">💰 คำนวณราคา</button>
       </div>
 
       <!-- BOOKING -->
@@ -1405,6 +1423,18 @@ function renderSalesStub(){
         </div>
         <div id="recList" class="rec-list"><div class="loading-row" style="grid-column:1/-1;">กดรีเฟรชเพื่อโหลด records</div></div>
       </div>
+
+      <!-- QUOTES (💰 คำนวณราคา) -->
+      <div id="sTabQuotes" style="display:none;">
+        <div class="rec-toolbar">
+          <div class="fg rec-search"><label class="fl">ค้นหา</label>
+            <input class="fi" id="quoSearch" type="text" placeholder="ลูกค้า / เบอร์ / ID / Job">
+          </div>
+          <button class="btn btn-g" onclick="quotesLoad()">🔄 รีเฟรช</button>
+          <button class="btn btn-p" onclick="quoteOpenNew()">+ คำนวณใหม่</button>
+        </div>
+        <div id="quoList" class="rec-list"><div class="loading-row" style="grid-column:1/-1;">กดรีเฟรชเพื่อโหลด quotes</div></div>
+      </div>
     </div>
 
     <!-- Edit modal -->
@@ -1461,7 +1491,7 @@ let _sSlotTimer = null;
 let _sEditingId = null;
 
 function setSalesTab(t, btn){
-  ['Booking','My','Records'].forEach(x => {
+  ['Booking','My','Records','Quotes'].forEach(x => {
     const el = document.getElementById('sTab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('sTab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -1471,6 +1501,7 @@ function setSalesTab(t, btn){
   if (t === 'booking') initSalesBooking();
   if (t === 'my') initSalesMy();
   if (t === 'records') recordsInit();
+  if (t === 'quotes') quotesInit();
 }
 
 function initSalesBooking(){
@@ -2967,6 +2998,139 @@ async function recordRestore(id){
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast('↩ กู้คืนแล้ว');
     recordsLoad();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// ════════════════════════════════════════
+//  💰 QUOTES — คำนวณราคา (D2 — List)
+// ════════════════════════════════════════
+const PRICE_TYPE_LABELS = {
+  PB: 'ราคา PB',
+  WHOLESALE: 'ราคาขายส่ง',
+  WHOLESALE_INSTALL: 'ขายส่ง + ติดตั้ง',
+  HOME: 'ลูกค้าบ้าน',
+  TOOK_DEE: 'มุ้งจีบ ถูกดี'
+};
+
+let _quotes = [];
+let _quoteSearchTimer = null;
+let _quoteMetadata = null;   // cache จาก backend (price table, colors, types)
+
+function quotesInit(){
+  const s = document.getElementById('quoSearch');
+  if (s && !s._bound) {
+    s._bound = true;
+    s.addEventListener('input', () => {
+      if (_quoteSearchTimer) clearTimeout(_quoteSearchTimer);
+      _quoteSearchTimer = setTimeout(quotesLoad, 400);
+    });
+  }
+  // Load metadata ครั้งเดียวเก็บ cache
+  if (!_quoteMetadata) quoteLoadMetadata();
+  quotesLoad();
+}
+
+async function quoteLoadMetadata(){
+  try {
+    const r = await call({ action:'pk_quoteMetadata' });
+    if (r.ok) {
+      _quoteMetadata = {
+        priceTable: r.priceTable,
+        colors: r.colors,
+        types: r.types,
+        muangMap: r.muangMap,
+        installFee: r.installFee,
+        defaults: r.defaults
+      };
+    }
+  } catch(e) {}
+}
+
+async function quotesLoad(){
+  const w = document.getElementById('quoList');
+  if (!w) return;
+  w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div>';
+  const search = (document.getElementById('quoSearch')?.value || '').trim();
+  const showDeletedEl = document.getElementById('quoShowDeleted');
+  const includeDeleted = showDeletedEl ? showDeletedEl.checked : false;
+  try {
+    const r = await call({ action:'pk_quoteList', search, includeDeleted, limit: 200 });
+    if (!r.ok) { w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
+    _quotes = r.quotes || [];
+    quotesRender();
+  } catch(e) { w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">เชื่อมต่อไม่ได้</div>'; }
+}
+
+function quotesRender(){
+  const w = document.getElementById('quoList');
+  if (!_quotes.length) {
+    w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">ไม่มี quotes<br><small style="color:var(--mu);">กด "+ คำนวณใหม่" เพื่อเริ่ม</small></div>';
+    return;
+  }
+  const isOffice = CURRENT_USER.role === 'office';
+  w.innerHTML = _quotes.map(q => {
+    const isDel = !!q.deletedAt;
+    const updatedDate = new Date(q.updatedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'});
+    const canEdit = !isDel && (CURRENT_USER.role === 'office' || q.createdBy === CURRENT_USER.username);
+    const priceLabel = PRICE_TYPE_LABELS[q.priceType] || q.priceType;
+    return `
+      <div class="rec-card ${isDel?'deleted':''}">
+        <div class="rec-head">
+          <div class="rec-id">${q.id}</div>
+          <div class="rec-when">${updatedDate}</div>
+        </div>
+        <div class="rec-cust">👤 ${q.customerName || '(ไม่มีชื่อ)'}</div>
+        <div class="rec-meta">
+          ${q.customerPhone ? `<span>📞 ${q.customerPhone}</span>` : ''}
+          <span>📋 <b>${q.entryCount}</b> รายการ</span>
+          <span style="color:var(--blu);">💲 ${priceLabel}</span>
+        </div>
+        <div style="background:rgba(52,199,89,.08);border:1px solid rgba(52,199,89,.3);border-radius:6px;padding:6px 10px;margin-bottom:8px;text-align:center;">
+          <div style="font-size:10px;color:var(--mu);">ยอดรวม</div>
+          <div style="font-size:18px;font-weight:700;color:var(--grn);font-family:var(--mono);">฿${fmt(q.totalAmount||0)}</div>
+        </div>
+        <div class="rec-meta">
+          ${q.linkedJobId ? `<span class="rec-link">🔗 ${q.linkedJobId}</span>` : ''}
+          ${q.linkedRecordId ? `<span class="rec-link" style="background:rgba(245,166,35,.12);color:var(--acc);">📐 ${q.linkedRecordId.slice(-8)}</span>` : ''}
+        </div>
+        ${isOffice && q.createdBy !== CURRENT_USER.username ? `<div style="font-size:11px;color:var(--mu);margin-bottom:6px;">โดย ${q.createdBy}</div>` : ''}
+        <div class="rec-btns">
+          <button class="btn btn-g" onclick="quoteOpenView('${q.id}')">👁 ดู</button>
+          ${canEdit ? `<button class="btn btn-p" onclick="quoteOpenEdit('${q.id}')">✏️ แก้</button>` : ''}
+          ${canEdit ? `<button class="btn btn-d" onclick="quoteDelete('${q.id}')">🗑 ลบ</button>` : ''}
+          ${isDel && isOffice ? `<button class="btn btn-g" onclick="quoteRestore('${q.id}')">↩ กู้คืน</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Placeholder — จะทำใน D3
+function quoteOpenNew(prefill){ toast('🔧 D3 จะทำ — Modal สร้าง'); }
+function quoteOpenView(id){ toast('🔧 D3 จะทำ — Modal ดู: ' + id); }
+function quoteOpenEdit(id){ toast('🔧 D3 จะทำ — Modal แก้: ' + id); }
+
+async function quoteDelete(id){
+  if (!confirm('ลบ quote นี้?')) return;
+  showLoad('กำลังลบ...');
+  try {
+    const r = await call({ action:'pk_quoteDelete', id });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast('🗑 ลบแล้ว');
+    quotesLoad();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+async function quoteRestore(id){
+  if (!confirm('กู้คืน quote นี้?')) return;
+  showLoad('กำลังกู้คืน...');
+  try {
+    const r = await call({ action:'pk_quoteRestore', id });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast('↩ กู้คืนแล้ว');
+    quotesLoad();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
