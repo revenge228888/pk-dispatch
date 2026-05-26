@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
 :root{
   --bg:#0f1319;--surf:#171d27;--surf2:#1e2535;--bdr:#2a3347;
@@ -205,6 +206,30 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 .recm-readonly .recm-rm-entry,.recm-readonly .recm-add-btn{display:none;}
 .recm-rm-entry{background:none;border:1px solid var(--rd);color:var(--rd);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;}
 .recm-rm-entry:hover{background:var(--rd);color:#fff;}
+
+/* ── A4 Export Template (hidden, used for html2canvas) ── */
+.a4-export-host{position:fixed;left:-99999px;top:0;width:794px;background:#fff;color:#1e3a5f;font-family:'Sarabun',sans-serif;}
+.a4-page{width:794px;height:1123px;padding:40px 50px;box-sizing:border-box;background:#fff;display:flex;flex-direction:column;page-break-after:always;}
+.a4-header{border-bottom:3px solid #1e6fb8;padding-bottom:14px;margin-bottom:18px;}
+.a4-title{font-size:22px;font-weight:700;color:#1e3a5f;text-align:center;margin-bottom:10px;letter-spacing:1px;}
+.a4-meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:13px;color:#333;}
+.a4-meta-row{display:flex;gap:6px;}
+.a4-meta-label{font-weight:600;color:#1e3a5f;min-width:70px;}
+.a4-meta-val{color:#000;}
+.a4-entries{flex:1;display:flex;flex-direction:column;gap:10px;}
+.a4-entry{border:1.5px solid #c0c7d0;border-radius:8px;padding:10px 14px;background:#fafbfc;}
+.a4-entry-head{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid #d0d7de;padding-bottom:6px;margin-bottom:8px;}
+.a4-entry-num{font-size:18px;font-weight:700;color:#1e6fb8;font-family:'IBM Plex Mono',monospace;}
+.a4-entry-loc{font-size:15px;font-weight:600;color:#1e3a5f;}
+.a4-size-box{display:inline-block;background:#fff;border:2px solid #1e6fb8;border-radius:6px;padding:6px 12px;font-size:16px;font-weight:700;color:#1e6fb8;font-family:'IBM Plex Mono',monospace;margin:4px 0;}
+.a4-size-label{font-size:10px;color:#888;font-weight:400;display:block;margin-top:-2px;}
+.a4-row{display:flex;gap:10px;margin-top:4px;flex-wrap:wrap;font-size:12px;}
+.a4-tag{display:inline-block;background:#e7f0f8;border:1px solid #b8d4ec;color:#1e3a5f;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:500;margin:2px 2px 0 0;}
+.a4-tag.muang{background:#fff4e6;border-color:#f5cba7;color:#8b4513;}
+.a4-tag.krachok{background:#e8f5e9;border-color:#a5d6a7;color:#2e7d32;}
+.a4-tag.rang{background:#fce4ec;border-color:#f48fb1;color:#880e4f;}
+.a4-detail{font-size:12px;color:#555;margin-top:4px;font-style:italic;background:#fffef0;border-left:3px solid #f5a623;padding:4px 8px;border-radius:0 4px 4px 0;}
+.a4-footer{margin-top:auto;padding-top:10px;border-top:1px solid #ccc;font-size:11px;color:#888;display:flex;justify-content:space-between;}
 
 /* ── BOOKING tab ── */
 .bk-type-btn, .bk-mode-btn{
@@ -2443,7 +2468,7 @@ async function recordOpenEdit(id){
     document.getElementById('recmTitle').textContent = '📐 แก้ไข — ' + id;
     document.getElementById('recmSaveBar').style.display = 'flex';
     document.getElementById('recmSaveBtn').textContent = '💾 อัปเดต';
-    document.getElementById('recmExportBtn').style.display = 'none';
+    document.getElementById('recmExportBtn').style.display = '';
     document.getElementById('recmLinkBtn').style.display = '';
     recordRenderForm();
     recordOpenModal();
@@ -2733,8 +2758,137 @@ async function recordSubmit(){
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
-// Placeholder for C4 Export
-function recordExportImg(){ toast('🔧 C4 จะทำ — Export PNG A4'); }
+// ── Export PNG A4 (C4) ──
+const A4_ENTRIES_PER_PAGE = 5;
+
+async function recordExportImg(){
+  if (typeof html2canvas === 'undefined') {
+    toast('❌ html2canvas ยังไม่โหลด — ลองรีเฟรชหน้า');
+    return;
+  }
+  const id = _recForm.id || ('NEW_' + Date.now());
+  const customer = _recForm.customer || { name:'', phone:'' };
+  const entries = (_recForm.entries || []).filter(e => !e.isEmpty);
+  if (!entries.length) { toast('ไม่มีรายการให้ export'); return; }
+
+  // แบ่งหน้า
+  const pages = [];
+  for (let i = 0; i < entries.length; i += A4_ENTRIES_PER_PAGE) {
+    pages.push(entries.slice(i, i + A4_ENTRIES_PER_PAGE));
+  }
+
+  showLoad(`กำลังสร้างรูป ${pages.length} หน้า...`);
+
+  // build host
+  let host = document.getElementById('a4ExportHost');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'a4ExportHost';
+    host.className = 'a4-export-host';
+    document.body.appendChild(host);
+  }
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' });
+  const fileDate = now.toISOString().split('T')[0];
+  const safeName = (customer.name||'noname').replace(/[^\w\u0E00-\u0E7F]+/g, '_').slice(0, 40);
+
+  try {
+    for (let p = 0; p < pages.length; p++) {
+      host.innerHTML = renderA4Page(pages[p], p+1, pages.length, customer, dateStr);
+      // รอ font + render
+      await new Promise(r => setTimeout(r, 200));
+      const canvas = await html2canvas(host.querySelector('.a4-page'), {
+        backgroundColor: '#ffffff',
+        scale: 2,            // ความคมชัด 2x
+        logging: false,
+        useCORS: true
+      });
+      // download
+      const dataUrl = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `บันทึกขนาด_${safeName}_${fileDate}_หน้า${p+1}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // เว้นช่วงให้ browser download ทัน
+      await new Promise(r => setTimeout(r, 400));
+    }
+    host.innerHTML = '';
+    hideLoad();
+    toast(`✅ Export เสร็จ ${pages.length} หน้า`);
+  } catch(e) {
+    hideLoad();
+    toast('❌ Export ผิดพลาด: ' + e.message);
+    host.innerHTML = '';
+  }
+}
+
+function renderA4Page(entriesInPage, pageNum, totalPages, customer, dateStr){
+  const linkedHtml = _recForm.linkedJobId
+    ? `<div class="a4-meta-row"><span class="a4-meta-label">🔗 ผูกกับงาน:</span><span class="a4-meta-val">${escAttr(_recForm.linkedJobId)}</span></div>`
+    : '';
+  const headBlock = `
+    <div class="a4-header">
+      <div class="a4-title">📐 บันทึกขนาดรายการ</div>
+      <div class="a4-meta-grid">
+        <div class="a4-meta-row"><span class="a4-meta-label">👤 ลูกค้า:</span><span class="a4-meta-val">${escAttr(customer.name)||'-'}</span></div>
+        <div class="a4-meta-row"><span class="a4-meta-label">📞 เบอร์:</span><span class="a4-meta-val">${escAttr(customer.phone)||'-'}</span></div>
+        <div class="a4-meta-row"><span class="a4-meta-label">📅 วันที่:</span><span class="a4-meta-val">${dateStr}</span></div>
+        <div class="a4-meta-row"><span class="a4-meta-label">✍️ ผู้บันทึก:</span><span class="a4-meta-val">${escAttr(CURRENT_USER.username)||'-'}</span></div>
+        ${linkedHtml}
+      </div>
+    </div>
+  `;
+  const entriesHtml = entriesInPage.map(e => renderA4Entry(e)).join('');
+  return `
+    <div class="a4-page">
+      ${headBlock}
+      <div class="a4-entries">
+        ${entriesHtml}
+      </div>
+      <div class="a4-footer">
+        <span>${_recForm.id || ''}</span>
+        <span>หน้า ${pageNum} / ${totalPages}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderA4Entry(e){
+  const w = e.width != null ? e.width : '-';
+  const h = e.height != null ? e.height : '-';
+  const qty = e.qty || 1;
+  const sizeStr = `${w} × ${h} cm × ${qty} ชุด`;
+
+  const muang = (e.muang || []);
+  const krachok = (e.krachok || []);
+  const muangTags = muang.length
+    ? muang.map(m => `<span class="a4-tag muang">🪟 ${escAttr(m)}</span>`).join('')
+    : '';
+  const krachokTags = krachok.length
+    ? krachok.map(k => `<span class="a4-tag krachok">🪞 ${escAttr(k)}</span>`).join('')
+    : '';
+  const rangTag = e.rang ? `<span class="a4-tag rang">📏 ${escAttr(e.rang)}</span>` : '';
+
+  return `
+    <div class="a4-entry">
+      <div class="a4-entry-head">
+        <span class="a4-entry-num">#${e.no}</span>
+        <span class="a4-entry-loc">📍 ${escAttr(e.location)||'(ไม่ระบุตำแหน่ง)'}</span>
+      </div>
+      <div>
+        <span class="a4-size-box">${sizeStr}</span>
+      </div>
+      <div class="a4-row">
+        ${muangTags}${rangTag}
+      </div>
+      ${krachok.length ? `<div class="a4-row">${krachokTags}</div>` : ''}
+      ${e.detail ? `<div class="a4-detail">📝 ${escAttr(e.detail)}</div>` : ''}
+    </div>
+  `;
+}
 
 // ── เปลี่ยน/ยกเลิก linkedJobId ของ record ที่มีอยู่ ──
 async function recordChangeLink(){
