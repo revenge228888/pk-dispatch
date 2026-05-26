@@ -231,6 +231,30 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 .a4-detail{font-size:12px;color:#555;margin-top:4px;font-style:italic;background:#fffef0;border-left:3px solid #f5a623;padding:4px 8px;border-radius:0 4px 4px 0;}
 .a4-footer{margin-top:auto;padding-top:10px;border-top:1px solid #ccc;font-size:11px;color:#888;display:flex;justify-content:space-between;}
 
+/* ── A4 Export Quote ── */
+.a4-q-header{border-bottom:3px solid #34c759;padding-bottom:14px;margin-bottom:18px;}
+.a4-q-title{font-size:22px;font-weight:700;color:#1e6f3a;text-align:center;margin-bottom:10px;letter-spacing:1px;}
+.a4-q-meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:12px;color:#333;}
+.a4-q-meta-row{display:flex;gap:6px;}
+.a4-q-meta-label{font-weight:600;color:#1e6f3a;min-width:80px;}
+.a4-q-entry{border:1.5px solid #c0c7d0;border-radius:8px;padding:10px 14px;background:#fafbfc;margin-bottom:10px;}
+.a4-q-entry-head{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid #d0d7de;padding-bottom:6px;margin-bottom:8px;}
+.a4-q-entry-num{font-size:16px;font-weight:700;color:#1e6f3a;font-family:'IBM Plex Mono',monospace;}
+.a4-q-entry-loc{flex:1;margin-left:10px;font-size:14px;font-weight:600;color:#1e3a5f;}
+.a4-q-entry-total{font-size:16px;font-weight:700;color:#1e6f3a;font-family:'IBM Plex Mono',monospace;}
+.a4-q-size{font-size:13px;color:#333;margin-bottom:4px;}
+.a4-q-size b{color:#1e6fb8;font-family:'IBM Plex Mono',monospace;}
+.a4-q-bdwn{margin-top:6px;padding:6px 8px;background:#f0f5f0;border-radius:4px;font-size:11px;}
+.a4-q-bdwn-row{display:flex;justify-content:space-between;padding:1px 0;}
+.a4-q-bdwn-row b{color:#1e6f3a;font-family:'IBM Plex Mono',monospace;}
+.a4-q-note{font-size:11px;color:#555;margin-top:4px;font-style:italic;}
+.a4-q-fees{margin-top:14px;padding:10px 14px;background:#fff8e1;border:1px solid #ffd54f;border-radius:8px;}
+.a4-q-fees-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;}
+.a4-q-fees-row b{font-family:'IBM Plex Mono',monospace;color:#856404;}
+.a4-q-grand{margin-top:18px;padding:14px 18px;background:linear-gradient(135deg,#34c759,#28a745);border-radius:10px;color:#fff;text-align:center;}
+.a4-q-grand-lbl{font-size:12px;opacity:.9;text-transform:uppercase;letter-spacing:1px;}
+.a4-q-grand-amt{font-size:30px;font-weight:700;font-family:'IBM Plex Mono',monospace;margin-top:4px;}
+
 /* ── Quote Form Modal ── */
 .quom-bg{position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(4px);z-index:600;display:none;}
 .quom-bg.on{display:flex;justify-content:center;}
@@ -392,6 +416,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
   <div class="recm-wrap">
     <div class="recm-head">
       <div class="recm-title" id="recmTitle">📐 บันทึกขนาด</div>
+      <button class="hbtn" id="recmQuoteBtn" onclick="recordHandoffToQuote()" style="display:none;" title="ส่งต่อคำนวณราคา">💰</button>
       <button class="hbtn" id="recmLinkBtn" onclick="recordChangeLink()" style="display:none;" title="ผูก/เปลี่ยน Job">🔗</button>
       <button class="hbtn" id="recmExportBtn" onclick="recordExportImg()" style="display:none;" title="Export PNG A4">🖼️</button>
       <button class="hbtn danger" onclick="recordCloseModal()">×</button>
@@ -774,9 +799,9 @@ function renderOfficeShell(){
         </div>
         <div class="job-wrap">
           <table><thead><tr>
-            <th>ลำดับ</th><th>ลูกค้า</th><th>ทีม</th><th>ผู้ทำงาน</th><th>ยอดเงิน</th><th>สถานะ</th><th>Location</th><th>รูป</th><th>📐 ขนาด</th>
+            <th>ลำดับ</th><th>ลูกค้า</th><th>ทีม</th><th>ผู้ทำงาน</th><th>ยอดเงิน</th><th>สถานะ</th><th>Location</th><th>รูป</th><th>📐 ขนาด</th><th>💰 ราคา</th>
           </tr></thead>
-          <tbody id="jTbody"><tr><td colspan="9" class="loading-row">เลือกวันที่แล้วกด "ดูรายการ"</td></tr></tbody></table>
+          <tbody id="jTbody"><tr><td colspan="10" class="loading-row">เลือกวันที่แล้วกด "ดูรายการ"</td></tr></tbody></table>
         </div>
       </div>
 
@@ -1206,8 +1231,8 @@ async function loadJobTable(){
   const date = document.getElementById('jDate').value;
   const status = document.getElementById('jStatus').value;
   const tb = document.getElementById('jTbody');
-  if (!date) { tb.innerHTML='<tr><td colspan="9" class="loading-row">เลือกวันที่ก่อน</td></tr>'; return; }
-  tb.innerHTML = '<tr><td colspan="9" class="loading-row">กำลังโหลด...</td></tr>';
+  if (!date) { tb.innerHTML='<tr><td colspan="10" class="loading-row">เลือกวันที่ก่อน</td></tr>'; return; }
+  tb.innerHTML = '<tr><td colspan="10" class="loading-row">กำลังโหลด...</td></tr>';
   try {
     let allJobs = [];
     if (team === '__ALL__') {
@@ -1220,7 +1245,7 @@ async function loadJobTable(){
       if (r.ok && r.jobs) allJobs = r.jobs.map(j => ({...j, _team:team}));
     }
     if (status) allJobs = allJobs.filter(j => j.status === status);
-    if (!allJobs.length) { tb.innerHTML='<tr><td colspan="9" class="loading-row">ไม่มีรายการงาน</td></tr>'; return; }
+    if (!allJobs.length) { tb.innerHTML='<tr><td colspan="10" class="loading-row">ไม่มีรายการงาน</td></tr>'; return; }
     const sl = {pending:'bp',working:'bw',done:'bd'};
     const ll = {pending:'รอรับงาน',working:'กำลังทำ',done:'เสร็จแล้ว'};
     window._officeJobs = allJobs;  // เก็บไว้สำหรับ showOfficePhoto
@@ -1234,10 +1259,20 @@ async function loadJobTable(){
       <td>${j.lat?`<a class="lnk" onclick="showMap(${j.lat},${j.lng},'${j.name.replace(/'/g,'')}','${(j.doneAt||'')}')">📍 ดูจุดจบงาน</a>`:(j.mapLink?`<a class="lnk" href="${j.mapLink}" target="_blank">🗺 ที่อยู่งาน</a>`:'-')}</td>
       <td>${j.photos && j.photos.length ? `<a class="lnk" onclick="showOfficePhoto(${idx})">📷 ดู ${j.photos.length} รูป</a>` : '-'}</td>
       <td id="jrec-${idx}" style="font-size:11px;color:var(--mu);">…</td>
+      <td id="jquo-${idx}" style="font-size:11px;color:var(--mu);">…</td>
     </tr>`).join('');
-    // โหลด record counts (async ไม่บล็อก)
+    // โหลด record counts + quote counts (async ไม่บล็อก)
     loadRecordCountsForJobs(allJobs);
-  } catch(e) { tb.innerHTML='<tr><td colspan="9" class="loading-row">โหลดไม่ได้</td></tr>'; }
+    if (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'sales') {
+      loadQuoteCountsForJobs(allJobs);
+    } else {
+      // tech ไม่เห็น quote — ใส่ -
+      allJobs.forEach((j, idx) => {
+        const c = document.getElementById('jquo-' + idx);
+        if (c) c.textContent = '-';
+      });
+    }
+  } catch(e) { tb.innerHTML='<tr><td colspan="10" class="loading-row">โหลดไม่ได้</td></tr>'; }
 }
 
 // โหลดจำนวน records ของแต่ละงาน + เซลล์อัปเดต
@@ -1301,6 +1336,67 @@ async function openJobRecords(jobIdx){
     const n = parseInt(choice);
     if (n >= 1 && n <= recs.length) {
       recordOpenView(recs[n-1].id);
+    }
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// ── โหลดจำนวน quotes ของแต่ละงาน (office/sales) ──
+async function loadQuoteCountsForJobs(jobs){
+  try {
+    const r = await call({ action:'pk_quoteList', limit: 200 });
+    if (!r.ok) return;
+    const byJob = {};
+    (r.quotes||[]).forEach(q => {
+      if (q.linkedJobId && !q.deletedAt) {
+        if (!byJob[q.linkedJobId]) byJob[q.linkedJobId] = [];
+        byJob[q.linkedJobId].push(q);
+      }
+    });
+    jobs.forEach((j, idx) => {
+      const cell = document.getElementById('jquo-' + idx);
+      if (!cell) return;
+      const quos = byJob[j.id] || [];
+      if (quos.length === 0) {
+        cell.innerHTML = '<a class="lnk" onclick="openCreateQuoteForJob(' + idx + ')" style="color:var(--mu);">+ คำนวณ</a>';
+      } else {
+        const totalSum = quos.reduce((s,q) => s + (q.totalAmount||0), 0);
+        cell.innerHTML = '<a class="lnk" onclick="openJobQuotes(' + idx + ')" style="color:var(--grn);font-family:var(--mono);">💰 ' + quos.length + ' ใบ · ฿' + fmt(totalSum) + '</a>';
+      }
+    });
+  } catch(e) {}
+}
+
+function openCreateQuoteForJob(jobIdx){
+  const j = window._officeJobs[jobIdx];
+  if (!j) return;
+  quoteOpenNew({
+    customer: { name: j.name || '', phone: '' },
+    linkedJobId: j.id
+  });
+}
+
+async function openJobQuotes(jobIdx){
+  const j = window._officeJobs[jobIdx];
+  if (!j) return;
+  showLoad('กำลังโหลด...');
+  try {
+    const r = await call({ action:'pk_quotesByJob', jobId: j.id });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + r.error); return; }
+    const quos = r.quotes || [];
+    if (!quos.length) { toast('ไม่มี quote'); return; }
+    if (quos.length === 1) {
+      quoteOpenView(quos[0].id);
+      return;
+    }
+    const list = quos.map((q, i) =>
+      `${i+1}. ${q.id} · ฿${fmt(q.totalAmount)} · ${new Date(q.updatedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}`
+    ).join('\n');
+    const choice = prompt('เลือก quote (1-' + quos.length + '):\n\n' + list);
+    if (!choice) return;
+    const n = parseInt(choice);
+    if (n >= 1 && n <= quos.length) {
+      quoteOpenView(quos[n-1].id);
     }
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
@@ -2491,6 +2587,7 @@ async function recordOpenNew(prefill){
   document.getElementById('recmSaveBtn').textContent = '💾 บันทึก';
   document.getElementById('recmExportBtn').style.display = 'none';
   document.getElementById('recmLinkBtn').style.display = 'none';
+  document.getElementById('recmQuoteBtn').style.display = 'none';
   recordRenderForm();
   recordOpenModal();
   recordStartAutosave();
@@ -2516,6 +2613,7 @@ async function recordOpenView(id){
     document.getElementById('recmSaveBar').style.display = 'none';
     document.getElementById('recmExportBtn').style.display = '';  // Phase C4 จะใช้
     document.getElementById('recmLinkBtn').style.display = (CURRENT_USER.role === 'office' || rec.createdBy === CURRENT_USER.username) ? '' : 'none';
+    document.getElementById('recmQuoteBtn').style.display = (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'sales') ? '' : 'none';
     recordRenderForm();
     recordOpenModal();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
@@ -2557,6 +2655,7 @@ async function recordOpenEdit(id){
     document.getElementById('recmSaveBtn').textContent = '💾 อัปเดต';
     document.getElementById('recmExportBtn').style.display = '';
     document.getElementById('recmLinkBtn').style.display = '';
+    document.getElementById('recmQuoteBtn').style.display = (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'sales') ? '' : 'none';
     recordRenderForm();
     recordOpenModal();
     recordStartAutosave();
@@ -2978,6 +3077,93 @@ function renderA4Entry(e){
 }
 
 // ── เปลี่ยน/ยกเลิก linkedJobId ของ record ที่มีอยู่ ──
+// ── Handoff: Record → Quote (D4) ──
+// Mapping: มุ้งลวด → quote types / กระจก → ใส่ note
+const REC_TO_QUO_TYPE_MAP = {
+  'เก็บซ้าย': 'jeeb_single',
+  'เก็บขวา': 'jeeb_single',
+  'แยกกลาง': 'jeeb_split',
+  'อิสระ': 'jeeb_free',
+  '4 มือจับ': 'jeeb_h4',
+  'มุ้งบานเลื่อน': 'slide',
+  'มุ้งบานเลื่อนแยกกลาง': 'slide_split',
+  'มุ้งบานเปิด': 'open',
+  'มุ้งบานเปิดแยกกลาง': 'open_split'
+};
+
+async function recordHandoffToQuote(){
+  if (!_recForm.id) { toast('ต้องบันทึก record ก่อน'); return; }
+  if (CURRENT_USER.role !== 'office' && CURRENT_USER.role !== 'sales') {
+    toast('เฉพาะ office / sales'); return;
+  }
+
+  // ตรวจว่ามี quote ที่ผูกกับ record นี้แล้วหรือยัง
+  if (_recForm.linkedJobId) {
+    showLoad('กำลังตรวจ...');
+    try {
+      const r = await call({ action:'pk_quotesByJob', jobId: _recForm.linkedJobId });
+      hideLoad();
+      if (r.ok && r.quotes && r.quotes.length > 0) {
+        // หา quote ที่ผูก linkedRecordId = id นี้
+        const linked = r.quotes.filter(q => true);  // backend ไม่กรองตาม linkedRecordId
+        if (linked.length > 0) {
+          if (confirm('มี Quote ที่ผูกกับงานนี้แล้ว ' + linked.length + ' ใบ\n\nกด OK → เปิดอันล่าสุด\nกด Cancel → สร้างใหม่')) {
+            const latest = linked.sort((a,b) => b.updatedAt - a.updatedAt)[0];
+            recordCloseModal();
+            quoteOpenEdit(latest.id);
+            return;
+          }
+        }
+      }
+    } catch(e) { hideLoad(); }
+  }
+
+  // แปลง entries จาก record → quote entries
+  const quoteEntries = (_recForm.entries || []).filter(e => !e.isEmpty).map((e, i) => {
+    // mapping มุ้งลวด → types
+    const types = [];
+    (e.muang || []).forEach(m => {
+      const tid = REC_TO_QUO_TYPE_MAP[m];
+      if (tid && !types.includes(tid)) types.push(tid);
+    });
+    // กระจกอลูมิเนียม → เก็บใน note
+    const noteParts = [];
+    if (e.krachok && e.krachok.length) {
+      noteParts.push('🪞 กระจก: ' + e.krachok.join(', '));
+    }
+    if (e.rang) noteParts.push('📏 ' + e.rang);
+    if (e.detail) noteParts.push(e.detail);
+
+    return {
+      no: i + 1,
+      isEmpty: false,
+      location: e.location || '',
+      width: e.width,
+      height: e.height,
+      qty: e.qty || 1,
+      colorId: '',
+      types,
+      note: noteParts.join(' · ')
+    };
+  });
+
+  if (!quoteEntries.length) {
+    toast('Record ไม่มีรายการที่กรอกข้อมูล'); return;
+  }
+
+  // ปิด record modal + เปิด quote modal พร้อม prefill
+  recordCloseModal();
+  setTimeout(() => {
+    quoteOpenNew({
+      customer: _recForm.customer,
+      linkedJobId: _recForm.linkedJobId,
+      linkedRecordId: _recForm.id,
+      entries: quoteEntries
+    });
+    toast('💰 เริ่มคำนวณราคา — ตรวจสอบ types แล้วบันทึก');
+  }, 250);
+}
+
 async function recordChangeLink(){
   if (!_recForm.id) { toast('record ยังไม่มี id'); return; }
   // โหลด recent jobs ถ้ายังไม่มี
@@ -3862,8 +4048,180 @@ async function quoteSubmit(){
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
-// Placeholder D4
-function quoteExportImg(){ toast('🔧 D4 จะทำ — Export PNG A4'); }
+// ── Quote Export PNG A4 (D4) ──
+const QUO_A4_ENTRIES_PER_PAGE = 4;
+
+async function quoteExportImg(){
+  if (typeof html2canvas === 'undefined') {
+    toast('❌ html2canvas ยังไม่โหลด'); return;
+  }
+  if (!_quoteMetadata) { toast('โหลด metadata ก่อน'); return; }
+  const customer = _quoForm.customer || { name:'', phone:'' };
+  // ใช้ entries ที่ไม่ว่าง + recalc ให้แน่ใจ
+  const entries = (_quoForm.entries || []).filter(e => !e.isEmpty).map(e => {
+    e._calc = quoteCalcEntry(e);
+    return e;
+  });
+  if (!entries.length) { toast('ไม่มีรายการให้ export'); return; }
+  const fees = (_quoForm.additionalFees || []).filter(f => Number(f.amount) > 0);
+
+  // คำนวณ grand total
+  let grand = entries.reduce((s,e) => s + (e._calc?.total||0), 0);
+  fees.forEach(f => { grand += Number(f.amount) || 0; });
+
+  // แบ่งหน้า — fees + grand อยู่หน้าสุดท้ายเท่านั้น
+  const pages = [];
+  for (let i = 0; i < entries.length; i += QUO_A4_ENTRIES_PER_PAGE) {
+    pages.push(entries.slice(i, i + QUO_A4_ENTRIES_PER_PAGE));
+  }
+  if (!pages.length) pages.push([]);
+
+  showLoad(`กำลังสร้างรูป ${pages.length} หน้า...`);
+
+  let host = document.getElementById('a4QuoExportHost');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'a4QuoExportHost';
+    host.className = 'a4-export-host';
+    document.body.appendChild(host);
+  }
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' });
+  const fileDate = now.toISOString().split('T')[0];
+  const safeName = (customer.name||'noname').replace(/[^\w\u0E00-\u0E7F]+/g, '_').slice(0, 40);
+
+  try {
+    for (let p = 0; p < pages.length; p++) {
+      const isLast = p === pages.length - 1;
+      host.innerHTML = renderQuoteA4Page(pages[p], p+1, pages.length, customer, dateStr, isLast ? fees : null, isLast ? grand : null);
+      await new Promise(r => setTimeout(r, 200));
+      const canvas = await html2canvas(host.querySelector('.a4-page'), {
+        backgroundColor: '#ffffff', scale: 2, logging: false, useCORS: true
+      });
+      const dataUrl = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `ใบเสนอราคา_${safeName}_${fileDate}_หน้า${p+1}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      await new Promise(r => setTimeout(r, 400));
+    }
+    host.innerHTML = '';
+    hideLoad();
+    toast(`✅ Export เสร็จ ${pages.length} หน้า`);
+  } catch(e) {
+    hideLoad();
+    toast('❌ Export ผิดพลาด: ' + e.message);
+    host.innerHTML = '';
+  }
+}
+
+function renderQuoteA4Page(entriesInPage, pageNum, totalPages, customer, dateStr, fees, grand){
+  const priceLabel = PRICE_TYPE_LABELS[_quoForm.priceType] || _quoForm.priceType;
+  const colorObj = _quoteMetadata.colors.find(c => c.id === _quoForm.mainColor);
+  const colorLabel = colorObj ? colorObj.label : _quoForm.mainColor;
+
+  const linkedHtml = _quoForm.linkedJobId
+    ? `<div class="a4-q-meta-row"><span class="a4-q-meta-label">🔗 ผูกกับงาน:</span><span>${escAttr(_quoForm.linkedJobId)}</span></div>`
+    : '';
+  const recHtml = _quoForm.linkedRecordId
+    ? `<div class="a4-q-meta-row"><span class="a4-q-meta-label">📐 จากบันทึก:</span><span>${escAttr(_quoForm.linkedRecordId)}</span></div>`
+    : '';
+
+  const headBlock = `
+    <div class="a4-q-header">
+      <div class="a4-q-title">💰 ใบประเมินราคา</div>
+      <div class="a4-q-meta">
+        <div class="a4-q-meta-row"><span class="a4-q-meta-label">👤 ลูกค้า:</span><span>${escAttr(customer.name)||'-'}</span></div>
+        <div class="a4-q-meta-row"><span class="a4-q-meta-label">📞 เบอร์:</span><span>${escAttr(customer.phone)||'-'}</span></div>
+        <div class="a4-q-meta-row"><span class="a4-q-meta-label">📅 วันที่:</span><span>${dateStr}</span></div>
+        <div class="a4-q-meta-row"><span class="a4-q-meta-label">✍️ โดย:</span><span>${escAttr(CURRENT_USER.username)||'-'}</span></div>
+        <div class="a4-q-meta-row"><span class="a4-q-meta-label">💲 ราคา:</span><span>${priceLabel}</span></div>
+        <div class="a4-q-meta-row"><span class="a4-q-meta-label">🎨 สีหลัก:</span><span>${escAttr(colorLabel)}</span></div>
+        ${linkedHtml}
+        ${recHtml}
+      </div>
+    </div>
+  `;
+
+  const entriesHtml = entriesInPage.map(e => renderQuoteA4Entry(e)).join('');
+
+  let feesBlock = '';
+  if (fees && fees.length) {
+    const feesRows = fees.map(f => `
+      <div class="a4-q-fees-row">
+        <span>🔧 ${escAttr(f.label)||'(ไม่ระบุ)'}</span>
+        <b>฿${fmt(f.amount)}</b>
+      </div>
+    `).join('');
+    const feesTotal = fees.reduce((s,f) => s + (Number(f.amount)||0), 0);
+    feesBlock = `
+      <div class="a4-q-fees">
+        <div style="font-size:11px;color:#856404;font-weight:700;text-transform:uppercase;margin-bottom:4px;">ค่าใช้จ่ายเพิ่มเติม</div>
+        ${feesRows}
+        <div class="a4-q-fees-row" style="border-top:1px solid #ffd54f;margin-top:4px;padding-top:4px;">
+          <span style="font-weight:700;">รวมค่าใช้จ่ายเพิ่ม</span>
+          <b style="font-size:13px;">฿${fmt(feesTotal)}</b>
+        </div>
+      </div>
+    `;
+  }
+
+  let grandBlock = '';
+  if (grand !== null) {
+    grandBlock = `
+      <div class="a4-q-grand">
+        <div class="a4-q-grand-lbl">💰 ยอดรวมทั้งสิ้น</div>
+        <div class="a4-q-grand-amt">฿${fmt(grand)}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="a4-page">
+      ${headBlock}
+      <div class="a4-entries">
+        ${entriesHtml}
+      </div>
+      ${feesBlock}
+      ${grandBlock}
+      <div class="a4-footer">
+        <span>${_quoForm.id || ''}</span>
+        <span>หน้า ${pageNum} / ${totalPages}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderQuoteA4Entry(e){
+  const w = e.width != null ? e.width : '-';
+  const h = e.height != null ? e.height : '-';
+  const qty = e.qty || 1;
+  const colorObj = e.colorId ? _quoteMetadata.colors.find(c => c.id === e.colorId) : null;
+  const colorLbl = colorObj ? colorObj.label : 'ใช้สีหลัก';
+
+  const bdwnHtml = (e._calc?.breakdown||[]).map(b => `
+    <div class="a4-q-bdwn-row">
+      <span>• ${escAttr(b.label)}${b.note?' <span style="color:#999;">('+escAttr(b.note)+')</span>':''}</span>
+      <b>฿${fmt(b.price)}</b>
+    </div>
+  `).join('');
+
+  return `
+    <div class="a4-q-entry">
+      <div class="a4-q-entry-head">
+        <span class="a4-q-entry-num">#${e.no}</span>
+        <span class="a4-q-entry-loc">📍 ${escAttr(e.location)||'(ไม่ระบุ)'}</span>
+        <span class="a4-q-entry-total">฿${fmt(e._calc?.total||0)}</span>
+      </div>
+      <div class="a4-q-size"><b>${w} × ${h} cm × ${qty} ชุด</b> · 🎨 ${escAttr(colorLbl)}</div>
+      ${bdwnHtml ? `<div class="a4-q-bdwn">${bdwnHtml}</div>` : ''}
+      ${e.note ? `<div class="a4-q-note">📝 ${escAttr(e.note)}</div>` : ''}
+    </div>
+  `;
+}
 
 // ── Delete / Restore (ใช้กับ quote list card) ──
 async function quoteDelete(id){
@@ -3912,8 +4270,7 @@ function updateDateDisplay(input){
   if (!v) { span.textContent='เลือกวันที่'; span.classList.add('empty'); return; }
   const p = v.split('-');
   if (p.length !== 3) { span.textContent='เลือกวันที่'; span.classList.add('empty'); return; }
-  span.textContent = `${p[2]}/${p[1]}
-/${p[0].slice(2)}`;
+  span.textContent = `${p[2]}/${p[1]}/${p[0].slice(2)}`;
   span.classList.remove('empty');
 }
 function refreshAllDateDisplays(){
