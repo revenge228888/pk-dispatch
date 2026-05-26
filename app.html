@@ -328,6 +328,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
   <div class="recm-wrap">
     <div class="recm-head">
       <div class="recm-title" id="recmTitle">📐 บันทึกขนาด</div>
+      <button class="hbtn" id="recmLinkBtn" onclick="recordChangeLink()" style="display:none;" title="ผูก/เปลี่ยน Job">🔗</button>
       <button class="hbtn" id="recmExportBtn" onclick="recordExportImg()" style="display:none;" title="Export PNG A4">🖼️</button>
       <button class="hbtn danger" onclick="recordCloseModal()">×</button>
     </div>
@@ -691,9 +692,9 @@ function renderOfficeShell(){
         </div>
         <div class="job-wrap">
           <table><thead><tr>
-            <th>ลำดับ</th><th>ลูกค้า</th><th>ทีม</th><th>ผู้ทำงาน</th><th>ยอดเงิน</th><th>สถานะ</th><th>Location</th><th>รูป</th>
+            <th>ลำดับ</th><th>ลูกค้า</th><th>ทีม</th><th>ผู้ทำงาน</th><th>ยอดเงิน</th><th>สถานะ</th><th>Location</th><th>รูป</th><th>📐 ขนาด</th>
           </tr></thead>
-          <tbody id="jTbody"><tr><td colspan="8" class="loading-row">เลือกวันที่แล้วกด "ดูรายการ"</td></tr></tbody></table>
+          <tbody id="jTbody"><tr><td colspan="9" class="loading-row">เลือกวันที่แล้วกด "ดูรายการ"</td></tr></tbody></table>
         </div>
       </div>
 
@@ -1107,8 +1108,8 @@ async function loadJobTable(){
   const date = document.getElementById('jDate').value;
   const status = document.getElementById('jStatus').value;
   const tb = document.getElementById('jTbody');
-  if (!date) { tb.innerHTML='<tr><td colspan="8" class="loading-row">เลือกวันที่ก่อน</td></tr>'; return; }
-  tb.innerHTML = '<tr><td colspan="8" class="loading-row">กำลังโหลด...</td></tr>';
+  if (!date) { tb.innerHTML='<tr><td colspan="9" class="loading-row">เลือกวันที่ก่อน</td></tr>'; return; }
+  tb.innerHTML = '<tr><td colspan="9" class="loading-row">กำลังโหลด...</td></tr>';
   try {
     let allJobs = [];
     if (team === '__ALL__') {
@@ -1121,7 +1122,7 @@ async function loadJobTable(){
       if (r.ok && r.jobs) allJobs = r.jobs.map(j => ({...j, _team:team}));
     }
     if (status) allJobs = allJobs.filter(j => j.status === status);
-    if (!allJobs.length) { tb.innerHTML='<tr><td colspan="8" class="loading-row">ไม่มีรายการงาน</td></tr>'; return; }
+    if (!allJobs.length) { tb.innerHTML='<tr><td colspan="9" class="loading-row">ไม่มีรายการงาน</td></tr>'; return; }
     const sl = {pending:'bp',working:'bw',done:'bd'};
     const ll = {pending:'รอรับงาน',working:'กำลังทำ',done:'เสร็จแล้ว'};
     window._officeJobs = allJobs;  // เก็บไว้สำหรับ showOfficePhoto
@@ -1134,8 +1135,76 @@ async function loadJobTable(){
       <td><span class="badge ${sl[j.status]||'bp'}">${ll[j.status]||j.status}</span></td>
       <td>${j.lat?`<a class="lnk" onclick="showMap(${j.lat},${j.lng},'${j.name.replace(/'/g,'')}','${(j.doneAt||'')}')">📍 ดูจุดจบงาน</a>`:(j.mapLink?`<a class="lnk" href="${j.mapLink}" target="_blank">🗺 ที่อยู่งาน</a>`:'-')}</td>
       <td>${j.photos && j.photos.length ? `<a class="lnk" onclick="showOfficePhoto(${idx})">📷 ดู ${j.photos.length} รูป</a>` : '-'}</td>
+      <td id="jrec-${idx}" style="font-size:11px;color:var(--mu);">…</td>
     </tr>`).join('');
-  } catch(e) { tb.innerHTML='<tr><td colspan="8" class="loading-row">โหลดไม่ได้</td></tr>'; }
+    // โหลด record counts (async ไม่บล็อก)
+    loadRecordCountsForJobs(allJobs);
+  } catch(e) { tb.innerHTML='<tr><td colspan="9" class="loading-row">โหลดไม่ได้</td></tr>'; }
+}
+
+// โหลดจำนวน records ของแต่ละงาน + เซลล์อัปเดต
+async function loadRecordCountsForJobs(jobs){
+  // อ่าน records ทั้งหมดของผู้ใช้ปัจจุบันครั้งเดียว แล้ว match
+  try {
+    const r = await call({ action:'pk_recordList', limit: 200 });
+    if (!r.ok) return;
+    const byJob = {};
+    (r.records||[]).forEach(rec => {
+      if (rec.linkedJobId && !rec.deletedAt) {
+        if (!byJob[rec.linkedJobId]) byJob[rec.linkedJobId] = [];
+        byJob[rec.linkedJobId].push(rec);
+      }
+    });
+    jobs.forEach((j, idx) => {
+      const cell = document.getElementById('jrec-' + idx);
+      if (!cell) return;
+      const recs = byJob[j.id] || [];
+      if (recs.length === 0) {
+        cell.innerHTML = '<a class="lnk" onclick="openCreateRecordForJob(' + idx + ')" style="color:var(--mu);">+ จด</a>';
+      } else {
+        cell.innerHTML = '<a class="lnk" onclick="openJobRecords(' + idx + ')">📐 ดู ' + recs.length + ' รายการ</a>';
+        cell.dataset.records = JSON.stringify(recs.map(r => r.id));
+      }
+    });
+  } catch(e) {}
+}
+
+// office: เปิดสร้าง record + ผูกงาน
+function openCreateRecordForJob(jobIdx){
+  const j = window._officeJobs[jobIdx];
+  if (!j) return;
+  recordOpenNew({
+    customerName: j.name || '',
+    linkedJobId: j.id
+  });
+}
+
+// office: เปิดรายการ records ของงานนั้น
+async function openJobRecords(jobIdx){
+  const j = window._officeJobs[jobIdx];
+  if (!j) return;
+  showLoad('กำลังโหลด...');
+  try {
+    const r = await call({ action:'pk_recordsByJob', jobId: j.id });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + r.error); return; }
+    const recs = r.records || [];
+    if (!recs.length) { toast('ไม่มี record'); return; }
+    if (recs.length === 1) {
+      recordOpenView(recs[0].id);
+      return;
+    }
+    // หลาย records → list ให้เลือก
+    const list = recs.map((rec, i) =>
+      `${i+1}. ${rec.id} · ${new Date(rec.updatedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})} · ${rec.entryCount} รายการ`
+    ).join('\n');
+    const choice = prompt('เลือก record (1-' + recs.length + ') หรือเว้นว่าง:\n\n' + list);
+    if (!choice) return;
+    const n = parseInt(choice);
+    if (n >= 1 && n <= recs.length) {
+      recordOpenView(recs[n-1].id);
+    }
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
 // ดูรูปงานจากหน้าออฟฟิศ
@@ -1888,10 +1957,41 @@ function techRenderJobs(){
         <div class="t-jobbtns">
           ${j.status !== 'pending' && j.mapLink ? `<a class="btn btn-g btn-sm" href="${j.mapLink}" target="_blank">🗺 นำทาง</a>` : ''}
           ${techJobButtons(j)}
+          <button class="btn btn-sm" style="background:rgba(74,158,255,.15);color:var(--blu);border:1px solid var(--blu);" onclick='techOpenRecord(${JSON.stringify(j).replace(/'/g,"&apos;")})'>📐 จดขนาด</button>
         </div>
       </div>
     `;
   }).join('');
+}
+
+// ── เปิด record จาก Card งาน — ผูกกับ Job อัตโนมัติ ──
+async function techOpenRecord(j){
+  // ตรวจว่ามี records ผูกกับงานนี้แล้วหรือยัง
+  showLoad('กำลังเช็ค...');
+  try {
+    const r = await call({ action:'pk_recordsByJob', jobId: j.id });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    const existing = r.records || [];
+    if (existing.length > 0) {
+      // มี records อยู่แล้ว → ถาม
+      const msg = `งาน ${j.id} มี record ที่ผูกอยู่ ${existing.length} อัน\n\n` +
+                  `กด OK → เปิดอันล่าสุดมาแก้\n` +
+                  `กด Cancel → สร้างใหม่`;
+      if (confirm(msg)) {
+        // เปิดอันล่าสุด
+        const latest = existing.sort((a,b) => b.updatedAt - a.updatedAt)[0];
+        recordOpenEdit(latest.id);
+        return;
+      }
+    }
+    // สร้างใหม่ + auto-fill
+    recordOpenNew({
+      customerName: j.name || '',
+      customerPhone: '',
+      linkedJobId: j.id
+    });
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
 function techJobButtons(j){
@@ -2278,6 +2378,7 @@ async function recordOpenNew(prefill){
   document.getElementById('recmSaveBar').style.display = 'flex';
   document.getElementById('recmSaveBtn').textContent = '💾 บันทึก';
   document.getElementById('recmExportBtn').style.display = 'none';
+  document.getElementById('recmLinkBtn').style.display = 'none';
   recordRenderForm();
   recordOpenModal();
   recordStartAutosave();
@@ -2302,6 +2403,7 @@ async function recordOpenView(id){
     document.getElementById('recmTitle').textContent = '📐 ดู Record — ' + id;
     document.getElementById('recmSaveBar').style.display = 'none';
     document.getElementById('recmExportBtn').style.display = '';  // Phase C4 จะใช้
+    document.getElementById('recmLinkBtn').style.display = (CURRENT_USER.role === 'office' || rec.createdBy === CURRENT_USER.username) ? '' : 'none';
     recordRenderForm();
     recordOpenModal();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
@@ -2342,6 +2444,7 @@ async function recordOpenEdit(id){
     document.getElementById('recmSaveBar').style.display = 'flex';
     document.getElementById('recmSaveBtn').textContent = '💾 อัปเดต';
     document.getElementById('recmExportBtn').style.display = 'none';
+    document.getElementById('recmLinkBtn').style.display = '';
     recordRenderForm();
     recordOpenModal();
     recordStartAutosave();
@@ -2632,6 +2735,62 @@ async function recordSubmit(){
 
 // Placeholder for C4 Export
 function recordExportImg(){ toast('🔧 C4 จะทำ — Export PNG A4'); }
+
+// ── เปลี่ยน/ยกเลิก linkedJobId ของ record ที่มีอยู่ ──
+async function recordChangeLink(){
+  if (!_recForm.id) { toast('record ยังไม่มี id'); return; }
+  // โหลด recent jobs ถ้ายังไม่มี
+  if (!_recForm.recentJobs.length) {
+    showLoad('กำลังโหลด...');
+    await recordLoadRecentJobs();
+    hideLoad();
+  }
+
+  const currentLinked = _recForm.linkedJobId || '';
+  const opts = _recForm.recentJobs.map((j, i) =>
+    `${i+1}. ${j.id} · ${j.name||''} · ${fmtD(j.date)}${j.id===currentLinked?' (ปัจจุบัน)':''}`
+  ).join('\n');
+  const msg = 'ผูก record นี้กับ Job ID อะไร?\n\n' +
+              'ปัจจุบัน: ' + (currentLinked||'(ไม่ผูก)') + '\n\n' +
+              'พิมพ์เลข (1-' + _recForm.recentJobs.length + ')\n' +
+              'หรือพิมพ์ Job ID ตรงๆ (เช่น I0123)\n' +
+              'หรือพิมพ์ "x" เพื่อยกเลิกผูก\n\n' +
+              opts;
+  const input = prompt(msg);
+  if (input === null) return;
+  let newJobId = '';
+  const trimmed = input.trim();
+  if (trimmed.toLowerCase() === 'x' || trimmed === '') {
+    newJobId = '';
+  } else if (/^\d+$/.test(trimmed)) {
+    const n = parseInt(trimmed);
+    if (n >= 1 && n <= _recForm.recentJobs.length) {
+      newJobId = _recForm.recentJobs[n-1].id;
+    } else { toast('เลขไม่ถูกต้อง'); return; }
+  } else {
+    newJobId = trimmed;
+  }
+
+  showLoad('กำลังผูก...');
+  try {
+    const r = await call({ action:'pk_recordLink', id: _recForm.id, linkedJobId: newJobId });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + r.error); return; }
+    _recForm.linkedJobId = newJobId;
+    toast(newJobId ? '🔗 ผูกกับ ' + newJobId : '↩ ยกเลิกผูกแล้ว');
+    // update UI
+    const sel = document.getElementById('recmLinkedJob');
+    if (sel) {
+      // ถ้า newJobId ไม่มีใน dropdown → เพิ่ม
+      if (newJobId && ![...sel.options].some(o => o.value === newJobId)) {
+        const o = document.createElement('option');
+        o.value = newJobId; o.textContent = newJobId + ' · (เก่า)';
+        sel.appendChild(o);
+      }
+      sel.value = newJobId;
+    }
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
 
 async function recordDelete(id){
   if (!confirm('ลบ record นี้?\n(สามารถกู้คืนได้โดย office)')) return;
