@@ -231,6 +231,45 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 .a4-detail{font-size:12px;color:#555;margin-top:4px;font-style:italic;background:#fffef0;border-left:3px solid #f5a623;padding:4px 8px;border-radius:0 4px 4px 0;}
 .a4-footer{margin-top:auto;padding-top:10px;border-top:1px solid #ccc;font-size:11px;color:#888;display:flex;justify-content:space-between;}
 
+/* ── Quote Form Modal ── */
+.quom-bg{position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(4px);z-index:600;display:none;}
+.quom-bg.on{display:flex;justify-content:center;}
+.quom-wrap{width:100%;max-width:820px;background:var(--bg);min-height:100vh;display:flex;flex-direction:column;}
+.quom-head{position:sticky;top:0;background:var(--surf);border-bottom:1px solid var(--bdr);padding:12px 18px;display:flex;align-items:center;gap:10px;z-index:5;}
+.quom-title{flex:1;font-size:15px;font-weight:700;color:var(--tx);}
+.quom-body{padding:16px 18px;flex:1;overflow-y:auto;}
+.quom-section{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:14px;margin-bottom:14px;}
+.quom-section-head{font-size:11px;font-weight:700;color:var(--blu);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;}
+.quom-entry{background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:14px;margin-bottom:12px;}
+.quom-entry.has-calc{border-color:rgba(52,199,89,.3);}
+.quom-entry-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--bdr);}
+.quom-entry-num{font-size:12px;font-weight:700;color:var(--blu);font-family:var(--mono);}
+.quom-size-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;}
+.quom-types-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;margin:8px 0;}
+.quom-type{display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--surf);border:1px solid var(--bdr);border-radius:6px;cursor:pointer;font-size:12px;}
+.quom-type:hover{border-color:var(--blu);}
+.quom-type.checked{background:rgba(74,158,255,.08);border-color:var(--blu);color:var(--blu);}
+.quom-type.unavailable{opacity:.4;cursor:not-allowed;}
+.quom-type input{margin:0;cursor:pointer;width:14px;height:14px;}
+.quom-calc-box{background:rgba(52,199,89,.05);border:1px solid rgba(52,199,89,.3);border-radius:8px;padding:10px 14px;margin-top:10px;}
+.quom-calc-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;}
+.quom-calc-label{color:var(--mu);font-weight:600;}
+.quom-calc-total{font-size:18px;font-weight:700;color:var(--grn);font-family:var(--mono);}
+.quom-calc-breakdown{margin-top:6px;padding-top:6px;border-top:1px dashed rgba(52,199,89,.2);font-size:11px;color:var(--mu);}
+.quom-calc-breakdown div{display:flex;justify-content:space-between;padding:1px 0;}
+.quom-grand-total{background:linear-gradient(135deg,rgba(52,199,89,.12),rgba(74,158,255,.08));border:2px solid var(--grn);border-radius:12px;padding:16px 18px;margin:18px 0;text-align:center;}
+.quom-grand-label{font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;}
+.quom-grand-amt{font-size:32px;font-weight:700;color:var(--grn);font-family:var(--mono);}
+.quom-save-bar{position:sticky;bottom:0;background:var(--surf);border-top:1px solid var(--bdr);padding:12px 18px;display:flex;align-items:center;gap:10px;z-index:5;}
+.quom-save-status{flex:1;font-size:11px;color:var(--mu);}
+.quom-readonly input,.quom-readonly textarea,.quom-readonly select{pointer-events:none;opacity:.85;}
+.quom-readonly .quom-type{pointer-events:none;opacity:.85;}
+.quom-readonly .quom-rm-entry,.quom-readonly .quom-add-btn{display:none;}
+.quom-rm-entry{background:none;border:1px solid var(--rd);color:var(--rd);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;}
+.quom-rm-entry:hover{background:var(--rd);color:#fff;}
+.quom-add-btn{width:100%;padding:14px;background:rgba(74,158,255,.06);border:2px dashed var(--blu);border-radius:10px;color:var(--blu);font-weight:600;cursor:pointer;font-size:13px;transition:all .15s;}
+.quom-add-btn:hover{background:rgba(74,158,255,.15);}
+
 /* ── BOOKING tab ── */
 .bk-type-btn, .bk-mode-btn{
   flex:1;padding:11px 16px;border-radius:8px;border:1px solid var(--bdr);
@@ -362,6 +401,23 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
       <span class="recm-save-status" id="recmSaveStatus">—</span>
       <button class="btn btn-d" onclick="recordCloseModal()">ยกเลิก</button>
       <button class="btn btn-p" id="recmSaveBtn" onclick="recordSubmit()">💾 บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- 💰 QUOTE FORM MODAL -->
+<div class="quom-bg" id="quomModal">
+  <div class="quom-wrap">
+    <div class="quom-head">
+      <div class="quom-title" id="quomTitle">💰 คำนวณราคา</div>
+      <button class="hbtn" id="quomExportBtn" onclick="quoteExportImg()" style="display:none;" title="Export PNG A4">🖼️</button>
+      <button class="hbtn danger" onclick="quoteCloseModal()">×</button>
+    </div>
+    <div class="quom-body" id="quomBody"></div>
+    <div class="quom-save-bar" id="quomSaveBar">
+      <span class="quom-save-status" id="quomSaveStatus">—</span>
+      <button class="btn btn-d" onclick="quoteCloseModal()">ยกเลิก</button>
+      <button class="btn btn-p" id="quomSaveBtn" onclick="quoteSubmit()">💾 บันทึก</button>
     </div>
   </div>
 </div>
@@ -3105,11 +3161,645 @@ function quotesRender(){
   }).join('');
 }
 
-// Placeholder — จะทำใน D3
-function quoteOpenNew(prefill){ toast('🔧 D3 จะทำ — Modal สร้าง'); }
-function quoteOpenView(id){ toast('🔧 D3 จะทำ — Modal ดู: ' + id); }
-function quoteOpenEdit(id){ toast('🔧 D3 จะทำ — Modal แก้: ' + id); }
+// ════════════════════════════════════════
+//  💰 QUOTE FORM MODAL (D3)
+// ════════════════════════════════════════
+const QUO_MAX_ENTRIES = 50;
+const QUO_TYPE_ORDER = [
+  'jeeb_single','jeeb_split','jeeb_free','jeeb_h4',
+  'slide','open','fixed','slide_split','open_split'
+];
 
+// State
+let _quoForm = {
+  mode: 'new',
+  id: null,
+  customer: { name:'', phone:'' },
+  priceType: 'HOME',
+  mainColor: 'white',
+  slidePrice: 220,
+  openPrice: 220,
+  linkedJobId: '',
+  linkedRecordId: '',
+  entries: [],
+  recentJobs: [],
+  draftKey: null,
+  draftTimer: null,
+  lastSavedAt: null,
+  dirty: false
+};
+
+function quoteEmptyEntry(no){
+  return {
+    no, isEmpty: true, location: '',
+    width: null, height: null, qty: null,
+    colorId: '',          // '' = use mainColor
+    types: [], note: ''
+  };
+}
+
+async function quoteEnsureMetadata(){
+  if (_quoteMetadata) return true;
+  await quoteLoadMetadata();
+  if (!_quoteMetadata) { toast('โหลด metadata ไม่ได้'); return false; }
+  return true;
+}
+
+// ── New ──
+async function quoteOpenNew(prefill){
+  if (!await quoteEnsureMetadata()) return;
+  prefill = prefill || {};
+  _quoForm = {
+    mode: 'new', id: null,
+    customer: prefill.customer || { name:'', phone:'' },
+    priceType: prefill.priceType || 'HOME',
+    mainColor: prefill.mainColor || 'white',
+    slidePrice: prefill.slidePrice || 220,
+    openPrice: prefill.openPrice || 220,
+    linkedJobId: prefill.linkedJobId || '',
+    linkedRecordId: prefill.linkedRecordId || '',
+    entries: (prefill.entries && prefill.entries.length) ? prefill.entries : [ quoteEmptyEntry(1) ],
+    recentJobs: [], draftKey: 'pk_quote_draft_new',
+    draftTimer: null, lastSavedAt: null, dirty: false
+  };
+  await quoteLoadRecentJobs();
+  // ถาม recover draft (ถ้าไม่มี prefill)
+  if (!prefill.customer && !prefill.entries) {
+    const draft = localStorage.getItem(_quoForm.draftKey);
+    if (draft) {
+      if (confirm('พบ draft ที่บันทึกค้างไว้ — โหลดกลับ?')) {
+        try { Object.assign(_quoForm, JSON.parse(draft)); }
+        catch(e) { localStorage.removeItem(_quoForm.draftKey); }
+      } else {
+        localStorage.removeItem(_quoForm.draftKey);
+      }
+    }
+  }
+  document.getElementById('quomTitle').textContent = '💰 คำนวณราคา — สร้างใหม่';
+  document.getElementById('quomSaveBar').style.display = 'flex';
+  document.getElementById('quomSaveBtn').textContent = '💾 บันทึก';
+  document.getElementById('quomExportBtn').style.display = 'none';
+  quoteRenderForm();
+  quoteOpenModal();
+  quoteStartAutosave();
+}
+
+// ── View ──
+async function quoteOpenView(id){
+  if (!await quoteEnsureMetadata()) return;
+  showLoad('กำลังโหลด...');
+  try {
+    const r = await call({ action:'pk_quoteGet', id });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
+    const q = r.quote;
+    _quoForm = {
+      mode: 'view', id,
+      customer: q.customer || { name:'', phone:'' },
+      priceType: q.priceType || 'HOME',
+      mainColor: q.mainColor || 'white',
+      slidePrice: q.slidePrice || 220,
+      openPrice: q.openPrice || 220,
+      linkedJobId: q.linkedJobId || '',
+      linkedRecordId: q.linkedRecordId || '',
+      entries: (q.entries && q.entries.length) ? q.entries : [ quoteEmptyEntry(1) ],
+      recentJobs: [], draftKey: null,
+      draftTimer: null, lastSavedAt: null, dirty: false
+    };
+    document.getElementById('quomTitle').textContent = '💰 ดู Quote — ' + id;
+    document.getElementById('quomSaveBar').style.display = 'none';
+    document.getElementById('quomExportBtn').style.display = '';
+    quoteRenderForm();
+    quoteOpenModal();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// ── Edit ──
+async function quoteOpenEdit(id){
+  if (!await quoteEnsureMetadata()) return;
+  showLoad('กำลังโหลด...');
+  try {
+    const r = await call({ action:'pk_quoteGet', id });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
+    const q = r.quote;
+    _quoForm = {
+      mode: 'edit', id,
+      customer: q.customer || { name:'', phone:'' },
+      priceType: q.priceType || 'HOME',
+      mainColor: q.mainColor || 'white',
+      slidePrice: q.slidePrice || 220,
+      openPrice: q.openPrice || 220,
+      linkedJobId: q.linkedJobId || '',
+      linkedRecordId: q.linkedRecordId || '',
+      entries: (q.entries && q.entries.length) ? q.entries : [ quoteEmptyEntry(1) ],
+      recentJobs: [], draftKey: 'pk_quote_draft_' + id,
+      draftTimer: null, lastSavedAt: null, dirty: false
+    };
+    await quoteLoadRecentJobs();
+    const draft = localStorage.getItem(_quoForm.draftKey);
+    if (draft) {
+      if (confirm('พบ draft ของ quote นี้ — โหลดกลับ?')) {
+        try { Object.assign(_quoForm, JSON.parse(draft)); }
+        catch(e) { localStorage.removeItem(_quoForm.draftKey); }
+      } else localStorage.removeItem(_quoForm.draftKey);
+    }
+    document.getElementById('quomTitle').textContent = '💰 แก้ไข — ' + id;
+    document.getElementById('quomSaveBar').style.display = 'flex';
+    document.getElementById('quomSaveBtn').textContent = '💾 อัปเดต';
+    document.getElementById('quomExportBtn').style.display = '';
+    quoteRenderForm();
+    quoteOpenModal();
+    quoteStartAutosave();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+function quoteOpenModal(){
+  document.getElementById('quomModal').classList.add('on');
+  document.body.style.overflow = 'hidden';
+}
+
+function quoteCloseModal(){
+  if (_quoForm.dirty && _quoForm.mode !== 'view') {
+    if (!confirm('มีการแก้ไขที่ยังไม่บันทึก — ปิด?\n(Draft จะถูกเก็บ)')) return;
+  }
+  quoteStopAutosave();
+  document.getElementById('quomModal').classList.remove('on');
+  document.body.style.overflow = '';
+}
+
+async function quoteLoadRecentJobs(){
+  try {
+    const r = await call({ action:'pk_recordListRecentJobs' });
+    if (r.ok) _quoForm.recentJobs = r.jobs || [];
+  } catch(e) {}
+}
+
+// ════════════════════════════════════════
+//  Calculation (Client-side mirror of server logic)
+// ════════════════════════════════════════
+function quoteCalcEntry(entry){
+  if (!_quoteMetadata) return { total:0, breakdown:[] };
+  const w = Number(entry.width) || 0;
+  const h = Number(entry.height) || 0;
+  const qty = Number(entry.qty) || 1;
+  const types = Array.isArray(entry.types) ? entry.types : [];
+  const colorId = entry.colorId || _quoForm.mainColor;
+  const color = _quoteMetadata.colors.find(c => c.id === colorId);
+  const group = color ? color.group : 'g1';
+  const slidePrice = Number(_quoForm.slidePrice) || 0;
+  const openPrice = Number(_quoForm.openPrice) || 0;
+
+  let total = 0;
+  const breakdown = [];
+
+  types.forEach(typeId => {
+    const t = _quoteMetadata.types[typeId];
+    if (!t) return;
+
+    let p = 0;
+    let note = '';
+    if (t.calc === 'area') {
+      const tbl = _quoteMetadata.priceTable[_quoForm.priceType] && _quoteMetadata.priceTable[_quoForm.priceType][group];
+      const ratePerSqm = tbl ? tbl[t.priceKey] : null;
+      if (!ratePerSqm) { breakdown.push({ typeId, label:t.label, price:0, note:'⚠️ ไม่มีราคา' }); return; }
+      let area = (w * h) / 10000;
+      const minArea = h >= 170 ? 2 : 1;
+      if (area < minArea) area = minArea;
+      p = ratePerSqm * area * qty;
+      note = ratePerSqm + '/ตร.ม.';
+    } else if (t.calc === 'perimeter') {
+      const perim = (w + h) * 2 / 100;
+      const rate = t.priceKey === 'slide' ? slidePrice : openPrice;
+      p = rate * perim * qty;
+      note = rate + '/ม.';
+    } else if (t.calc === 'perimeter_split') {
+      const perim = ((w/2) + h) * 2 * 2 / 100;
+      const rate = t.priceKey === 'slide' ? slidePrice : openPrice;
+      p = rate * perim * qty;
+      note = rate + '/ม.';
+    }
+
+    breakdown.push({ typeId, label: t.label, price: Math.round(p), note });
+    total += p;
+  });
+
+  return { total: Math.round(total), breakdown };
+}
+
+function quoteCalcAll(){
+  let grand = 0;
+  _quoForm.entries.forEach(e => {
+    if (e.isEmpty) { e._calc = { total:0, breakdown:[] }; return; }
+    e._calc = quoteCalcEntry(e);
+    grand += e._calc.total;
+  });
+  return grand;
+}
+
+// ════════════════════════════════════════
+//  Render
+// ════════════════════════════════════════
+function quoteRenderForm(){
+  const body = document.getElementById('quomBody');
+  const ro = _quoForm.mode === 'view';
+  body.className = 'quom-body' + (ro ? ' quom-readonly' : '');
+
+  // Job dropdown
+  const jobOptions = ['<option value="">— ไม่ผูกกับงาน —</option>']
+    .concat(_quoForm.recentJobs.map(j => {
+      const sel = j.id === _quoForm.linkedJobId ? ' selected' : '';
+      return `<option value="${j.id}"${sel}>${j.id} · ${j.name||''} · ${fmtD(j.date)}</option>`;
+    }));
+  if (_quoForm.linkedJobId && !_quoForm.recentJobs.find(j => j.id === _quoForm.linkedJobId)) {
+    jobOptions.push(`<option value="${_quoForm.linkedJobId}" selected>${_quoForm.linkedJobId} · (เก่า)</option>`);
+  }
+
+  // Price type dropdown
+  const priceOptions = Object.keys(PRICE_TYPE_LABELS).map(k => {
+    const sel = k === _quoForm.priceType ? ' selected' : '';
+    return `<option value="${k}"${sel}>${PRICE_TYPE_LABELS[k]}</option>`;
+  }).join('');
+
+  // Color dropdown for mainColor
+  const colorOptions = (_quoteMetadata?.colors||[]).map(c => {
+    const sel = c.id === _quoForm.mainColor ? ' selected' : '';
+    return `<option value="${c.id}"${sel}>${c.label} (${c.group})</option>`;
+  }).join('');
+
+  const c = _quoForm.customer || { name:'', phone:'' };
+
+  let html = `
+    <div class="quom-section">
+      <div class="quom-section-head">ข้อมูลลูกค้า</div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label class="fl">👤 ชื่อลูกค้า <span style="color:var(--rd)">*</span></label>
+        <input class="fi" id="quomCustName" type="text" value="${escAttr(c.name)}" oninput="quoteOnChange()">
+      </div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label class="fl">📞 เบอร์</label>
+        <input class="fi" id="quomCustPhone" type="tel" value="${escAttr(c.phone)}" oninput="quoteOnChange()">
+      </div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label class="fl">🔗 ผูกกับงาน (Optional)</label>
+        <select class="fi" id="quomLinkedJob" onchange="quoteOnChange()">${jobOptions.join('')}</select>
+      </div>
+      ${_quoForm.linkedRecordId ? `
+      <div class="fg">
+        <label class="fl">📐 ผูกกับ Record</label>
+        <input class="fi" type="text" value="${_quoForm.linkedRecordId}" readonly style="opacity:.7;">
+      </div>` : ''}
+    </div>
+
+    <div class="quom-section">
+      <div class="quom-section-head">การคำนวณ</div>
+      <div class="row-form" style="margin-bottom:10px;">
+        <div class="fg" style="flex:1;min-width:160px;">
+          <label class="fl">💲 ประเภทราคา</label>
+          <select class="fi" id="quomPriceType" onchange="quoteOnPriceTypeChange()">${priceOptions}</select>
+        </div>
+        <div class="fg" style="flex:1;min-width:160px;">
+          <label class="fl">🎨 สีกรอบหลัก</label>
+          <select class="fi" id="quomMainColor" onchange="quoteOnMainColorChange()">${colorOptions}</select>
+        </div>
+      </div>
+      <div class="row-form">
+        <div class="fg" style="flex:1;min-width:120px;">
+          <label class="fl">📏 มุ้งบานเลื่อน /ม.</label>
+          <input class="fi" id="quomSlidePrice" type="number" inputmode="numeric" value="${_quoForm.slidePrice}" oninput="quoteOnPriceChange('slidePrice',this.value)">
+        </div>
+        <div class="fg" style="flex:1;min-width:120px;">
+          <label class="fl">📏 มุ้งบานเปิด /ม.</label>
+          <input class="fi" id="quomOpenPrice" type="number" inputmode="numeric" value="${_quoForm.openPrice}" oninput="quoteOnPriceChange('openPrice',this.value)">
+        </div>
+      </div>
+    </div>
+  `;
+
+  _quoForm.entries.forEach((e, idx) => {
+    html += quoteRenderEntry(e, idx, ro);
+  });
+
+  if (!ro) {
+    html += `<button class="quom-add-btn" onclick="quoteAddEntry()">+ เพิ่มรายการ</button>`;
+  }
+
+  // Grand total
+  const grand = quoteCalcAll();
+  html += `
+    <div class="quom-grand-total">
+      <div class="quom-grand-label">💰 ยอดรวมทั้งหมด</div>
+      <div class="quom-grand-amt" id="quomGrandTotal">฿${fmt(grand)}</div>
+    </div>
+  `;
+
+  body.innerHTML = html;
+  quoteUpdateSaveStatus();
+}
+
+function quoteRenderEntry(e, idx, ro){
+  const num = idx + 1;
+  const colorOptions = ['<option value="">▼ ใช้สีหลัก</option>']
+    .concat((_quoteMetadata?.colors||[]).map(c => {
+      const sel = c.id === e.colorId ? ' selected' : '';
+      return `<option value="${c.id}"${sel}>${c.label} (${c.group})</option>`;
+    }));
+
+  // คำนวณก่อน
+  if (!e._calc) e._calc = e.isEmpty ? { total:0, breakdown:[] } : quoteCalcEntry(e);
+
+  // Type checkboxes
+  const typesHtml = QUO_TYPE_ORDER.map(tid => {
+    const t = _quoteMetadata?.types[tid];
+    if (!t) return '';
+    const checked = (e.types||[]).indexOf(tid) !== -1;
+    // ตรวจว่ามีราคาไหม
+    let unavailable = false;
+    if (t.calc === 'area') {
+      const colorId = e.colorId || _quoForm.mainColor;
+      const color = (_quoteMetadata?.colors||[]).find(c => c.id === colorId);
+      const group = color ? color.group : 'g1';
+      const tbl = _quoteMetadata.priceTable[_quoForm.priceType] && _quoteMetadata.priceTable[_quoForm.priceType][group];
+      if (!tbl || !tbl[t.priceKey]) unavailable = true;
+    }
+    return `<label class="quom-type${checked?' checked':''}${unavailable&&!checked?' unavailable':''}">
+      <input type="checkbox" ${checked?'checked':''} ${unavailable&&!checked?'disabled':''} onchange="quoteToggleType(${idx},'${tid}',this)">
+      ${t.label}
+    </label>`;
+  }).join('');
+
+  const cls = e.isEmpty || e._calc.total === 0 ? '' : 'has-calc';
+  const breakdownHtml = (e._calc.breakdown||[]).length ? `
+    <div class="quom-calc-breakdown">
+      ${e._calc.breakdown.map(b => `
+        <div>
+          <span>• ${b.label}${b.note?' ('+b.note+')':''}</span>
+          <span style="${b.note==='⚠️ ไม่มีราคา'?'color:var(--rd);':'color:var(--tx);'}">${b.note==='⚠️ ไม่มีราคา'?b.note:'฿'+fmt(b.price)}</span>
+        </div>
+      `).join('')}
+    </div>` : '';
+
+  return `
+    <div class="quom-entry ${cls}">
+      <div class="quom-entry-head">
+        <div class="quom-entry-num">รายการที่ ${num}</div>
+        ${!ro?`<button class="quom-rm-entry" onclick="quoteRemoveEntry(${idx})">× ลบ</button>`:''}
+      </div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label class="fl">📍 ตำแหน่ง</label>
+        <input class="fi" type="text" placeholder="เช่น ห้องนอน" value="${escAttr(e.location||'')}" oninput="quoteOnEntryChange(${idx},'location',this.value)">
+      </div>
+      <div class="quom-size-row">
+        <div class="fg">
+          <label class="fl">📏 กว้าง (cm)</label>
+          <input class="fi" type="number" inputmode="decimal" value="${e.width??''}" oninput="quoteOnEntryChange(${idx},'width',this.value===''?null:parseFloat(this.value))">
+        </div>
+        <div class="fg">
+          <label class="fl">📐 สูง (cm)</label>
+          <input class="fi" type="number" inputmode="decimal" value="${e.height??''}" oninput="quoteOnEntryChange(${idx},'height',this.value===''?null:parseFloat(this.value))">
+        </div>
+        <div class="fg">
+          <label class="fl">🔢 จำนวน</label>
+          <input class="fi" type="number" inputmode="numeric" value="${e.qty??''}" min="1" oninput="quoteOnEntryChange(${idx},'qty',this.value===''?null:parseInt(this.value))">
+        </div>
+      </div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label class="fl">🎨 สี (เฉพาะรายการนี้)</label>
+        <select class="fi" onchange="quoteOnEntryChange(${idx},'colorId',this.value)">${colorOptions.join('')}</select>
+      </div>
+      <div style="margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">ประเภทมุ้ง (ติ๊กได้หลายอย่าง)</div>
+        <div class="quom-types-grid">${typesHtml}</div>
+      </div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label class="fl">📝 หมายเหตุ</label>
+        <textarea class="fi" rows="2" oninput="quoteOnEntryChange(${idx},'note',this.value)">${escHtml(e.note||'')}</textarea>
+      </div>
+      <div class="quom-calc-box">
+        <div class="quom-calc-head">
+          <span class="quom-calc-label">💰 ยอดรายการนี้</span>
+          <span class="quom-calc-total">฿${fmt(e._calc.total||0)}</span>
+        </div>
+        ${breakdownHtml}
+      </div>
+    </div>
+  `;
+}
+
+// ════════════════════════════════════════
+//  Event Handlers
+// ════════════════════════════════════════
+function quoteOnChange(){
+  _quoForm.customer.name = document.getElementById('quomCustName').value;
+  _quoForm.customer.phone = document.getElementById('quomCustPhone').value;
+  _quoForm.linkedJobId = document.getElementById('quomLinkedJob').value;
+  _quoForm.dirty = true;
+}
+
+function quoteOnPriceTypeChange(){
+  _quoForm.priceType = document.getElementById('quomPriceType').value;
+  _quoForm.dirty = true;
+  quoteRenderForm();
+}
+
+function quoteOnMainColorChange(){
+  _quoForm.mainColor = document.getElementById('quomMainColor').value;
+  _quoForm.dirty = true;
+  quoteRenderForm();
+}
+
+function quoteOnPriceChange(field, val){
+  _quoForm[field] = parseFloat(val) || 0;
+  _quoForm.dirty = true;
+  // re-calc แต่ไม่ต้อง re-render full (เพราะ input อยู่ที่ price)
+  quoteCalcAll();
+  quoteUpdateGrandTotal();
+  // re-render entries เพื่อ update breakdown
+  quoteRerenderEntriesOnly();
+}
+
+function quoteOnEntryChange(idx, field, val){
+  if (!_quoForm.entries[idx]) return;
+  _quoForm.entries[idx][field] = val;
+  const e = _quoForm.entries[idx];
+  e.isEmpty = !e.location && !e.width && !e.height && !e.qty && !e.note
+              && (!e.types || !e.types.length);
+  _quoForm.dirty = true;
+  // re-calc แค่ entry นี้
+  e._calc = e.isEmpty ? { total:0, breakdown:[] } : quoteCalcEntry(e);
+  // ถ้าเปลี่ยน colorId ของ entry → ต้อง re-render เพราะ unavailable เปลี่ยน
+  if (field === 'colorId') {
+    quoteRerenderEntriesOnly();
+  } else {
+    quoteUpdateEntryCalc(idx);
+  }
+  quoteUpdateGrandTotal();
+}
+
+function quoteToggleType(idx, typeId, el){
+  if (!_quoForm.entries[idx]) return;
+  const e = _quoForm.entries[idx];
+  if (!e.types) e.types = [];
+  const i = e.types.indexOf(typeId);
+  if (i === -1) e.types.push(typeId);
+  else e.types.splice(i, 1);
+  el.parentElement.classList.toggle('checked', i === -1);
+  quoteOnEntryChange(idx, 'types', e.types);
+}
+
+function quoteAddEntry(){
+  if (_quoForm.entries.length >= QUO_MAX_ENTRIES) {
+    toast('สูงสุด ' + QUO_MAX_ENTRIES + ' รายการ'); return;
+  }
+  _quoForm.entries.push(quoteEmptyEntry(_quoForm.entries.length + 1));
+  _quoForm.dirty = true;
+  quoteRenderForm();
+  setTimeout(() => { document.getElementById('quomModal').scrollTop = 99999; }, 50);
+}
+
+function quoteRemoveEntry(idx){
+  if (_quoForm.entries.length <= 1) { toast('ต้องมีอย่างน้อย 1 รายการ'); return; }
+  if (!confirm('ลบรายการที่ ' + (idx+1) + '?')) return;
+  _quoForm.entries.splice(idx, 1);
+  _quoForm.entries.forEach((e, i) => e.no = i + 1);
+  _quoForm.dirty = true;
+  quoteRenderForm();
+}
+
+// ── Update เฉพาะส่วน — ไม่ re-render ทั้งหมด เพื่อไม่ลบ focus ของ input ──
+function quoteUpdateEntryCalc(idx){
+  // หา .quom-entry ตำแหน่ง idx แล้วอัปเดต .quom-calc-box
+  const entries = document.querySelectorAll('.quom-entry');
+  if (!entries[idx]) return;
+  const e = _quoForm.entries[idx];
+  const calcBox = entries[idx].querySelector('.quom-calc-box');
+  if (!calcBox) return;
+  const breakdownHtml = (e._calc.breakdown||[]).length ? `
+    <div class="quom-calc-breakdown">
+      ${e._calc.breakdown.map(b => `
+        <div>
+          <span>• ${b.label}${b.note?' ('+b.note+')':''}</span>
+          <span style="${b.note==='⚠️ ไม่มีราคา'?'color:var(--rd);':'color:var(--tx);'}">${b.note==='⚠️ ไม่มีราคา'?b.note:'฿'+fmt(b.price)}</span>
+        </div>
+      `).join('')}
+    </div>` : '';
+  calcBox.innerHTML = `
+    <div class="quom-calc-head">
+      <span class="quom-calc-label">💰 ยอดรายการนี้</span>
+      <span class="quom-calc-total">฿${fmt(e._calc.total||0)}</span>
+    </div>
+    ${breakdownHtml}
+  `;
+  entries[idx].classList.toggle('has-calc', !e.isEmpty && e._calc.total > 0);
+}
+
+function quoteUpdateGrandTotal(){
+  const grand = _quoForm.entries.reduce((s,e) => s + (e._calc?.total||0), 0);
+  const el = document.getElementById('quomGrandTotal');
+  if (el) el.textContent = '฿' + fmt(grand);
+}
+
+function quoteRerenderEntriesOnly(){
+  // re-render เฉพาะ entries section
+  const body = document.getElementById('quomBody');
+  if (!body) return;
+  const entries = body.querySelectorAll('.quom-entry');
+  const ro = _quoForm.mode === 'view';
+  _quoForm.entries.forEach((e, idx) => {
+    if (!entries[idx]) return;
+    e._calc = e.isEmpty ? { total:0, breakdown:[] } : quoteCalcEntry(e);
+  });
+  // re-render ทั้ง form เพื่อ update checkbox states + unavailable
+  quoteRenderForm();
+}
+
+// ── Auto-save Draft ──
+function quoteStartAutosave(){
+  quoteStopAutosave();
+  _quoForm.draftTimer = setInterval(() => {
+    if (!_quoForm.dirty || !_quoForm.draftKey) return;
+    try {
+      const snapshot = {
+        customer: _quoForm.customer,
+        priceType: _quoForm.priceType,
+        mainColor: _quoForm.mainColor,
+        slidePrice: _quoForm.slidePrice,
+        openPrice: _quoForm.openPrice,
+        linkedJobId: _quoForm.linkedJobId,
+        linkedRecordId: _quoForm.linkedRecordId,
+        entries: _quoForm.entries.map(e => { const copy = {...e}; delete copy._calc; return copy; })
+      };
+      localStorage.setItem(_quoForm.draftKey, JSON.stringify(snapshot));
+      _quoForm.lastSavedAt = Date.now();
+      _quoForm.dirty = false;
+      quoteUpdateSaveStatus();
+    } catch(e) {}
+  }, 5000);
+}
+function quoteStopAutosave(){
+  if (_quoForm.draftTimer) clearInterval(_quoForm.draftTimer);
+  _quoForm.draftTimer = null;
+}
+function quoteUpdateSaveStatus(){
+  const el = document.getElementById('quomSaveStatus');
+  if (!el) return;
+  if (_quoForm.mode === 'view') { el.textContent = '🔒 โหมดดู (readonly)'; return; }
+  if (_quoForm.lastSavedAt) {
+    const t = new Date(_quoForm.lastSavedAt).toLocaleTimeString('th-TH',{timeStyle:'short'});
+    el.textContent = '💾 draft บันทึกใน browser · ล่าสุด ' + t;
+  } else {
+    el.textContent = 'auto-save draft ทุก 5 วินาที';
+  }
+}
+
+// ── Submit ──
+async function quoteSubmit(){
+  if (!_quoForm.customer.name || !_quoForm.customer.name.trim()) {
+    toast('กรอกชื่อลูกค้า'); return;
+  }
+  const nonEmpty = _quoForm.entries.filter(e => !e.isEmpty);
+  if (!nonEmpty.length) { toast('ต้องมีอย่างน้อย 1 รายการ'); return; }
+
+  // clean _calc ก่อนส่ง
+  const entries = _quoForm.entries.map(e => {
+    const copy = {...e}; delete copy._calc; return copy;
+  });
+
+  const body = {
+    customer: _quoForm.customer,
+    priceType: _quoForm.priceType,
+    mainColor: _quoForm.mainColor,
+    slidePrice: _quoForm.slidePrice,
+    openPrice: _quoForm.openPrice,
+    linkedJobId: _quoForm.linkedJobId,
+    linkedRecordId: _quoForm.linkedRecordId,
+    entries
+  };
+
+  showLoad(_quoForm.mode === 'edit' ? 'กำลังอัปเดต...' : 'กำลังบันทึก...');
+  try {
+    let r;
+    if (_quoForm.mode === 'edit') {
+      r = await call({ action:'pk_quoteUpdate', id: _quoForm.id, ...body });
+    } else {
+      r = await call({ action:'pk_quoteCreate', ...body });
+    }
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast(_quoForm.mode === 'edit' ? '✅ อัปเดตแล้ว · ฿' + fmt(r.totalAmount||0) : '✅ บันทึกแล้ว · ฿' + fmt(r.totalAmount||0));
+    if (_quoForm.draftKey) localStorage.removeItem(_quoForm.draftKey);
+    _quoForm.dirty = false;
+    quoteStopAutosave();
+    document.getElementById('quomModal').classList.remove('on');
+    document.body.style.overflow = '';
+    quotesLoad();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// Placeholder D4
+function quoteExportImg(){ toast('🔧 D4 จะทำ — Export PNG A4'); }
+
+// ── Delete / Restore (ใช้กับ quote list card) ──
 async function quoteDelete(id){
   if (!confirm('ลบ quote นี้?')) return;
   showLoad('กำลังลบ...');
