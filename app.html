@@ -3182,6 +3182,7 @@ let _quoForm = {
   linkedJobId: '',
   linkedRecordId: '',
   entries: [],
+  additionalFees: [],
   recentJobs: [],
   draftKey: null,
   draftTimer: null,
@@ -3219,6 +3220,7 @@ async function quoteOpenNew(prefill){
     linkedJobId: prefill.linkedJobId || '',
     linkedRecordId: prefill.linkedRecordId || '',
     entries: (prefill.entries && prefill.entries.length) ? prefill.entries : [ quoteEmptyEntry(1) ],
+    additionalFees: prefill.additionalFees || [],
     recentJobs: [], draftKey: 'pk_quote_draft_new',
     draftTimer: null, lastSavedAt: null, dirty: false
   };
@@ -3263,6 +3265,7 @@ async function quoteOpenView(id){
       linkedJobId: q.linkedJobId || '',
       linkedRecordId: q.linkedRecordId || '',
       entries: (q.entries && q.entries.length) ? q.entries : [ quoteEmptyEntry(1) ],
+      additionalFees: q.additionalFees || [],
       recentJobs: [], draftKey: null,
       draftTimer: null, lastSavedAt: null, dirty: false
     };
@@ -3293,6 +3296,7 @@ async function quoteOpenEdit(id){
       linkedJobId: q.linkedJobId || '',
       linkedRecordId: q.linkedRecordId || '',
       entries: (q.entries && q.entries.length) ? q.entries : [ quoteEmptyEntry(1) ],
+      additionalFees: q.additionalFees || [],
       recentJobs: [], draftKey: 'pk_quote_draft_' + id,
       draftTimer: null, lastSavedAt: null, dirty: false
     };
@@ -3338,6 +3342,9 @@ async function quoteLoadRecentJobs(){
 // ════════════════════════════════════════
 //  Calculation (Client-side mirror of server logic)
 // ════════════════════════════════════════
+const PK_H4_EXTRA_CLIENT = 2000;
+const PK_H4_THRESHOLD_SQM_CLIENT = 6;
+
 function quoteCalcEntry(entry){
   if (!_quoteMetadata) return { total:0, breakdown:[] };
   const w = Number(entry.width) || 0;
@@ -3368,6 +3375,18 @@ function quoteCalcEntry(entry){
       if (area < minArea) area = minArea;
       p = ratePerSqm * area * qty;
       note = ratePerSqm + '/ตร.ม.';
+    } else if (t.calc === 'area_h4') {
+      // h4 ใช้สูตรพิเศษ: rate_free × area × qty + (area<6 ? 2000×qty : 0)
+      const tbl = _quoteMetadata.priceTable[_quoForm.priceType] && _quoteMetadata.priceTable[_quoForm.priceType][group];
+      const ratePerSqm = tbl ? tbl[t.priceKey] : null;
+      if (!ratePerSqm) { breakdown.push({ typeId, label:t.label, price:0, note:'⚠️ ไม่มีราคา' }); return; }
+      let area = (w * h) / 10000;
+      const minArea = h >= 170 ? 2 : 1;
+      if (area < minArea) area = minArea;
+      const basePrice = ratePerSqm * area * qty;
+      const extra = (area < PK_H4_THRESHOLD_SQM_CLIENT) ? (PK_H4_EXTRA_CLIENT * qty) : 0;
+      p = basePrice + extra;
+      note = ratePerSqm + '/ตร.ม.' + (extra ? ' +2,000×' + qty : ' (≥ 6 ตร.ม.)');
     } else if (t.calc === 'perimeter') {
       const perim = (w + h) * 2 / 100;
       const rate = t.priceKey === 'slide' ? slidePrice : openPrice;
@@ -3393,6 +3412,10 @@ function quoteCalcAll(){
     if (e.isEmpty) { e._calc = { total:0, breakdown:[] }; return; }
     e._calc = quoteCalcEntry(e);
     grand += e._calc.total;
+  });
+  // บวก additionalFees
+  (_quoForm.additionalFees || []).forEach(f => {
+    grand += Number(f.amount) || 0;
   });
   return grand;
 }
@@ -3483,6 +3506,24 @@ function quoteRenderForm(){
   if (!ro) {
     html += `<button class="quom-add-btn" onclick="quoteAddEntry()">+ เพิ่มรายการ</button>`;
   }
+
+  // ── ค่าใช้จ่ายเพิ่มเติม ──
+  const feesRows = (_quoForm.additionalFees || []).map((f, i) => `
+    <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+      <input class="fi" type="text" placeholder="รายการ เช่น ค่าติดตั้ง" value="${escAttr(f.label||'')}" oninput="quoteOnFeeChange(${i},'label',this.value)" style="flex:2;">
+      <input class="fi" type="number" inputmode="numeric" placeholder="จำนวนเงิน" value="${f.amount??''}" oninput="quoteOnFeeChange(${i},'amount',this.value===''?0:parseFloat(this.value))" style="flex:1;">
+      ${!ro?`<button class="quom-rm-entry" onclick="quoteRemoveFee(${i})" style="white-space:nowrap;">×</button>`:''}
+    </div>
+  `).join('');
+  const feesTotal = (_quoForm.additionalFees || []).reduce((s,f) => s + (Number(f.amount)||0), 0);
+  html += `
+    <div class="quom-section">
+      <div class="quom-section-head">ค่าใช้จ่ายเพิ่มเติม</div>
+      <div id="quomFeesList">${feesRows || '<div style="color:var(--mu);font-size:12px;font-style:italic;padding:4px 0;">ยังไม่มีรายการ</div>'}</div>
+      ${!ro?`<button class="quom-add-btn" onclick="quoteAddFee()" style="margin-top:8px;">+ เพิ่มค่าใช้จ่าย</button>`:''}
+      ${feesTotal>0?`<div style="text-align:right;margin-top:8px;font-size:13px;color:var(--mu);">รวมค่าใช้จ่ายเพิ่ม: <b style="color:var(--blu);font-family:var(--mono);">฿${fmt(feesTotal)}</b></div>`:''}
+    </div>
+  `;
 
   // Grand total
   const grand = quoteCalcAll();
@@ -3666,6 +3707,28 @@ function quoteRemoveEntry(idx){
   quoteRenderForm();
 }
 
+// ── Additional Fees ──
+function quoteAddFee(){
+  if (!_quoForm.additionalFees) _quoForm.additionalFees = [];
+  _quoForm.additionalFees.push({ label: '', amount: 0 });
+  _quoForm.dirty = true;
+  quoteRenderForm();
+}
+
+function quoteRemoveFee(idx){
+  if (!_quoForm.additionalFees) return;
+  _quoForm.additionalFees.splice(idx, 1);
+  _quoForm.dirty = true;
+  quoteRenderForm();
+}
+
+function quoteOnFeeChange(idx, field, val){
+  if (!_quoForm.additionalFees || !_quoForm.additionalFees[idx]) return;
+  _quoForm.additionalFees[idx][field] = val;
+  _quoForm.dirty = true;
+  quoteUpdateGrandTotal();
+}
+
 // ── Update เฉพาะส่วน — ไม่ re-render ทั้งหมด เพื่อไม่ลบ focus ของ input ──
 function quoteUpdateEntryCalc(idx){
   // หา .quom-entry ตำแหน่ง idx แล้วอัปเดต .quom-calc-box
@@ -3694,7 +3757,8 @@ function quoteUpdateEntryCalc(idx){
 }
 
 function quoteUpdateGrandTotal(){
-  const grand = _quoForm.entries.reduce((s,e) => s + (e._calc?.total||0), 0);
+  let grand = _quoForm.entries.reduce((s,e) => s + (e._calc?.total||0), 0);
+  (_quoForm.additionalFees || []).forEach(f => { grand += Number(f.amount) || 0; });
   const el = document.getElementById('quomGrandTotal');
   if (el) el.textContent = '฿' + fmt(grand);
 }
@@ -3727,7 +3791,8 @@ function quoteStartAutosave(){
         openPrice: _quoForm.openPrice,
         linkedJobId: _quoForm.linkedJobId,
         linkedRecordId: _quoForm.linkedRecordId,
-        entries: _quoForm.entries.map(e => { const copy = {...e}; delete copy._calc; return copy; })
+        entries: _quoForm.entries.map(e => { const copy = {...e}; delete copy._calc; return copy; }),
+        additionalFees: _quoForm.additionalFees || []
       };
       localStorage.setItem(_quoForm.draftKey, JSON.stringify(snapshot));
       _quoForm.lastSavedAt = Date.now();
@@ -3773,7 +3838,8 @@ async function quoteSubmit(){
     openPrice: _quoForm.openPrice,
     linkedJobId: _quoForm.linkedJobId,
     linkedRecordId: _quoForm.linkedRecordId,
-    entries
+    entries,
+    additionalFees: _quoForm.additionalFees || []
   };
 
   showLoad(_quoForm.mode === 'edit' ? 'กำลังอัปเดต...' : 'กำลังบันทึก...');
