@@ -82,7 +82,10 @@ select.fi{cursor:pointer;}
 .dstat-num{font-family:var(--mono);font-size:24px;font-weight:600;line-height:1;}
 .dstat-lbl{font-size:11px;color:var(--mu);margin-top:5px;text-transform:uppercase;letter-spacing:.6px;}
 .dash-team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;padding:0 16px 16px;}
-.dteam{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:14px;}
+.dteam{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:14px;cursor:pointer;transition:all .15s;position:relative;}
+.dteam:hover{border-color:var(--acc);transform:translateY(-1px);box-shadow:0 4px 12px rgba(245,166,35,.12);}
+.dteam::after{content:'›';position:absolute;top:14px;right:14px;color:var(--mu);font-size:18px;transition:transform .15s;}
+.dteam:hover::after{color:var(--acc);transform:translateX(3px);}
 .dteam-name{font-size:14px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
 .dteam-bar{display:flex;height:8px;border-radius:6px;overflow:hidden;margin-bottom:10px;background:var(--surf2);}
 .dseg-p{background:var(--acc);}.dseg-w{background:var(--blu);}.dseg-d{background:var(--grn);}
@@ -254,6 +257,19 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
     <button id="officePhotoNext" onclick="officePhotoNext()" style="position:absolute;right:-50px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);color:#fff;border:none;width:40px;height:60px;border-radius:8px;cursor:pointer;font-size:24px;">›</button>
     <img id="officePhotoFull" style="max-width:95vw;max-height:90vh;border-radius:8px;">
     <div style="text-align:center;margin-top:10px;color:#fff;font-size:13px;" id="officePhotoCaption"></div>
+  </div>
+</div>
+
+<!-- TEAM DETAIL MODAL -->
+<div class="modal-bg" id="teamDetailModal">
+  <div class="modal" style="max-width:760px;width:96vw;">
+    <div class="card-head">
+      <span id="tdmTitle">รายละเอียดทีม</span>
+      <button onclick="document.getElementById('teamDetailModal').classList.remove('on')" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button>
+    </div>
+    <div class="card-body" id="tdmBody" style="max-height:78vh;overflow-y:auto;">
+      <div class="loading-row">กำลังโหลด...</div>
+    </div>
   </div>
 </div>
 
@@ -796,7 +812,7 @@ async function loadDashboard(){
     r.teams.forEach(t => {
       const tot = t.jobs || 1;
       const pp = (t.pending||0)/tot*100, pw=(t.working||0)/tot*100, pd=(t.done||0)/tot*100;
-      html += `<div class="dteam">
+      html += `<div class="dteam" onclick="showTeamDetail('${t.team.replace(/'/g,"\\'")}','${date}')">
         <div class="dteam-name">👷 ${t.team}</div>
         <div class="dteam-bar"><div class="dseg-p" style="width:${pp}%"></div><div class="dseg-w" style="width:${pw}%"></div><div class="dseg-d" style="width:${pd}%"></div></div>
         <div class="dteam-row"><span>งานทั้งหมด</span><b>${t.jobs}</b></div>
@@ -811,6 +827,98 @@ async function loadDashboard(){
     document.getElementById('dashContent').innerHTML = html;
   } catch(e) { document.getElementById('dashContent').innerHTML='<div class="loading-row">โหลดไม่ได้</div>'; }
 }
+
+// ─── Team Detail Modal — กด card ทีมใน Dashboard → ดูงานของทีมนั้น ───
+async function showTeamDetail(team, date){
+  const m = document.getElementById('teamDetailModal');
+  const b = document.getElementById('tdmBody');
+  document.getElementById('tdmTitle').textContent = `👷 ${team} · ${fmtD(date)}`;
+  b.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  m.classList.add('on');
+
+  try {
+    const r = await call({ action:'pk_getJobs', team, date });
+    if (!r.ok) { b.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
+    const jobs = r.jobs || [];
+    if (!jobs.length) { b.innerHTML = '<div class="loading-row">ไม่มีงานในวันนี้</div>'; return; }
+
+    // จัดกลุ่ม
+    const pending  = jobs.filter(j => j.status === 'pending');
+    const working  = jobs.filter(j => j.status === 'working');
+    const doneOnly = jobs.filter(j => j.status === 'done' && !j.continueNote);
+    const continued = jobs.filter(j => j.status === 'done' && j.continueNote);
+
+    const totalAmt = jobs.reduce((s,j) => s + (Number(j.amount)||0), 0);
+
+    let html = `
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px;">
+        <div class="dstat" style="padding:10px;"><div class="dstat-num" style="font-size:18px;">${jobs.length}</div><div class="dstat-lbl">งานทั้งหมด</div></div>
+        <div class="dstat" style="padding:10px;"><div class="dstat-num" style="font-size:18px;color:var(--acc);">${pending.length}</div><div class="dstat-lbl">รอรับงาน</div></div>
+        <div class="dstat" style="padding:10px;"><div class="dstat-num" style="font-size:18px;color:var(--blu);">${working.length}</div><div class="dstat-lbl">กำลังทำ</div></div>
+        <div class="dstat" style="padding:10px;"><div class="dstat-num" style="font-size:18px;color:var(--grn);">${doneOnly.length}</div><div class="dstat-lbl">✅ จบ</div></div>
+        <div class="dstat" style="padding:10px;"><div class="dstat-num" style="font-size:18px;color:var(--acc);">${continued.length}</div><div class="dstat-lbl">➡ ต่องาน</div></div>
+      </div>
+      <div style="text-align:right;font-size:12px;color:var(--mu);margin-bottom:14px;">ยอดเงินรวม: <b style="color:var(--grn);font-size:14px;">฿${fmt(totalAmt)}</b></div>
+    `;
+
+    // render กลุ่ม
+    const groups = [
+      { title:'⏳ รอรับงาน', list:pending,   color:'var(--acc)' },
+      { title:'🔧 กำลังทำ',  list:working,   color:'var(--blu)' },
+      { title:'✅ จบงาน',    list:doneOnly,  color:'var(--grn)' },
+      { title:'➡ ต่องาน',    list:continued, color:'var(--acc)' },
+    ];
+
+    groups.forEach(g => {
+      if (!g.list.length) return;
+      html += `<div style="margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:700;color:${g.color};text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;border-left:3px solid ${g.color};padding-left:8px;">
+          ${g.title} <span style="color:var(--mu);">(${g.list.length})</span>
+        </div>`;
+
+      g.list.forEach(j => {
+        const doneTime = j.doneAt ? new Date(Number(j.doneAt)).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}) : '';
+        html += `<div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;margin-bottom:6px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--mu);">${j.orderLabel} · ${j.id}</div>
+              <div style="font-weight:600;font-size:13px;margin-top:2px;">${j.name||'-'}</div>
+              ${j.address?`<div style="font-size:11px;color:var(--mu);margin-top:2px;">📍 ${j.address}</div>`:''}
+              ${j.description?`<div style="font-size:11px;color:var(--blu);margin-top:2px;">🔧 ${j.description}</div>`:''}
+            </div>
+            <div style="text-align:right;font-size:11px;">
+              ${j.amount?`<div style="color:var(--acc);font-family:var(--mono);font-weight:600;">฿${fmt(j.amount)}</div>`:''}
+              ${j.worker?`<div style="color:var(--blu);margin-top:2px;">👤 ${j.worker}</div>`:''}
+              ${doneTime?`<div style="color:var(--grn);margin-top:2px;">⏱ ${doneTime}</div>`:''}
+            </div>
+          </div>
+          ${j.continueNote?`<div style="background:rgba(245,166,35,.1);border-left:3px solid var(--acc);padding:5px 8px;font-size:11px;color:var(--acc);margin-top:6px;border-radius:0 4px 4px 0;">📝 ${j.continueNote}</div>`:''}
+          ${j.photos&&j.photos.length?`<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;">${j.photos.map((p,i)=>`<img src="${fixDriveUrl(p)}" referrerpolicy="no-referrer" style="width:42px;height:42px;object-fit:cover;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;" onclick="showTdmPhoto('${j.id}',${i})" onerror="this.style.opacity='.3'">`).join('')}</div>`:''}
+        </div>`;
+      });
+      html += '</div>';
+    });
+
+    b.innerHTML = html;
+    // เก็บ jobs ไว้สำหรับเปิดรูป
+    window._tdmJobs = jobs;
+  } catch(e) {
+    b.innerHTML = '<div class="loading-row">โหลดไม่ได้</div>';
+  }
+}
+
+function showTdmPhoto(jobId, photoIdx){
+  const j = (window._tdmJobs||[]).find(x => x.id === jobId);
+  if (!j || !j.photos || !j.photos[photoIdx]) return;
+  _officePhotoJob = j;
+  _officePhotoIdx = photoIdx;
+  renderOfficePhoto();
+  document.getElementById('officePhotoModal').classList.add('on');
+}
+
+document.getElementById('teamDetailModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('on');
+});
 
 // ─── ACCESS + MEMBERS ───
 function addMemChip(){
