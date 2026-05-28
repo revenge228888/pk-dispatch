@@ -53,6 +53,7 @@ select.fi{cursor:pointer;}
 
 /* WRAP */
 .wrap{max-width:1280px;margin:0 auto;padding:20px;}
+.wrap.wrap-sidebar{max-width:none;padding:0;}
 .empty-section{text-align:center;padding:60px 20px;color:var(--mu);}
 .empty-section h2{font-size:18px;color:var(--tx);margin-bottom:8px;font-weight:600;}
 
@@ -65,6 +66,41 @@ select.fi{cursor:pointer;}
 .tabs{display:flex;border-bottom:1px solid var(--bdr);background:var(--surf);border-radius:12px 12px 0 0;overflow:hidden;}
 .tab{flex:1;padding:13px 0;text-align:center;font-size:13px;font-weight:600;cursor:pointer;color:var(--mu);border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--sans);transition:all .15s;}
 .tab.on{color:var(--acc);border-bottom-color:var(--acc);background:var(--surf2);}
+
+/* ── SIDEBAR LAYOUT ── */
+.app-shell{display:flex;min-height:100vh;position:relative;}
+.sidebar{background:var(--surf);border-right:1px solid var(--bdr);display:flex;flex-direction:column;width:56px;transition:width .2s ease;flex-shrink:0;position:sticky;top:0;height:100vh;z-index:50;}
+.sidebar.expanded{width:220px;}
+.sidebar-top{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--bdr);min-height:56px;box-sizing:border-box;}
+.sidebar-toggle{background:none;border:none;color:var(--tx);font-size:20px;cursor:pointer;padding:0;line-height:1;flex-shrink:0;width:24px;text-align:center;}
+.sidebar-brand{font-size:15px;font-weight:700;color:var(--acc);white-space:nowrap;overflow:hidden;opacity:0;transition:opacity .2s;}
+.sidebar.expanded .sidebar-brand{opacity:1;}
+.sidebar-nav{flex:1;padding:8px 0;overflow-y:auto;overflow-x:hidden;}
+.sidebar-item{display:flex;align-items:center;gap:14px;padding:12px 16px;cursor:pointer;color:var(--mu);font-size:13px;font-weight:600;white-space:nowrap;border:none;background:none;width:100%;text-align:left;font-family:var(--sans);border-left:3px solid transparent;transition:all .12s;box-sizing:border-box;}
+.sidebar-item:hover{background:var(--surf2);color:var(--tx);}
+.sidebar-item.on{color:var(--acc);border-left-color:var(--acc);background:var(--surf2);}
+.sidebar-ico{font-size:18px;flex-shrink:0;width:22px;text-align:center;}
+.sidebar-label{overflow:hidden;opacity:0;transition:opacity .2s;}
+.sidebar.expanded .sidebar-label{opacity:1;}
+.sidebar-divider{height:1px;background:var(--bdr);margin:8px 12px;}
+.sidebar-bottom{border-top:1px solid var(--bdr);padding:8px 0;}
+.sidebar-user{display:flex;align-items:center;gap:14px;padding:10px 16px;color:var(--mu);font-size:12px;white-space:nowrap;overflow:hidden;}
+.sidebar-user .sidebar-label{font-weight:600;color:var(--tx);}
+.content-area{flex:1;min-width:0;display:flex;flex-direction:column;overflow-x:hidden;}
+.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:45;}
+
+/* Mobile: sidebar เป็น drawer */
+@media (max-width:768px){
+  .sidebar{position:fixed;left:0;top:0;height:100vh;width:220px;transform:translateX(-100%);transition:transform .25s ease;box-shadow:2px 0 16px rgba(0,0,0,.4);}
+  .sidebar.expanded{transform:translateX(0);width:220px;}
+  .sidebar .sidebar-brand,.sidebar .sidebar-label{opacity:1;}
+  .sidebar-backdrop.on{display:block;}
+  .content-area{width:100%;}
+  .mobile-topbar{display:flex !important;}
+}
+.mobile-topbar{display:none;align-items:center;gap:12px;padding:12px 16px;background:var(--surf);border-bottom:1px solid var(--bdr);position:sticky;top:0;z-index:40;}
+.mobile-topbar button{background:none;border:none;color:var(--tx);font-size:22px;cursor:pointer;}
+.mobile-topbar .mt-title{font-size:15px;font-weight:700;color:var(--acc);}
 
 /* FORM */
 .section-pad{padding:14px 16px;}
@@ -596,7 +632,9 @@ function enterApp(){
   badge.textContent = roleLabel.toUpperCase();
 
   const c = document.getElementById('roleContent');
-  if (CURRENT_USER.role === 'office')      { c.innerHTML = renderOfficeShell(); officeInit(); }
+  const wrapEl = c.closest('.wrap');
+  if (wrapEl) wrapEl.classList.remove('wrap-sidebar');
+  if (CURRENT_USER.role === 'office')      { if(wrapEl) wrapEl.classList.add('wrap-sidebar'); c.innerHTML = renderOfficeShell(); officeInit(); }
   else if (CURRENT_USER.role === 'sales')  { c.innerHTML = renderSalesStub();   _showRefreshForSales(); }
   else if (CURRENT_USER.role === 'tech')   {
     c.innerHTML = renderTechStub();
@@ -628,15 +666,33 @@ function enterApp(){
 // ════════════════════════════════════════════════════════════
 function renderOfficeShell(){
   return `
-    <div class="card">
-      <div class="tabs">
-        <button class="tab on" onclick="setTab('dash',this)">📊 Dashboard</button>
-        <button class="tab" onclick="setTab('access',this)">📅 กำหนดคิว + สมาชิก</button>
-        <button class="tab" onclick="setTab('booking',this)">➕ ลงคิวใหม่</button>
-        <button class="tab" onclick="setTab('jobs',this)">📋 รายการงาน</button>
-        <button class="tab" onclick="setTab('records',this)">📐 จดขนาด</button>
-        <button class="tab" onclick="setTab('quotes',this)">💰 คำนวณราคา</button>
-      </div>
+    <div class="app-shell">
+      <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebarMobile()"></div>
+      <nav class="sidebar" id="officeSidebar">
+        <div class="sidebar-top">
+          <button class="sidebar-toggle" onclick="toggleSidebar()" title="ย่อ/ขยายเมนู">☰</button>
+          <span class="sidebar-brand">PK Dispatch</span>
+        </div>
+        <div class="sidebar-nav">
+          <button class="sidebar-item on" data-tab="dash" onclick="setTab('dash',this)"><span class="sidebar-ico">📊</span><span class="sidebar-label">Dashboard</span></button>
+          <button class="sidebar-item" data-tab="access" onclick="setTab('access',this)"><span class="sidebar-ico">📅</span><span class="sidebar-label">กำหนดคิว + สมาชิก</span></button>
+          <button class="sidebar-item" data-tab="booking" onclick="setTab('booking',this)"><span class="sidebar-ico">➕</span><span class="sidebar-label">ลงคิวใหม่</span></button>
+          <button class="sidebar-item" data-tab="jobs" onclick="setTab('jobs',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">รายการงาน</span></button>
+          <button class="sidebar-item" data-tab="records" onclick="setTab('records',this)"><span class="sidebar-ico">📐</span><span class="sidebar-label">จดขนาด</span></button>
+          <button class="sidebar-item" data-tab="quotes" onclick="setTab('quotes',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">คำนวณราคา</span></button>
+        </div>
+        <div class="sidebar-bottom">
+          <div class="sidebar-user"><span class="sidebar-ico">👤</span><span class="sidebar-label">${CURRENT_USER.name || CURRENT_USER.username}</span></div>
+          <button class="sidebar-item" onclick="logout()"><span class="sidebar-ico">🚪</span><span class="sidebar-label">ออกจากระบบ</span></button>
+        </div>
+      </nav>
+
+      <div class="content-area">
+        <div class="mobile-topbar">
+          <button onclick="openSidebarMobile()">☰</button>
+          <span class="mt-title" id="mobileTabTitle">Dashboard</span>
+        </div>
+        <div class="card" style="border:none;border-radius:0;background:transparent;">
 
       <!-- DASHBOARD -->
       <div id="tabDash">
@@ -834,6 +890,8 @@ function renderOfficeShell(){
         </div>
         <div id="quoList" class="rec-list"><div class="loading-row" style="grid-column:1/-1;">กดรีเฟรชเพื่อโหลด quotes</div></div>
       </div>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -842,6 +900,7 @@ function officeInit(){
   const today = new Date().toISOString().split('T')[0];
   ['dashDate','jDate'].forEach(id => { const el = document.getElementById(id); if (el) el.value = today; });
   refreshAllDateDisplays();
+  restoreSidebarState();
   reloadAll();
 }
 
@@ -901,12 +960,58 @@ function setTab(t, btn){
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
   if (tgt) tgt.style.display = 'block';
-  document.querySelectorAll('.tab').forEach(b => b.classList.remove('on'));
-  btn.classList.add('on');
+  // sidebar active state
+  document.querySelectorAll('#officeSidebar .sidebar-item').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  // mobile title
+  const titleEl = document.getElementById('mobileTabTitle');
+  if (titleEl && btn) {
+    const lbl = btn.querySelector('.sidebar-label');
+    if (lbl) titleEl.textContent = lbl.textContent;
+  }
+  // ปิด drawer บนมือถือ
+  closeSidebarMobile();
   if (t === 'dash') loadDashboard();
   if (t === 'booking') initBookingTab();
   if (t === 'records') recordsInit();
   if (t === 'quotes') quotesInit();
+}
+
+// ── Sidebar toggle ──
+function toggleSidebar(){
+  const sb = document.getElementById('officeSidebar') || document.getElementById('salesSidebar');
+  if (!sb) return;
+  // mobile: toggle drawer / desktop: expand-collapse
+  if (window.innerWidth <= 768) {
+    sb.classList.toggle('expanded');
+    document.getElementById('sidebarBackdrop').classList.toggle('on', sb.classList.contains('expanded'));
+  } else {
+    const expanded = sb.classList.toggle('expanded');
+    try { localStorage.setItem('pk_sidebar_expanded', expanded ? '1' : '0'); } catch(e){}
+  }
+}
+function openSidebarMobile(){
+  const sb = document.getElementById('officeSidebar') || document.getElementById('salesSidebar');
+  if (!sb) return;
+  sb.classList.add('expanded');
+  document.getElementById('sidebarBackdrop').classList.add('on');
+}
+function closeSidebarMobile(){
+  if (window.innerWidth > 768) return;
+  const sb = document.getElementById('officeSidebar') || document.getElementById('salesSidebar');
+  if (!sb) return;
+  sb.classList.remove('expanded');
+  const bd = document.getElementById('sidebarBackdrop');
+  if (bd) bd.classList.remove('on');
+}
+// restore sidebar state (desktop)
+function restoreSidebarState(){
+  if (window.innerWidth <= 768) return;
+  const sb = document.getElementById('officeSidebar') || document.getElementById('salesSidebar');
+  if (!sb) return;
+  try {
+    if (localStorage.getItem('pk_sidebar_expanded') === '1') sb.classList.add('expanded');
+  } catch(e){}
 }
 
 // ════════════════════════════════════════
