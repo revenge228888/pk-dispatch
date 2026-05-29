@@ -102,6 +102,14 @@ select.fi{cursor:pointer;}
 .mobile-topbar button{background:none;border:none;color:var(--tx);font-size:22px;cursor:pointer;}
 .mobile-topbar .mt-title{font-size:15px;font-weight:700;color:var(--acc);}
 
+/* ── SKELETON LOADING ── */
+@keyframes pk-shimmer{0%{background-position:-400px 0;}100%{background-position:400px 0;}}
+.skel{background:linear-gradient(90deg,var(--surf2) 25%,var(--bdr) 50%,var(--surf2) 75%);background-size:800px 100%;animation:pk-shimmer 1.3s infinite linear;border-radius:6px;}
+.skel-card{background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:14px;margin-bottom:10px;}
+.skel-line{height:12px;margin-bottom:8px;}
+.skel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;padding:12px 16px;}
+.skel-stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;padding:16px;}
+
 /* FORM */
 .section-pad{padding:14px 16px;}
 .row-form{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;}
@@ -504,12 +512,79 @@ let _teams=[], _salesTeams=[], _accessDates=[], _allMembers=[], _memDraft=[], _m
 // ════════════════════════════════════════
 //  API CALL — auto-attach token + secret
 // ════════════════════════════════════════
-async function call(body){
+// ════════════════════════════════════════
+//  SKELETON HELPERS
+// ════════════════════════════════════════
+// skeleton สำหรับ card list (records/quotes)
+function skelCards(n){
+  n = n || 6;
+  let h = '';
+  for (let i = 0; i < n; i++) {
+    h += `<div class="skel-card">
+      <div class="skel skel-line" style="width:40%;"></div>
+      <div class="skel skel-line" style="width:70%;height:16px;"></div>
+      <div class="skel skel-line" style="width:55%;"></div>
+      <div class="skel skel-line" style="width:30%;margin-top:10px;"></div>
+    </div>`;
+  }
+  return `<div class="skel-grid" style="grid-column:1/-1;padding:0;">${h}</div>`;
+}
+// skeleton สำหรับ dashboard (stat + team cards)
+function skelDashboard(){
+  let stats = '';
+  for (let i = 0; i < 4; i++) stats += `<div class="skel-card" style="text-align:center;"><div class="skel skel-line" style="width:50%;height:24px;margin:0 auto 8px;"></div><div class="skel skel-line" style="width:70%;margin:0 auto;"></div></div>`;
+  let teams = '';
+  for (let i = 0; i < 3; i++) teams += `<div class="skel-card"><div class="skel skel-line" style="width:45%;height:15px;"></div><div class="skel skel-line" style="width:100%;height:8px;margin:10px 0;"></div><div class="skel skel-line" style="width:80%;"></div></div>`;
+  return `<div class="skel-stat-grid">${stats}</div><div class="skel-grid">${teams}</div>`;
+}
+
+// ════════════════════════════════════════
+//  CLIENT CACHE (Level 1) — opt-in per call
+// ════════════════════════════════════════
+const _apiCache = new Map();  // key → { data, expires }
+const CACHE_TTL_MS = 30000;   // 30 วินาที
+
+// action ที่อนุญาตให้ cache ได้ (list/read เท่านั้น)
+const CACHEABLE_ACTIONS = new Set([
+  'pk_getJobs', 'pk_recordList', 'pk_quoteList',
+  'pk_quoteMetadata', 'pk_recordListRecentJobs', 'pk_dashboard'
+]);
+
+function _cacheKey(body){
+  // key = action + args ที่เกี่ยวข้อง (ไม่รวม token/username/secret)
+  const { username, token, ...rest } = body;
+  return JSON.stringify(rest);
+}
+
+// ลบ cache ของ action ที่ระบุ (เรียกหลัง create/update/delete)
+function clearCache(actions){
+  if (!actions) { _apiCache.clear(); return; }
+  const list = Array.isArray(actions) ? actions : [actions];
+  for (const key of _apiCache.keys()) {
+    if (list.some(a => key.indexOf('"action":"' + a + '"') !== -1)) {
+      _apiCache.delete(key);
+    }
+  }
+}
+
+async function call(body, opts){
+  opts = opts || {};
   // Auto-attach username + token (ยกเว้น pk_login ที่ส่ง username/password)
   if (CURRENT_USER && body.action !== 'pk_login') {
     if (body.username == null) body.username = CURRENT_USER.username;
     if (body.token == null)    body.token    = CURRENT_USER.token;
   }
+
+  // ── Cache read (เฉพาะ opt-in + cacheable + ไม่ bypass) ──
+  const useCache = opts.cache && CACHEABLE_ACTIONS.has(body.action) && !opts.bypassCache;
+  const ckey = useCache ? _cacheKey(body) : null;
+  if (useCache) {
+    const hit = _apiCache.get(ckey);
+    if (hit && hit.expires > Date.now()) {
+      return hit.data;
+    }
+  }
+
   try {
     const r = await fetch(API, {
       method: 'POST',
@@ -538,6 +613,12 @@ async function call(body){
         }
       }
     }
+
+    // ── Cache write (เฉพาะผลลัพธ์ ok) ──
+    if (useCache && data && data.ok !== false) {
+      _apiCache.set(ckey, { data, expires: Date.now() + CACHE_TTL_MS });
+    }
+
     return data;
   } catch(e) { toast('❌ เชื่อมต่อไม่ได้'); throw e; }
 }
@@ -703,7 +784,7 @@ function renderOfficeShell(){
               <span class="date-display empty" data-for="dashDate">เลือกวันที่</span>
             </div>
           </div>
-          <button class="btn btn-p" onclick="loadDashboard()">ดูสรุป</button>
+          <button class="btn btn-p" onclick="clearCache('pk_dashboard');loadDashboard()">ดูสรุป</button>
         </div>
         <div id="dashContent"><div class="loading-row">เลือกวันที่เพื่อดูสรุปงาน</div></div>
       </div>
@@ -906,6 +987,7 @@ function officeInit(){
 
 async function reloadAll(){
   if (CURRENT_USER && CURRENT_USER.role !== 'office') return;
+  clearCache();  // ปุ่ม refresh global → ล้าง cache ทั้งหมด
   document.getElementById('syncTxt').textContent = 'กำลังโหลด...';
   try {
     const b = await call({ action:'pk_bootstrap' });
@@ -1125,9 +1207,9 @@ function clearBookingForm(){
 async function loadDashboard(){
   const date = document.getElementById('dashDate').value;
   if (!date) { document.getElementById('dashContent').innerHTML='<div class="loading-row">เลือกวันที่ก่อน</div>'; return; }
-  document.getElementById('dashContent').innerHTML='<div class="loading-row">กำลังโหลด...</div>';
+  document.getElementById('dashContent').innerHTML = skelDashboard();
   try {
-    const r = await call({ action:'pk_dashboard', date });
+    const r = await call({ action:'pk_dashboard', date }, { cache: true });
     if (!r.ok) { document.getElementById('dashContent').innerHTML='<div class="loading-row">'+r.error+'</div>'; return; }
     const s = r.summary;
     if (s.totalJobs === 0) { document.getElementById('dashContent').innerHTML='<div class="loading-row">ไม่มีงานในวันที่ '+fmtD(date)+'</div>'; return; }
@@ -2608,21 +2690,22 @@ function recordsInit(){
     s._bound = true;
     s.addEventListener('input', () => {
       if (_recordSearchTimer) clearTimeout(_recordSearchTimer);
-      _recordSearchTimer = setTimeout(recordsLoad, 400);
+      _recordSearchTimer = setTimeout(() => recordsLoad(false), 400);
     });
   }
-  recordsLoad();
+  recordsLoad(true);  // เปิด tab → ใช้ cache ได้
 }
 
-async function recordsLoad(){
+async function recordsLoad(useCache){
   const w = document.getElementById('recList');
   if (!w) return;
-  w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div>';
+  w.innerHTML = skelCards(6);
   const search = (document.getElementById('recSearch')?.value || '').trim();
   const showDeletedEl = document.getElementById('recShowDeleted');
   const includeDeleted = showDeletedEl ? showDeletedEl.checked : false;
   try {
-    const r = await call({ action:'pk_recordList', search, includeDeleted, limit: 200 });
+    const r = await call({ action:'pk_recordList', search, includeDeleted, limit: 200 },
+                         { cache: true, bypassCache: !useCache });
     if (!r.ok) { w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
     _records = r.records || [];
     recordsRender();
@@ -3086,13 +3169,14 @@ async function recordSubmit(){
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast(_recForm.mode === 'edit' ? '✅ อัปเดตแล้ว' : '✅ บันทึกแล้ว');
+    clearCache(['pk_recordList','pk_getJobs']);
     // ลบ draft
     if (_recForm.draftKey) localStorage.removeItem(_recForm.draftKey);
     _recForm.dirty = false;
     recordStopAutosave();
     document.getElementById('recmModal').classList.remove('on');
     document.body.style.overflow = '';
-    recordsLoad();
+    recordsLoad(false);
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
@@ -3356,6 +3440,7 @@ async function recordChangeLink(){
     hideLoad();
     if (!r.ok) { toast('❌ ' + r.error); return; }
     _recForm.linkedJobId = newJobId;
+    clearCache(['pk_recordList','pk_getJobs']);
     toast(newJobId ? '🔗 ผูกกับ ' + newJobId : '↩ ยกเลิกผูกแล้ว');
     // update UI
     const sel = document.getElementById('recmLinkedJob');
@@ -3379,7 +3464,8 @@ async function recordDelete(id){
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast('🗑 ลบแล้ว');
-    recordsLoad();
+    clearCache(['pk_recordList','pk_getJobs']);
+    recordsLoad(false);
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
@@ -3391,7 +3477,8 @@ async function recordRestore(id){
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast('↩ กู้คืนแล้ว');
-    recordsLoad();
+    clearCache(['pk_recordList','pk_getJobs']);
+    recordsLoad(false);
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
@@ -3416,17 +3503,17 @@ function quotesInit(){
     s._bound = true;
     s.addEventListener('input', () => {
       if (_quoteSearchTimer) clearTimeout(_quoteSearchTimer);
-      _quoteSearchTimer = setTimeout(quotesLoad, 400);
+      _quoteSearchTimer = setTimeout(() => quotesLoad(false), 400);
     });
   }
   // Load metadata ครั้งเดียวเก็บ cache
   if (!_quoteMetadata) quoteLoadMetadata();
-  quotesLoad();
+  quotesLoad(true);  // เปิด tab → ใช้ cache ได้
 }
 
 async function quoteLoadMetadata(){
   try {
-    const r = await call({ action:'pk_quoteMetadata' });
+    const r = await call({ action:'pk_quoteMetadata' }, { cache: true });
     if (r.ok) {
       _quoteMetadata = {
         priceTable: r.priceTable,
@@ -3440,15 +3527,16 @@ async function quoteLoadMetadata(){
   } catch(e) {}
 }
 
-async function quotesLoad(){
+async function quotesLoad(useCache){
   const w = document.getElementById('quoList');
   if (!w) return;
-  w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div>';
+  w.innerHTML = skelCards(6);
   const search = (document.getElementById('quoSearch')?.value || '').trim();
   const showDeletedEl = document.getElementById('quoShowDeleted');
   const includeDeleted = showDeletedEl ? showDeletedEl.checked : false;
   try {
-    const r = await call({ action:'pk_quoteList', search, includeDeleted, limit: 200 });
+    const r = await call({ action:'pk_quoteList', search, includeDeleted, limit: 200 },
+                         { cache: true, bypassCache: !useCache });
     if (!r.ok) { w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
     _quotes = r.quotes || [];
     quotesRender();
@@ -4207,12 +4295,13 @@ async function quoteSubmit(){
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast(_quoForm.mode === 'edit' ? '✅ อัปเดตแล้ว · ฿' + fmt(r.totalAmount||0) : '✅ บันทึกแล้ว · ฿' + fmt(r.totalAmount||0));
+    clearCache(['pk_quoteList','pk_getJobs']);
     if (_quoForm.draftKey) localStorage.removeItem(_quoForm.draftKey);
     _quoForm.dirty = false;
     quoteStopAutosave();
     document.getElementById('quomModal').classList.remove('on');
     document.body.style.overflow = '';
-    quotesLoad();
+    quotesLoad(false);
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
@@ -4400,7 +4489,8 @@ async function quoteDelete(id){
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast('🗑 ลบแล้ว');
-    quotesLoad();
+    clearCache(['pk_quoteList','pk_getJobs']);
+    quotesLoad(false);
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
@@ -4412,7 +4502,8 @@ async function quoteRestore(id){
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast('↩ กู้คืนแล้ว');
-    quotesLoad();
+    clearCache(['pk_quoteList','pk_getJobs']);
+    quotesLoad(false);
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
