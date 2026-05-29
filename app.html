@@ -2670,6 +2670,9 @@ function recordsRender(){
 const REC_MAX_ENTRIES = 50;
 
 // State
+// guard กันเปิด modal ซ้อน/กดซ้ำ (ใช้ร่วมกับ record + quote)
+let _modalOpening = false;
+
 let _recForm = {
   mode: 'new',         // new | edit | view
   id: null,
@@ -2693,41 +2696,53 @@ function recordEmptyEntry(no){
 
 // ── New ──
 async function recordOpenNew(prefill){
-  prefill = prefill || {};
-  _recForm = {
-    mode: 'new', id: null,
-    customer: { name: prefill.customerName || '', phone: prefill.customerPhone || '' },
-    linkedJobId: prefill.linkedJobId || '',
-    entries: [ recordEmptyEntry(1) ],
-    recentJobs: [], draftKey: 'pk_record_draft_new',
-    draftTimer: null, lastSavedAt: null, dirty: false
-  };
-  await recordLoadRecentJobs();
-  // ถาม recover draft (เฉพาะตอน new ไม่มี prefill)
-  if (!prefill.customerName && !prefill.linkedJobId) {
-    const draft = localStorage.getItem(_recForm.draftKey);
-    if (draft) {
-      if (confirm('พบ draft ที่บันทึกค้างไว้ — โหลดกลับ?')) {
-        try { Object.assign(_recForm, JSON.parse(draft)); }
-        catch(e) { localStorage.removeItem(_recForm.draftKey); }
-      } else {
-        localStorage.removeItem(_recForm.draftKey);
+  if (_modalOpening) return;
+  _modalOpening = true;
+  showLoad('กำลังเตรียมฟอร์ม...');
+  try {
+    prefill = prefill || {};
+    _recForm = {
+      mode: 'new', id: null,
+      customer: { name: prefill.customerName || '', phone: prefill.customerPhone || '' },
+      linkedJobId: prefill.linkedJobId || '',
+      entries: [ recordEmptyEntry(1) ],
+      recentJobs: [], draftKey: 'pk_record_draft_new',
+      draftTimer: null, lastSavedAt: null, dirty: false
+    };
+    await recordLoadRecentJobs();
+    // ถาม recover draft (เฉพาะตอน new ไม่มี prefill)
+    if (!prefill.customerName && !prefill.linkedJobId) {
+      const draft = localStorage.getItem(_recForm.draftKey);
+      if (draft) {
+        hideLoad();
+        if (confirm('พบ draft ที่บันทึกค้างไว้ — โหลดกลับ?')) {
+          try { Object.assign(_recForm, JSON.parse(draft)); }
+          catch(e) { localStorage.removeItem(_recForm.draftKey); }
+        } else {
+          localStorage.removeItem(_recForm.draftKey);
+        }
+        showLoad('กำลังเตรียมฟอร์ม...');
       }
     }
+    document.getElementById('recmTitle').textContent = '📐 บันทึกขนาด — สร้างใหม่';
+    document.getElementById('recmSaveBar').style.display = 'flex';
+    document.getElementById('recmSaveBtn').textContent = '💾 บันทึก';
+    document.getElementById('recmExportBtn').style.display = 'none';
+    document.getElementById('recmLinkBtn').style.display = 'none';
+    document.getElementById('recmQuoteBtn').style.display = 'none';
+    recordRenderForm();
+    recordOpenModal();
+    recordStartAutosave();
+  } finally {
+    hideLoad();
+    _modalOpening = false;
   }
-  document.getElementById('recmTitle').textContent = '📐 บันทึกขนาด — สร้างใหม่';
-  document.getElementById('recmSaveBar').style.display = 'flex';
-  document.getElementById('recmSaveBtn').textContent = '💾 บันทึก';
-  document.getElementById('recmExportBtn').style.display = 'none';
-  document.getElementById('recmLinkBtn').style.display = 'none';
-  document.getElementById('recmQuoteBtn').style.display = 'none';
-  recordRenderForm();
-  recordOpenModal();
-  recordStartAutosave();
 }
 
 // ── View (readonly) ──
 async function recordOpenView(id){
+  if (_modalOpening) return;
+  _modalOpening = true;
   showLoad('กำลังโหลด...');
   try {
     const r = await call({ action:'pk_recordGet', id });
@@ -2750,10 +2765,13 @@ async function recordOpenView(id){
     recordRenderForm();
     recordOpenModal();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+  finally { _modalOpening = false; }
 }
 
 // ── Edit ──
 async function recordOpenEdit(id){
+  if (_modalOpening) return;
+  _modalOpening = true;
   showLoad('กำลังโหลด...');
   try {
     const r = await call({ action:'pk_recordGet', id });
@@ -2793,6 +2811,7 @@ async function recordOpenEdit(id){
     recordOpenModal();
     recordStartAutosave();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+  finally { _modalOpening = false; }
 }
 
 function recordOpenModal(){
@@ -3527,49 +3546,61 @@ async function quoteEnsureMetadata(){
 
 // ── New ──
 async function quoteOpenNew(prefill){
-  if (!await quoteEnsureMetadata()) return;
-  prefill = prefill || {};
-  _quoForm = {
-    mode: 'new', id: null,
-    customer: prefill.customer || { name:'', phone:'' },
-    priceType: prefill.priceType || 'HOME',
-    mainColor: prefill.mainColor || 'white',
-    slidePrice: prefill.slidePrice || 220,
-    openPrice: prefill.openPrice || 220,
-    linkedJobId: prefill.linkedJobId || '',
-    linkedRecordId: prefill.linkedRecordId || '',
-    entries: (prefill.entries && prefill.entries.length) ? prefill.entries : [ quoteEmptyEntry(1) ],
-    additionalFees: prefill.additionalFees || [],
-    recentJobs: [], draftKey: 'pk_quote_draft_new',
-    draftTimer: null, lastSavedAt: null, dirty: false
-  };
-  await quoteLoadRecentJobs();
-  // ถาม recover draft (ถ้าไม่มี prefill)
-  if (!prefill.customer && !prefill.entries) {
-    const draft = localStorage.getItem(_quoForm.draftKey);
-    if (draft) {
-      if (confirm('พบ draft ที่บันทึกค้างไว้ — โหลดกลับ?')) {
-        try { Object.assign(_quoForm, JSON.parse(draft)); }
-        catch(e) { localStorage.removeItem(_quoForm.draftKey); }
-      } else {
-        localStorage.removeItem(_quoForm.draftKey);
+  if (_modalOpening) return;
+  _modalOpening = true;
+  showLoad('กำลังเตรียมฟอร์ม...');
+  try {
+    if (!await quoteEnsureMetadata()) { return; }
+    prefill = prefill || {};
+    _quoForm = {
+      mode: 'new', id: null,
+      customer: prefill.customer || { name:'', phone:'' },
+      priceType: prefill.priceType || 'HOME',
+      mainColor: prefill.mainColor || 'white',
+      slidePrice: prefill.slidePrice || 220,
+      openPrice: prefill.openPrice || 220,
+      linkedJobId: prefill.linkedJobId || '',
+      linkedRecordId: prefill.linkedRecordId || '',
+      entries: (prefill.entries && prefill.entries.length) ? prefill.entries : [ quoteEmptyEntry(1) ],
+      additionalFees: prefill.additionalFees || [],
+      recentJobs: [], draftKey: 'pk_quote_draft_new',
+      draftTimer: null, lastSavedAt: null, dirty: false
+    };
+    await quoteLoadRecentJobs();
+    // ถาม recover draft (ถ้าไม่มี prefill)
+    if (!prefill.customer && !prefill.entries) {
+      const draft = localStorage.getItem(_quoForm.draftKey);
+      if (draft) {
+        hideLoad();
+        if (confirm('พบ draft ที่บันทึกค้างไว้ — โหลดกลับ?')) {
+          try { Object.assign(_quoForm, JSON.parse(draft)); }
+          catch(e) { localStorage.removeItem(_quoForm.draftKey); }
+        } else {
+          localStorage.removeItem(_quoForm.draftKey);
+        }
+        showLoad('กำลังเตรียมฟอร์ม...');
       }
     }
+    document.getElementById('quomTitle').textContent = '💰 คำนวณราคา — สร้างใหม่';
+    document.getElementById('quomSaveBar').style.display = 'flex';
+    document.getElementById('quomSaveBtn').textContent = '💾 บันทึก';
+    document.getElementById('quomExportBtn').style.display = 'none';
+    quoteRenderForm();
+    quoteOpenModal();
+    quoteStartAutosave();
+  } finally {
+    hideLoad();
+    _modalOpening = false;
   }
-  document.getElementById('quomTitle').textContent = '💰 คำนวณราคา — สร้างใหม่';
-  document.getElementById('quomSaveBar').style.display = 'flex';
-  document.getElementById('quomSaveBtn').textContent = '💾 บันทึก';
-  document.getElementById('quomExportBtn').style.display = 'none';
-  quoteRenderForm();
-  quoteOpenModal();
-  quoteStartAutosave();
 }
 
 // ── View ──
 async function quoteOpenView(id){
-  if (!await quoteEnsureMetadata()) return;
+  if (_modalOpening) return;
+  _modalOpening = true;
   showLoad('กำลังโหลด...');
   try {
+    if (!await quoteEnsureMetadata()) { return; }
     const r = await call({ action:'pk_quoteGet', id });
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
@@ -3594,13 +3625,16 @@ async function quoteOpenView(id){
     quoteRenderForm();
     quoteOpenModal();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+  finally { _modalOpening = false; }
 }
 
 // ── Edit ──
 async function quoteOpenEdit(id){
-  if (!await quoteEnsureMetadata()) return;
+  if (_modalOpening) return;
+  _modalOpening = true;
   showLoad('กำลังโหลด...');
   try {
+    if (!await quoteEnsureMetadata()) { return; }
     const r = await call({ action:'pk_quoteGet', id });
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
@@ -3635,6 +3669,7 @@ async function quoteOpenEdit(id){
     quoteOpenModal();
     quoteStartAutosave();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+  finally { _modalOpening = false; }
 }
 
 function quoteOpenModal(){
