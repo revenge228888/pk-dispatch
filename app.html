@@ -1871,6 +1871,8 @@ function renderSalesStub(){
 //  SALES — Booking
 // ════════════════════════════════════════
 let _sBkMode = 'form';
+let _salesBookingMeasureId = '';  // ผูกงานวัด ตอนลงคิวติดตั้งจากงานวัด
+let _fromMeasureBtn = false;      // flag กัน initSalesBooking ล้าง measure link
 let _sSlotTimer = null;
 let _sEditingId = null;
 
@@ -1967,6 +1969,8 @@ function salesMeasureRender(){
         ${j.status !== 'pending' && j.mapLink ? `<a class="btn btn-g btn-sm" href="${j.mapLink}" target="_blank">🗺 นำทาง</a>` : ''}
         ${salesMeasureButtons(j)}
         ${j.status !== 'pending' ? `<button class="btn btn-sm" style="background:rgba(74,158,255,.15);color:var(--blu);border:1px solid var(--blu);" onclick='salesMeasureOpenRecord(${JSON.stringify(j).replace(/'/g,"&apos;")})'>📐 จดขนาด</button>` : ''}
+        ${j.status !== 'pending' ? `<button class="btn btn-sm" style="background:rgba(52,199,89,.15);color:var(--grn);border:1px solid var(--grn);" onclick='salesMeasureQuote(${JSON.stringify(j).replace(/'/g,"&apos;")})'>💰 คำนวณราคา</button>` : ''}
+        ${j.status !== 'pending' ? `<button class="btn btn-sm" style="background:rgba(255,159,67,.15);color:var(--acc);border:1px solid var(--acc);" onclick='salesMeasureToInstall(${JSON.stringify(j).replace(/'/g,"&apos;")})'>🔧 ลงคิวติดตั้ง</button>` : ''}
       </div>
     </div>
   `).join('');
@@ -2074,6 +2078,86 @@ async function salesMeasureOpenRecord(j){
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
+// 💰 คำนวณราคาจากงานวัด — มี record → แปลงเป็น quote / ไม่มี → เติมแค่ลูกค้า
+async function salesMeasureQuote(j){
+  showLoad('กำลังเตรียม...');
+  try {
+    // มี quote ผูกงานนี้แล้วไหม
+    const rq = await call({ action:'pk_quotesByJob', jobId: j.id });
+    if (rq.ok && rq.quotes && rq.quotes.length > 0) {
+      hideLoad();
+      if (confirm(`มี Quote ผูกกับงานนี้แล้ว ${rq.quotes.length} ใบ\n\nกด OK → เปิดอันล่าสุด\nกด Cancel → สร้างใหม่`)) {
+        const latest = rq.quotes.sort((a,b) => b.updatedAt - a.updatedAt)[0];
+        quoteOpenView(latest.id);
+        return;
+      }
+      showLoad('กำลังเตรียม...');
+    }
+
+    // หา record ที่ผูกงานวัดนี้
+    const rr = await call({ action:'pk_recordsByJob', jobId: j.id });
+    hideLoad();
+    let quoteEntries = [];
+    let linkedRecordId = '';
+    if (rr.ok && rr.records && rr.records.length > 0) {
+      const latest = rr.records.sort((a,b) => b.updatedAt - a.updatedAt)[0];
+      showLoad('กำลังโหลดขนาด...');
+      const rg = await call({ action:'pk_recordGet', id: latest.id });
+      hideLoad();
+      if (rg.ok && rg.record) {
+        quoteEntries = pkRecordEntriesToQuote(rg.record.entries);
+        linkedRecordId = latest.id;
+      }
+    }
+
+    quoteOpenNew({
+      customer: { name: j.name || '', phone: '' },
+      linkedJobId: j.id,
+      linkedRecordId,
+      entries: quoteEntries.length ? quoteEntries : undefined
+    });
+    if (quoteEntries.length) toast('💰 ดึงขนาดจาก record แล้ว — ตรวจ types + สี');
+    else toast('💰 ยังไม่มี record — กรอกรายการเอง');
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// 🔧 ลงคิวติดตั้งจากงานวัด — เด้งไปแท็บ "ขอคิวติดตั้ง" + เติมข้อมูล (ยกเว้นคะแนน)
+function salesMeasureToInstall(j){
+  _salesBookingMeasureId = j.id;
+  _fromMeasureBtn = true;  // กัน initSalesBooking ล้าง measure link
+  const btn = document.querySelector('#salesSidebar .sidebar-item[data-tab="booking"]');
+  setSalesTab('booking', btn);
+  setTimeout(() => {
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    set('sBkCustomer', j.name || '');
+    set('sBkAddress', j.address || '');
+    set('sBkJob', j.description || '');
+    set('sBkScore', '1');   // คะแนนเริ่มใหม่
+    set('sBkAmount', '');   // ยอดเงินมาจาก quote
+    showMeasureLinkBanner(j.id);
+    toast('🔧 ดึงข้อมูลจากงานวัด ' + j.id + ' — กรอกคะแนนแล้วขอคิว');
+  }, 200);
+}
+
+function showMeasureLinkBanner(measureId){
+  let banner = document.getElementById('sBkMeasureBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'sBkMeasureBanner';
+    banner.style.cssText = 'margin:0 16px 12px;padding:10px 14px;background:rgba(255,159,67,.12);border:1px solid var(--acc);border-radius:8px;font-size:13px;color:var(--acc);display:flex;align-items:center;justify-content:space-between;gap:10px;';
+    const form = document.getElementById('sTabBooking');
+    if (form) form.insertBefore(banner, form.firstChild);
+  }
+  banner.innerHTML = `<span>🔧 กำลังลงคิวติดตั้งจากงานวัด <b>${measureId}</b></span>
+    <button class="btn btn-sm" style="background:none;border:1px solid var(--acc);color:var(--acc);" onclick="clearMeasureLink()">✕ ยกเลิกผูก</button>`;
+  banner.style.display = 'flex';
+}
+function clearMeasureLink(){
+  _salesBookingMeasureId = '';
+  const banner = document.getElementById('sBkMeasureBanner');
+  if (banner) banner.style.display = 'none';
+}
+
 function initSalesBooking(){
   const dt = document.getElementById('sBkDate');
   if (dt && !dt.value) {
@@ -2081,6 +2165,11 @@ function initSalesBooking(){
     updateDateDisplay(dt);
     salesCheckSlot();
   }
+  // ถ้าเข้าแท็บเองจาก sidebar (ไม่ได้มาจากปุ่มงานวัด) → ล้าง measure link เก่า
+  if (!_fromMeasureBtn) {
+    clearMeasureLink();
+  }
+  _fromMeasureBtn = false;
 }
 function initSalesMy(){
   const to = document.getElementById('sFilterTo');
@@ -2149,10 +2238,12 @@ async function salesSubmitBooking(){
       if (!confirm(`⚠️ วันนี้คิวเกินจุดเต็มแล้ว (${r.totalAfter}/${r.maxScore})\nต้องการลงคิวต่อไหม?`)) return;
     }
     Object.assign(body, { date, customer, address, job, score, amount });
+    if (_salesBookingMeasureId) body.linkedMeasureId = _salesBookingMeasureId;
   } else {
     const raw = document.getElementById('sBkRawText').value.trim();
     if (!raw) { toast('พิมพ์ข้อมูลก่อน'); return; }
     body.raw = raw;
+    if (_salesBookingMeasureId) body.linkedMeasureId = _salesBookingMeasureId;
   }
 
   showLoad('กำลังบันทึก...');
@@ -2161,6 +2252,7 @@ async function salesSubmitBooking(){
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error || 'ผิดพลาด')); return; }
     toast(`✅ ลงคิวสำเร็จ #${r.id} — รอ CF`);
+    clearMeasureLink();  // ล้าง banner + measure link
     salesClearForm();
     document.getElementById('sSlotIndicator').innerHTML = '';
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
@@ -3530,6 +3622,27 @@ const REC_TO_QUO_TYPE_MAP = {
   'มุ้งบานเปิดแยกกลาง': 'open_split'
 };
 
+// แปลง record entries → quote entries (shared)
+function pkRecordEntriesToQuote(entries){
+  return (entries || []).filter(e => !e.isEmpty).map((e, i) => {
+    const types = [];
+    (e.muang || []).forEach(m => {
+      const tid = REC_TO_QUO_TYPE_MAP[m];
+      if (tid && !types.includes(tid)) types.push(tid);
+    });
+    const noteParts = [];
+    if (e.krachok && e.krachok.length) noteParts.push('🪞 กระจก: ' + e.krachok.join(', '));
+    if (e.rang) noteParts.push('📏 ' + e.rang);
+    if (e.detail) noteParts.push(e.detail);
+    return {
+      no: i + 1, isEmpty: false,
+      location: e.location || '',
+      width: e.width, height: e.height, qty: e.qty || 1,
+      colorId: '', types, note: noteParts.join(' · ')
+    };
+  });
+}
+
 async function recordHandoffToQuote(){
   if (!_recForm.id) { toast('ต้องบันทึก record ก่อน'); return; }
   if (CURRENT_USER.role !== 'office' && CURRENT_USER.role !== 'sales') {
@@ -3558,33 +3671,7 @@ async function recordHandoffToQuote(){
   }
 
   // แปลง entries จาก record → quote entries
-  const quoteEntries = (_recForm.entries || []).filter(e => !e.isEmpty).map((e, i) => {
-    // mapping มุ้งลวด → types
-    const types = [];
-    (e.muang || []).forEach(m => {
-      const tid = REC_TO_QUO_TYPE_MAP[m];
-      if (tid && !types.includes(tid)) types.push(tid);
-    });
-    // กระจกอลูมิเนียม → เก็บใน note
-    const noteParts = [];
-    if (e.krachok && e.krachok.length) {
-      noteParts.push('🪞 กระจก: ' + e.krachok.join(', '));
-    }
-    if (e.rang) noteParts.push('📏 ' + e.rang);
-    if (e.detail) noteParts.push(e.detail);
-
-    return {
-      no: i + 1,
-      isEmpty: false,
-      location: e.location || '',
-      width: e.width,
-      height: e.height,
-      qty: e.qty || 1,
-      colorId: '',
-      types,
-      note: noteParts.join(' · ')
-    };
-  });
+  const quoteEntries = pkRecordEntriesToQuote(_recForm.entries);
 
   if (!quoteEntries.length) {
     toast('Record ไม่มีรายการที่กรอกข้อมูล'); return;
