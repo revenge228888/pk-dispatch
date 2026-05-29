@@ -1099,11 +1099,14 @@ function restoreSidebarState(){
 // ════════════════════════════════════════
 //  BOOKING (ลงคิวใหม่)
 // ════════════════════════════════════════
-let _bkType = 'install';  // measure | install
+let _bkType = 'measure';  // measure | install — default ตรงกับปุ่มที่ไฮไลต์ใน HTML
 let _bkMode = 'form';     // form | raw
 let _bkRecent = [];
 
 async function initBookingTab(){
+  // sync ปุ่มประเภท/รูปแบบ ให้ตรงกับ state (source of truth = _bkType/_bkMode)
+  setBookingType(_bkType);
+  setBookingMode(_bkMode);
   // set วันที่เป็นวันนี้ ถ้ายังว่าง
   const dt = document.getElementById('bkDate');
   if (dt && !dt.value) {
