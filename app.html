@@ -109,6 +109,7 @@ select.fi{cursor:pointer;}
 .skel-line{height:12px;margin-bottom:8px;}
 .skel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;padding:12px 16px;}
 .skel-stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;padding:16px;}
+.sm-subtab.on{background:var(--acc) !important;color:#fff !important;border-color:var(--acc) !important;}
 
 /* FORM */
 .section-pad{padding:14px 16px;}
@@ -1647,6 +1648,7 @@ function renderSalesStub(){
         </div>
         <div class="sidebar-nav">
           <button class="sidebar-item on" data-tab="booking" onclick="setSalesTab('booking',this)"><span class="sidebar-ico">➕</span><span class="sidebar-label">ขอคิวติดตั้ง</span></button>
+          <button class="sidebar-item" data-tab="measure" onclick="setSalesTab('measure',this)"><span class="sidebar-ico">📏</span><span class="sidebar-label">งานวัดของฉัน</span></button>
           <button class="sidebar-item" data-tab="my" onclick="setSalesTab('my',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">คิวของฉัน</span></button>
           <button class="sidebar-item" data-tab="records" onclick="setSalesTab('records',this)"><span class="sidebar-ico">📐</span><span class="sidebar-label">จดขนาด</span></button>
           <button class="sidebar-item" data-tab="quotes" onclick="setSalesTab('quotes',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">คำนวณราคา</span></button>
@@ -1743,6 +1745,26 @@ function renderSalesStub(){
       </div>
 
       <!-- MY QUEUE -->
+      <div id="sTabMeasure" style="display:none;">
+        <div class="section-pad row-form">
+          <div class="fg">
+            <label class="fl">เลือกวันที่</label>
+            <div class="date-wrap">
+              <input class="fi" id="smDate" type="date" onchange="salesMeasureLoad();updateDateDisplay(this)" oninput="updateDateDisplay(this)">
+              <span class="date-display empty" data-for="smDate">เลือกวันที่</span>
+            </div>
+          </div>
+          <button class="btn btn-p" onclick="salesMeasureLoad()">ดูงานวัด</button>
+        </div>
+        <div class="section-pad" style="padding-top:0;">
+          <div class="t-tabs" style="display:flex;gap:8px;margin-bottom:12px;">
+            <button class="btn btn-g btn-sm sm-subtab on" id="smTabCurrent" onclick="salesMeasureSwitchTab('current')">📋 งานปัจจุบัน (<span id="smCntCur">0</span>)</button>
+            <button class="btn btn-g btn-sm sm-subtab" id="smTabDone" onclick="salesMeasureSwitchTab('done')">✅ เสร็จแล้ว (<span id="smCntDone">0</span>)</button>
+          </div>
+          <div id="smJobsList"><div class="loading-row">เลือกวันที่แล้วกด "ดูงานวัด"</div></div>
+        </div>
+      </div>
+
       <div id="sTabMy" style="display:none;">
         <div class="section-pad row-form">
           <div class="fg" style="min-width:130px;">
@@ -1853,7 +1875,7 @@ let _sSlotTimer = null;
 let _sEditingId = null;
 
 function setSalesTab(t, btn){
-  ['Booking','My','Records','Quotes'].forEach(x => {
+  ['Booking','Measure','My','Records','Quotes'].forEach(x => {
     const el = document.getElementById('sTab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('sTab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -1869,9 +1891,187 @@ function setSalesTab(t, btn){
   }
   closeSidebarMobile();
   if (t === 'booking') initSalesBooking();
+  if (t === 'measure') initSalesMeasure();
   if (t === 'my') initSalesMy();
   if (t === 'records') recordsInit();
   if (t === 'quotes') quotesInit();
+}
+
+// ════════════════════════════════════════
+//  📏 SALES MEASURE JOBS (Phase E2)
+// ════════════════════════════════════════
+let _smJobs = [];
+let _smTab = 'current';
+
+function initSalesMeasure(){
+  const dt = document.getElementById('smDate');
+  if (dt && !dt.value) {
+    dt.value = new Date().toISOString().split('T')[0];
+    updateDateDisplay(dt);
+  }
+  salesMeasureLoad();
+}
+
+function salesMeasureSwitchTab(t){
+  _smTab = t;
+  document.getElementById('smTabCurrent').classList.toggle('on', t==='current');
+  document.getElementById('smTabDone').classList.toggle('on', t==='done');
+  salesMeasureRender();
+}
+
+async function salesMeasureLoad(){
+  const date = document.getElementById('smDate').value;
+  if (!date) { toast('เลือกวันที่ก่อน'); return; }
+  const w = document.getElementById('smJobsList');
+  w.innerHTML = skelCards(3);
+  try {
+    const r = await call({ action:'pk_salesGetMeasureJobs', date });
+    if (!r.ok) { w.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
+    _smJobs = r.jobs || [];
+    salesMeasureRender();
+  } catch(e) { w.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
+}
+
+function salesMeasureRender(){
+  const w = document.getElementById('smJobsList');
+  const current = _smJobs.filter(j => j.status !== 'done');
+  const done = _smJobs.filter(j => j.status === 'done');
+  document.getElementById('smCntCur').textContent = current.length;
+  document.getElementById('smCntDone').textContent = done.length;
+
+  if (!_smJobs.length) {
+    w.innerHTML = '<div class="loading-row">ไม่มีงานวัดในวันที่เลือก</div>';
+    return;
+  }
+  const showList = (_smTab === 'current') ? current : done;
+  if (!showList.length) {
+    w.innerHTML = `<div class="loading-row">ไม่มีงานใน${_smTab==='current'?'หมวดงานปัจจุบัน':'หมวดเสร็จแล้ว'}</div>`;
+    return;
+  }
+
+  const statusLabel = {pending:'รอรับงาน', working:'กำลังวัด', done:'✅ วัดเสร็จ'};
+  const statusClass = {pending:'bp', working:'bw', done:'bd'};
+
+  w.innerHTML = showList.map(j => `
+    <div class="t-jobcard ${j.status}">
+      <div class="t-jobhead">
+        <div class="t-jobnum">${j.orderLabel}</div>
+        <span class="badge ${statusClass[j.status]||'bp'}">${statusLabel[j.status]||'รอรับงาน'}</span>
+      </div>
+      <div class="t-jobname">${j.name}</div>
+      ${j.status !== 'pending' && j.address ? `<div class="t-jobaddr">📍 ${j.address}</div>` : ''}
+      ${j.status === 'pending' ? `<div class="t-jobaddr" style="color:var(--mu);font-style:italic;">📍 (กดรับงานเพื่อดูที่อยู่)</div>` : ''}
+      ${j.description ? `<div class="t-jobdesc">📐 ${j.description}</div>` : ''}
+      ${j.status === 'done' && j.doneAt ? `<div class="t-jobtime">⏱ วัดเสร็จ ${new Date(Number(j.doneAt)).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}</div>` : ''}
+      <div class="t-jobbtns">
+        ${j.status !== 'pending' && j.mapLink ? `<a class="btn btn-g btn-sm" href="${j.mapLink}" target="_blank">🗺 นำทาง</a>` : ''}
+        ${salesMeasureButtons(j)}
+        ${j.status !== 'pending' ? `<button class="btn btn-sm" style="background:rgba(74,158,255,.15);color:var(--blu);border:1px solid var(--blu);" onclick='salesMeasureOpenRecord(${JSON.stringify(j).replace(/'/g,"&apos;")})'>📐 จดขนาด</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function salesMeasureButtons(j){
+  if (j.status === 'pending') {
+    return `<button class="btn btn-p btn-sm" onclick="salesMeasureAccept('${j.id}')">▶ รับงาน</button>`;
+  } else if (j.status === 'working') {
+    return `
+      <button class="btn btn-d btn-sm" onclick="salesMeasureCancelAccept('${j.id}')">✕ ยกเลิกรับงาน</button>
+      <button class="btn btn-p btn-sm" onclick="salesMeasureDone('${j.id}')">✅ จบงานวัด</button>
+    `;
+  } else if (j.status === 'done') {
+    return `<button class="btn btn-g btn-sm" onclick="salesMeasureUndo('${j.id}')">↩ ยกเลิกการจบงาน</button>`;
+  }
+  return '';
+}
+
+async function salesMeasureAccept(id){
+  if (!confirm('รับงานวัดนี้?')) return;
+  showLoad('กำลังรับงาน...');
+  try {
+    const r = await call({
+      action: 'pk_salesUpdateMeasureStatus',
+      id, status: 'working', startAt: Date.now(),
+      worker: CURRENT_USER.name || CURRENT_USER.username
+    });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast('✅ รับงานแล้ว');
+    salesMeasureLoad();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+async function salesMeasureCancelAccept(id){
+  if (!confirm('ยกเลิกการรับงาน?\nงานจะกลับเป็น "รอรับงาน"')) return;
+  showLoad('กำลังยกเลิก...');
+  try {
+    const r = await call({
+      action: 'pk_salesUpdateMeasureStatus',
+      id, status: 'pending',
+      startAt: '', doneAt: '', worker: ''
+    });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast('↩ ยกเลิกแล้ว');
+    salesMeasureLoad();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+async function salesMeasureDone(id){
+  if (!confirm('จบงานวัดนี้?\n(อย่าลืมจดขนาดก่อนจบงาน)')) return;
+  showLoad('กำลังบันทึก...');
+  try {
+    const r = await call({
+      action: 'pk_salesUpdateMeasureStatus',
+      id, status: 'done', doneAt: Date.now(),
+      worker: CURRENT_USER.name || CURRENT_USER.username
+    });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast('✅ จบงานวัดแล้ว');
+    salesMeasureLoad();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+async function salesMeasureUndo(id){
+  if (!confirm('ยกเลิกการจบงาน?\nงานจะกลับเป็น "รอรับงาน"')) return;
+  showLoad('กำลังยกเลิก...');
+  try {
+    const r = await call({
+      action: 'pk_salesUpdateMeasureStatus',
+      id, status: 'pending',
+      startAt: '', doneAt: '', worker: ''
+    });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast('↩ ยกเลิกแล้ว');
+    salesMeasureLoad();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// เปิด record จากงานวัด — ผูก linkedJobId อัตโนมัติ
+async function salesMeasureOpenRecord(j){
+  showLoad('กำลังเช็ค...');
+  try {
+    const r = await call({ action:'pk_recordsByJob', jobId: j.id });
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    const existing = r.records || [];
+    if (existing.length > 0) {
+      const msg = `งาน ${j.id} มี record ผูกอยู่ ${existing.length} อัน\n\nกด OK → เปิดอันล่าสุด\nกด Cancel → สร้างใหม่`;
+      if (confirm(msg)) {
+        const latest = existing.sort((a,b) => b.updatedAt - a.updatedAt)[0];
+        recordOpenEdit(latest.id);
+        return;
+      }
+    }
+    recordOpenNew({
+      customerName: j.name || '',
+      customerPhone: '',
+      linkedJobId: j.id
+    });
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
 function initSalesBooking(){
