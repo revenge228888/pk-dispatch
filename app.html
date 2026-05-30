@@ -1577,6 +1577,10 @@ function expenseDetailOpen(id){
       actions = '<button class="btn btn-p" style="width:100%;margin-top:14px;" onclick="expensePayOpen(\'' + it.id + '\')">💸 ยืนยันจ่าย + แนบสลิป</button>';
     }
   }
+  // ปุ่มรับทราบ — เจ้าของใบที่ถูกตีกลับ และยังไม่รับทราบ
+  if (it.status === 'ตีกลับ' && it.createdBy === CURRENT_USER.username && !it.rejectSeen){
+    actions += '<button class="btn btn-p" style="width:100%;margin-top:14px;" onclick="expenseAckReject(\'' + it.id + '\')">✓ รับทราบการตีกลับ</button>';
+  }
 
   document.getElementById('expDetailBody').innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
@@ -1630,6 +1634,21 @@ async function expensePayConfirm(){
     toast('✅ จ่ายแล้ว ' + _expPayId);
     document.getElementById('expPayModal').classList.remove('on');
     _expPayId = '';
+    expenseReloadActive();
+  } catch(e){ hideLoad(); }
+}
+
+// รับทราบการตีกลับ (เจ้าของใบ) → เคลียร์ badge
+async function expenseAckReject(id){
+  showLoad('บันทึก...');
+  try {
+    const r = await call({ action:'pk_expenseAckReject', id: id });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'ไม่สำเร็จ')); return; }
+    toast('✓ รับทราบแล้ว');
+    const el = document.getElementById('expMyBadge');
+    if (el){ const n = (parseInt(el.textContent||'0',10) || 0) - 1; el.textContent = n > 0 ? n : ''; }
+    expenseDetailClose();
     expenseReloadActive();
   } catch(e){ hideLoad(); }
 }
