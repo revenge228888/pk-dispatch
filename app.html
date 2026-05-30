@@ -1526,17 +1526,17 @@ function expenseDetailOpen(id){
   const amt = (Number(it.amount)||0).toLocaleString('th-TH', { minimumFractionDigits:2 });
   const isTravel = it.mainCat === 'ค่าเดินทาง';
 
-  let rec;
+  // 3. ผู้รับ + ธนาคาร + เลขบัญชี (กล่องเด่น) หรือ ทะเบียนรถ
+  let recBlock;
   if (isTravel){
-    rec = '<div class="exp-dt-row"><span class="k">ทะเบียนรถ</span><span class="v">' + (it.vehicle||'-') + '</span></div>';
+    recBlock = '<div class="exp-dt-row"><span class="k">🚗 ทะเบียนรถ</span><span class="v">' + (it.vehicle||'-') + '</span></div>';
   } else {
-    rec = '<div class="exp-dt-row"><span class="k">ผู้รับเงิน</span><span class="v">' + (it.payee||'-') + '</span></div>';
-    if (it.payeeBank || it.payeeAccount){
-      rec += '<div class="exp-bank-box"><div style="font-size:11px;color:var(--mu);margin-bottom:4px;">💳 ข้อมูลโอนเงิน</div>' +
-        '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">ธนาคาร</span><span class="v">' + (it.payeeBank||'-') + '</span></div>' +
-        '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">เลขบัญชี</span><span class="v" style="font-family:var(--mono);">' + (it.payeeAccount||'-') + '</span></div></div>';
-    }
+    recBlock = '<div class="exp-bank-box">' +
+      '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">ผู้รับเงิน</span><span class="v">' + (it.payee||'-') + '</span></div>' +
+      '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">ธนาคาร</span><span class="v">' + (it.payeeBank||'-') + '</span></div>' +
+      '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">เลขบัญชี</span><span class="v" style="font-family:var(--mono);">' + (it.payeeAccount||'-') + '</span></div></div>';
   }
+
   const invoice  = it.invoiceUrl ? '<div class="exp-dt-row"><span class="k">ใบแจ้งหนี้</span><span class="v"><a href="' + it.invoiceUrl + '" target="_blank" style="color:var(--acc);">เปิดไฟล์ →</a></span></div>' : '';
   const approved = it.approvedBy ? '<div class="exp-dt-row"><span class="k">ผู้ตรวจ</span><span class="v">' + it.approvedBy + (ad?(' · '+ad):'') + '</span></div>' : '';
   const note     = it.note ? '<div style="margin-top:10px;font-size:12px;color:var(--mu);white-space:pre-wrap;border-top:1px solid var(--bdr);padding-top:8px;">📝 ' + it.note + '</div>' : '';
@@ -1549,18 +1549,25 @@ function expenseDetailOpen(id){
   }
 
   document.getElementById('expDetailBody').innerHTML =
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
       '<span style="font-family:var(--mono);font-size:13px;color:var(--acc);">' + it.id + '</span>' + expenseStatusBadge(it.status) + '</div>' +
-    '<div style="text-align:center;font-size:28px;font-weight:700;margin-bottom:14px;">฿' + amt + '</div>' +
-    '<div class="exp-dt-row"><span class="k">หมวด</span><span class="v">' + (it.mainCat||'-') + '</span></div>' +
-    '<div class="exp-dt-row"><span class="k">ประเภท</span><span class="v">' + (it.subType||'-') + '</span></div>' +
+    // 1. วันที่
+    '<div class="exp-dt-row"><span class="k">📅 วันที่</span><span class="v">' + d + '</span></div>' +
+    // 2. ชื่อผู้เบิก
+    '<div class="exp-dt-row"><span class="k">👤 ผู้เบิก</span><span class="v">' + (it.createdBy||'-') + '</span></div>' +
+    // 3. ธนาคาร + เลขบัญชี
+    recBlock +
+    // 4. รายละเอียด
+    '<div class="exp-dt-row"><span class="k">หมวด</span><span class="v">' + (it.mainCat||'-') + ' · ' + (it.subType||'-') + '</span></div>' +
     '<div class="exp-dt-row"><span class="k">รายละเอียด</span><span class="v">' + (it.detail||'-') + '</span></div>' +
-    rec +
-    '<div class="exp-dt-row"><span class="k">วันที่ค่าใช้จ่าย</span><span class="v">' + d + '</span></div>' +
-    '<div class="exp-dt-row"><span class="k">ผู้ตั้งเบิก</span><span class="v">' + (it.createdBy||'-') + '</span></div>' +
+    // 5. ยอดเงิน (เด่น)
+    '<div style="text-align:center;margin:16px 0 6px;"><div style="font-size:12px;color:var(--mu);">ยอดเงิน</div>' +
+      '<div style="font-size:30px;font-weight:700;color:var(--acc);">฿' + amt + '</div></div>' +
+    // เพิ่มเติม
+    '<div style="border-top:1px solid var(--bdr);margin-top:8px;">' +
     '<div class="exp-dt-row"><span class="k">วันที่ตั้งเบิก</span><span class="v">' + cd + '</span></div>' +
-    approved + invoice + note + actions +
-    '<button class="btn btn-g" style="width:100%;margin-top:10px;" onclick="expenseDetailClose()">ปิด</button>';
+    approved + invoice + '</div>' + note + actions +
+    '<button class="btn btn-g" style="width:100%;margin-top:12px;" onclick="expenseDetailClose()">ปิด</button>';
   document.getElementById('expDetailModal').classList.add('on');
 }
 function expenseDetailClose(){ document.getElementById('expDetailModal').classList.remove('on'); }
