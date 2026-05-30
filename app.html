@@ -1044,7 +1044,7 @@ async function salesReportLoad(){
   const w = document.getElementById('srContent');
   w.innerHTML = skelDashboard();
   try {
-    const r = await call({ action:'pk_managerSalesReport', username, fromDate, toDate });
+    const r = await call({ action:'pk_managerSalesReport', salesUsername: username, fromDate, toDate });
     if (!r.ok) { w.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
     salesReportRender(r);
   } catch(e) { w.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
