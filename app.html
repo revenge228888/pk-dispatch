@@ -33,6 +33,7 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
 .role-badge{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;}
 .role-office{background:rgba(245,166,35,.15);color:var(--acc);}
 .role-sales{background:rgba(74,158,255,.15);color:var(--blu);}
+.role-manager{background:rgba(175,82,222,.18);color:#c77dff;}
 .role-tech{background:rgba(52,199,89,.15);color:var(--grn);}
 
 /* LOGIN */
@@ -508,6 +509,8 @@ const API          = 'https://pk-discord-relay.revenge2288.workers.dev/api';
 const API_SECRET   = '2389';   // ค่าเดียวกับ PK_SECRET ใน Cloudflare Worker
 
 let CURRENT_USER = null;
+// manager ทำได้ทุกอย่างที่ office ทำ — ใช้เช็คสิทธิ์ระดับ office
+function isOfficeLevel(){ return CURRENT_USER && (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'manager'); }
 let _teams=[], _salesTeams=[], _accessDates=[], _allMembers=[], _memDraft=[], _mapObj=null;
 
 // ════════════════════════════════════════
@@ -706,7 +709,7 @@ function enterApp(){
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('mainApp').style.display = 'block';
 
-  const roleLabel = { office:'ออฟฟิศ', sales:'เซลล์', tech:'ช่าง' }[CURRENT_USER.role] || CURRENT_USER.role;
+  const roleLabel = { office:'ออฟฟิศ', sales:'เซลล์', tech:'ช่าง', manager:'ผู้จัดการ' }[CURRENT_USER.role] || CURRENT_USER.role;
   document.getElementById('hdrRoleLabel').textContent = '· ' + roleLabel;
   document.getElementById('hdrName').textContent = CURRENT_USER.name || CURRENT_USER.username;
   const badge = document.getElementById('hdrRoleBadge');
@@ -716,7 +719,7 @@ function enterApp(){
   const c = document.getElementById('roleContent');
   const wrapEl = c.closest('.wrap');
   if (wrapEl) wrapEl.classList.remove('wrap-sidebar');
-  if (CURRENT_USER.role === 'office')      { if(wrapEl) wrapEl.classList.add('wrap-sidebar'); c.innerHTML = renderOfficeShell(); officeInit(); }
+  if (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'manager') { if(wrapEl) wrapEl.classList.add('wrap-sidebar'); c.innerHTML = renderOfficeShell(); officeInit(); }
   else if (CURRENT_USER.role === 'sales')  { if(wrapEl) wrapEl.classList.add('wrap-sidebar'); c.innerHTML = renderSalesStub();   _showRefreshForSales(); restoreSidebarState(); }
   else if (CURRENT_USER.role === 'tech')   {
     c.innerHTML = renderTechStub();
@@ -762,6 +765,8 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="jobs" onclick="setTab('jobs',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">รายการงาน</span></button>
           <button class="sidebar-item" data-tab="records" onclick="setTab('records',this)"><span class="sidebar-ico">📐</span><span class="sidebar-label">จดขนาด</span></button>
           <button class="sidebar-item" data-tab="quotes" onclick="setTab('quotes',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">คำนวณราคา</span></button>
+          ${CURRENT_USER.role === 'manager' ? `<div class="sidebar-divider"></div>
+          <button class="sidebar-item" data-tab="salesreport" onclick="setTab('salesreport',this)"><span class="sidebar-ico">📊</span><span class="sidebar-label">รายงานเซลล์</span></button>` : ''}
         </div>
         <div class="sidebar-bottom">
           <div class="sidebar-user"><span class="sidebar-ico">👤</span><span class="sidebar-label">${CURRENT_USER.name || CURRENT_USER.username}</span></div>
@@ -951,7 +956,7 @@ function renderOfficeShell(){
           </div>
           <button class="btn btn-g" onclick="recordsLoad()">🔄 รีเฟรช</button>
           <button class="btn btn-p" onclick="recordOpenNew()">+ สร้างใหม่</button>
-          ${CURRENT_USER.role === 'office' ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;">
+          ${isOfficeLevel() ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;">
             <input type="checkbox" id="recShowDeleted" onchange="recordsLoad()"> รวมที่ถูกลบ
           </label>` : ''}
         </div>
@@ -966,11 +971,37 @@ function renderOfficeShell(){
           </div>
           <button class="btn btn-g" onclick="quotesLoad()">🔄 รีเฟรช</button>
           <button class="btn btn-p" onclick="quoteOpenNew()">+ คำนวณใหม่</button>
-          ${CURRENT_USER.role === 'office' ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;">
+          ${isOfficeLevel() ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;">
             <input type="checkbox" id="quoShowDeleted" onchange="quotesLoad()"> รวมที่ถูกลบ
           </label>` : ''}
         </div>
         <div id="quoList" class="rec-list"><div class="loading-row" style="grid-column:1/-1;">กดรีเฟรชเพื่อโหลด quotes</div></div>
+      </div>
+
+      <!-- SALES REPORT (manager only) -->
+      <div id="tabSalesreport" style="display:none;">
+        <div class="section-pad row-form">
+          <div class="fg" style="min-width:180px;">
+            <label class="fl">เลือกเซลล์</label>
+            <select class="fi" id="srSalesUser"><option value="">— เลือกเซลล์ —</option></select>
+          </div>
+          <div class="fg" style="min-width:150px;">
+            <label class="fl">วันที่จาก</label>
+            <div class="date-wrap">
+              <input class="fi" id="srFrom" type="date" oninput="updateDateDisplay(this)">
+              <span class="date-display empty" data-for="srFrom">ทั้งหมด</span>
+            </div>
+          </div>
+          <div class="fg" style="min-width:150px;">
+            <label class="fl">ถึง</label>
+            <div class="date-wrap">
+              <input class="fi" id="srTo" type="date" oninput="updateDateDisplay(this)">
+              <span class="date-display empty" data-for="srTo">ทั้งหมด</span>
+            </div>
+          </div>
+          <button class="btn btn-p" onclick="salesReportLoad()">ดูรายงาน</button>
+        </div>
+        <div id="srContent"><div class="loading-row">เลือกเซลล์แล้วกด "ดูรายงาน"</div></div>
       </div>
         </div>
       </div>
@@ -986,8 +1017,89 @@ function officeInit(){
   reloadAll();
 }
 
+// ════════════════════════════════════════
+//  📊 SALES REPORT (Manager — Phase M2)
+// ════════════════════════════════════════
+let _srSalesLoaded = false;
+
+async function salesReportInit(){
+  if (_srSalesLoaded) return;
+  // โหลด dropdown เซลล์
+  try {
+    const r = await call({ action:'pk_managerSalesList' });
+    if (r.ok) {
+      const sel = document.getElementById('srSalesUser');
+      sel.innerHTML = '<option value="">— เลือกเซลล์ —</option>' +
+        r.sales.map(s => `<option value="${escAttr(s.username)}">${escAttr(s.name)}${s.active?'':' (ปิดใช้งาน)'}</option>`).join('');
+      _srSalesLoaded = true;
+    }
+  } catch(e) {}
+}
+
+async function salesReportLoad(){
+  const username = document.getElementById('srSalesUser').value;
+  if (!username) { toast('เลือกเซลล์ก่อน'); return; }
+  const fromDate = document.getElementById('srFrom').value || '';
+  const toDate = document.getElementById('srTo').value || '';
+  const w = document.getElementById('srContent');
+  w.innerHTML = skelDashboard();
+  try {
+    const r = await call({ action:'pk_managerSalesReport', username, fromDate, toDate });
+    if (!r.ok) { w.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
+    salesReportRender(r);
+  } catch(e) { w.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
+}
+
+function salesReportRender(r){
+  const s = r.summary;
+  const fmtB = n => '฿' + (n||0).toLocaleString('th-TH');
+  const rangeStr = (r.range.fromDate || r.range.toDate)
+    ? `${r.range.fromDate||'เริ่มต้น'} → ${r.range.toDate||'ปัจจุบัน'}`
+    : 'ทั้งหมด';
+
+  // สรุปตัวเลข
+  let html = `
+    <div class="section-pad">
+      <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:4px;">👤 ${escAttr(r.sales.name)}</div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:14px;">📅 ${rangeStr}</div>
+      <div class="dash-stats" style="padding:0;">
+        <div class="dstat"><div class="dstat-num">${s.installCount}</div><div class="dstat-lbl">งานติดตั้งลงคิว</div></div>
+        <div class="dstat"><div class="dstat-num" style="font-size:18px;">${fmtB(s.installAmount)}</div><div class="dstat-lbl">ยอดติดตั้ง</div></div>
+        <div class="dstat"><div class="dstat-num">${s.measureCount}</div><div class="dstat-lbl">งานวัด (จบ ${s.measureDone})</div></div>
+        <div class="dstat"><div class="dstat-num">${s.quoteCount}</div><div class="dstat-lbl">Quotes</div></div>
+        <div class="dstat"><div class="dstat-num" style="font-size:18px;">${fmtB(s.quoteAmount)}</div><div class="dstat-lbl">ยอด Quotes</div></div>
+      </div>
+    </div>
+  `;
+
+  // 3 list
+  html += salesReportList('🔧 งานติดตั้งที่ลงคิว', r.installJobs, j =>
+    `${j.id} · ${escAttr(j.customer)} · ${fmtB(j.amount)} · <span style="color:var(--mu);">${escAttr(j.status)}</span>`);
+  html += salesReportList('📏 งานวัด', r.measureJobs, j =>
+    `${j.id} · ${escAttr(j.customer)} · <span style="color:var(--mu);">${j.status==='done'?'✅ จบ':j.status}</span>`);
+  html += salesReportList('💰 Quotes', r.quotes, q =>
+    `${q.id} · ${escAttr(q.customer)} · ${fmtB(q.totalAmount)}`);
+
+  document.getElementById('srContent').innerHTML = html;
+}
+
+function salesReportList(title, items, lineFn){
+  let rows;
+  if (!items.length) {
+    rows = '<div style="padding:10px 14px;color:var(--mu);font-size:13px;font-style:italic;">— ไม่มีข้อมูล —</div>';
+  } else {
+    rows = items.map(it => `<div style="padding:8px 14px;border-bottom:1px solid var(--bdr);font-size:13px;">${it.date} · ${lineFn(it)}</div>`).join('');
+  }
+  return `
+    <div class="section-pad" style="padding-top:0;">
+      <div style="font-size:13px;font-weight:700;color:var(--acc);margin:8px 0;">${title} (${items.length})</div>
+      <div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:8px;overflow:hidden;max-height:300px;overflow-y:auto;">${rows}</div>
+    </div>
+  `;
+}
+
 async function reloadAll(){
-  if (CURRENT_USER && CURRENT_USER.role !== 'office') return;
+  if (CURRENT_USER && CURRENT_USER.role !== 'office' && CURRENT_USER.role !== 'manager') return;
   clearCache();  // ปุ่ม refresh global → ล้าง cache ทั้งหมด
   document.getElementById('syncTxt').textContent = 'กำลังโหลด...';
   try {
@@ -1038,7 +1150,7 @@ function fillBookingTeam(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Records','Quotes'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Records','Quotes','Salesreport'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -1058,6 +1170,7 @@ function setTab(t, btn){
   if (t === 'booking') initBookingTab();
   if (t === 'records') recordsInit();
   if (t === 'quotes') quotesInit();
+  if (t === 'salesreport') salesReportInit();
 }
 
 // ── Sidebar toggle ──
@@ -1454,7 +1567,7 @@ async function loadJobTable(){
     </tr>`).join('');
     // โหลด record counts + quote counts (async ไม่บล็อก)
     loadRecordCountsForJobs(allJobs);
-    if (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'sales') {
+    if (isOfficeLevel() || CURRENT_USER.role === 'sales') {
       loadQuoteCountsForJobs(allJobs);
     } else {
       // tech ไม่เห็น quote — ใส่ -
@@ -3013,11 +3126,11 @@ function recordsRender(){
     w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">ไม่มี records<br><small style="color:var(--mu);">กด "+ สร้างใหม่" เพื่อเริ่มจด</small></div>';
     return;
   }
-  const isOffice = CURRENT_USER.role === 'office';
+  const isOffice = isOfficeLevel();
   w.innerHTML = _records.map(r => {
     const isDel = !!r.deletedAt;
     const updatedDate = new Date(r.updatedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'});
-    const canEdit = !isDel && (CURRENT_USER.role === 'office' || r.createdBy === CURRENT_USER.username);
+    const canEdit = !isDel && (isOfficeLevel() || r.createdBy === CURRENT_USER.username);
     return `
       <div class="rec-card ${isDel?'deleted':''}">
         <div class="rec-head">
@@ -3138,8 +3251,8 @@ async function recordOpenView(id){
     document.getElementById('recmTitle').textContent = '📐 ดู Record — ' + id;
     document.getElementById('recmSaveBar').style.display = 'none';
     document.getElementById('recmExportBtn').style.display = '';  // Phase C4 จะใช้
-    document.getElementById('recmLinkBtn').style.display = (CURRENT_USER.role === 'office' || rec.createdBy === CURRENT_USER.username) ? '' : 'none';
-    document.getElementById('recmQuoteBtn').style.display = (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'sales') ? '' : 'none';
+    document.getElementById('recmLinkBtn').style.display = (isOfficeLevel() || rec.createdBy === CURRENT_USER.username) ? '' : 'none';
+    document.getElementById('recmQuoteBtn').style.display = (isOfficeLevel() || CURRENT_USER.role === 'sales') ? '' : 'none';
     recordRenderForm();
     recordOpenModal();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
@@ -3184,7 +3297,7 @@ async function recordOpenEdit(id){
     document.getElementById('recmSaveBtn').textContent = '💾 อัปเดต';
     document.getElementById('recmExportBtn').style.display = '';
     document.getElementById('recmLinkBtn').style.display = '';
-    document.getElementById('recmQuoteBtn').style.display = (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'sales') ? '' : 'none';
+    document.getElementById('recmQuoteBtn').style.display = (isOfficeLevel() || CURRENT_USER.role === 'sales') ? '' : 'none';
     recordRenderForm();
     recordOpenModal();
     recordStartAutosave();
@@ -3645,7 +3758,7 @@ function pkRecordEntriesToQuote(entries){
 
 async function recordHandoffToQuote(){
   if (!_recForm.id) { toast('ต้องบันทึก record ก่อน'); return; }
-  if (CURRENT_USER.role !== 'office' && CURRENT_USER.role !== 'sales') {
+  if (!isOfficeLevel() && CURRENT_USER.role !== 'sales') {
     toast('เฉพาะ office / sales'); return;
   }
 
@@ -3839,11 +3952,11 @@ function quotesRender(){
     w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">ไม่มี quotes<br><small style="color:var(--mu);">กด "+ คำนวณใหม่" เพื่อเริ่ม</small></div>';
     return;
   }
-  const isOffice = CURRENT_USER.role === 'office';
+  const isOffice = isOfficeLevel();
   w.innerHTML = _quotes.map(q => {
     const isDel = !!q.deletedAt;
     const updatedDate = new Date(q.updatedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'});
-    const canEdit = !isDel && (CURRENT_USER.role === 'office' || q.createdBy === CURRENT_USER.username);
+    const canEdit = !isDel && (isOfficeLevel() || q.createdBy === CURRENT_USER.username);
     const priceLabel = PRICE_TYPE_LABELS[q.priceType] || q.priceType;
     return `
       <div class="rec-card ${isDel?'deleted':''}">
