@@ -84,6 +84,8 @@ select.fi{cursor:pointer;}
 .sidebar-label{overflow:hidden;opacity:0;transition:opacity .2s;}
 .sidebar.expanded .sidebar-label{opacity:1;}
 .sidebar-divider{height:1px;background:var(--bdr);margin:8px 12px;}
+.exp-badge{display:inline-block;min-width:18px;padding:0 5px;height:18px;line-height:18px;text-align:center;font-size:11px;border-radius:9px;background:var(--rd);color:#fff;margin-left:6px;font-weight:700;}
+.exp-badge:empty{display:none;}
 .sidebar-bottom{border-top:1px solid var(--bdr);padding:8px 0;}
 .sidebar-user{display:flex;align-items:center;gap:14px;padding:10px 16px;color:var(--mu);font-size:12px;white-space:nowrap;overflow:hidden;}
 .sidebar-user .sidebar-label{font-weight:600;color:var(--tx);}
@@ -458,6 +460,19 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 </div>
 
 <!-- 📐 RECORD FORM MODAL -->
+<div class="modal-bg" id="expRejectModal">
+  <div class="modal" style="padding:18px;">
+    <div style="font-weight:700;font-size:15px;margin-bottom:4px;">↩️ ตีกลับคำขอเบิก</div>
+    <div id="expRejectId" style="color:var(--mu);font-size:12px;font-family:var(--mono);margin-bottom:12px;"></div>
+    <label class="fl">เหตุผล (บังคับ)</label>
+    <textarea class="fi" id="expRejectReason" rows="3" placeholder="ระบุเหตุผลที่ตีกลับ — ผู้ตั้งเบิกจะเห็นในหมายเหตุ"></textarea>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn btn-g" style="flex:1;" onclick="expenseRejectCancel()">ยกเลิก</button>
+      <button class="btn btn-d" style="flex:1;" onclick="expenseRejectConfirm()">ยืนยันตีกลับ</button>
+    </div>
+  </div>
+</div>
+
 <div class="recm-bg" id="recmModal">
   <div class="recm-wrap">
     <div class="recm-head">
@@ -767,7 +782,9 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="quotes" onclick="setTab('quotes',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">คำนวณราคา</span></button>
           <div class="sidebar-divider"></div>
           <button class="sidebar-item" data-tab="expensesubmit" onclick="setTab('expensesubmit',this)"><span class="sidebar-ico">💸</span><span class="sidebar-label">ตั้งเบิก</span></button>
+          <button class="sidebar-item" data-tab="expensemy" onclick="setTab('expensemy',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">เบิกของฉัน</span></button>
           ${CURRENT_USER.role === 'manager' ? `<div class="sidebar-divider"></div>
+          <button class="sidebar-item" data-tab="expenseapprove" onclick="setTab('expenseapprove',this)"><span class="sidebar-ico">✅</span><span class="sidebar-label">อนุมัติเบิก</span><span id="expApproveBadge" class="exp-badge"></span></button>
           <button class="sidebar-item" data-tab="salesreport" onclick="setTab('salesreport',this)"><span class="sidebar-ico">📊</span><span class="sidebar-label">รายงานเซลล์</span></button>` : ''}
         </div>
         <div class="sidebar-bottom">
@@ -1078,6 +1095,36 @@ function renderOfficeShell(){
           <button class="btn btn-p" style="width:100%;margin-top:8px;" onclick="expenseSubmit()">💾 ส่งคำขอเบิก</button>
         </div>
       </div>
+
+      <!-- เบิกของฉัน -->
+      <div id="tabExpensemy" style="display:none;">
+        <div class="section-pad">
+          <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
+            <select class="fi" id="expMyFilter" onchange="expenseMyLoad()" style="flex:1;">
+              <option value="">ทั้งหมด</option>
+              <option value="รออนุมัติ">รออนุมัติ</option>
+              <option value="อนุมัติแล้ว">อนุมัติแล้ว</option>
+              <option value="ตีกลับ">ตีกลับ</option>
+              <option value="จ่ายแล้ว">จ่ายแล้ว</option>
+            </select>
+            <button class="btn btn-g" onclick="expenseMyLoad()">🔄</button>
+          </div>
+          <div id="expMyList"><div class="loading-row">กำลังโหลด...</div></div>
+        </div>
+      </div>
+
+      <!-- อนุมัติเบิก (manager) -->
+      <div id="tabExpenseapprove" style="display:none;">
+        <div class="section-pad">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="font-weight:700;">⏳ รออนุมัติ</div>
+            <button class="btn btn-g" onclick="expenseApproveLoad()">🔄</button>
+          </div>
+          <div id="expPendingList"><div class="loading-row">กำลังโหลด...</div></div>
+          <div style="font-weight:700;margin:18px 0 10px;">💰 อนุมัติแล้ว · รอจ่าย</div>
+          <div id="expAwaitList"></div>
+        </div>
+      </div>
         </div>
       </div>
     </div>
@@ -1373,8 +1420,112 @@ function expenseSetBadge(n){
   if (el) el.textContent = (n > 0) ? n : '';
 }
 
+// ════════ เบิกของฉัน ════════
+async function expenseMyInit(){ expenseMyLoad(); }
+async function expenseMyLoad(){
+  const box = document.getElementById('expMyList');
+  box.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  const fEl = document.getElementById('expMyFilter');
+  const sf = fEl ? fEl.value : '';
+  try {
+    const r = await call({ action:'pk_expenseListMy', statusFilter: sf });
+    if (!r.ok){ box.innerHTML = '<div class="loading-row">โหลดไม่ได้: ' + (r.error||'') + '</div>'; return; }
+    const items = r.items || [];
+    box.innerHTML = items.length ? items.map(it => expenseCardHtml(it, false)).join('') : '<div class="loading-row">ยังไม่มีรายการเบิก</div>';
+  } catch(e){ box.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
+}
+
+// ════════ อนุมัติ (manager) ════════
+async function expenseApproveInit(){ expenseApproveLoad(); }
+async function expenseApproveLoad(){
+  const pBox = document.getElementById('expPendingList');
+  const aBox = document.getElementById('expAwaitList');
+  pBox.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  aBox.innerHTML = '';
+  try {
+    const r = await call({ action:'pk_expenseBootstrapApproval' });
+    if (!r.ok){ pBox.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
+    const pending = r.pending || [], awaiting = r.awaitingPayment || [];
+    expenseSetBadge(pending.length);
+    pBox.innerHTML = pending.length ? pending.map(it => expenseCardHtml(it, true)).join('') : '<div class="loading-row">ไม่มีรายการรออนุมัติ</div>';
+    aBox.innerHTML = awaiting.length ? awaiting.map(it => expenseCardHtml(it, false)).join('') : '<div class="loading-row">ไม่มีรายการรอจ่าย</div>';
+  } catch(e){ pBox.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
+}
+
+// card html (withActions = แสดงปุ่มอนุมัติ/ตีกลับ)
+function expenseCardHtml(it, withActions){
+  const st = expenseStatusBadge(it.status);
+  const who = it.vehicle ? ('🚗 ' + it.vehicle) : ('👤 ' + (it.payee || '-'));
+  const d = it.date ? new Date(it.date).toLocaleDateString('th-TH') : '';
+  const amt = (Number(it.amount)||0).toLocaleString('th-TH', { minimumFractionDigits:2 });
+  let actions = '';
+  if (withActions){
+    actions = '<div style="display:flex;gap:8px;margin-top:10px;">' +
+      '<button class="btn btn-p" style="flex:1;padding:8px;" onclick="expenseDoApprove(\'' + it.id + '\')">✅ อนุมัติ</button>' +
+      '<button class="btn btn-d" style="flex:1;padding:8px;" onclick="expenseRejectOpen(\'' + it.id + '\')">↩️ ตีกลับ</button></div>';
+  }
+  return '<div class="rec-card" style="margin-bottom:10px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+    '<span style="font-family:var(--mono);font-size:12px;color:var(--acc);">' + it.id + '</span>' + st + '</div>' +
+    '<div style="font-weight:700;font-size:16px;margin-top:6px;">฿' + amt + '</div>' +
+    '<div style="font-size:12px;color:var(--mu);margin-top:2px;">' + (it.mainCat||'') + ' · ' + (it.subType||'') + '</div>' +
+    '<div style="font-size:12px;margin-top:4px;">' + (it.detail||'') + '</div>' +
+    '<div style="font-size:12px;color:var(--mu);margin-top:4px;">' + who + ' · ' + d + '</div>' +
+    (it.note ? '<div style="font-size:11px;color:var(--mu);margin-top:4px;border-top:1px solid var(--bdr);padding-top:4px;white-space:pre-wrap;">📝 ' + it.note + '</div>' : '') +
+    actions + '</div>';
+}
+
+function expenseStatusBadge(s){
+  const map = {
+    'รออนุมัติ':   ['#f5a623','rgba(245,166,35,.15)'],
+    'อนุมัติแล้ว': ['#30d158','rgba(48,209,88,.15)'],
+    'ตีกลับ':      ['#ff453a','rgba(255,69,58,.15)'],
+    'จ่ายแล้ว':    ['#0a84ff','rgba(10,132,255,.15)']
+  };
+  const c = map[s] || ['#888','rgba(136,136,136,.15)'];
+  return '<span style="font-size:11px;padding:2px 8px;border-radius:10px;color:' + c[0] + ';background:' + c[1] + ';">' + (s||'') + '</span>';
+}
+
+async function expenseDoApprove(id){
+  if (!confirm('ยืนยันอนุมัติ ' + id + ' ?')) return;
+  showLoad('อนุมัติ...');
+  try {
+    const r = await call({ action:'pk_expenseApprove', id: id });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'อนุมัติไม่ได้')); return; }
+    toast('✅ อนุมัติแล้ว ' + id);
+    expenseApproveLoad();
+  } catch(e){ hideLoad(); }
+}
+
+let _expRejectId = '';
+function expenseRejectOpen(id){
+  _expRejectId = id;
+  document.getElementById('expRejectId').textContent = id;
+  document.getElementById('expRejectReason').value = '';
+  document.getElementById('expRejectModal').classList.add('on');
+}
+function expenseRejectCancel(){
+  document.getElementById('expRejectModal').classList.remove('on');
+  _expRejectId = '';
+}
+async function expenseRejectConfirm(){
+  const reason = document.getElementById('expRejectReason').value.trim();
+  if (!reason){ toast('กรุณาระบุเหตุผล'); return; }
+  showLoad('ตีกลับ...');
+  try {
+    const r = await call({ action:'pk_expenseReject', id: _expRejectId, reason: reason });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'ตีกลับไม่ได้')); return; }
+    toast('↩️ ตีกลับแล้ว ' + _expRejectId);
+    document.getElementById('expRejectModal').classList.remove('on');
+    _expRejectId = '';
+    expenseApproveLoad();
+  } catch(e){ hideLoad(); }
+}
+
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Records','Quotes','Salesreport','Expensesubmit'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -1396,6 +1547,8 @@ function setTab(t, btn){
   if (t === 'quotes') quotesInit();
   if (t === 'salesreport') salesReportInit();
   if (t === 'expensesubmit') expenseInit();
+  if (t === 'expensemy') expenseMyInit();
+  if (t === 'expenseapprove') expenseApproveInit();
 }
 
 // ── Sidebar toggle ──
