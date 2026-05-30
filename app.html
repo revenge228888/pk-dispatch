@@ -86,6 +86,21 @@ select.fi{cursor:pointer;}
 .sidebar-divider{height:1px;background:var(--bdr);margin:8px 12px;}
 .exp-badge{display:inline-block;min-width:18px;padding:0 5px;height:18px;line-height:18px;text-align:center;font-size:11px;border-radius:9px;background:var(--rd);color:#fff;margin-left:6px;font-weight:700;}
 .exp-badge:empty{display:none;}
+.exp-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;}
+.exp-card{background:var(--surf2);border:1px solid var(--bdr);border-radius:12px;padding:14px;cursor:pointer;transition:all .15s;}
+.exp-card:hover{border-color:var(--acc);transform:translateY(-2px);}
+.exp-card-head{display:flex;align-items:center;gap:10px;}
+.exp-avatar{width:40px;height:40px;border-radius:50%;background:rgba(245,166,35,.15);color:var(--acc);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;flex-shrink:0;}
+.exp-card-name{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.exp-card-sub{font-size:11px;color:var(--mu);font-family:var(--mono);}
+.exp-amount{font-weight:700;font-size:16px;margin-top:2px;}
+.exp-card-cat{font-size:12px;color:var(--mu);margin-top:10px;}
+.exp-card-desc{font-size:12px;margin-top:4px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.exp-card-foot{font-size:12px;color:var(--acc);margin-top:10px;text-align:right;}
+.exp-dt-row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--bdr);font-size:13px;}
+.exp-dt-row .k{color:var(--mu);flex-shrink:0;}
+.exp-dt-row .v{font-weight:600;text-align:right;word-break:break-word;}
+.exp-bank-box{background:rgba(10,132,255,.08);border:1px solid rgba(10,132,255,.25);border-radius:8px;padding:10px;margin:10px 0;}
 .sidebar-bottom{border-top:1px solid var(--bdr);padding:8px 0;}
 .sidebar-user{display:flex;align-items:center;gap:14px;padding:10px 16px;color:var(--mu);font-size:12px;white-space:nowrap;overflow:hidden;}
 .sidebar-user .sidebar-label{font-weight:600;color:var(--tx);}
@@ -460,6 +475,12 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 </div>
 
 <!-- 📐 RECORD FORM MODAL -->
+<div class="modal-bg" id="expDetailModal" onclick="if(event.target===this)expenseDetailClose()">
+  <div class="modal" style="padding:18px;">
+    <div id="expDetailBody"></div>
+  </div>
+</div>
+
 <div class="modal-bg" id="expRejectModal">
   <div class="modal" style="padding:18px;">
     <div style="font-weight:700;font-size:15px;margin-bottom:4px;">↩️ ตีกลับคำขอเบิก</div>
@@ -1109,7 +1130,7 @@ function renderOfficeShell(){
             </select>
             <button class="btn btn-g" onclick="expenseMyLoad()">🔄</button>
           </div>
-          <div id="expMyList"><div class="loading-row">กำลังโหลด...</div></div>
+          <div id="expMyList" class="exp-list"><div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div></div>
         </div>
       </div>
 
@@ -1120,9 +1141,9 @@ function renderOfficeShell(){
             <div style="font-weight:700;">⏳ รออนุมัติ</div>
             <button class="btn btn-g" onclick="expenseApproveLoad()">🔄</button>
           </div>
-          <div id="expPendingList"><div class="loading-row">กำลังโหลด...</div></div>
+          <div id="expPendingList" class="exp-list"><div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div></div>
           <div style="font-weight:700;margin:18px 0 10px;">💰 อนุมัติแล้ว · รอจ่าย</div>
-          <div id="expAwaitList"></div>
+          <div id="expAwaitList" class="exp-list"></div>
         </div>
       </div>
         </div>
@@ -1278,6 +1299,7 @@ let _expMaster = null;     // master data (cache ใน memory ทั้ง sess
 let _expCat = '';          // หมวดหลักที่เลือกอยู่
 let _expCanApprove = false;
 let _expPayeeMap = {};     // ชื่อผู้รับ → {bank, account} (สำหรับ auto-fill / เช็คชื่อใหม่)
+let _expCurrentList = [];  // รายการที่โหลดล่าสุด (สำหรับ detail modal lookup)
 
 function _expFileToBase64(file){
   return new Promise((resolve, reject) => {
@@ -1424,15 +1446,16 @@ function expenseSetBadge(n){
 async function expenseMyInit(){ expenseMyLoad(); }
 async function expenseMyLoad(){
   const box = document.getElementById('expMyList');
-  box.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div>';
   const fEl = document.getElementById('expMyFilter');
   const sf = fEl ? fEl.value : '';
   try {
     const r = await call({ action:'pk_expenseListMy', statusFilter: sf });
-    if (!r.ok){ box.innerHTML = '<div class="loading-row">โหลดไม่ได้: ' + (r.error||'') + '</div>'; return; }
+    if (!r.ok){ box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">โหลดไม่ได้: ' + (r.error||'') + '</div>'; return; }
     const items = r.items || [];
-    box.innerHTML = items.length ? items.map(it => expenseCardHtml(it, false)).join('') : '<div class="loading-row">ยังไม่มีรายการเบิก</div>';
-  } catch(e){ box.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
+    _expCurrentList = items.slice();
+    box.innerHTML = items.length ? items.map(expenseCardHtml).join('') : '<div class="loading-row" style="grid-column:1/-1;">ยังไม่มีรายการเบิก</div>';
+  } catch(e){ box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">เชื่อมต่อไม่ได้</div>'; }
 }
 
 // ════════ อนุมัติ (manager) ════════
@@ -1440,39 +1463,46 @@ async function expenseApproveInit(){ expenseApproveLoad(); }
 async function expenseApproveLoad(){
   const pBox = document.getElementById('expPendingList');
   const aBox = document.getElementById('expAwaitList');
-  pBox.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  pBox.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div>';
   aBox.innerHTML = '';
   try {
     const r = await call({ action:'pk_expenseBootstrapApproval' });
-    if (!r.ok){ pBox.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
+    if (!r.ok){ pBox.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
     const pending = r.pending || [], awaiting = r.awaitingPayment || [];
+    _expCurrentList = pending.concat(awaiting);
     expenseSetBadge(pending.length);
-    pBox.innerHTML = pending.length ? pending.map(it => expenseCardHtml(it, true)).join('') : '<div class="loading-row">ไม่มีรายการรออนุมัติ</div>';
-    aBox.innerHTML = awaiting.length ? awaiting.map(it => expenseCardHtml(it, false)).join('') : '<div class="loading-row">ไม่มีรายการรอจ่าย</div>';
-  } catch(e){ pBox.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
+    pBox.innerHTML = pending.length ? pending.map(expenseCardHtml).join('') : '<div class="loading-row" style="grid-column:1/-1;">ไม่มีรายการรออนุมัติ</div>';
+    aBox.innerHTML = awaiting.length ? awaiting.map(expenseCardHtml).join('') : '<div class="loading-row" style="grid-column:1/-1;">ไม่มีรายการรอจ่าย</div>';
+  } catch(e){ pBox.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">เชื่อมต่อไม่ได้</div>'; }
 }
 
-// card html (withActions = แสดงปุ่มอนุมัติ/ตีกลับ)
-function expenseCardHtml(it, withActions){
-  const st = expenseStatusBadge(it.status);
-  const who = it.vehicle ? ('🚗 ' + it.vehicle) : ('👤 ' + (it.payee || '-'));
+// reload หน้าที่กำลังเปิดอยู่
+function expenseReloadActive(){
+  const ap = document.getElementById('tabExpenseapprove');
+  const my = document.getElementById('tabExpensemy');
+  if (ap && ap.style.display !== 'none') expenseApproveLoad();
+  else if (my && my.style.display !== 'none') expenseMyLoad();
+}
+
+// card (กดเปิด detail)
+function expenseCardHtml(it){
+  const initial = (String(it.createdBy||'?').charAt(0) || '?').toUpperCase();
   const d = it.date ? new Date(it.date).toLocaleDateString('th-TH') : '';
   const amt = (Number(it.amount)||0).toLocaleString('th-TH', { minimumFractionDigits:2 });
-  let actions = '';
-  if (withActions){
-    actions = '<div style="display:flex;gap:8px;margin-top:10px;">' +
-      '<button class="btn btn-p" style="flex:1;padding:8px;" onclick="expenseDoApprove(\'' + it.id + '\')">✅ อนุมัติ</button>' +
-      '<button class="btn btn-d" style="flex:1;padding:8px;" onclick="expenseRejectOpen(\'' + it.id + '\')">↩️ ตีกลับ</button></div>';
-  }
-  return '<div class="rec-card" style="margin-bottom:10px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-    '<span style="font-family:var(--mono);font-size:12px;color:var(--acc);">' + it.id + '</span>' + st + '</div>' +
-    '<div style="font-weight:700;font-size:16px;margin-top:6px;">฿' + amt + '</div>' +
-    '<div style="font-size:12px;color:var(--mu);margin-top:2px;">' + (it.mainCat||'') + ' · ' + (it.subType||'') + '</div>' +
-    '<div style="font-size:12px;margin-top:4px;">' + (it.detail||'') + '</div>' +
-    '<div style="font-size:12px;color:var(--mu);margin-top:4px;">' + who + ' · ' + d + '</div>' +
-    (it.note ? '<div style="font-size:11px;color:var(--mu);margin-top:4px;border-top:1px solid var(--bdr);padding-top:4px;white-space:pre-wrap;">📝 ' + it.note + '</div>' : '') +
-    actions + '</div>';
+  const catIcon = it.mainCat==='ค่าเดินทาง' ? '🚗' : (it.mainCat==='ค่าแรง' ? '💪' : '📦');
+  return '<div class="exp-card" onclick="expenseDetailOpen(\'' + it.id + '\')">' +
+    '<div class="exp-card-head">' +
+      '<div class="exp-avatar">' + initial + '</div>' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div class="exp-card-name">' + (it.createdBy||'-') + '</div>' +
+        '<div class="exp-card-sub">' + it.id + ' · ' + d + '</div>' +
+      '</div>' +
+      '<div style="text-align:right;flex-shrink:0;">' + expenseStatusBadge(it.status) +
+        '<div class="exp-amount">฿' + amt + '</div></div>' +
+    '</div>' +
+    '<div class="exp-card-cat">' + catIcon + ' ' + (it.mainCat||'') + ' · ' + (it.subType||'') + '</div>' +
+    '<div class="exp-card-desc">' + (it.detail||'-') + '</div>' +
+    '<div class="exp-card-foot">ดูรายละเอียด →</div></div>';
 }
 
 function expenseStatusBadge(s){
@@ -1486,6 +1516,56 @@ function expenseStatusBadge(s){
   return '<span style="font-size:11px;padding:2px 8px;border-radius:10px;color:' + c[0] + ';background:' + c[1] + ';">' + (s||'') + '</span>';
 }
 
+// ════════ detail modal — รายละเอียดเต็ม + บัญชีโอน + ปุ่มอนุมัติ/ตีกลับ ════════
+function expenseDetailOpen(id){
+  const it = _expCurrentList.find(x => x.id === id);
+  if (!it){ toast('ไม่พบรายการ'); return; }
+  const d  = it.date ? new Date(it.date).toLocaleDateString('th-TH') : '-';
+  const cd = it.createdAt ? new Date(it.createdAt).toLocaleString('th-TH') : '-';
+  const ad = it.approvedAt ? new Date(it.approvedAt).toLocaleString('th-TH') : '';
+  const amt = (Number(it.amount)||0).toLocaleString('th-TH', { minimumFractionDigits:2 });
+  const isTravel = it.mainCat === 'ค่าเดินทาง';
+
+  let rec;
+  if (isTravel){
+    rec = '<div class="exp-dt-row"><span class="k">ทะเบียนรถ</span><span class="v">' + (it.vehicle||'-') + '</span></div>';
+  } else {
+    rec = '<div class="exp-dt-row"><span class="k">ผู้รับเงิน</span><span class="v">' + (it.payee||'-') + '</span></div>';
+    if (it.payeeBank || it.payeeAccount){
+      rec += '<div class="exp-bank-box"><div style="font-size:11px;color:var(--mu);margin-bottom:4px;">💳 ข้อมูลโอนเงิน</div>' +
+        '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">ธนาคาร</span><span class="v">' + (it.payeeBank||'-') + '</span></div>' +
+        '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">เลขบัญชี</span><span class="v" style="font-family:var(--mono);">' + (it.payeeAccount||'-') + '</span></div></div>';
+    }
+  }
+  const invoice  = it.invoiceUrl ? '<div class="exp-dt-row"><span class="k">ใบแจ้งหนี้</span><span class="v"><a href="' + it.invoiceUrl + '" target="_blank" style="color:var(--acc);">เปิดไฟล์ →</a></span></div>' : '';
+  const approved = it.approvedBy ? '<div class="exp-dt-row"><span class="k">ผู้ตรวจ</span><span class="v">' + it.approvedBy + (ad?(' · '+ad):'') + '</span></div>' : '';
+  const note     = it.note ? '<div style="margin-top:10px;font-size:12px;color:var(--mu);white-space:pre-wrap;border-top:1px solid var(--bdr);padding-top:8px;">📝 ' + it.note + '</div>' : '';
+
+  let actions = '';
+  if (it.status === 'รออนุมัติ' && CURRENT_USER.role === 'manager'){
+    actions = '<div style="display:flex;gap:8px;margin-top:14px;">' +
+      '<button class="btn btn-p" style="flex:1;" onclick="expenseDetailApprove(\'' + it.id + '\')">✅ อนุมัติ</button>' +
+      '<button class="btn btn-d" style="flex:1;" onclick="expenseRejectOpen(\'' + it.id + '\')">↩️ ตีกลับ</button></div>';
+  }
+
+  document.getElementById('expDetailBody').innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+      '<span style="font-family:var(--mono);font-size:13px;color:var(--acc);">' + it.id + '</span>' + expenseStatusBadge(it.status) + '</div>' +
+    '<div style="text-align:center;font-size:28px;font-weight:700;margin-bottom:14px;">฿' + amt + '</div>' +
+    '<div class="exp-dt-row"><span class="k">หมวด</span><span class="v">' + (it.mainCat||'-') + '</span></div>' +
+    '<div class="exp-dt-row"><span class="k">ประเภท</span><span class="v">' + (it.subType||'-') + '</span></div>' +
+    '<div class="exp-dt-row"><span class="k">รายละเอียด</span><span class="v">' + (it.detail||'-') + '</span></div>' +
+    rec +
+    '<div class="exp-dt-row"><span class="k">วันที่ค่าใช้จ่าย</span><span class="v">' + d + '</span></div>' +
+    '<div class="exp-dt-row"><span class="k">ผู้ตั้งเบิก</span><span class="v">' + (it.createdBy||'-') + '</span></div>' +
+    '<div class="exp-dt-row"><span class="k">วันที่ตั้งเบิก</span><span class="v">' + cd + '</span></div>' +
+    approved + invoice + note + actions +
+    '<button class="btn btn-g" style="width:100%;margin-top:10px;" onclick="expenseDetailClose()">ปิด</button>';
+  document.getElementById('expDetailModal').classList.add('on');
+}
+function expenseDetailClose(){ document.getElementById('expDetailModal').classList.remove('on'); }
+function expenseDetailApprove(id){ expenseDetailClose(); expenseDoApprove(id); }
+
 async function expenseDoApprove(id){
   if (!confirm('ยืนยันอนุมัติ ' + id + ' ?')) return;
   showLoad('อนุมัติ...');
@@ -1494,7 +1574,8 @@ async function expenseDoApprove(id){
     hideLoad();
     if (!r.ok){ toast('❌ ' + (r.error||'อนุมัติไม่ได้')); return; }
     toast('✅ อนุมัติแล้ว ' + id);
-    expenseApproveLoad();
+    expenseDetailClose();
+    expenseReloadActive();
   } catch(e){ hideLoad(); }
 }
 
@@ -1520,7 +1601,8 @@ async function expenseRejectConfirm(){
     toast('↩️ ตีกลับแล้ว ' + _expRejectId);
     document.getElementById('expRejectModal').classList.remove('on');
     _expRejectId = '';
-    expenseApproveLoad();
+    expenseDetailClose();
+    expenseReloadActive();
   } catch(e){ hideLoad(); }
 }
 
