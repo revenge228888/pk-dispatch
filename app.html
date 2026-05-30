@@ -475,6 +475,40 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 </div>
 
 <!-- 📐 RECORD FORM MODAL -->
+<div class="modal-bg" id="empModal">
+  <div class="modal" style="padding:18px;max-height:88vh;overflow-y:auto;">
+    <div style="font-weight:700;font-size:15px;margin-bottom:14px;" id="empModalTitle">เพิ่มพนักงาน</div>
+    <input type="hidden" id="empId">
+    <div class="row"><label class="fl">ชื่อพนักงาน</label><input class="fi" id="empFName" placeholder="ชื่อ-นามสกุล"></div>
+    <label class="fl">ประเภท</label>
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      <button type="button" class="bk-type-btn" id="empTypeMonth" onclick="employeeSelType('รายเดือน')">รายเดือน</button>
+      <button type="button" class="bk-type-btn" id="empTypeDay" onclick="employeeSelType('รายวัน')">รายวัน</button>
+    </div>
+    <div class="row" id="empRowSalary" style="display:none;"><label class="fl">เงินเดือนฐาน (บาท/เดือน)</label><input class="fi" id="empFSalary" type="number" inputmode="numeric" placeholder="15000"></div>
+    <div class="row" id="empRowDaily" style="display:none;"><label class="fl">ค่าแรงต่อวัน (บาท)</label><input class="fi" id="empFDaily" type="number" inputmode="numeric" placeholder="500"></div>
+    <div style="display:flex;gap:8px;">
+      <div class="row" style="flex:1;"><label class="fl">ธนาคาร</label><input class="fi" id="empFBank" placeholder="กสิกร"></div>
+      <div class="row" style="flex:1.4;"><label class="fl">เลขบัญชี</label><input class="fi" id="empFAccount" placeholder="123-4-56789"></div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <div class="row" style="flex:1;"><label class="fl">โควตาลาป่วย/ปี</label><input class="fi" id="empFQSick" type="number" inputmode="numeric" placeholder="30"></div>
+      <div class="row" style="flex:1;"><label class="fl">โควตาลากิจ/ปี</label><input class="fi" id="empFQPer" type="number" inputmode="numeric" placeholder="6"></div>
+    </div>
+    <div class="row" style="display:flex;align-items:center;justify-content:space-between;background:var(--surf2);padding:11px 14px;border-radius:8px;">
+      <div><div style="font-size:13px;font-weight:600;">ให้ office ตั้งเบิกได้</div><div style="font-size:11px;color:var(--mu);">รายวัน · เบิกล่วงหน้า · หักอื่นๆ</div></div>
+      <button type="button" class="bk-type-btn" id="empFOffice" style="flex:0 0 auto;padding:8px 16px;" onclick="employeeToggleOffice()">✗</button>
+    </div>
+    <div class="row"><label class="fl">สถานะ</label>
+      <select class="fi" id="empFStatus"><option value="ทำงาน">ทำงาน</option><option value="ลาออก">ลาออก</option></select>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button class="btn btn-g" style="flex:1;" onclick="document.getElementById('empModal').classList.remove('on')">ยกเลิก</button>
+      <button class="btn btn-p" style="flex:1;" onclick="employeeSave()">บันทึก</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="expPayModal">
   <div class="modal" style="padding:18px;">
     <div style="font-weight:700;font-size:15px;margin-bottom:4px;">💸 ยืนยันการจ่าย</div>
@@ -819,7 +853,8 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="expensemy" onclick="setTab('expensemy',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">เบิกของฉัน</span><span id="expMyBadge" class="exp-badge"></span></button>
           ${CURRENT_USER.role === 'manager' ? `<div class="sidebar-divider"></div>
           <button class="sidebar-item" data-tab="expenseapprove" onclick="setTab('expenseapprove',this)"><span class="sidebar-ico">✅</span><span class="sidebar-label">อนุมัติเบิก</span><span id="expApproveBadge" class="exp-badge"></span></button>
-          <button class="sidebar-item" data-tab="salesreport" onclick="setTab('salesreport',this)"><span class="sidebar-ico">📊</span><span class="sidebar-label">รายงานเซลล์</span></button>` : ''}
+          <button class="sidebar-item" data-tab="salesreport" onclick="setTab('salesreport',this)"><span class="sidebar-ico">📊</span><span class="sidebar-label">รายงานเซลล์</span></button>
+          <button class="sidebar-item" data-tab="employees" onclick="setTab('employees',this)"><span class="sidebar-ico">👥</span><span class="sidebar-label">พนักงาน</span></button>` : ''}
         </div>
         <div class="sidebar-bottom">
           <div class="sidebar-user"><span class="sidebar-ico">👤</span><span class="sidebar-label">${CURRENT_USER.name || CURRENT_USER.username}</span></div>
@@ -1161,6 +1196,17 @@ function renderOfficeShell(){
             <button class="btn btn-g" onclick="expenseApproveLoad()">🔄</button>
           </div>
           <div id="expApproveList" class="exp-list"><div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div></div>
+        </div>
+      </div>
+
+      <!-- ทะเบียนพนักงาน (manager) -->
+      <div id="tabEmployees" style="display:none;">
+        <div class="section-pad">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <div style="font-weight:700;font-size:15px;">👥 ทะเบียนพนักงาน</div>
+            <button class="btn btn-p" style="padding:7px 14px;font-size:13px;" onclick="employeeOpen()">+ เพิ่ม</button>
+          </div>
+          <div id="empRegList"><div class="loading-row">กำลังโหลด...</div></div>
         </div>
       </div>
         </div>
@@ -1665,6 +1711,99 @@ async function expenseAckReject(id){
   } catch(e){ hideLoad(); }
 }
 
+// ════════════════════════════════════════
+//  👥 ทะเบียนพนักงาน (manager — Payroll P1)
+// ════════════════════════════════════════
+let _empList = [], _empType = '', _empOffice = false;
+
+async function employeesInit(){ employeesLoad(); }
+async function employeesLoad(){
+  const box = document.getElementById('empRegList');
+  box.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  try {
+    const r = await call({ action:'pk_payListEmployees' });
+    if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
+    _empList = r.employees || [];
+    employeesRender();
+  } catch(e){ box.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
+}
+function employeesRender(){
+  const box = document.getElementById('empRegList');
+  if (!_empList.length){ box.innerHTML = '<div class="loading-row">ยังไม่มีพนักงาน — กด "+ เพิ่ม"</div>'; return; }
+  box.innerHTML = _empList.map((e,i) => {
+    const wage = e.type==='รายวัน' ? ('฿'+(e.daily||0).toLocaleString()+'/วัน')
+               : e.type==='รายเดือน' ? ('฿'+(e.baseSalary||0).toLocaleString()+'/เดือน')
+               : '<span style="color:var(--rd);">ยังไม่ตั้งประเภท</span>';
+    const off = e.officeAllowed ? '<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(52,199,89,.15);color:var(--grn);white-space:nowrap;">office ทำได้</span>' : '';
+    const inactive = e.status==='ลาออก' ? 'opacity:.5;' : '';
+    return '<div class="exp-card" style="margin-bottom:10px;' + inactive + '" onclick="employeeOpen(' + i + ')">' +
+      '<div style="display:flex;align-items:center;gap:12px;">' +
+      '<div class="exp-avatar">' + (e.name.charAt(0)||'?') + '</div>' +
+      '<div style="flex:1;min-width:0;">' +
+      '<div style="font-weight:600;">' + e.name + '</div>' +
+      '<div style="font-size:12px;color:var(--mu);">' + (e.id||'-') + ' · ' + (e.type||'-') + ' · ' + wage + '</div></div>' +
+      off + '</div></div>';
+  }).join('');
+}
+
+function employeeOpen(idx){
+  const e = (typeof idx === 'number') ? _empList[idx] : null;
+  document.getElementById('empModalTitle').textContent = e ? 'แก้ไขพนักงาน' : 'เพิ่มพนักงาน';
+  document.getElementById('empId').value = e ? e.id : '';
+  document.getElementById('empFName').value = e ? e.name : '';
+  document.getElementById('empFSalary').value = e ? (e.baseSalary||'') : '';
+  document.getElementById('empFDaily').value = e ? (e.daily||'') : '';
+  document.getElementById('empFBank').value = e ? e.bank : '';
+  document.getElementById('empFAccount').value = e ? e.account : '';
+  document.getElementById('empFQSick').value = e ? (e.quotaSick||'') : '';
+  document.getElementById('empFQPer').value = e ? (e.quotaPersonal||'') : '';
+  document.getElementById('empFStatus').value = e ? e.status : 'ทำงาน';
+  employeeSelType(e ? e.type : '');
+  _empOffice = e ? !!e.officeAllowed : false;
+  employeeUpdateOfficeBtn();
+  document.getElementById('empModal').classList.add('on');
+}
+function employeeSelType(type){
+  _empType = type;
+  document.getElementById('empTypeMonth').classList.toggle('on', type==='รายเดือน');
+  document.getElementById('empTypeDay').classList.toggle('on', type==='รายวัน');
+  document.getElementById('empRowSalary').style.display = type==='รายเดือน' ? 'block' : 'none';
+  document.getElementById('empRowDaily').style.display = type==='รายวัน' ? 'block' : 'none';
+}
+function employeeToggleOffice(){ _empOffice = !_empOffice; employeeUpdateOfficeBtn(); }
+function employeeUpdateOfficeBtn(){
+  const b = document.getElementById('empFOffice');
+  b.classList.toggle('on', _empOffice);
+  b.textContent = _empOffice ? '✓' : '✗';
+}
+async function employeeSave(){
+  const payload = {
+    action:'pk_paySaveEmployee',
+    id: document.getElementById('empId').value,
+    name: document.getElementById('empFName').value.trim(),
+    type: _empType,
+    baseSalary: document.getElementById('empFSalary').value,
+    daily: document.getElementById('empFDaily').value,
+    bank: document.getElementById('empFBank').value.trim(),
+    account: document.getElementById('empFAccount').value.trim(),
+    quotaSick: document.getElementById('empFQSick').value,
+    quotaPersonal: document.getElementById('empFQPer').value,
+    officeAllowed: _empOffice,
+    status: document.getElementById('empFStatus').value
+  };
+  if (!payload.name){ toast('ระบุชื่อพนักงาน'); return; }
+  if (!payload.type){ toast('เลือกประเภท (รายเดือน/รายวัน)'); return; }
+  showLoad('บันทึก...');
+  try {
+    const r = await call(payload);
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'บันทึกไม่ได้')); return; }
+    toast('✅ บันทึกแล้ว ' + r.id);
+    document.getElementById('empModal').classList.remove('on');
+    employeesLoad();
+  } catch(e){ hideLoad(); }
+}
+
 async function expenseDoApprove(id){
   if (!confirm('ยืนยันอนุมัติ ' + id + ' ?')) return;
   showLoad('อนุมัติ...');
@@ -1706,7 +1845,7 @@ async function expenseRejectConfirm(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -1730,6 +1869,7 @@ function setTab(t, btn){
   if (t === 'expensesubmit') expenseInit();
   if (t === 'expensemy') expenseMyInit();
   if (t === 'expenseapprove') expenseApproveInit();
+  if (t === 'employees') employeesInit();
 }
 
 // ── Sidebar toggle ──
