@@ -475,6 +475,19 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 </div>
 
 <!-- 📐 RECORD FORM MODAL -->
+<div class="modal-bg" id="expPayModal">
+  <div class="modal" style="padding:18px;">
+    <div style="font-weight:700;font-size:15px;margin-bottom:4px;">💸 ยืนยันการจ่าย</div>
+    <div id="expPayId" style="color:var(--mu);font-size:12px;font-family:var(--mono);margin-bottom:12px;"></div>
+    <label class="fl">แนบสลิปโอน (ถ้ามี · ไม่เกิน 5MB)</label>
+    <input class="fi" id="expPaySlip" type="file" accept="image/*,application/pdf">
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn btn-g" style="flex:1;" onclick="expensePayCancel()">ยกเลิก</button>
+      <button class="btn btn-p" style="flex:1;" onclick="expensePayConfirm()">ยืนยันจ่ายแล้ว</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="expDetailModal" onclick="if(event.target===this)expenseDetailClose()">
   <div class="modal" style="padding:18px;">
     <div id="expDetailBody"></div>
@@ -803,7 +816,7 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="quotes" onclick="setTab('quotes',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">คำนวณราคา</span></button>
           <div class="sidebar-divider"></div>
           <button class="sidebar-item" data-tab="expensesubmit" onclick="setTab('expensesubmit',this)"><span class="sidebar-ico">💸</span><span class="sidebar-label">ตั้งเบิก</span></button>
-          <button class="sidebar-item" data-tab="expensemy" onclick="setTab('expensemy',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">เบิกของฉัน</span></button>
+          <button class="sidebar-item" data-tab="expensemy" onclick="setTab('expensemy',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">เบิกของฉัน</span><span id="expMyBadge" class="exp-badge"></span></button>
           ${CURRENT_USER.role === 'manager' ? `<div class="sidebar-divider"></div>
           <button class="sidebar-item" data-tab="expenseapprove" onclick="setTab('expenseapprove',this)"><span class="sidebar-ico">✅</span><span class="sidebar-label">อนุมัติเบิก</span><span id="expApproveBadge" class="exp-badge"></span></button>
           <button class="sidebar-item" data-tab="salesreport" onclick="setTab('salesreport',this)"><span class="sidebar-ico">📊</span><span class="sidebar-label">รายงานเซลล์</span></button>` : ''}
@@ -1137,13 +1150,17 @@ function renderOfficeShell(){
       <!-- อนุมัติเบิก (manager) -->
       <div id="tabExpenseapprove" style="display:none;">
         <div class="section-pad">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <div style="font-weight:700;">⏳ รออนุมัติ</div>
+          <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
+            <select class="fi" id="expApproveFilter" onchange="expenseApproveLoad()" style="flex:1;">
+              <option value="รออนุมัติ">⏳ รออนุมัติ</option>
+              <option value="อนุมัติแล้ว">💰 อนุมัติแล้ว (รอจ่าย)</option>
+              <option value="จ่ายแล้ว">✅ จ่ายแล้ว</option>
+              <option value="ตีกลับ">↩️ ตีกลับ</option>
+              <option value="">📋 ทั้งหมด</option>
+            </select>
             <button class="btn btn-g" onclick="expenseApproveLoad()">🔄</button>
           </div>
-          <div id="expPendingList" class="exp-list"><div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div></div>
-          <div style="font-weight:700;margin:18px 0 10px;">💰 อนุมัติแล้ว · รอจ่าย</div>
-          <div id="expAwaitList" class="exp-list"></div>
+          <div id="expApproveList" class="exp-list"><div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div></div>
         </div>
       </div>
         </div>
@@ -1319,6 +1336,7 @@ async function expenseInit(){
       _expMaster = r.master;
       _expCanApprove = !!r.canApprove;
       if (typeof r.pendingCount === 'number') expenseSetBadge(r.pendingCount);
+      if (typeof r.myRejectedCount === 'number') expenseSetMyBadge(r.myRejectedCount);
     } catch(e){ hideLoad(); return; }
     hideLoad();
   }
@@ -1441,6 +1459,10 @@ function expenseSetBadge(n){
   const el = document.getElementById('expApproveBadge');
   if (el) el.textContent = (n > 0) ? n : '';
 }
+function expenseSetMyBadge(n){
+  const el = document.getElementById('expMyBadge');
+  if (el) el.textContent = (n > 0) ? n : '';
+}
 
 // ════════ เบิกของฉัน ════════
 async function expenseMyInit(){ expenseMyLoad(); }
@@ -1459,21 +1481,24 @@ async function expenseMyLoad(){
 }
 
 // ════════ อนุมัติ (manager) ════════
-async function expenseApproveInit(){ expenseApproveLoad(); }
+async function expenseApproveInit(){
+  const f = document.getElementById('expApproveFilter');
+  if (f) f.value = 'รออนุมัติ';
+  expenseApproveLoad();
+}
 async function expenseApproveLoad(){
-  const pBox = document.getElementById('expPendingList');
-  const aBox = document.getElementById('expAwaitList');
-  pBox.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div>';
-  aBox.innerHTML = '';
+  const box = document.getElementById('expApproveList');
+  box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div>';
+  const fEl = document.getElementById('expApproveFilter');
+  const sf = fEl ? fEl.value : 'รออนุมัติ';
   try {
-    const r = await call({ action:'pk_expenseBootstrapApproval' });
-    if (!r.ok){ pBox.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
-    const pending = r.pending || [], awaiting = r.awaitingPayment || [];
-    _expCurrentList = pending.concat(awaiting);
-    expenseSetBadge(pending.length);
-    pBox.innerHTML = pending.length ? pending.map(expenseCardHtml).join('') : '<div class="loading-row" style="grid-column:1/-1;">ไม่มีรายการรออนุมัติ</div>';
-    aBox.innerHTML = awaiting.length ? awaiting.map(expenseCardHtml).join('') : '<div class="loading-row" style="grid-column:1/-1;">ไม่มีรายการรอจ่าย</div>';
-  } catch(e){ pBox.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">เชื่อมต่อไม่ได้</div>'; }
+    const r = await call({ action:'pk_expenseListAll', statusFilter: sf });
+    if (!r.ok){ box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
+    const items = r.items || [];
+    _expCurrentList = items.slice();
+    if (sf === 'รออนุมัติ') expenseSetBadge(items.length);
+    box.innerHTML = items.length ? items.map(expenseCardHtml).join('') : '<div class="loading-row" style="grid-column:1/-1;">ไม่มีรายการ</div>';
+  } catch(e){ box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">เชื่อมต่อไม่ได้</div>'; }
 }
 
 // reload หน้าที่กำลังเปิดอยู่
@@ -1538,14 +1563,19 @@ function expenseDetailOpen(id){
   }
 
   const invoice  = it.invoiceUrl ? '<div class="exp-dt-row"><span class="k">ใบแจ้งหนี้</span><span class="v"><a href="' + it.invoiceUrl + '" target="_blank" style="color:var(--acc);">เปิดไฟล์ →</a></span></div>' : '';
+  const slip     = it.slipUrl ? '<div class="exp-dt-row"><span class="k">สลิปโอน</span><span class="v"><a href="' + it.slipUrl + '" target="_blank" style="color:var(--acc);">เปิดไฟล์ →</a></span></div>' : '';
   const approved = it.approvedBy ? '<div class="exp-dt-row"><span class="k">ผู้ตรวจ</span><span class="v">' + it.approvedBy + (ad?(' · '+ad):'') + '</span></div>' : '';
   const note     = it.note ? '<div style="margin-top:10px;font-size:12px;color:var(--mu);white-space:pre-wrap;border-top:1px solid var(--bdr);padding-top:8px;">📝 ' + it.note + '</div>' : '';
 
   let actions = '';
-  if (it.status === 'รออนุมัติ' && CURRENT_USER.role === 'manager'){
-    actions = '<div style="display:flex;gap:8px;margin-top:14px;">' +
-      '<button class="btn btn-p" style="flex:1;" onclick="expenseDetailApprove(\'' + it.id + '\')">✅ อนุมัติ</button>' +
-      '<button class="btn btn-d" style="flex:1;" onclick="expenseRejectOpen(\'' + it.id + '\')">↩️ ตีกลับ</button></div>';
+  if (CURRENT_USER.role === 'manager'){
+    if (it.status === 'รออนุมัติ'){
+      actions = '<div style="display:flex;gap:8px;margin-top:14px;">' +
+        '<button class="btn btn-p" style="flex:1;" onclick="expenseDetailApprove(\'' + it.id + '\')">✅ อนุมัติ</button>' +
+        '<button class="btn btn-d" style="flex:1;" onclick="expenseRejectOpen(\'' + it.id + '\')">↩️ ตีกลับ</button></div>';
+    } else if (it.status === 'อนุมัติแล้ว'){
+      actions = '<button class="btn btn-p" style="width:100%;margin-top:14px;" onclick="expensePayOpen(\'' + it.id + '\')">💸 ยืนยันจ่าย + แนบสลิป</button>';
+    }
   }
 
   document.getElementById('expDetailBody').innerHTML =
@@ -1566,12 +1596,43 @@ function expenseDetailOpen(id){
     // เพิ่มเติม
     '<div style="border-top:1px solid var(--bdr);margin-top:8px;">' +
     '<div class="exp-dt-row"><span class="k">วันที่ตั้งเบิก</span><span class="v">' + cd + '</span></div>' +
-    approved + invoice + '</div>' + note + actions +
+    approved + invoice + slip + '</div>' + note + actions +
     '<button class="btn btn-g" style="width:100%;margin-top:12px;" onclick="expenseDetailClose()">ปิด</button>';
   document.getElementById('expDetailModal').classList.add('on');
 }
 function expenseDetailClose(){ document.getElementById('expDetailModal').classList.remove('on'); }
 function expenseDetailApprove(id){ expenseDetailClose(); expenseDoApprove(id); }
+
+// ════════ ยืนยันจ่าย + แนบสลิป (manager) ════════
+let _expPayId = '';
+function expensePayOpen(id){
+  _expPayId = id;
+  document.getElementById('expPayId').textContent = id;
+  document.getElementById('expPaySlip').value = '';
+  expenseDetailClose();
+  document.getElementById('expPayModal').classList.add('on');
+}
+function expensePayCancel(){ document.getElementById('expPayModal').classList.remove('on'); _expPayId = ''; }
+async function expensePayConfirm(){
+  let slipData = null;
+  const fEl = document.getElementById('expPaySlip');
+  if (fEl && fEl.files && fEl.files[0]){
+    const file = fEl.files[0];
+    if (file.size > 5*1024*1024){ toast('ไฟล์ใหญ่เกิน 5MB'); return; }
+    showLoad('อัปโหลดสลิป...');
+    try { slipData = await _expFileToBase64(file); }
+    catch(e){ hideLoad(); toast('อ่านไฟล์ไม่ได้'); return; }
+  } else { showLoad('บันทึก...'); }
+  try {
+    const r = await call({ action:'pk_expenseMarkPaid', id: _expPayId, slipData: slipData });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'ไม่สำเร็จ')); return; }
+    toast('✅ จ่ายแล้ว ' + _expPayId);
+    document.getElementById('expPayModal').classList.remove('on');
+    _expPayId = '';
+    expenseReloadActive();
+  } catch(e){ hideLoad(); }
+}
 
 async function expenseDoApprove(id){
   if (!confirm('ยืนยันอนุมัติ ' + id + ' ?')) return;
