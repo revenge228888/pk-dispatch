@@ -1033,11 +1033,13 @@ function renderOfficeShell(){
 
           <div class="fg" id="expPayeeWrap" style="display:none;">
             <label class="fl">ผู้รับเงิน</label>
-            <select class="fi" id="expPayee"><option value="">— เลือกผู้รับเงิน —</option></select>
+            <input class="fi" id="expPayee" list="expPayeeList" placeholder="พิมพ์ชื่อผู้รับเงิน (มีรายการเดิมให้เลือก)" autocomplete="off">
+            <datalist id="expPayeeList"></datalist>
           </div>
           <div class="fg" id="expVehicleWrap" style="display:none;">
             <label class="fl">ทะเบียนรถ</label>
-            <select class="fi" id="expVehicle"><option value="">— เลือกรถ —</option></select>
+            <input class="fi" id="expVehicle" list="expVehicleList" placeholder="พิมพ์ทะเบียนรถ (มีรายการเดิมให้เลือก)" autocomplete="off">
+            <datalist id="expVehicleList"></datalist>
           </div>
 
           <div class="fg">
@@ -1253,7 +1255,7 @@ function expenseResetForm(){
   const today = new Date().toISOString().slice(0,10);
   const d = document.getElementById('expDate'); if (d){ d.value = today; updateDateDisplay(d); }
   const st = document.getElementById('expSubType'); if (st) st.innerHTML = '<option value="">— เลือกหมวดก่อน —</option>';
-  ['expDetail','expAmount','expNote'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
+  ['expDetail','expAmount','expNote','expPayee','expVehicle'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
   const f = document.getElementById('expFile'); if (f) f.value = '';
   const td = document.getElementById('expTransfer'); if (td){ td.value=''; updateDateDisplay(td); }
   document.querySelectorAll('.exp-chip').forEach(c => c.classList.remove('on'));
@@ -1262,6 +1264,7 @@ function expenseResetForm(){
 }
 
 function expenseSelectCat(cat, btn){
+  if (!_expMaster){ toast('ข้อมูลยังโหลดไม่เสร็จ ลองกดใหม่อีกครั้ง'); return; }
   _expCat = cat;
   document.querySelectorAll('.exp-chip').forEach(c => c.classList.remove('on'));
   if (btn) btn.classList.add('on');
@@ -1277,11 +1280,11 @@ function expenseSelectCat(cat, btn){
   document.getElementById('expVehicleWrap').style.display = isTravel ? '' : 'none';
   document.getElementById('expPayeeWrap').style.display   = isTravel ? 'none' : '';
   if (isTravel){
-    document.getElementById('expVehicle').innerHTML =
-      '<option value="">— เลือกรถ —</option>' + _expMaster.vehicles.map(x=>`<option value="${x}">${x}</option>`).join('');
+    document.getElementById('expVehicleList').innerHTML =
+      (_expMaster.vehicles||[]).map(x=>`<option value="${x}"></option>`).join('');
   } else {
-    document.getElementById('expPayee').innerHTML =
-      '<option value="">— เลือกผู้รับเงิน —</option>' + _expMaster.payees.map(x=>`<option value="${x}">${x}</option>`).join('');
+    document.getElementById('expPayeeList').innerHTML =
+      (_expMaster.payees||[]).map(x=>`<option value="${x}"></option>`).join('');
   }
 }
 
