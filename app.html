@@ -1175,6 +1175,7 @@ function officeInit(){
   refreshAllDateDisplays();
   restoreSidebarState();
   reloadAll();
+  expenseBadgeRefresh();
 }
 
 // ════════════════════════════════════════
@@ -1464,8 +1465,19 @@ function expenseSetMyBadge(n){
   if (el) el.textContent = (n > 0) ? n : '';
 }
 
+// โหลด badge ทั้งสอง (เรียกตอน login + เข้าเบิกของฉัน) — เบา ไม่ render อะไร
+async function expenseBadgeRefresh(){
+  try {
+    const r = await call({ action:'pk_expenseBootstrap' });
+    if (!r.ok) return;
+    if (!_expMaster){ _expMaster = r.master; _expCanApprove = !!r.canApprove; }
+    if (typeof r.pendingCount === 'number') expenseSetBadge(r.pendingCount);
+    if (typeof r.myRejectedCount === 'number') expenseSetMyBadge(r.myRejectedCount);
+  } catch(e){}
+}
+
 // ════════ เบิกของฉัน ════════
-async function expenseMyInit(){ expenseMyLoad(); }
+async function expenseMyInit(){ expenseBadgeRefresh(); expenseMyLoad(); }
 async function expenseMyLoad(){
   const box = document.getElementById('expMyList');
   box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div>';
