@@ -1033,8 +1033,13 @@ function renderOfficeShell(){
 
           <div class="fg" id="expPayeeWrap" style="display:none;">
             <label class="fl">ผู้รับเงิน</label>
-            <input class="fi" id="expPayee" list="expPayeeList" placeholder="พิมพ์ชื่อผู้รับเงิน (มีรายการเดิมให้เลือก)" autocomplete="off">
+            <input class="fi" id="expPayee" list="expPayeeList" placeholder="พิมพ์ชื่อผู้รับเงิน (มีรายการเดิมให้เลือก)" autocomplete="off" oninput="expensePayeeCheck()">
             <datalist id="expPayeeList"></datalist>
+          </div>
+          <div class="fg" id="expPayeeBankWrap" style="display:none;">
+            <label class="fl">ธนาคาร / เลขบัญชี <span id="expPayeeNewHint" style="color:var(--acc);font-size:11px;font-weight:600;">(ผู้รับใหม่ — กรอกเพื่อบันทึกเข้าระบบ)</span></label>
+            <input class="fi" id="expPayeeBank" placeholder="ธนาคาร (เช่น กสิกร)" autocomplete="off" style="margin-bottom:6px;">
+            <input class="fi" id="expPayeeAccount" placeholder="เลขบัญชี" autocomplete="off">
           </div>
           <div class="fg" id="expVehicleWrap" style="display:none;">
             <label class="fl">ทะเบียนรถ</label>
@@ -1225,6 +1230,7 @@ function fillBookingTeam(){
 let _expMaster = null;     // master data (cache ใน memory ทั้ง session)
 let _expCat = '';          // หมวดหลักที่เลือกอยู่
 let _expCanApprove = false;
+let _expPayeeMap = {};     // ชื่อผู้รับ → {bank, account} (สำหรับ auto-fill / เช็คชื่อใหม่)
 
 function _expFileToBase64(file){
   return new Promise((resolve, reject) => {
@@ -1255,11 +1261,12 @@ function expenseResetForm(){
   const today = new Date().toISOString().slice(0,10);
   const d = document.getElementById('expDate'); if (d){ d.value = today; updateDateDisplay(d); }
   const st = document.getElementById('expSubType'); if (st) st.innerHTML = '<option value="">— เลือกหมวดก่อน —</option>';
-  ['expDetail','expAmount','expNote','expPayee','expVehicle'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
+  ['expDetail','expAmount','expNote','expPayee','expVehicle','expPayeeBank','expPayeeAccount'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
   const f = document.getElementById('expFile'); if (f) f.value = '';
   const td = document.getElementById('expTransfer'); if (td){ td.value=''; updateDateDisplay(td); }
   document.querySelectorAll('.exp-chip').forEach(c => c.classList.remove('on'));
   const pw = document.getElementById('expPayeeWrap');   if (pw) pw.style.display='none';
+  const pbw = document.getElementById('expPayeeBankWrap'); if (pbw) pbw.style.display='none';
   const vw = document.getElementById('expVehicleWrap'); if (vw) vw.style.display='none';
 }
 
@@ -1284,7 +1291,31 @@ function expenseSelectCat(cat, btn){
       (_expMaster.vehicles||[]).map(x=>`<option value="${x}"></option>`).join('');
   } else {
     document.getElementById('expPayeeList').innerHTML =
-      (_expMaster.payees||[]).map(x=>`<option value="${x}"></option>`).join('');
+      (_expMaster.payees||[]).map(p=>`<option value="${p.name}"></option>`).join('');
+    _expPayeeMap = {};
+    (_expMaster.payees||[]).forEach(p => { _expPayeeMap[p.name] = { bank:p.bank||'', account:p.account||'' }; });
+  }
+}
+
+// เช็คชื่อผู้รับ → เดิม: แสดงบัญชีอัตโนมัติ (ล็อค) · ใหม่: เปิดช่องกรอกบัญชี
+function expensePayeeCheck(){
+  const name = (document.getElementById('expPayee').value||'').trim();
+  const wrap   = document.getElementById('expPayeeBankWrap');
+  const bankEl = document.getElementById('expPayeeBank');
+  const accEl  = document.getElementById('expPayeeAccount');
+  const hint   = document.getElementById('expPayeeNewHint');
+  if (!name){ wrap.style.display = 'none'; return; }
+  const found = _expPayeeMap[name];
+  if (found){
+    bankEl.value = found.bank; accEl.value = found.account;
+    bankEl.readOnly = true; accEl.readOnly = true;
+    hint.style.display = 'none';
+    wrap.style.display = '';
+  } else {
+    if (bankEl.readOnly){ bankEl.value = ''; accEl.value = ''; }  // เพิ่งสลับจากชื่อเดิม → ล้าง
+    bankEl.readOnly = false; accEl.readOnly = false;
+    hint.style.display = '';
+    wrap.style.display = '';
   }
 }
 
@@ -1297,6 +1328,8 @@ async function expenseSubmit(){
     detail: document.getElementById('expDetail').value.trim(),
     amount: document.getElementById('expAmount').value,
     payee:   _expCat === 'ค่าเดินทาง' ? '' : document.getElementById('expPayee').value,
+    payeeBank:    _expCat === 'ค่าเดินทาง' ? '' : document.getElementById('expPayeeBank').value.trim(),
+    payeeAccount: _expCat === 'ค่าเดินทาง' ? '' : document.getElementById('expPayeeAccount').value.trim(),
     vehicle: _expCat === 'ค่าเดินทาง' ? document.getElementById('expVehicle').value : '',
     transferDate: document.getElementById('expTransfer').value,
     note: document.getElementById('expNote').value.trim()
@@ -1323,7 +1356,14 @@ async function expenseSubmit(){
     const r = await call({ action:'pk_expenseSubmit', formData, fileData });
     hideLoad();
     if (!r.ok){ toast('❌ ' + (r.error||'บันทึกไม่ได้')); return; }
-    toast('✅ ตั้งเบิกสำเร็จ ' + r.id);
+    // ผู้รับใหม่ถูกเพิ่มเข้า master → อัปเดต map + datalist ใน memory (ไม่ต้อง re-bootstrap)
+    if (r.payeeAdded && formData.payee){
+      _expPayeeMap[formData.payee] = { bank:formData.payeeBank, account:formData.payeeAccount };
+      const dl = document.getElementById('expPayeeList');
+      if (dl){ const o = document.createElement('option'); o.value = formData.payee; dl.appendChild(o); }
+      if (_expMaster && _expMaster.payees) _expMaster.payees.push({ name:formData.payee, bank:formData.payeeBank, account:formData.payeeAccount });
+    }
+    toast('✅ ตั้งเบิกสำเร็จ ' + r.id + (r.payeeAdded ? ' · เพิ่มผู้รับใหม่แล้ว' : ''));
     expenseResetForm();
   } catch(e){ hideLoad(); }
 }
