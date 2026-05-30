@@ -765,6 +765,8 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="jobs" onclick="setTab('jobs',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">รายการงาน</span></button>
           <button class="sidebar-item" data-tab="records" onclick="setTab('records',this)"><span class="sidebar-ico">📐</span><span class="sidebar-label">จดขนาด</span></button>
           <button class="sidebar-item" data-tab="quotes" onclick="setTab('quotes',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">คำนวณราคา</span></button>
+          <div class="sidebar-divider"></div>
+          <button class="sidebar-item" data-tab="expensesubmit" onclick="setTab('expensesubmit',this)"><span class="sidebar-ico">💸</span><span class="sidebar-label">ตั้งเบิก</span></button>
           ${CURRENT_USER.role === 'manager' ? `<div class="sidebar-divider"></div>
           <button class="sidebar-item" data-tab="salesreport" onclick="setTab('salesreport',this)"><span class="sidebar-ico">📊</span><span class="sidebar-label">รายงานเซลล์</span></button>` : ''}
         </div>
@@ -1003,6 +1005,72 @@ function renderOfficeShell(){
         </div>
         <div id="srContent"><div class="loading-row">เลือกเซลล์แล้วกด "ดูรายงาน"</div></div>
       </div>
+
+      <!-- ตั้งเบิก (Expense Phase F2a) -->
+      <div id="tabExpensesubmit" style="display:none;">
+        <div class="section-pad">
+          <div class="fg">
+            <label class="fl">วันที่เกิดค่าใช้จ่าย</label>
+            <div class="date-wrap">
+              <input class="fi" id="expDate" type="date" oninput="updateDateDisplay(this)">
+              <span class="date-display empty" data-for="expDate">เลือกวันที่</span>
+            </div>
+          </div>
+
+          <div class="fg">
+            <label class="fl">หมวดหลัก</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" class="bk-type-btn exp-chip" onclick="expenseSelectCat('ค่าแรง',this)">💪 ค่าแรง</button>
+              <button type="button" class="bk-type-btn exp-chip" onclick="expenseSelectCat('ค่าเดินทาง',this)">🚗 ค่าเดินทาง</button>
+              <button type="button" class="bk-type-btn exp-chip" onclick="expenseSelectCat('ต้นทุน ค่าใช้จ่าย',this)">📦 ต้นทุน/ค่าใช้จ่าย</button>
+            </div>
+          </div>
+
+          <div class="fg">
+            <label class="fl">ประเภท</label>
+            <select class="fi" id="expSubType"><option value="">— เลือกหมวดก่อน —</option></select>
+          </div>
+
+          <div class="fg" id="expPayeeWrap" style="display:none;">
+            <label class="fl">ผู้รับเงิน</label>
+            <select class="fi" id="expPayee"><option value="">— เลือกผู้รับเงิน —</option></select>
+          </div>
+          <div class="fg" id="expVehicleWrap" style="display:none;">
+            <label class="fl">ทะเบียนรถ</label>
+            <select class="fi" id="expVehicle"><option value="">— เลือกรถ —</option></select>
+          </div>
+
+          <div class="fg">
+            <label class="fl">รายละเอียด</label>
+            <input class="fi" id="expDetail" type="text" placeholder="ระบุรายละเอียดค่าใช้จ่าย">
+          </div>
+
+          <div class="fg">
+            <label class="fl">ยอดเงิน (บาท)</label>
+            <input class="fi" id="expAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00" style="font-size:24px;font-weight:700;text-align:right;">
+          </div>
+
+          <div class="fg">
+            <label class="fl">วันที่โอน (ถ้ามี)</label>
+            <div class="date-wrap">
+              <input class="fi" id="expTransfer" type="date" oninput="updateDateDisplay(this)">
+              <span class="date-display empty" data-for="expTransfer">ไม่ระบุ</span>
+            </div>
+          </div>
+
+          <div class="fg">
+            <label class="fl">ใบแจ้งหนี้ (ถ้ามี · ไม่เกิน 5MB)</label>
+            <input class="fi" id="expFile" type="file" accept="image/*,application/pdf">
+          </div>
+
+          <div class="fg">
+            <label class="fl">หมายเหตุ</label>
+            <input class="fi" id="expNote" type="text" placeholder="(ไม่บังคับ)">
+          </div>
+
+          <button class="btn btn-p" style="width:100%;margin-top:8px;" onclick="expenseSubmit()">💾 ส่งคำขอเบิก</button>
+        </div>
+      </div>
         </div>
       </div>
     </div>
@@ -1149,8 +1217,121 @@ function fillBookingTeam(){
   list.forEach(t => { const o=document.createElement('option'); o.value=t; o.textContent=t; bt.appendChild(o); });
 }
 
+// ════════════════════════════════════════════════════════════
+//  EXPENSE — ระบบเบิกจ่าย (Phase F2a: ตั้งเบิก)
+// ════════════════════════════════════════════════════════════
+let _expMaster = null;     // master data (cache ใน memory ทั้ง session)
+let _expCat = '';          // หมวดหลักที่เลือกอยู่
+let _expCanApprove = false;
+
+function _expFileToBase64(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve({ name:file.name, mimeType:file.type, bytes: reader.result.split(',')[1] });
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function expenseInit(){
+  if (!_expMaster){
+    showLoad('โหลดข้อมูล...');
+    try {
+      const r = await call({ action:'pk_expenseBootstrap' });
+      if (!r.ok){ hideLoad(); toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
+      _expMaster = r.master;
+      _expCanApprove = !!r.canApprove;
+      if (typeof r.pendingCount === 'number') expenseSetBadge(r.pendingCount);
+    } catch(e){ hideLoad(); return; }
+    hideLoad();
+  }
+  expenseResetForm();
+}
+
+function expenseResetForm(){
+  _expCat = '';
+  const today = new Date().toISOString().slice(0,10);
+  const d = document.getElementById('expDate'); if (d){ d.value = today; updateDateDisplay(d); }
+  const st = document.getElementById('expSubType'); if (st) st.innerHTML = '<option value="">— เลือกหมวดก่อน —</option>';
+  ['expDetail','expAmount','expNote'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
+  const f = document.getElementById('expFile'); if (f) f.value = '';
+  const td = document.getElementById('expTransfer'); if (td){ td.value=''; updateDateDisplay(td); }
+  document.querySelectorAll('.exp-chip').forEach(c => c.classList.remove('on'));
+  const pw = document.getElementById('expPayeeWrap');   if (pw) pw.style.display='none';
+  const vw = document.getElementById('expVehicleWrap'); if (vw) vw.style.display='none';
+}
+
+function expenseSelectCat(cat, btn){
+  _expCat = cat;
+  document.querySelectorAll('.exp-chip').forEach(c => c.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+
+  let list = [];
+  if (cat === 'ค่าแรง') list = _expMaster.wageTypes;
+  else if (cat === 'ค่าเดินทาง') list = _expMaster.travelTypes;
+  else list = _expMaster.costTypes;
+  document.getElementById('expSubType').innerHTML =
+    '<option value="">— เลือกประเภท —</option>' + list.map(t => `<option value="${t}">${t}</option>`).join('');
+
+  const isTravel = (cat === 'ค่าเดินทาง');
+  document.getElementById('expVehicleWrap').style.display = isTravel ? '' : 'none';
+  document.getElementById('expPayeeWrap').style.display   = isTravel ? 'none' : '';
+  if (isTravel){
+    document.getElementById('expVehicle').innerHTML =
+      '<option value="">— เลือกรถ —</option>' + _expMaster.vehicles.map(x=>`<option value="${x}">${x}</option>`).join('');
+  } else {
+    document.getElementById('expPayee').innerHTML =
+      '<option value="">— เลือกผู้รับเงิน —</option>' + _expMaster.payees.map(x=>`<option value="${x}">${x}</option>`).join('');
+  }
+}
+
+async function expenseSubmit(){
+  if (!_expCat){ toast('เลือกหมวดหลัก'); return; }
+  const formData = {
+    mainCat: _expCat,
+    subType: document.getElementById('expSubType').value,
+    expenseDate: document.getElementById('expDate').value,
+    detail: document.getElementById('expDetail').value.trim(),
+    amount: document.getElementById('expAmount').value,
+    payee:   _expCat === 'ค่าเดินทาง' ? '' : document.getElementById('expPayee').value,
+    vehicle: _expCat === 'ค่าเดินทาง' ? document.getElementById('expVehicle').value : '',
+    transferDate: document.getElementById('expTransfer').value,
+    note: document.getElementById('expNote').value.trim()
+  };
+  if (!formData.subType){ toast('เลือกประเภท'); return; }
+  if (!formData.detail){ toast('กรอกรายละเอียด'); return; }
+  if (!(parseFloat(formData.amount) > 0)){ toast('ยอดเงินไม่ถูกต้อง'); return; }
+  if (formData.mainCat === 'ค่าเดินทาง' && !formData.vehicle){ toast('เลือกทะเบียนรถ'); return; }
+  if (formData.mainCat !== 'ค่าเดินทาง' && !formData.payee){ toast('เลือกผู้รับเงิน'); return; }
+
+  let fileData = null;
+  const fileEl = document.getElementById('expFile');
+  if (fileEl && fileEl.files && fileEl.files[0]){
+    const file = fileEl.files[0];
+    if (file.size > 5*1024*1024){ toast('ไฟล์ใหญ่เกิน 5MB'); return; }
+    showLoad('อัปโหลดใบแจ้งหนี้...');
+    try { fileData = await _expFileToBase64(file); }
+    catch(e){ hideLoad(); toast('อ่านไฟล์ไม่ได้'); return; }
+  } else {
+    showLoad('บันทึก...');
+  }
+
+  try {
+    const r = await call({ action:'pk_expenseSubmit', formData, fileData });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'บันทึกไม่ได้')); return; }
+    toast('✅ ตั้งเบิกสำเร็จ ' + r.id);
+    expenseResetForm();
+  } catch(e){ hideLoad(); }
+}
+
+function expenseSetBadge(n){
+  const el = document.getElementById('expApproveBadge');
+  if (el) el.textContent = (n > 0) ? n : '';
+}
+
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Records','Quotes','Salesreport'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Records','Quotes','Salesreport','Expensesubmit'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -1171,6 +1352,7 @@ function setTab(t, btn){
   if (t === 'records') recordsInit();
   if (t === 'quotes') quotesInit();
   if (t === 'salesreport') salesReportInit();
+  if (t === 'expensesubmit') expenseInit();
 }
 
 // ── Sidebar toggle ──
