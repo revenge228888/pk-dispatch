@@ -101,6 +101,21 @@ select.fi{cursor:pointer;}
 .exp-dt-row .k{color:var(--mu);flex-shrink:0;}
 .exp-dt-row .v{font-weight:600;text-align:right;word-break:break-word;}
 .exp-bank-box{background:rgba(10,132,255,.08);border:1px solid rgba(10,132,255,.25);border-radius:8px;padding:10px;margin:10px 0;}
+.wt-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.wt{padding:10px 6px;border-radius:8px;border:1px solid var(--bdr);background:var(--bg);color:var(--mu);font-size:12px;font-weight:600;cursor:pointer;text-align:center;font-family:var(--sans);transition:all .15s;}
+.wt:hover{border-color:var(--acc);color:var(--tx);}
+.wt.on{background:rgba(245,166,35,.12);border-color:var(--acc);color:var(--acc);}
+.wt.minus.on{background:rgba(255,69,58,.12);border-color:var(--rd);color:var(--rd);}
+.cal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.cal-head button{background:var(--surf2);border:1px solid var(--bdr);color:var(--tx);width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:16px;}
+.cal-month{font-weight:700;font-size:14px;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+.cal-dow{text-align:center;font-size:10px;color:var(--mu);font-weight:600;padding:4px 0;}
+.cal-day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:8px;font-size:13px;cursor:pointer;border:1px solid transparent;background:var(--bg);transition:all .12s;font-family:var(--mono);}
+.cal-day:hover{border-color:var(--acc);}
+.cal-day.sel{background:var(--acc);color:#000;font-weight:700;}
+.cal-day.sun{color:var(--rd);}
+.cal-day.empty{background:none;cursor:default;}
 .sidebar-bottom{border-top:1px solid var(--bdr);padding:8px 0;}
 .sidebar-user{display:flex;align-items:center;gap:14px;padding:10px 16px;color:var(--mu);font-size:12px;white-space:nowrap;overflow:hidden;}
 .sidebar-user .sidebar-label{font-weight:600;color:var(--tx);}
@@ -1112,7 +1127,31 @@ function renderOfficeShell(){
             </div>
           </div>
 
-          <div class="fg">
+          <!-- ===== UI ค่าแรง (เลือกพนักงาน → ประเภท → ปฏิทินรายวัน) ===== -->
+          <div id="expWageBlock" style="display:none;">
+            <div class="fg">
+              <label class="fl">เลือกพนักงาน</label>
+              <select class="fi" id="expWageEmp" onchange="expWageSelEmp()"><option value="">— เลือกพนักงาน —</option></select>
+            </div>
+            <div id="expWageEmpBox" style="background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:12px;margin-bottom:14px;display:none;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="exp-avatar" id="expWageInit">?</div>
+                <div><div style="font-weight:700;" id="expWageName">—</div><div style="font-size:11px;color:var(--mu);font-family:var(--mono);" id="expWageMeta">—</div></div>
+              </div>
+            </div>
+            <div class="fg" id="expWageTypeWrap" style="display:none;">
+              <label class="fl">ประเภทรายการ</label>
+              <div class="wt-grid" id="expWageTypeBtns"></div>
+            </div>
+            <div class="fg" id="expWageCalWrap" style="display:none;">
+              <label class="fl">แตะเลือกวันทำงาน (แตะซ้ำ = ยกเลิก)</label>
+              <div class="cal-head"><button type="button" onclick="expWageCalMove(-1)">‹</button><span class="cal-month" id="expWageCalMonth"></span><button type="button" onclick="expWageCalMove(1)">›</button></div>
+              <div class="cal-grid" id="expWageCalGrid"></div>
+              <div style="text-align:center;margin-top:8px;font-size:13px;color:var(--mu);">เลือก <b id="expWageDays" style="color:var(--acc);">0</b> วัน × <span id="expWageRate">฿0</span> = <b id="expWageCalc" style="color:var(--acc);">฿0</b></div>
+            </div>
+          </div>
+
+          <div class="fg" id="expSubTypeWrap">
             <label class="fl">ประเภท</label>
             <select class="fi" id="expSubType"><option value="">— เลือกหมวดก่อน —</option></select>
           </div>
@@ -1402,6 +1441,11 @@ function expenseResetForm(){
   const pw = document.getElementById('expPayeeWrap');   if (pw) pw.style.display='none';
   const pbw = document.getElementById('expPayeeBankWrap'); if (pbw) pbw.style.display='none';
   const vw = document.getElementById('expVehicleWrap'); if (vw) vw.style.display='none';
+  // reset UI ค่าแรง
+  const wb = document.getElementById('expWageBlock'); if (wb) wb.style.display='none';
+  const stw = document.getElementById('expSubTypeWrap'); if (stw) stw.style.display='';
+  const dt = document.getElementById('expDetail'); if (dt) delete dt.dataset.auto;
+  if (typeof expWageReset === 'function') expWageReset();
 }
 
 function expenseSelectCat(cat, btn){
@@ -1410,14 +1454,26 @@ function expenseSelectCat(cat, btn){
   document.querySelectorAll('.exp-chip').forEach(c => c.classList.remove('on'));
   if (btn) btn.classList.add('on');
 
-  let list = [];
-  if (cat === 'ค่าแรง') list = _expMaster.wageTypes;
-  else if (cat === 'ค่าเดินทาง') list = _expMaster.travelTypes;
-  else list = _expMaster.costTypes;
+  const isWage = (cat === 'ค่าแรง');
+  const isTravel = (cat === 'ค่าเดินทาง');
+
+  // สลับ UI ค่าแรง ↔ ฟอร์มปกติ
+  document.getElementById('expWageBlock').style.display = isWage ? '' : 'none';
+  document.getElementById('expSubTypeWrap').style.display = isWage ? 'none' : '';
+
+  if (isWage){
+    document.getElementById('expPayeeWrap').style.display = 'none';
+    document.getElementById('expPayeeBankWrap').style.display = 'none';
+    document.getElementById('expVehicleWrap').style.display = 'none';
+    expWageReset();
+    expWageLoadEmps();
+    return;
+  }
+
+  const list = isTravel ? _expMaster.travelTypes : _expMaster.costTypes;
   document.getElementById('expSubType').innerHTML =
     '<option value="">— เลือกประเภท —</option>' + list.map(t => `<option value="${t}">${t}</option>`).join('');
 
-  const isTravel = (cat === 'ค่าเดินทาง');
   document.getElementById('expVehicleWrap').style.display = isTravel ? '' : 'none';
   document.getElementById('expPayeeWrap').style.display   = isTravel ? 'none' : '';
   if (isTravel){
@@ -1451,6 +1507,115 @@ function expensePayeeCheck(){
     hint.style.display = '';
     wrap.style.display = '';
   }
+}
+
+// ════════ UI ค่าแรง (เลือกพนักงาน → ประเภท → ปฏิทินรายวัน) ════════
+let _wageEmps = [], _wagePerms = null, _wageEmp = null, _wageType = '', _wageSelDays = {}, _wageCalDate = new Date();
+const TH_MON_W = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+function expWageReset(){
+  _wageEmp = null; _wageType = ''; _wageSelDays = {};
+  const sel = document.getElementById('expWageEmp'); if (sel) sel.value = '';
+  document.getElementById('expWageEmpBox').style.display = 'none';
+  document.getElementById('expWageTypeWrap').style.display = 'none';
+  document.getElementById('expWageCalWrap').style.display = 'none';
+  document.getElementById('expSubType').value = '';
+  document.getElementById('expPayee').value = '';
+  document.getElementById('expPayeeBank').value = '';
+  document.getElementById('expPayeeAccount').value = '';
+}
+
+async function expWageLoadEmps(){
+  const sel = document.getElementById('expWageEmp');
+  try {
+    const r = await call({ action:'pk_payEmployeesForWage' });
+    if (!r.ok){ toast('โหลดพนักงานไม่ได้: ' + (r.error||'')); return; }
+    _wageEmps = r.employees || [];
+    _wagePerms = r.perms || null;
+    sel.innerHTML = '<option value="">— เลือกพนักงาน —</option>' +
+      _wageEmps.map((e,i) => '<option value="' + i + '">' + e.name + ' (' + (e.type||'ยังไม่ตั้ง') + ')</option>').join('');
+  } catch(e){ toast('เชื่อมต่อไม่ได้'); }
+}
+
+function expWageSelEmp(){
+  const i = document.getElementById('expWageEmp').value;
+  const box = document.getElementById('expWageEmpBox');
+  if (i === ''){ _wageEmp = null; box.style.display='none';
+    document.getElementById('expWageTypeWrap').style.display='none';
+    document.getElementById('expWageCalWrap').style.display='none'; return; }
+  _wageEmp = _wageEmps[+i]; _wageType = ''; _wageSelDays = {};
+  document.getElementById('expWageInit').textContent = (_wageEmp.name.charAt(0)||'?');
+  document.getElementById('expWageName').textContent = _wageEmp.name;
+  document.getElementById('expWageMeta').textContent = (_wageEmp.type||'ยังไม่ตั้งประเภท') + (_wageEmp.type==='รายวัน' ? (' · ฿'+(_wageEmp.daily||0)+'/วัน') : '');
+  box.style.display = '';
+  // เขียนลง backing fields (submit เดิมอ่านต่อ)
+  document.getElementById('expPayee').value = _wageEmp.name;
+  document.getElementById('expPayeeBank').value = _wageEmp.bank || '';
+  document.getElementById('expPayeeAccount').value = _wageEmp.account || '';
+  document.getElementById('expSubType').value = '';
+  document.getElementById('expWageCalWrap').style.display = 'none';
+  expWageRenderTypes();
+}
+
+function expWageRenderTypes(){
+  const wrap = document.getElementById('expWageTypeWrap');
+  const box = document.getElementById('expWageTypeBtns');
+  const e = _wageEmp, P = _wagePerms;
+  if (!e || !P){ wrap.style.display = 'none'; return; }
+  let types;
+  if (e.type === 'รายเดือน') types = ['เงินเดือน','เบิกล่วงหน้า','เบี้ยเลี้ยง','OT (ค่าล่วงเวลา)','โบนัส','หักอื่นๆ'];
+  else if (e.type === 'รายวัน') types = ['ค่าแรงรายวัน','เบิกล่วงหน้า','เบี้ยเลี้ยง','OT (ค่าล่วงเวลา)','โบนัส','หักอื่นๆ'];
+  else types = ['เบี้ยเลี้ยง','OT (ค่าล่วงเวลา)','โบนัส'];
+  const canDo = (t) => {
+    if (P.open.indexOf(t) >= 0) return true;
+    if (CURRENT_USER.role === 'manager') return true;
+    if (P.managerOnly.indexOf(t) >= 0) return false;
+    if (P.restricted.indexOf(t) >= 0) return !!e.officeAllowed;
+    return false;
+  };
+  const allowed = types.filter(canDo);
+  if (!allowed.length){ box.innerHTML = '<div style="color:var(--mu);font-size:12px;">ไม่มีสิทธิ์ตั้งเบิกพนักงานคนนี้</div>'; wrap.style.display=''; return; }
+  const minus = ['เบิกล่วงหน้า','หักอื่นๆ'];
+  box.innerHTML = allowed.map(t =>
+    '<button type="button" class="wt' + (minus.indexOf(t)>=0?' minus':'') + '" onclick="expWageSelType(\'' + t + '\',this)">' + t + '</button>').join('');
+  wrap.style.display = '';
+}
+
+function expWageSelType(t, btn){
+  _wageType = t;
+  document.querySelectorAll('#expWageTypeBtns .wt').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('expSubType').value = t;
+  const dt = document.getElementById('expDetail');
+  if (!dt.value || dt.dataset.auto === '1'){ dt.value = t + ' - ' + (_wageEmp ? _wageEmp.name : ''); dt.dataset.auto = '1'; }
+  const isDaily = (t === 'ค่าแรงรายวัน');
+  document.getElementById('expWageCalWrap').style.display = isDaily ? '' : 'none';
+  if (isDaily){ _wageSelDays = {}; expWageRenderCal(); }
+}
+
+function expWageCalMove(d){ _wageCalDate.setMonth(_wageCalDate.getMonth()+d); expWageRenderCal(); }
+function expWageRenderCal(){
+  const y = _wageCalDate.getFullYear(), m = _wageCalDate.getMonth();
+  document.getElementById('expWageCalMonth').textContent = TH_MON_W[m] + ' ' + (y+543);
+  const first = new Date(y,m,1).getDay(), days = new Date(y,m+1,0).getDate();
+  const dow = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+  let h = dow.map(d => '<div class="cal-dow">'+d+'</div>').join('');
+  for (let i=0;i<first;i++) h += '<div class="cal-day empty"></div>';
+  for (let d=1;d<=days;d++){
+    const key = y+'-'+m+'-'+d, wd = new Date(y,m,d).getDay();
+    h += '<div class="cal-day' + (_wageSelDays[key]?' sel':'') + (wd===0?' sun':'') + '" onclick="expWageToggleDay(\''+key+'\')">'+d+'</div>';
+  }
+  document.getElementById('expWageCalGrid').innerHTML = h;
+  expWageCalc();
+}
+function expWageToggleDay(key){ _wageSelDays[key] ? delete _wageSelDays[key] : _wageSelDays[key]=1; expWageRenderCal(); }
+function expWageCalc(){
+  if (!_wageEmp) return;
+  const n = Object.keys(_wageSelDays).length, rate = _wageEmp.daily||0, total = n*rate;
+  document.getElementById('expWageDays').textContent = n;
+  document.getElementById('expWageRate').textContent = '฿' + rate.toLocaleString();
+  document.getElementById('expWageCalc').textContent = '฿' + total.toLocaleString();
+  document.getElementById('expAmount').value = total;
 }
 
 async function expenseSubmit(){
