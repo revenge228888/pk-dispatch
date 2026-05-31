@@ -868,6 +868,7 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="expensemy" onclick="setTab('expensemy',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">เบิกของฉัน</span><span id="expMyBadge" class="exp-badge"></span></button>
           <button class="sidebar-item" data-tab="timelog" onclick="setTab('timelog',this)"><span class="sidebar-ico">📅</span><span class="sidebar-label">บันทึกเวลา</span></button>
           ${CURRENT_USER.role === 'manager' ? `<div class="sidebar-divider"></div>
+          <button class="sidebar-item" data-tab="production" onclick="setTab('production',this)"><span class="sidebar-ico">🏭</span><span class="sidebar-label">ใบผลิต</span></button>
           <button class="sidebar-item" data-tab="expenseapprove" onclick="setTab('expenseapprove',this)"><span class="sidebar-ico">✅</span><span class="sidebar-label">อนุมัติเบิก</span><span id="expApproveBadge" class="exp-badge"></span></button>
           <button class="sidebar-item" data-tab="salesreport" onclick="setTab('salesreport',this)"><span class="sidebar-ico">📊</span><span class="sidebar-label">รายงานเซลล์</span></button>
           <button class="sidebar-item" data-tab="employees" onclick="setTab('employees',this)"><span class="sidebar-ico">👥</span><span class="sidebar-label">พนักงาน</span></button>` : ''}
@@ -897,6 +898,42 @@ function renderOfficeShell(){
           <button class="btn btn-p" onclick="clearCache('pk_dashboard');loadDashboard()">ดูสรุป</button>
         </div>
         <div id="dashContent"><div class="loading-row">เลือกวันที่เพื่อดูสรุปงาน</div></div>
+      </div>
+
+      <!-- PRODUCTION (ใบผลิต) -->
+      <div id="tabProduction" style="display:none;">
+        <div class="section-pad">
+          <div class="row-form" style="margin-bottom:10px;align-items:center;">
+            <div style="font-weight:800;font-size:16px;">🏭 ใบผลิต</div>
+            <div style="font-size:13px;color:var(--mu,#6b7a94);">เลขใบ: <b id="pkpWoLabel">(ใบใหม่ — เลขออกตอนบันทึก)</b></div>
+            <button class="btn btn-g btn-sm" onclick="pkpNew()" style="margin-left:auto;">+ ใบใหม่</button>
+          </div>
+          <div class="row-form" style="margin-bottom:10px;">
+            <div class="fg" style="flex:1;min-width:180px;"><label class="fl">ชื่อลูกค้า</label><input class="fi" id="pkpCust" type="text" placeholder="ชื่อลูกค้า"></div>
+            <div class="fg"><label class="fl">วันที่ออกใบผลิต</label><div class="date-wrap"><input class="fi" id="pkpIssue" type="date" oninput="updateDateDisplay(this)"><span class="date-display empty" data-for="pkpIssue">เลือกวันที่</span></div></div>
+            <div class="fg"><label class="fl">วันที่ติดตั้ง</label><div class="date-wrap"><input class="fi" id="pkpInstall" type="date" oninput="updateDateDisplay(this)"><span class="date-display empty" data-for="pkpInstall">เลือกวันที่</span></div></div>
+            <div class="fg" style="width:120px;"><label class="fl">เลขอ้างอิง</label><input class="fi" id="pkpRef" type="text" placeholder="(ถ้ามี)"></div>
+          </div>
+          <div class="row-form" style="margin-bottom:10px;">
+            <div class="fg" style="flex:1;min-width:160px;"><label class="fl">หมายเหตุ</label><input class="fi" id="pkpNote" type="text" placeholder="(ถ้ามี)"></div>
+            <div class="fg" style="width:150px;"><label class="fl">สีหลัก-อลู (ทั้งใบ)</label><input class="fi" id="pkpMainAlu" type="text" placeholder="เช่น อบขาว"></div>
+            <div class="fg" style="width:150px;"><label class="fl">สีหลัก-ผ้ามุ้ง (ทั้งใบ)</label><input class="fi" id="pkpMainMesh" type="text" placeholder="เช่น เทา"></div>
+          </div>
+          <div style="font-size:12px;color:var(--mu,#6b7a94);margin-bottom:8px;">รายการ (สีในแต่ละชุดเว้นว่าง = ใช้สีหลัก, กรอกทับได้เฉพาะชุด)</div>
+          <div id="pkpItemsWrap"></div>
+          <div class="row-form" style="margin-top:6px;">
+            <button class="btn btn-g" onclick="pkpAddItem()">+ เพิ่มรายการ</button>
+            <button class="btn btn-p" id="pkpSaveBtn" onclick="pkpSave()" style="margin-left:auto;">💾 บันทึกใบผลิต</button>
+          </div>
+        </div>
+        <div class="mem-existing">
+          <div class="row-form" style="align-items:center;margin-bottom:8px;">
+            <div style="font-size:11px;font-weight:700;color:var(--mu,#6b7a94);text-transform:uppercase;letter-spacing:.8px;">ใบผลิตรายเดือน</div>
+            <input class="fi" id="pkpListMonth" type="month" style="width:auto;" onchange="pkpLoadList()">
+            <button class="btn btn-g btn-sm" onclick="pkpLoadList()">โหลด</button>
+          </div>
+          <div id="pkpListWrap"><div class="loading-row">กำลังโหลด...</div></div>
+        </div>
       </div>
 
       <!-- ACCESS + MEMBERS -->
@@ -2293,7 +2330,7 @@ async function expenseRejectConfirm(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -2319,6 +2356,7 @@ function setTab(t, btn){
   if (t === 'expenseapprove') expenseApproveInit();
   if (t === 'employees') employeesInit();
   if (t === 'timelog') timelogInit();
+  if (t === 'production') pkpInit();
 }
 
 // ── Sidebar toggle ──
@@ -6095,6 +6133,272 @@ const fmtD = d => { if(!d)return'-'; const p=d.split('-'); return`${p[2]}/${p[1]
 function showLoad(msg){ document.getElementById('loadMsg').textContent = msg||'กำลังโหลด...'; document.getElementById('loading').classList.add('on'); }
 function hideLoad(){ document.getElementById('loading').classList.remove('on'); }
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),2800); }
+
+// ════════ PK PRODUCTION MODULE (P2) — injected ════════
+// ════════════════════════════════════════════════════════════
+//  PK PRODUCTION (P2) — แท็บ "ใบผลิต" (manager only)
+//  ทุกชื่อ prefix pkp* เพื่อไม่ชนกับ global เดิมใน app.html
+//  เชื่อม backend: pk_prodCreate / Update / Get / List / Delete / Restore
+//  หมายเหตุ: ใบพิมพ์/PDF เว้นไว้ทำตอนออกแบบใบใหม่ (ตามที่ตกลง)
+// ════════════════════════════════════════════════════════════
+
+// ── ENGINE (verified — ตรงกับ Code_Production.gs) ──
+function pkpScreenCalc(type, W, H){
+  var SKIP=['มุ้งบานเปิด','มุ้งบานเปิดแยกกลาง','มุ้งบานเลื่อน','มุ้งบานเลื่อนแยกกลาง','มุ้งบานตาย'];
+  var RT=['มุ้งจีบมีรางธรรมดาบานเดี่ยว','มุ้งจีบมีรางธรรมดาบานคู่','มุ้งจีบมีรางธรรมดาบานอิสระ'];
+  var SL=['มุ้งจีบมีรางธรรมดาสลิงบานเดี่ยว','มุ้งจีบมีรางธรรมดาสลิงบานคู่','มุ้งจีบมีรางธรรมดาสลิงบานอิสระ'];
+  var JS_=RT.concat(SL);
+  var KHOO=['มุ้งจีบมีรางธรรมดาบานคู่','มุ้งจีบมีรางธรรมดาสลิงบานคู่','มุ้งจีบรางเตี้ยบานคู่'];
+  var ISARA=['มุ้งจีบมีรางธรรมดาบานอิสระ','มุ้งจีบมีรางธรรมดาสลิงบานอิสระ'];
+  var RTDIAW=['มุ้งจีบรางเตี้ยบานเดี่ยวซ้าย','มุ้งจีบรางเตี้ยบานเดี่ยวขวา','มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ'];
+  var JDI=['มุ้งจีบมีรางธรรมดาบานเดี่ยว','มุ้งจีบมีรางธรรมดาบานอิสระ','มุ้งจีบมีรางธรรมดาสลิงบานเดี่ยว','มุ้งจีบมีรางธรรมดาสลิงบานอิสระ'];
+  var JK=['มุ้งจีบมีรางธรรมดาบานคู่','มุ้งจีบมีรางธรรมดาสลิงบานคู่'];
+  var inA=function(a,v){return a.indexOf(v)>=0;};
+  var w=parseFloat(W),h=parseFloat(H);
+  if(!type||W===''||W==null||H===''||H==null||isNaN(w)||isNaN(h)||inA(SKIP,type)) return {calculable:false,fields:{}};
+  var ceil=Math.ceil, O=(inA(RT,type)||inA(SL,type))?h-2.4:h-1.7, jeeb;
+  if(inA(JDI,type))jeeb=(w/1.8)-6; else if(inA(JK,type))jeeb=(w/3.6)-6; else if(inA(RTDIAW,type))jeeb=w*0.45+3; else jeeb=w/2*0.45+3;
+  var chuok=inA(KHOO,type)?(w/2+h+30):(inA(ISARA,type)?(w+h+60):(w+h+30));
+  return {calculable:true,fields:{
+    maajab:inA(JS_,type)?h-6.5:h-5.9, rangkang:inA(JS_,type)?h-0.2:h-0.5, rangbl:w-2.2,
+    rangtia:inA(JS_,type)?0:w-4, cutScreen:O, jeeb:jeeb, cutRope:chuok,
+    nRope:inA(KHOO,type)?(ceil((O-6)/30)+1)*2:ceil((O-6)/30)+1,
+    cutSling:inA(RT,type)?0:w+25, nSling:inA(RT,type)?0:2,
+    pvc:inA(RT,type)?h-2.6:h-1.6, holePitch:(O-6)/ceil((O-6)/30)
+  }};
+}
+function pkpMeshPieces(t){ if(/6 มือจับ/.test(t))return 3; if(/4 มือจับ/.test(t))return 2; if(/แยกกลาง/.test(t))return 2; if(/บานคู่/.test(t))return 2; return 1; }
+var pkpHANDLE={
+ 'มุ้งจีบมีรางธรรมดาบานอิสระ 4 มือจับ':['มุ้งจีบมีรางธรรมดาบานอิสระ',4],'มุ้งจีบมีรางธรรมดาบานอิสระ 6 มือจับ':['มุ้งจีบมีรางธรรมดาบานอิสระ',6],
+ 'มุ้งจีบมีรางธรรมดาสลิงบานอิสระ 4 มือจับ':['มุ้งจีบมีรางธรรมดาสลิงบานอิสระ',4],'มุ้งจีบมีรางธรรมดาสลิงบานอิสระ 6 มือจับ':['มุ้งจีบมีรางธรรมดาสลิงบานอิสระ',6],
+ 'มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ 4 มือจับ':['มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ',4],'มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ 6 มือจับ':['มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ',6]
+};
+var pkpSPLIT={
+ 'มุ้งจีบมีรางธรรมดาแยกกลางไม่เท่ากัน':['มุ้งจีบมีรางธรรมดาบานเดี่ยว','มุ้งจีบมีรางธรรมดาบานเดี่ยว'],
+ 'มุ้งจีบมีรางธรรมดาสลิงแยกกลางไม่เท่ากัน':['มุ้งจีบมีรางธรรมดาสลิงบานเดี่ยว','มุ้งจีบมีรางธรรมดาสลิงบานเดี่ยว'],
+ 'มุ้งจีบรางเตี้ยแยกกลางไม่เท่ากัน':['มุ้งจีบรางเตี้ยบานเดี่ยวซ้าย','มุ้งจีบรางเตี้ยบานเดี่ยวขวา']
+};
+function pkpIsSplit(t){return !!pkpSPLIT[t];}
+function pkpRi(v){return (typeof v==='number')?Math.round(v):v;}
+function pkpCalcItem(it){
+  var t=it.type, pieces=pkpMeshPieces(t);
+  if(pkpHANDLE[t]){
+    var bt=pkpHANDLE[t][0],hn=pkpHANDLE[t][1],div=hn===4?2:3,mul=hn===4?2:3;
+    var b=pkpScreenCalc(bt,it.w,it.h); if(!b.calculable)return{calculable:false,fields:{}};
+    var f=Object.assign({},b.fields); f.cutScreen=b.fields.cutScreen/div+5; f.nRope=b.fields.nRope*mul;
+    f.jeeb=pkpRi(f.jeeb); f.pieces=pieces; f.pvcCount=pieces*2; return {calculable:true,kind:'handle',fields:f};
+  }
+  if(pkpSPLIT[t]){
+    var bl=pkpSPLIT[t][0],br=pkpSPLIT[t][1],wl=parseFloat(it.wl),wr=parseFloat(it.wr),h=parseFloat(it.h);
+    if(isNaN(wl)||isNaN(wr)||isNaN(h))return{calculable:false,fields:{}};
+    var tot=pkpScreenCalc(bl,wl+wr,h).fields, L=pkpScreenCalc(bl,wl,h).fields, R=pkpScreenCalc(br,wr,h).fields;
+    var f=Object.assign({},tot); f.jeebL=pkpRi(L.jeeb); f.jeebR=pkpRi(R.jeeb); f.cutRopeL=L.cutRope; f.cutRopeR=R.cutRope;
+    f.split=true; f.pieces=pieces; f.pvcCount=pieces*2; return {calculable:true,kind:'split',fields:f};
+  }
+  var r=pkpScreenCalc(t,it.w,it.h); if(!r.calculable)return{calculable:false,fields:{}};
+  var f=Object.assign({},r.fields); f.jeeb=pkpRi(f.jeeb); f.pieces=pieces; f.pvcCount=pieces*2; return {calculable:true,kind:'normal',fields:f};
+}
+function pkpFmt(v){ if(v==null||v==='')return''; var n=Number(v); if(isNaN(n))return''; return (Math.round(n*100)/100).toLocaleString('th-TH',{maximumFractionDigits:2}); }
+
+// ── ประเภท (จัดกลุ่มไว้เผื่อ dropdown แยกหมวด ภายหลัง) ──
+var pkpTYPES=[
+ {g:'รางธรรมดา', items:['มุ้งจีบมีรางธรรมดาบานเดี่ยว','มุ้งจีบมีรางธรรมดาบานคู่','มุ้งจีบมีรางธรรมดาบานอิสระ','มุ้งจีบมีรางธรรมดาบานอิสระ 4 มือจับ','มุ้งจีบมีรางธรรมดาบานอิสระ 6 มือจับ','มุ้งจีบมีรางธรรมดาแยกกลางไม่เท่ากัน']},
+ {g:'สลิง',       items:['มุ้งจีบมีรางธรรมดาสลิงบานเดี่ยว','มุ้งจีบมีรางธรรมดาสลิงบานคู่','มุ้งจีบมีรางธรรมดาสลิงบานอิสระ','มุ้งจีบมีรางธรรมดาสลิงบานอิสระ 4 มือจับ','มุ้งจีบมีรางธรรมดาสลิงบานอิสระ 6 มือจับ','มุ้งจีบมีรางธรรมดาสลิงแยกกลางไม่เท่ากัน']},
+ {g:'รางเตี้ย',   items:['มุ้งจีบรางเตี้ยบานเดี่ยวซ้าย','มุ้งจีบรางเตี้ยบานเดี่ยวขวา','มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ','มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ 4 มือจับ','มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ 6 มือจับ','มุ้งจีบรางเตี้ยบานคู่','มุ้งจีบรางเตี้ยแยกกลางไม่เท่ากัน']},
+ {g:'อื่นๆ (ไม่มีค่าตัด)', items:['มุ้งบานเปิด','มุ้งบานเปิดแยกกลาง','มุ้งบานเลื่อน','มุ้งบานเลื่อนแยกกลาง','มุ้งบานตาย']}
+];
+var pkpARROWS=['→','←','↑','↓','↔','↕'];
+
+// ── STATE ──
+var pkpItems=[];
+var pkpEditingWO=null;   // null = ใบใหม่ / 'WO-xxxx' = กำลังแก้
+var pkpLoadedStatus='';
+
+function pkpToday(){ return new Date().toISOString().slice(0,10); }
+function pkpBlankItem(){ return { type:'', patt:'→', w:'', h:'', wl:'', wr:'', cAlu:'', cMesh:'' }; }
+
+// ── INIT (เรียกจาก setTab) ──
+function pkpInit(){
+  if(!pkpItems.length){ pkpNew(true); }
+  else { pkpRenderRows(); }
+  // default วันที่ออก = วันนี้ (ถ้ายังว่าง)
+  var iss=document.getElementById('pkpIssue'); if(iss && !iss.value){ iss.value=pkpToday(); }
+  // default เดือนที่ list = เดือนนี้
+  var mEl=document.getElementById('pkpListMonth'); if(mEl && !mEl.value){ mEl.value=pkpToday().slice(0,7); }
+  if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
+  pkpLoadList();
+}
+
+// ── ใบใหม่ (reset) ──
+function pkpNew(skipRender){
+  pkpEditingWO=null; pkpLoadedStatus='';
+  pkpItems=[pkpBlankItem(),pkpBlankItem(),pkpBlankItem()];
+  ['pkpCust','pkpRef','pkpNote','pkpMainAlu','pkpMainMesh'].forEach(function(id){var e=document.getElementById(id); if(e)e.value='';});
+  var iss=document.getElementById('pkpIssue'); if(iss)iss.value=pkpToday();
+  var ins=document.getElementById('pkpInstall'); if(ins)ins.value='';
+  var woEl=document.getElementById('pkpWoLabel'); if(woEl)woEl.textContent='(ใบใหม่ — เลขออกตอนบันทึก)';
+  var sv=document.getElementById('pkpSaveBtn'); if(sv)sv.textContent='💾 บันทึกใบผลิต';
+  if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
+  if(!skipRender) pkpRenderRows();
+}
+
+// ── items CRUD ──
+function pkpAddItem(){ pkpItems.push(pkpBlankItem()); pkpRenderRows(); }
+function pkpDelItem(i){ pkpItems.splice(i,1); if(!pkpItems.length)pkpItems.push(pkpBlankItem()); pkpRenderRows(); }
+function pkpOnType(i,val){ pkpItems[i].type=val; pkpRenderRows(); }            // เปลี่ยนประเภท → re-render (สลับช่องกว้าง/ซ้าย-ขวา)
+function pkpOnPatt(i){ var a=pkpItems[i]; var idx=pkpARROWS.indexOf(a.patt); a.patt=pkpARROWS[(idx+1)%pkpARROWS.length]; var el=document.getElementById('pkpPatt'+i); if(el)el.textContent=a.patt; }
+function pkpOnField(i,field,val){ pkpItems[i][field]=val; pkpRecalc(i); }       // ตัวเลข → คำนวณเฉพาะแถว (ไม่ re-render = ไม่เสีย focus)
+
+// ── render การ์ดทุกรายการ ──
+function pkpRenderRows(){
+  var wrap=document.getElementById('pkpItemsWrap'); if(!wrap) return;
+  var html='';
+  pkpItems.forEach(function(it,i){
+    var sp=pkpIsSplit(it.type);
+    // ตัวเลือกประเภท (grouped)
+    var opts='<option value="">— เลือกประเภท —</option>';
+    pkpTYPES.forEach(function(grp){ opts+='<optgroup label="'+grp.g+'">'; grp.items.forEach(function(t){ opts+='<option value="'+t+'"'+(it.type===t?' selected':'')+'>'+t+'</option>'; }); opts+='</optgroup>'; });
+    // ช่องขนาด
+    var dims = sp
+      ? '<div class="fg" style="width:78px"><label class="fl">ซ้าย(ซม.)</label><input class="fi" type="number" step="0.1" value="'+(it.wl||'')+'" oninput="pkpOnField('+i+',\'wl\',this.value)"></div>'
+       +'<div class="fg" style="width:78px"><label class="fl">ขวา(ซม.)</label><input class="fi" type="number" step="0.1" value="'+(it.wr||'')+'" oninput="pkpOnField('+i+',\'wr\',this.value)"></div>'
+       +'<div class="fg" style="width:78px"><label class="fl">สูง(ซม.)</label><input class="fi" type="number" step="0.1" value="'+(it.h||'')+'" oninput="pkpOnField('+i+',\'h\',this.value)"></div>'
+      : '<div class="fg" style="width:90px"><label class="fl">กว้าง(ซม.)</label><input class="fi" type="number" step="0.1" value="'+(it.w||'')+'" oninput="pkpOnField('+i+',\'w\',this.value)"></div>'
+       +'<div class="fg" style="width:90px"><label class="fl">สูง(ซม.)</label><input class="fi" type="number" step="0.1" value="'+(it.h||'')+'" oninput="pkpOnField('+i+',\'h\',this.value)"></div>';
+    html+='<div class="pkp-card" style="border:1px solid var(--line,#2a3344);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--surf,#171d27);">'
+      +'<div class="row-form" style="align-items:flex-end;gap:8px;margin-bottom:8px;">'
+        +'<div style="font-weight:700;color:var(--acc,#f5a623);min-width:24px;">'+(i+1)+'.</div>'
+        +'<div class="fg" style="flex:1;min-width:200px;"><label class="fl">รายการ</label><select class="fi" onchange="pkpOnType('+i+',this.value)">'+opts+'</select></div>'
+        +'<div class="fg" style="width:54px"><label class="fl">แบบ</label><button type="button" class="btn btn-g" id="pkpPatt'+i+'" onclick="pkpOnPatt('+i+')" style="width:100%;font-size:18px;padding:6px 0;">'+(it.patt||'→')+'</button></div>'
+        +'<button type="button" class="btn btn-g" onclick="pkpDelItem('+i+')" title="ลบ" style="color:var(--rd,#ff453a);">✕</button>'
+      +'</div>'
+      +'<div class="row-form" style="gap:8px;margin-bottom:8px;">'+dims
+        +'<div class="fg" style="width:120px"><label class="fl">สีอลู (ว่าง=ตามหลัก)</label><input class="fi" type="text" value="'+(it.cAlu||'')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cAlu\',this.value)"></div>'
+        +'<div class="fg" style="width:120px"><label class="fl">สีผ้ามุ้ง (ว่าง=ตามหลัก)</label><input class="fi" type="text" value="'+(it.cMesh||'')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cMesh\',this.value)"></div>'
+      +'</div>'
+      +'<div id="pkpCalc'+i+'" style="font-size:12px;color:var(--mu,#6b7a94);line-height:1.7;border-top:1px dashed var(--line,#2a3344);padding-top:7px;"></div>'
+    +'</div>';
+  });
+  wrap.innerHTML=html;
+  pkpItems.forEach(function(_,i){ pkpRecalc(i); });
+}
+
+// ── คำนวณ + แสดงสรุปต่อแถว ──
+function pkpRecalc(i){
+  var el=document.getElementById('pkpCalc'+i); if(!el) return;
+  var it=pkpItems[i];
+  if(!it.type){ el.innerHTML='<span style="color:var(--mu,#6b7a94)">เลือกประเภทเพื่อคำนวณ</span>'; return; }
+  var c=pkpCalcItem(it), f=c.fields||{};
+  if(!c.calculable){ el.innerHTML='<span style="color:var(--mu,#6b7a94)">— ประเภทนี้ไม่มีค่าตัด หรือยังกรอกขนาดไม่ครบ —</span>'; return; }
+  var V=pkpFmt;
+  if(c.kind==='split'){
+    el.innerHTML='อลู: มือจับ <b>'+V(f.maajab)+'</b> · รางข้าง <b>'+V(f.rangkang)+'</b> · รางบน-ล่าง <b>'+V(f.rangbl)+'</b> · รางเตี้ย <b>'+V(f.rangtia)+'</b> · สลิง <b>'+V(f.cutSling)+'</b>×'+V(f.nSling)+' · PVC <b>'+V(f.pvc)+'</b>×'+f.pvcCount
+      +'<br>ซ้าย: มุ้ง <b>'+V(f.cutScreen)+'</b> จีบ <b>'+f.jeebL+'</b> เชือก <b>'+V(f.cutRopeL)+'</b>×'+V(f.nRope)+' เส้น'
+      +' &nbsp;|&nbsp; ขวา: มุ้ง <b>'+V(f.cutScreen)+'</b> จีบ <b>'+f.jeebR+'</b> เชือก <b>'+V(f.cutRopeR)+'</b>×'+V(f.nRope)+' เส้น';
+  } else {
+    el.innerHTML='มือจับ <b>'+V(f.maajab)+'</b> · รางข้าง <b>'+V(f.rangkang)+'</b> · รางบน-ล่าง <b>'+V(f.rangbl)+'</b> · รางเตี้ย <b>'+V(f.rangtia)+'</b>'
+      +' · มุ้ง <b>'+V(f.cutScreen)+'</b> จีบ <b>'+f.jeeb+'</b> · เชือก <b>'+V(f.cutRope)+'</b>×'+V(f.nRope)+' เส้น'
+      +' · สลิง <b>'+V(f.cutSling)+'</b>×'+V(f.nSling)+' · PVC <b>'+V(f.pvc)+'</b>×'+f.pvcCount+' · เจาะรู <b>'+V(f.holePitch)+'</b>';
+  }
+}
+
+// ── build payload ส่ง backend ──
+function pkpBody(){
+  return {
+    customer:{ name:(document.getElementById('pkpCust')||{}).value||'' },
+    issueDate:(document.getElementById('pkpIssue')||{}).value||'',
+    installDate:(document.getElementById('pkpInstall')||{}).value||'',
+    refNo:(document.getElementById('pkpRef')||{}).value||'',
+    note:(document.getElementById('pkpNote')||{}).value||'',
+    mainColorAlu:(document.getElementById('pkpMainAlu')||{}).value||'',
+    mainColorMesh:(document.getElementById('pkpMainMesh')||{}).value||'',
+    items: pkpItems.filter(function(it){return it.type;}).map(function(it){return {
+      type:it.type, patt:it.patt||'',
+      w:it.w, h:it.h, wl:it.wl, wr:it.wr,
+      cAlu:it.cAlu, cMesh:it.cMesh
+    };})
+  };
+}
+function pkpValidate(b){
+  if(!b.customer.name.trim()) return 'กรอกชื่อลูกค้า';
+  if(!b.items.length) return 'ต้องมีอย่างน้อย 1 รายการที่เลือกประเภท';
+  return null;
+}
+
+// ── บันทึก (create / update) ──
+async function pkpSave(){
+  var b=pkpBody(); var err=pkpValidate(b);
+  if(err){ toast('⚠️ '+err); return; }
+  var sv=document.getElementById('pkpSaveBtn'); if(sv){sv.disabled=true;sv.textContent='กำลังบันทึก...';}
+  try{
+    var r;
+    if(pkpEditingWO){ b.woId=pkpEditingWO; if(pkpLoadedStatus)b.status=pkpLoadedStatus; r=await call({ action:'pk_prodUpdate', ...b }); }
+    else { r=await call({ action:'pk_prodCreate', ...b }); }
+    if(!r.ok){ toast('❌ '+(r.error||'บันทึกไม่สำเร็จ')); return; }
+    pkpEditingWO=r.woId;
+    var woEl=document.getElementById('pkpWoLabel'); if(woEl)woEl.textContent=r.woId;
+    if(sv)sv.textContent='💾 บันทึกใบผลิต';
+    toast('✅ บันทึกแล้ว — '+r.woId);
+    pkpLoadList();
+  }catch(e){ toast('❌ เชื่อมต่อไม่ได้'); }
+  finally{ if(sv){sv.disabled=false; if(sv.textContent==='กำลังบันทึก...')sv.textContent='💾 บันทึกใบผลิต';} }
+}
+
+// ── รายการเดือน ──
+async function pkpLoadList(){
+  var wrap=document.getElementById('pkpListWrap'); if(!wrap) return;
+  var month=(document.getElementById('pkpListMonth')||{}).value||'';
+  wrap.innerHTML='<div class="loading-row">กำลังโหลด...</div>';
+  try{
+    var r=await call({ action:'pk_prodList', month:month });
+    if(!r.ok){ wrap.innerHTML='<div class="loading-row">'+(r.error||'โหลดไม่สำเร็จ')+'</div>'; return; }
+    if(!r.orders.length){ wrap.innerHTML='<div class="loading-row">ยังไม่มีใบผลิตในเดือนนี้</div>'; return; }
+    var h='';
+    r.orders.forEach(function(o){
+      h+='<div class="pkp-list-row" style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line,#2a3344);border-radius:8px;margin-bottom:7px;background:var(--surf,#171d27);">'
+        +'<div style="flex:1;min-width:0;"><div style="font-weight:700;">'+o.woId+' · '+(o.customerName||'-')+'</div>'
+        +'<div style="font-size:12px;color:var(--mu,#6b7a94);">ออก '+(o.issueDate||'-')+' · ติดตั้ง '+(o.installDate||'-')+' · '+o.itemCount+' รายการ · '+(o.status||'-')+'</div></div>'
+        +'<button class="btn btn-g btn-sm" onclick="pkpOpen(\''+o.woId+'\')">เปิด/แก้</button>'
+        +'<button class="btn btn-g btn-sm" onclick="pkpDelete(\''+o.woId+'\')" style="color:var(--rd,#ff453a);">ลบ</button>'
+      +'</div>';
+    });
+    wrap.innerHTML=h;
+  }catch(e){ wrap.innerHTML='<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
+}
+
+// ── เปิดใบมาแก้ ──
+async function pkpOpen(woId){
+  try{
+    var r=await call({ action:'pk_prodGet', woId:woId });
+    if(!r.ok){ toast('❌ '+(r.error||'เปิดไม่ได้')); return; }
+    var o=r.order;
+    pkpEditingWO=o.woId; pkpLoadedStatus=o.status||'';
+    var set=function(id,v){var e=document.getElementById(id); if(e)e.value=v||'';};
+    set('pkpCust',(o.customer&&o.customer.name)||''); set('pkpIssue',o.issueDate); set('pkpInstall',o.installDate);
+    set('pkpRef',o.refNo); set('pkpNote',o.note); set('pkpMainAlu',o.mainColorAlu); set('pkpMainMesh',o.mainColorMesh);
+    pkpItems=(o.items&&o.items.length?o.items:[pkpBlankItem()]).map(function(it){return {
+      type:it.type||'', patt:it.patt||'→', w:it.w||'', h:it.h||'', wl:it.wl||'', wr:it.wr||'', cAlu:it.cAlu||'', cMesh:it.cMesh||''
+    };});
+    var woEl=document.getElementById('pkpWoLabel'); if(woEl)woEl.textContent=o.woId+(o.status?' · '+o.status:'');
+    var sv=document.getElementById('pkpSaveBtn'); if(sv)sv.textContent='💾 บันทึกการแก้ไข';
+    pkpRenderRows();
+    if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
+    if(window.scrollTo)window.scrollTo(0,0);
+    toast('เปิด '+o.woId+' แล้ว');
+  }catch(e){ toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// ── ลบ (soft) ──
+async function pkpDelete(woId){
+  if(!confirm('ลบใบผลิต '+woId+' ?\n(ลบแบบกู้คืนได้ — ข้อมูลไม่หายถาวร)')) return;
+  try{
+    var r=await call({ action:'pk_prodDelete', woId:woId });
+    if(!r.ok){ toast('❌ '+(r.error||'ลบไม่สำเร็จ')); return; }
+    toast('ลบแล้ว '+woId);
+    if(pkpEditingWO===woId) pkpNew();
+    pkpLoadList();
+  }catch(e){ toast('❌ เชื่อมต่อไม่ได้'); }
+}
 </script>
 </body>
 </html>
