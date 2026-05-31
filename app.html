@@ -1150,6 +1150,25 @@ function renderOfficeShell(){
               <div class="cal-grid" id="expWageCalGrid"></div>
               <div style="text-align:center;margin-top:8px;font-size:13px;color:var(--mu);">เลือก <b id="expWageDays" style="color:var(--acc);">0</b> วัน × <span id="expWageRate">฿0</span> = <b id="expWageCalc" style="color:var(--acc);">฿0</b></div>
             </div>
+            <div class="fg" id="expWageSalaryWrap" style="display:none;">
+              <label class="fl">งวดเงินเดือน</label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input class="fi" type="date" id="expSalFrom">
+                <input class="fi" type="date" id="expSalTo">
+                <button type="button" class="btn btn-g" style="white-space:nowrap;padding:10px 14px;" onclick="expWageCalcSalary()">คำนวณ</button>
+              </div>
+              <div id="expSalResult" style="display:none;margin-top:12px;">
+                <div class="exp-dt-row"><span class="k">เงินเดือนฐาน</span><span class="v" id="salBase">฿0</span></div>
+                <div class="exp-dt-row"><span class="k" id="salAbsentLbl">หักขาด/ลา</span><span class="v" style="color:var(--rd);" id="salAbsent">−฿0</span></div>
+                <div class="exp-dt-row"><span class="k">หักเบิกล่วงหน้า</span><span class="v" style="color:var(--rd);" id="salAdvance">−฿0</span></div>
+                <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;margin:12px 0 6px;">รายการเพิ่มเติม</div>
+                <div id="salLiList"></div>
+                <button type="button" class="btn btn-g" style="width:100%;font-size:12px;padding:7px;" onclick="expSalAddLi()">+ เพิ่มรายการ (โบนัส/หัก)</button>
+                <div class="exp-bank-box" style="margin-top:12px;background:rgba(52,199,89,.07);border-color:rgba(52,199,89,.25);">
+                  <div class="exp-dt-row" style="border:none;padding:2px 0;"><span class="k">เงินเดือนสุทธิ</span><span class="v" style="font-size:18px;color:var(--grn);" id="salNet">฿0</span></div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="fg" id="expSubTypeWrap">
@@ -1567,6 +1586,7 @@ function expWageReset(){
   document.getElementById('expWageEmpBox').style.display = 'none';
   document.getElementById('expWageTypeWrap').style.display = 'none';
   document.getElementById('expWageCalWrap').style.display = 'none';
+  document.getElementById('expWageSalaryWrap').style.display = 'none';
   document.getElementById('expSubType').value = '';
   document.getElementById('expPayee').value = '';
   document.getElementById('expPayeeBank').value = '';
@@ -1602,6 +1622,7 @@ function expWageSelEmp(){
   document.getElementById('expPayeeAccount').value = _wageEmp.account || '';
   document.getElementById('expSubType').value = '';
   document.getElementById('expWageCalWrap').style.display = 'none';
+  document.getElementById('expWageSalaryWrap').style.display = 'none';
   expWageRenderTypes();
 }
 
@@ -1641,6 +1662,15 @@ function expWageSelType(t, btn){
   const isDaily = (t === 'ค่าแรงรายวัน');
   document.getElementById('expWageCalWrap').style.display = isDaily ? '' : 'none';
   if (isDaily){ _wageSelDays = {}; expWageRenderCal(); }
+  const isSalary = (t === 'เงินเดือน');
+  document.getElementById('expWageSalaryWrap').style.display = isSalary ? '' : 'none';
+  if (isSalary){
+    _salData = null;
+    document.getElementById('expSalResult').style.display = 'none';
+    const now = new Date(), y = now.getFullYear(), m = now.getMonth();
+    document.getElementById('expSalFrom').value = new Date(y,m,1).toISOString().slice(0,10);
+    document.getElementById('expSalTo').value = new Date(y,m+1,0).toISOString().slice(0,10);
+  }
 }
 
 function expWageCalMove(d){ _wageCalDate.setMonth(_wageCalDate.getMonth()+d); expWageRenderCal(); }
@@ -1666,6 +1696,64 @@ function expWageCalc(){
   document.getElementById('expWageRate').textContent = '฿' + rate.toLocaleString();
   document.getElementById('expWageCalc').textContent = '฿' + total.toLocaleString();
   document.getElementById('expAmount').value = total;
+}
+
+// ── เงินเดือน: คำนวณจากฐาน − ขาด/ลา − เบิกล่วงหน้า + line items ──
+let _salData = null, _salLiId = 0;
+async function expWageCalcSalary(){
+  if (!_wageEmp){ toast('เลือกพนักงาน'); return; }
+  const from = document.getElementById('expSalFrom').value, to = document.getElementById('expSalTo').value;
+  if (!from || !to){ toast('ระบุงวด (จาก–ถึง)'); return; }
+  showLoad('คำนวณเงินเดือน...');
+  try {
+    const r = await call({ action:'pk_payCalcSalary', empId:_wageEmp.id, from:from, to:to });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'คำนวณไม่ได้')); return; }
+    _salData = r;
+    document.getElementById('salBase').textContent = '฿' + r.base.toLocaleString();
+    document.getElementById('salAbsentLbl').textContent = 'หักขาด/ลา (' + r.absentDays + ' วัน)';
+    document.getElementById('salAbsent').textContent = '−฿' + r.deductAbsent.toLocaleString();
+    document.getElementById('salAdvance').textContent = '−฿' + r.advanceTotal.toLocaleString();
+    document.getElementById('salLiList').innerHTML = '';
+    document.getElementById('expSalResult').style.display = '';
+    expSalRecalc();
+  } catch(e){ hideLoad(); }
+}
+function expSalAddLi(){
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:8px;';
+  div.innerHTML =
+    '<button type="button" class="wt minus" style="width:36px;flex:0 0 auto;padding:8px 0;" onclick="this.classList.toggle(\'minus\');this.textContent=this.classList.contains(\'minus\')?\'−\':\'+\';expSalRecalc();">−</button>' +
+    '<input class="fi" style="flex:1;" placeholder="ชื่อรายการ">' +
+    '<input class="fi" type="number" inputmode="numeric" style="width:88px;text-align:right;" placeholder="0" oninput="expSalRecalc()">' +
+    '<button type="button" style="background:none;border:none;color:var(--mu);cursor:pointer;font-size:16px;flex:0 0 auto;" onclick="this.parentNode.remove();expSalRecalc();">✕</button>';
+  document.getElementById('salLiList').appendChild(div);
+}
+function expSalRecalc(){
+  if (!_salData) return;
+  let itemsSum = 0; const notes = [];
+  document.querySelectorAll('#salLiList > div').forEach(row => {
+    const minus = row.querySelector('.wt').classList.contains('minus');
+    const ins = row.querySelectorAll('input');
+    const name = ins[0].value.trim();
+    const v = parseFloat(ins[1].value) || 0;
+    if (v){ itemsSum += minus ? -v : v; if (name) notes.push((minus?'−':'+') + name + ' ' + v); }
+  });
+  const net = _salData.netBeforeItems + itemsSum;
+  document.getElementById('salNet').textContent = '฿' + net.toLocaleString();
+  // เขียน backing fields (submit เดิมอ่านต่อ)
+  document.getElementById('expAmount').value = net;
+  document.getElementById('expPayee').value = _salData.employee.name;
+  document.getElementById('expPayeeBank').value = _salData.employee.bank || '';
+  document.getElementById('expPayeeAccount').value = _salData.employee.account || '';
+  const from = document.getElementById('expSalFrom').value, to = document.getElementById('expSalTo').value;
+  const dt = document.getElementById('expDetail');
+  dt.value = 'เงินเดือน ' + _salData.employee.name + ' (' + from + ' ถึง ' + to + ')';
+  dt.dataset.auto = '1';
+  const np = [];
+  if (_salData.absentDays) np.push('หักขาด/ลา ' + _salData.absentDays + 'วัน');
+  if (_salData.advanceTotal) np.push('หักล่วงหน้า ' + _salData.advanceTotal);
+  document.getElementById('expNote').value = np.concat(notes).join(', ');
 }
 
 async function expenseSubmit(){
