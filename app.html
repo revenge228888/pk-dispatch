@@ -866,6 +866,7 @@ function renderOfficeShell(){
           <div class="sidebar-divider"></div>
           <button class="sidebar-item" data-tab="expensesubmit" onclick="setTab('expensesubmit',this)"><span class="sidebar-ico">💸</span><span class="sidebar-label">ตั้งเบิก</span></button>
           <button class="sidebar-item" data-tab="expensemy" onclick="setTab('expensemy',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">เบิกของฉัน</span><span id="expMyBadge" class="exp-badge"></span></button>
+          <button class="sidebar-item" data-tab="timelog" onclick="setTab('timelog',this)"><span class="sidebar-ico">📅</span><span class="sidebar-label">บันทึกเวลา</span></button>
           ${CURRENT_USER.role === 'manager' ? `<div class="sidebar-divider"></div>
           <button class="sidebar-item" data-tab="expenseapprove" onclick="setTab('expenseapprove',this)"><span class="sidebar-ico">✅</span><span class="sidebar-label">อนุมัติเบิก</span><span id="expApproveBadge" class="exp-badge"></span></button>
           <button class="sidebar-item" data-tab="salesreport" onclick="setTab('salesreport',this)"><span class="sidebar-ico">📊</span><span class="sidebar-label">รายงานเซลล์</span></button>
@@ -1246,6 +1247,53 @@ function renderOfficeShell(){
             <button class="btn btn-p" style="padding:7px 14px;font-size:13px;" onclick="employeeOpen()">+ เพิ่ม</button>
           </div>
           <div id="empRegList"><div class="loading-row">กำลังโหลด...</div></div>
+        </div>
+      </div>
+
+      <!-- บันทึกเวลา (office + manager) -->
+      <div id="tabTimelog" style="display:none;">
+        <div class="section-pad">
+          <div style="font-weight:700;font-size:15px;margin-bottom:14px;">📅 บันทึกเวลา (ลา/ขาด/สาย)</div>
+          <div class="fg">
+            <label class="fl">พนักงาน</label>
+            <select class="fi" id="tlEmp" onchange="timelogSelEmp()"><option value="">— เลือกพนักงาน —</option></select>
+          </div>
+          <div id="tlQuota" style="display:none;background:var(--surf2);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--mu);"></div>
+          <div class="fg">
+            <label class="fl">วันที่</label>
+            <input class="fi" id="tlDate" type="date" oninput="updateDateDisplay(this)">
+          </div>
+          <div class="fg">
+            <label class="fl">ประเภท</label>
+            <div class="wt-grid" id="tlTypeBtns" style="grid-template-columns:repeat(4,1fr);">
+              <button type="button" class="wt" onclick="timelogSelType('ขาด',this)">ขาด</button>
+              <button type="button" class="wt" onclick="timelogSelType('ลาป่วย',this)">ลาป่วย</button>
+              <button type="button" class="wt" onclick="timelogSelType('ลากิจ',this)">ลากิจ</button>
+              <button type="button" class="wt" onclick="timelogSelType('มาสาย',this)">มาสาย</button>
+            </div>
+          </div>
+          <div class="fg" id="tlLateWrap" style="display:none;">
+            <label class="fl">นาทีที่สาย</label>
+            <input class="fi" id="tlLateMin" type="number" inputmode="numeric" min="0" placeholder="0">
+          </div>
+          <div class="fg" style="display:flex;align-items:center;justify-content:space-between;background:var(--surf2);padding:11px 14px;border-radius:8px;">
+            <span style="font-size:13px;">หักเงินรายการนี้?</span>
+            <button type="button" class="wt minus" id="tlDeduct" style="flex:0 0 auto;padding:8px 18px;" onclick="timelogToggleDeduct()">✗ ไม่หัก</button>
+          </div>
+          <div class="fg">
+            <label class="fl">หมายเหตุ</label>
+            <input class="fi" id="tlNote" type="text" placeholder="(ไม่บังคับ)">
+          </div>
+          <input type="hidden" id="tlId">
+          <button class="btn btn-p" style="width:100%;margin-top:4px;" onclick="timelogSave()">💾 บันทึก</button>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 10px;">
+            <div style="font-weight:700;font-size:13px;">รายการล่าสุด</div>
+            <select class="fi" id="tlFilterEmp" onchange="timelogRender()" style="width:auto;padding:6px 10px;font-size:12px;">
+              <option value="">ทุกคน</option>
+            </select>
+          </div>
+          <div id="tlRecList"></div>
         </div>
       </div>
         </div>
@@ -1971,6 +2019,151 @@ async function employeeSave(){
   } catch(e){ hideLoad(); }
 }
 
+// ════════════════════════════════════════
+//  📅 บันทึกเวลา (office + manager — Payroll P2)
+// ════════════════════════════════════════
+let _tlRecords = [], _tlEmps = [], _tlType = '', _tlDeduct = false;
+
+async function timelogInit(){ timelogLoad(); }
+async function timelogLoad(){
+  const box = document.getElementById('tlRecList');
+  box.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  try {
+    const r = await call({ action:'pk_payListTimeLog' });
+    if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
+    _tlRecords = r.records || [];
+    _tlEmps = r.employees || [];
+    // เติม dropdown พนักงาน (ฟอร์ม + ฟิลเตอร์)
+    const opts = '<option value="">— เลือกพนักงาน —</option>' + _tlEmps.map(e => '<option value="' + e.id + '">' + e.name + '</option>').join('');
+    document.getElementById('tlEmp').innerHTML = opts;
+    document.getElementById('tlFilterEmp').innerHTML = '<option value="">ทุกคน</option>' + _tlEmps.map(e => '<option value="' + e.id + '">' + e.name + '</option>').join('');
+    timelogRender();
+  } catch(e){ box.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
+}
+
+function timelogSelEmp(){
+  const id = document.getElementById('tlEmp').value;
+  const box = document.getElementById('tlQuota');
+  const emp = _tlEmps.find(e => e.id === id);
+  if (!emp){ box.style.display = 'none'; return; }
+  // นับลาที่ "ไม่หัก" ปีนี้
+  const yr = new Date().getFullYear();
+  let sick = 0, per = 0;
+  _tlRecords.forEach(rec => {
+    if (rec.empId !== id || rec.deduct) return;
+    const y = rec.date ? new Date(rec.date).getFullYear() : 0;
+    if (y !== yr) return;
+    if (rec.type === 'ลาป่วย') sick++;
+    else if (rec.type === 'ลากิจ') per++;
+  });
+  box.innerHTML = 'โควตาปีนี้ (เฉพาะที่ไม่หัก) — ลาป่วย: <b style="color:var(--tx);">' + sick + '/' + (emp.quotaSick||0) +
+    '</b> · ลากิจ: <b style="color:var(--tx);">' + per + '/' + (emp.quotaPersonal||0) + '</b>';
+  box.style.display = '';
+}
+
+function timelogSelType(t, btn){
+  _tlType = t;
+  document.querySelectorAll('#tlTypeBtns .wt').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('tlLateWrap').style.display = (t === 'มาสาย') ? '' : 'none';
+  // ค่าเริ่มต้นหัก: ขาด=หัก · ลา/สาย=ไม่หัก (ปรับเองได้)
+  _tlDeduct = (t === 'ขาด');
+  timelogUpdateDeductBtn();
+}
+function timelogToggleDeduct(){ _tlDeduct = !_tlDeduct; timelogUpdateDeductBtn(); }
+function timelogUpdateDeductBtn(){
+  const b = document.getElementById('tlDeduct');
+  b.classList.toggle('on', _tlDeduct);
+  b.textContent = _tlDeduct ? '✓ หัก' : '✗ ไม่หัก';
+}
+
+async function timelogSave(){
+  const payload = {
+    action:'pk_paySaveTimeLog',
+    id: document.getElementById('tlId').value,
+    empId: document.getElementById('tlEmp').value,
+    date: document.getElementById('tlDate').value,
+    type: _tlType,
+    deduct: _tlDeduct,
+    lateMin: document.getElementById('tlLateMin').value,
+    note: document.getElementById('tlNote').value.trim()
+  };
+  if (!payload.empId){ toast('เลือกพนักงาน'); return; }
+  if (!payload.date){ toast('ระบุวันที่'); return; }
+  if (!payload.type){ toast('เลือกประเภท'); return; }
+  showLoad('บันทึก...');
+  try {
+    const r = await call(payload);
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'บันทึกไม่ได้')); return; }
+    toast('✅ บันทึกแล้ว ' + r.id);
+    timelogResetForm();
+    timelogLoad();
+  } catch(e){ hideLoad(); }
+}
+
+function timelogResetForm(){
+  document.getElementById('tlId').value = '';
+  document.getElementById('tlNote').value = '';
+  document.getElementById('tlLateMin').value = '';
+  document.getElementById('tlLateWrap').style.display = 'none';
+  _tlType = ''; _tlDeduct = false;
+  document.querySelectorAll('#tlTypeBtns .wt').forEach(b => b.classList.remove('on'));
+  timelogUpdateDeductBtn();
+}
+
+function timelogRender(){
+  const box = document.getElementById('tlRecList');
+  const filt = document.getElementById('tlFilterEmp').value;
+  let recs = _tlRecords;
+  if (filt) recs = recs.filter(r => r.empId === filt);
+  if (!recs.length){ box.innerHTML = '<div class="loading-row">ยังไม่มีบันทึก</div>'; return; }
+  const typeColor = { 'ขาด':'var(--rd)', 'ลาป่วย':'var(--grn)', 'ลากิจ':'var(--blu)', 'มาสาย':'var(--acc)' };
+  box.innerHTML = recs.map(rec => {
+    const d = rec.date ? new Date(rec.date).toLocaleDateString('th-TH') : '';
+    const c = typeColor[rec.type] || 'var(--mu)';
+    const tag = rec.type + (rec.type==='มาสาย' && rec.lateMin ? (' ' + rec.lateMin + ' นาที') : '') + ' · ' + (rec.deduct ? 'หัก' : 'ไม่หัก');
+    return '<div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
+      '<div style="min-width:0;"><div style="font-weight:600;font-size:13px;">' + rec.empName + ' · ' + d + '</div>' +
+      '<div style="font-size:11px;color:' + c + ';">' + tag + (rec.note ? (' · ' + rec.note) : '') + '</div></div>' +
+      '<div style="flex-shrink:0;display:flex;gap:6px;">' +
+      '<button class="btn btn-g" style="padding:5px 10px;font-size:12px;" onclick="timelogEdit(\'' + rec.id + '\')">แก้</button>' +
+      '<button class="btn" style="padding:5px 10px;font-size:12px;background:rgba(255,69,58,.12);color:var(--rd);" onclick="timelogDelete(\'' + rec.id + '\')">ลบ</button>' +
+      '</div></div>';
+  }).join('');
+}
+
+function timelogEdit(id){
+  const rec = _tlRecords.find(r => r.id === id);
+  if (!rec) return;
+  document.getElementById('tlId').value = rec.id;
+  document.getElementById('tlEmp').value = rec.empId;
+  document.getElementById('tlDate').value = rec.date ? rec.date.slice(0,10) : '';
+  document.getElementById('tlNote').value = rec.note || '';
+  document.getElementById('tlLateMin').value = rec.lateMin || '';
+  timelogSelEmp();
+  // set ประเภท
+  _tlType = rec.type;
+  document.querySelectorAll('#tlTypeBtns .wt').forEach(b => b.classList.toggle('on', b.textContent === rec.type));
+  document.getElementById('tlLateWrap').style.display = (rec.type === 'มาสาย') ? '' : 'none';
+  _tlDeduct = rec.deduct;
+  timelogUpdateDeductBtn();
+  window.scrollTo({ top:0, behavior:'smooth' });
+  toast('แก้ไขรายการ ' + id);
+}
+
+async function timelogDelete(id){
+  if (!confirm('ลบบันทึกนี้? (ลบถาวร)')) return;
+  showLoad('ลบ...');
+  try {
+    const r = await call({ action:'pk_payDeleteTimeLog', id: id });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'ลบไม่ได้')); return; }
+    toast('🗑 ลบแล้ว');
+    timelogLoad();
+  } catch(e){ hideLoad(); }
+}
+
 async function expenseDoApprove(id){
   if (!confirm('ยืนยันอนุมัติ ' + id + ' ?')) return;
   showLoad('อนุมัติ...');
@@ -2012,7 +2205,7 @@ async function expenseRejectConfirm(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -2037,6 +2230,7 @@ function setTab(t, btn){
   if (t === 'expensemy') expenseMyInit();
   if (t === 'expenseapprove') expenseApproveInit();
   if (t === 'employees') employeesInit();
+  if (t === 'timelog') timelogInit();
 }
 
 // ── Sidebar toggle ──
