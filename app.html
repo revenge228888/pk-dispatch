@@ -916,9 +916,10 @@ function renderOfficeShell(){
           </div>
           <div class="row-form" style="margin-bottom:10px;">
             <div class="fg" style="flex:1;min-width:160px;"><label class="fl">หมายเหตุ</label><input class="fi" id="pkpNote" type="text" placeholder="(ถ้ามี)"></div>
-            <div class="fg" style="width:150px;"><label class="fl">สีหลัก-อลู (ทั้งใบ)</label><input class="fi" id="pkpMainAlu" type="text" placeholder="เช่น อบขาว"></div>
-            <div class="fg" style="width:150px;"><label class="fl">สีหลัก-ผ้ามุ้ง (ทั้งใบ)</label><input class="fi" id="pkpMainMesh" type="text" placeholder="เช่น เทา"></div>
+            <div class="fg" style="width:150px;"><label class="fl">สีหลัก-อลู (ทั้งใบ)</label><input class="fi" id="pkpMainAlu" type="text" list="pkpColorList" placeholder="เลือก/พิมพ์เอง"></div>
+            <div class="fg" style="width:150px;"><label class="fl">สีหลัก-ผ้ามุ้ง (ทั้งใบ)</label><input class="fi" id="pkpMainMesh" type="text" list="pkpColorList" placeholder="เลือก/พิมพ์เอง"></div>
           </div>
+          <datalist id="pkpColorList"><option value="อบขาว"></option><option value="ดำ"></option><option value="NA"></option><option value="น้ำตาลแดง"></option><option value="น้ำตาลเข้ม"></option><option value="เทาเข้มซาฮาร่า"></option><option value="เทาเงินซาฮาร่า"></option><option value="ดำซาฮาร่า"></option><option value="ลายไม้สักแดง"></option><option value="ลายไม้สักทอง"></option></datalist>
           <div style="font-size:12px;color:var(--mu,#6b7a94);margin-bottom:8px;">รายการ (สีในแต่ละชุดเว้นว่าง = ใช้สีหลัก, กรอกทับได้เฉพาะชุด)</div>
           <div id="pkpItemsWrap"></div>
           <div class="row-form" style="margin-top:6px;">
@@ -6273,8 +6274,8 @@ function pkpRenderRows(){
         +'<button type="button" class="btn btn-g" onclick="pkpDelItem('+i+')" title="ลบ" style="color:var(--rd,#ff453a);">✕</button>'
       +'</div>'
       +'<div class="row-form" style="gap:8px;margin-bottom:8px;">'+dims
-        +'<div class="fg" style="width:120px"><label class="fl">สีอลู (ว่าง=ตามหลัก)</label><input class="fi" type="text" value="'+(it.cAlu||'')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cAlu\',this.value)"></div>'
-        +'<div class="fg" style="width:120px"><label class="fl">สีผ้ามุ้ง (ว่าง=ตามหลัก)</label><input class="fi" type="text" value="'+(it.cMesh||'')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cMesh\',this.value)"></div>'
+        +'<div class="fg" style="width:120px"><label class="fl">สีอลู (ว่าง=ตามหลัก)</label><input class="fi" type="text" list="pkpColorList" value="'+(it.cAlu||'')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cAlu\',this.value)"></div>'
+        +'<div class="fg" style="width:120px"><label class="fl">สีผ้ามุ้ง (ว่าง=ตามหลัก)</label><input class="fi" type="text" list="pkpColorList" value="'+(it.cMesh||'')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cMesh\',this.value)"></div>'
       +'</div>'
       +'<div id="pkpCalc'+i+'" style="font-size:12px;color:var(--mu,#6b7a94);line-height:1.7;border-top:1px dashed var(--line,#2a3344);padding-top:7px;"></div>'
     +'</div>';
