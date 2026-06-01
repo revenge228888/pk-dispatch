@@ -537,6 +537,19 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
   </div>
 </div>
 
+<div class="modal-bg" id="expBatchModal">
+  <div class="modal" style="padding:18px;">
+    <div style="font-weight:700;font-size:15px;margin-bottom:4px;">🧾 ยืนยันรวบจ่าย</div>
+    <div id="expBatchModalInfo" style="color:var(--mu);font-size:13px;margin-bottom:12px;"></div>
+    <label class="fl">แนบสลิปโอน (ใบเดียวต่อชุด · ไม่เกิน 5MB)</label>
+    <input class="fi" id="expBatchSlip" type="file" accept="image/*,application/pdf">
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn btn-g" style="flex:1;" onclick="document.getElementById('expBatchModal').classList.remove('on')">ยกเลิก</button>
+      <button class="btn btn-p" style="flex:1;" onclick="expenseBatchConfirm()">ยืนยันรวบจ่าย</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="expDetailModal" onclick="if(event.target===this)expenseDetailClose()">
   <div class="modal" style="padding:18px;">
     <div id="expDetailBody"></div>
@@ -1295,8 +1308,15 @@ function renderOfficeShell(){
               <option value="">📋 ทั้งหมด</option>
             </select>
             <button class="btn btn-g" onclick="expenseApproveLoad()">🔄</button>
+            <button class="btn btn-g" id="expBatchToggle" onclick="expenseBatchToggle()" style="display:none;white-space:nowrap;">🧾 รวบจ่าย</button>
           </div>
           <div id="expApproveList" class="exp-list"><div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div></div>
+          <div id="expBatchBar" style="display:none;position:sticky;bottom:8px;background:var(--surf2);border:1px solid var(--acc);border-radius:10px;padding:12px 14px;margin-top:12px;box-shadow:0 4px 16px rgba(0,0,0,.3);">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+              <div style="min-width:0;"><div style="font-size:13px;"><b id="expBatchCount">0</b> ใบ · <span id="expBatchPayee" style="color:var(--mu);">—</span></div><div style="font-size:17px;font-weight:700;color:var(--acc);">฿<span id="expBatchTotal">0</span></div></div>
+              <button class="btn btn-p" style="white-space:nowrap;" onclick="expenseBatchPayOpen()">รวบจ่าย →</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1896,14 +1916,111 @@ async function expenseApproveLoad(){
   box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div>';
   const fEl = document.getElementById('expApproveFilter');
   const sf = fEl ? fEl.value : 'รออนุมัติ';
+  // ปุ่มรวบจ่ายแสดงเฉพาะสถานะ "อนุมัติแล้ว"
+  const showBatch = (sf === 'อนุมัติแล้ว');
+  const tgl = document.getElementById('expBatchToggle');
+  if (tgl) tgl.style.display = showBatch ? '' : 'none';
+  if (!showBatch && _batchMode) expenseBatchExit();
   try {
     const r = await call({ action:'pk_expenseListAll', statusFilter: sf });
     if (!r.ok){ box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
     const items = r.items || [];
     _expCurrentList = items.slice();
     if (sf === 'รออนุมัติ') expenseSetBadge(items.length);
-    box.innerHTML = items.length ? items.map(expenseCardHtml).join('') : '<div class="loading-row" style="grid-column:1/-1;">ไม่มีรายการ</div>';
+    expenseApproveRender();
   } catch(e){ box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">เชื่อมต่อไม่ได้</div>'; }
+}
+
+function expenseApproveRender(){
+  const box = document.getElementById('expApproveList');
+  const items = _expCurrentList || [];
+  const fn = _batchMode ? expenseBatchCardHtml : expenseCardHtml;
+  box.innerHTML = items.length ? items.map(fn).join('') : '<div class="loading-row" style="grid-column:1/-1;">ไม่มีรายการ</div>';
+  if (_batchMode) expenseBatchUpdateBar();
+}
+
+// ════════ รวบจ่าย (ผู้รับเดียวกัน) ════════
+let _batchMode = false, _batchSel = [], _batchPayee = null;
+
+function expenseBatchToggle(){
+  _batchMode = !_batchMode;
+  _batchSel = []; _batchPayee = null;
+  document.getElementById('expBatchToggle').textContent = _batchMode ? '✕ ออกโหมด' : '🧾 รวบจ่าย';
+  document.getElementById('expBatchBar').style.display = _batchMode ? '' : 'none';
+  expenseApproveRender();
+}
+function expenseBatchExit(){
+  _batchMode = false; _batchSel = []; _batchPayee = null;
+  const t = document.getElementById('expBatchToggle'); if (t) t.textContent = '🧾 รวบจ่าย';
+  const b = document.getElementById('expBatchBar'); if (b) b.style.display = 'none';
+}
+
+function expenseBatchCardHtml(it){
+  const sel = _batchSel.indexOf(it.id) >= 0;
+  const payee = (it.payee||'').trim();
+  const locked = (_batchPayee !== null && payee !== _batchPayee && !sel);
+  const amt = (Number(it.amount)||0).toLocaleString('th-TH', { minimumFractionDigits:2 });
+  const d = it.date ? new Date(it.date).toLocaleDateString('th-TH') : '';
+  return '<div class="exp-card" style="' + (locked?'opacity:.4;':'') + (sel?'border-color:var(--acc);background:rgba(245,166,35,.06);':'') + '" onclick="' + (locked?'':'expenseBatchToggleItem(\'' + it.id + '\')') + '">' +
+    '<div style="display:flex;align-items:center;gap:10px;">' +
+    '<div style="width:22px;height:22px;border-radius:6px;border:2px solid ' + (sel?'var(--acc)':'var(--bdr)') + ';background:' + (sel?'var(--acc)':'transparent') + ';flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#000;font-weight:700;font-size:13px;">' + (sel?'✓':'') + '</div>' +
+    '<div style="flex:1;min-width:0;">' +
+    '<div style="font-weight:600;font-size:13px;">' + (payee||'(ไม่ระบุผู้รับ)') + (locked?' <span style="color:var(--rd);font-size:10px;">คนละผู้รับ</span>':'') + '</div>' +
+    '<div style="font-size:11px;color:var(--mu);">' + it.id + ' · ' + d + ' · ' + (it.subType||'') + '</div></div>' +
+    '<div style="font-weight:700;color:var(--acc);flex-shrink:0;">฿' + amt + '</div>' +
+    '</div></div>';
+}
+
+function expenseBatchToggleItem(id){
+  const it = (_expCurrentList||[]).find(x => x.id === id);
+  if (!it) return;
+  const payee = (it.payee||'').trim();
+  const i = _batchSel.indexOf(id);
+  if (i >= 0){ _batchSel.splice(i,1); if (_batchSel.length === 0) _batchPayee = null; }
+  else {
+    if (_batchPayee === null) _batchPayee = payee;
+    else if (payee !== _batchPayee){ toast('เลือกได้เฉพาะผู้รับเดียวกัน'); return; }
+    _batchSel.push(id);
+  }
+  expenseApproveRender();
+}
+
+function expenseBatchUpdateBar(){
+  let total = 0;
+  _batchSel.forEach(id => { const it = (_expCurrentList||[]).find(x => x.id === id); if (it) total += Number(it.amount)||0; });
+  document.getElementById('expBatchCount').textContent = _batchSel.length;
+  document.getElementById('expBatchPayee').textContent = _batchPayee || '—';
+  document.getElementById('expBatchTotal').textContent = total.toLocaleString('th-TH', { minimumFractionDigits:2 });
+}
+
+function expenseBatchPayOpen(){
+  if (_batchSel.length < 2){ toast('เลือกอย่างน้อย 2 ใบเพื่อรวบจ่าย'); return; }
+  let total = 0;
+  _batchSel.forEach(id => { const it = (_expCurrentList||[]).find(x => x.id === id); if (it) total += Number(it.amount)||0; });
+  document.getElementById('expBatchModalInfo').textContent = _batchSel.length + ' ใบ · ' + _batchPayee + ' · รวม ฿' + total.toLocaleString('th-TH',{minimumFractionDigits:2});
+  document.getElementById('expBatchSlip').value = '';
+  document.getElementById('expBatchModal').classList.add('on');
+}
+
+async function expenseBatchConfirm(){
+  let slipData = null;
+  const fEl = document.getElementById('expBatchSlip');
+  if (fEl && fEl.files && fEl.files[0]){
+    const file = fEl.files[0];
+    if (file.size > 5*1024*1024){ toast('ไฟล์ใหญ่เกิน 5MB'); return; }
+    showLoad('อัปโหลดสลิป...');
+    try { slipData = await _expFileToBase64(file); }
+    catch(e){ hideLoad(); toast('อ่านไฟล์ไม่ได้'); return; }
+  } else { showLoad('รวบจ่าย...'); }
+  try {
+    const r = await call({ action:'pk_expenseBatchPay', ids: _batchSel.slice(), slipData: slipData });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'ไม่สำเร็จ')); return; }
+    toast('✅ รวบจ่าย ' + r.count + ' ใบ (' + r.batchId + ')');
+    document.getElementById('expBatchModal').classList.remove('on');
+    expenseBatchExit();
+    expenseApproveLoad();
+  } catch(e){ hideLoad(); }
 }
 
 // reload หน้าที่กำลังเปิดอยู่
