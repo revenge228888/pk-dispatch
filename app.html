@@ -6469,7 +6469,7 @@ function pkpPrint(){
     sheets+='<div class="sheet">'+headHTML()+'<table>'+THEAD+'<tbody>'+body+'</tbody></table>'+signHTML
       +'<div class="foot"><span>PK Queue System · ใบผลิต</span><span>หน้า '+(pi+1)+'/'+pages.length+' · พิมพ์ '+thDate(new Date().toISOString().slice(0,10))+'</span></div></div>';
   });
-  var CSS=':root{--ink:#16202e;--mut:#6b7a90;--line:#c8d2df;--line2:#e7edf4;--acc:#e8821a;--slate:#1f2a37;--soft:#f4f7fb}'
+  var CSS=':root{--ink:#111a25;--mut:#4b5a6e;--line:#94a1b2;--line2:#d3dbe6;--acc:#d4760f;--slate:#1c2733;--soft:#eaf0f6}'
     +'*{box-sizing:border-box;margin:0;padding:0}body{background:#aab3c0;font-family:Sarabun,sans-serif;color:var(--ink);padding:20px;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
     +'.toolbar{max-width:283mm;margin:0 auto 12px;text-align:right}.toolbar button{border:none;border-radius:8px;padding:9px 18px;background:var(--acc);color:#fff;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer}.toolbar button+button{margin-left:8px}#pdfBtn{background:var(--slate)}'
     +'.sheet{width:283mm;min-height:196mm;margin:0 auto 22px;background:#fff;border-radius:5px;box-shadow:0 12px 40px rgba(0,0,0,.28);padding:6mm 7mm;display:flex;flex-direction:column}'
@@ -6477,8 +6477,8 @@ function pkpPrint(){
     +'.co{font-weight:800;font-size:15px}.doc{font-size:9.5px;color:var(--mut);letter-spacing:2.5px;font-weight:600;text-transform:uppercase}.head .sp{flex:1}'
     +'.wo{display:flex;align-items:baseline;gap:8px}.wo .lab{font-size:9.5px;color:var(--mut);letter-spacing:1.5px;font-weight:600;text-transform:uppercase}.wo .no{font-size:18px;font-weight:800;color:var(--slate)}.wo .stat{font-size:10px;font-weight:700;color:var(--acc);border:1px solid var(--acc);border-radius:14px;padding:1px 9px}'
     +'.info{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:6px;margin-top:8px;overflow:hidden}.f{padding:4px 11px;border-right:1px solid var(--line2);flex:1 1 auto}.f.w{flex:2 1 220px}.f:last-child{border-right:none}.f .k{font-size:9px;color:var(--mut);letter-spacing:.4px;font-weight:600;text-transform:uppercase}.f .v{font-size:13px;font-weight:600;line-height:1.25}'
-    +'table{width:100%;border-collapse:collapse;margin-top:9px;table-layout:fixed}th,td{border:.6px solid var(--line);text-align:center;font-size:10px;padding:1px 3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
-    +'thead th{background:var(--slate);color:#fff;font-weight:600;font-size:9px;padding:3px 2px;white-space:normal}tbody td{height:21px;vertical-align:middle}.nme{text-align:left;padding-left:5px;font-size:10px}'
+    +'table{width:100%;border-collapse:collapse;margin-top:9px;table-layout:fixed}th,td{border:.7px solid var(--line);text-align:center;font-size:11.5px;padding:1px 3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    +'thead th{background:var(--slate);color:#fff;font-weight:600;font-size:9.5px;padding:3px 2px;white-space:normal}tbody td{height:23px;vertical-align:middle}.nme{text-align:left;padding-left:5px;font-size:10px}'
     +'.grpstart td{border-top:1.4px solid var(--slate)}.sub .nme{color:var(--mut);padding-left:14px;font-style:italic}.b{font-weight:700}.arrow{color:var(--acc);font-weight:700;font-size:12px}'
     +'.noterow td{text-align:left;background:#fff7ec;color:#7a4a07;font-size:9.5px;padding:2px 8px;border-top:none;white-space:normal}.empty td{color:#cfd8e3}.spc td{border:none;padding:0;height:18px;background:transparent}'
     +'.colNo{width:24px}.colNm{width:192px}.colPt{width:26px}.colWH{width:48px}.colC{width:56px}.colPv{width:42px}.colHl{width:40px}'
