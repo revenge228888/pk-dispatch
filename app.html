@@ -935,6 +935,7 @@ function renderOfficeShell(){
             <div class="fg" style="width:150px;"><label class="fl">สีหลัก-ผ้ามุ้ง (ทั้งใบ)</label><input class="fi" id="pkpMainMesh" type="text" list="pkpColorList" placeholder="เลือก/พิมพ์เอง"></div>
           </div>
           <datalist id="pkpColorList"><option value="อบขาว"></option><option value="ดำ"></option><option value="NA"></option><option value="น้ำตาลแดง"></option><option value="น้ำตาลเข้ม"></option><option value="เทาเข้มซาฮาร่า"></option><option value="เทาเงินซาฮาร่า"></option><option value="ดำซาฮาร่า"></option><option value="ลายไม้สักแดง"></option><option value="ลายไม้สักทอง"></option></datalist>
+          <datalist id="pkpTypeList"></datalist>
           <div style="font-size:12px;color:var(--mu,#6b7a94);margin-bottom:8px;">รายการ (สีในแต่ละชุดเว้นว่าง = ใช้สีหลัก, กรอกทับได้เฉพาะชุด)</div>
           <div id="pkpItemsWrap"></div>
           <div id="pkpReqSummary" style="margin-top:10px;"></div>
@@ -6800,19 +6801,24 @@ function pkpNew(skipRender){
 // ── items CRUD ──
 function pkpAddItem(){ pkpItems.push(pkpBlankItem()); pkpRenderRows(); }
 function pkpDelItem(i){ pkpItems.splice(i,1); if(!pkpItems.length)pkpItems.push(pkpBlankItem()); pkpRenderRows(); }
-function pkpOnType(i,val){ pkpItems[i].type=val; pkpRenderRows(); }            // เปลี่ยนประเภท → re-render (สลับช่องกว้าง/ซ้าย-ขวา)
+function pkpAllTypes(){ var a=[]; pkpTYPES.forEach(function(g){ a=a.concat(g.items); }); return a; }
+function pkpValidType(v){ return pkpAllTypes().indexOf(v)>=0; }
+function pkpOnType(i,val){
+  val=(val||'').trim();
+  if(val && !pkpValidType(val)){ toast('"'+val+'" ไม่ตรงรายการชนิด — เลือกจากที่ระบบแนะนำ'); pkpRenderRows(); return; }  // บังคับให้ตรง dropdown
+  pkpItems[i].type=val; pkpRenderRows();
+}
 function pkpOnPatt(i){ var a=pkpItems[i]; var idx=pkpARROWS.indexOf(a.patt); a.patt=pkpARROWS[(idx+1)%pkpARROWS.length]; var el=document.getElementById('pkpPatt'+i); if(el)el.textContent=a.patt; }
 function pkpOnField(i,field,val){ pkpItems[i][field]=val; pkpRecalc(i); pkpRenderReqSummary(); }   // ตัวเลข → คำนวณเฉพาะแถว (ไม่ re-render = ไม่เสีย focus)
 
 // ── render การ์ดทุกรายการ ──
 function pkpRenderRows(){
   var wrap=document.getElementById('pkpItemsWrap'); if(!wrap) return;
+  var dl=document.getElementById('pkpTypeList');   // เติม datalist ชนิด (ครั้งเดียว)
+  if(dl && !dl.children.length){ dl.innerHTML=pkpAllTypes().map(function(t){return '<option value="'+t+'"></option>';}).join(''); }
   var html='';
   pkpItems.forEach(function(it,i){
     var sp=pkpIsSplit(it.type);
-    // ตัวเลือกประเภท (grouped)
-    var opts='<option value="">— เลือกประเภท —</option>';
-    pkpTYPES.forEach(function(grp){ opts+='<optgroup label="'+grp.g+'">'; grp.items.forEach(function(t){ opts+='<option value="'+t+'"'+(it.type===t?' selected':'')+'>'+t+'</option>'; }); opts+='</optgroup>'; });
     // ช่องขนาด
     var dims = sp
       ? '<div class="fg" style="width:78px"><label class="fl">ซ้าย(ซม.)</label><input class="fi" type="number" step="0.1" value="'+(it.wl||'')+'" oninput="pkpOnField('+i+',\'wl\',this.value)"></div>'
@@ -6823,7 +6829,7 @@ function pkpRenderRows(){
     html+='<div class="pkp-card" style="border:1px solid var(--line,#2a3344);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--surf,#171d27);">'
       +'<div class="row-form" style="align-items:flex-end;gap:8px;margin-bottom:8px;">'
         +'<div style="font-weight:700;color:var(--acc,#f5a623);min-width:24px;">'+(i+1)+'.</div>'
-        +'<div class="fg" style="flex:1;min-width:200px;"><label class="fl">รายการ</label><select class="fi" onchange="pkpOnType('+i+',this.value)">'+opts+'</select></div>'
+        +'<div class="fg" style="flex:1;min-width:200px;"><label class="fl">รายการ</label><input class="fi" list="pkpTypeList" value="'+(it.type||'').replace(/"/g,'&quot;')+'" placeholder="พิมพ์ค้น/เลือกชนิด" onchange="pkpOnType('+i+',this.value)"></div>'
         +'<div class="fg" style="width:54px"><label class="fl">แบบ</label><button type="button" class="btn btn-g" id="pkpPatt'+i+'" onclick="pkpOnPatt('+i+')" style="width:100%;font-size:18px;padding:6px 0;">'+(it.patt||'→')+'</button></div>'
         +'<button type="button" class="btn btn-g" onclick="pkpDelItem('+i+')" title="ลบ" style="color:var(--rd,#ff453a);">✕</button>'
       +'</div>'
