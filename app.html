@@ -6371,6 +6371,7 @@ async function pkpLoadList(){
 
 // ── เปิดใบมาแก้ ──
 async function pkpOpen(woId){
+  showLoad('กำลังเปิดใบผลิต...');
   try{
     var r=await call({ action:'pk_prodGet', woId:woId });
     if(!r.ok){ toast('❌ '+(r.error||'เปิดไม่ได้')); return; }
@@ -6389,6 +6390,7 @@ async function pkpOpen(woId){
     if(window.scrollTo)window.scrollTo(0,0);
     toast('เปิด '+o.woId+' แล้ว');
   }catch(e){ toast('❌ เชื่อมต่อไม่ได้'); }
+  finally{ hideLoad(); }
 }
 
 // ── ลบ (soft) ──
@@ -6458,10 +6460,12 @@ function pkpPrint(){
   };
   var signHTML='<div class="sign"><div class="sg"><div class="ln"></div><div class="rl">ผู้ตรวจสอบ</div><div class="dt">วันที่ ......./......./...........</div></div>'
     +'<div class="sg"><div class="ln"></div><div class="rl">ผู้อนุมัติ</div><div class="dt">วันที่ ......./......./...........</div></div></div>';
+  var SPACER='<tr class="spc"><td colspan="19"></td></tr>';
   var sheets='';
   pages.forEach(function(pg,pi){
-    var body=''; pg.forEach(function(rws){ body+=rws.join(''); });
-    for(var k=pg.length;k<PER;k++) body+=emptyRow((pi*PER)+k+1);
+    var blocks=pg.map(function(rws){ return rws.join(''); });
+    for(var k=pg.length;k<PER;k++) blocks.push(emptyRow((pi*PER)+k+1));
+    var body=blocks.join(SPACER);
     sheets+='<div class="sheet">'+headHTML()+'<table>'+THEAD+'<tbody>'+body+'</tbody></table>'+signHTML
       +'<div class="foot"><span>PK Queue System · ใบผลิต</span><span>หน้า '+(pi+1)+'/'+pages.length+' · พิมพ์ '+thDate(new Date().toISOString().slice(0,10))+'</span></div></div>';
   });
@@ -6476,7 +6480,7 @@ function pkpPrint(){
     +'table{width:100%;border-collapse:collapse;margin-top:9px;table-layout:fixed}th,td{border:.6px solid var(--line);text-align:center;font-size:10px;padding:1px 3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     +'thead th{background:var(--slate);color:#fff;font-weight:600;font-size:9px;padding:3px 2px;white-space:normal}tbody td{height:21px;vertical-align:middle}.nme{text-align:left;padding-left:5px;font-size:10px}'
     +'.grpstart td{border-top:1.4px solid var(--slate)}.sub .nme{color:var(--mut);padding-left:14px;font-style:italic}.b{font-weight:700}.arrow{color:var(--acc);font-weight:700;font-size:12px}'
-    +'.noterow td{text-align:left;background:#fff7ec;color:#7a4a07;font-size:9.5px;padding:2px 8px;border-top:none;white-space:normal}.empty td{color:#cfd8e3}'
+    +'.noterow td{text-align:left;background:#fff7ec;color:#7a4a07;font-size:9.5px;padding:2px 8px;border-top:none;white-space:normal}.empty td{color:#cfd8e3}.spc td{border:none;padding:0;height:18px;background:transparent}'
     +'.colNo{width:24px}.colNm{width:192px}.colPt{width:26px}.colWH{width:48px}.colC{width:56px}.colPv{width:42px}.colHl{width:40px}'
     +'.sign{display:grid;grid-template-columns:1fr 1fr;gap:50px;margin-top:auto;padding-top:14px}.sg{text-align:center}.sg .ln{border-bottom:1.4px dotted var(--ink);height:26px;margin:0 16px}.sg .rl{font-size:11.5px;font-weight:700;margin-top:5px}.sg .dt{font-size:10px;color:var(--mut);margin-top:1px}'
     +'.foot{display:flex;justify-content:space-between;margin-top:9px;padding-top:6px;border-top:1px solid var(--line2);font-size:9.5px;color:var(--mut)}'
