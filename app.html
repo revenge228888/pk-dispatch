@@ -6467,8 +6467,8 @@ function pkpPrint(){
   });
   var CSS=':root{--ink:#16202e;--mut:#6b7a90;--line:#c8d2df;--line2:#e7edf4;--acc:#e8821a;--slate:#1f2a37;--soft:#f4f7fb}'
     +'*{box-sizing:border-box;margin:0;padding:0}body{background:#aab3c0;font-family:Sarabun,sans-serif;color:var(--ink);padding:20px;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
-    +'.toolbar{max-width:1090px;margin:0 auto 12px;text-align:right}.toolbar button{border:none;border-radius:8px;padding:9px 18px;background:var(--acc);color:#fff;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer}'
-    +'.sheet{width:1090px;margin:0 auto 22px;background:#fff;border-radius:5px;box-shadow:0 12px 40px rgba(0,0,0,.28);padding:14px 16px 12px;display:flex;flex-direction:column}'
+    +'.toolbar{max-width:283mm;margin:0 auto 12px;text-align:right}.toolbar button{border:none;border-radius:8px;padding:9px 18px;background:var(--acc);color:#fff;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer}.toolbar button+button{margin-left:8px}#pdfBtn{background:var(--slate)}'
+    +'.sheet{width:283mm;min-height:196mm;margin:0 auto 22px;background:#fff;border-radius:5px;box-shadow:0 12px 40px rgba(0,0,0,.28);padding:6mm 7mm;display:flex;flex-direction:column}'
     +'.head{display:flex;align-items:center;gap:10px;border-bottom:2px solid var(--slate);padding-bottom:7px}.mark{width:24px;height:24px;border-radius:6px;background:var(--slate);color:var(--acc);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}'
     +'.co{font-weight:800;font-size:15px}.doc{font-size:9.5px;color:var(--mut);letter-spacing:2.5px;font-weight:600;text-transform:uppercase}.head .sp{flex:1}'
     +'.wo{display:flex;align-items:baseline;gap:8px}.wo .lab{font-size:9.5px;color:var(--mut);letter-spacing:1.5px;font-weight:600;text-transform:uppercase}.wo .no{font-size:18px;font-weight:800;color:var(--slate)}.wo .stat{font-size:10px;font-weight:700;color:var(--acc);border:1px solid var(--acc);border-radius:14px;padding:1px 9px}'
@@ -6478,16 +6478,20 @@ function pkpPrint(){
     +'.grpstart td{border-top:1.4px solid var(--slate)}.sub .nme{color:var(--mut);padding-left:14px;font-style:italic}.b{font-weight:700}.arrow{color:var(--acc);font-weight:700;font-size:12px}'
     +'.noterow td{text-align:left;background:#fff7ec;color:#7a4a07;font-size:9.5px;padding:2px 8px;border-top:none;white-space:normal}.empty td{color:#cfd8e3}'
     +'.colNo{width:24px}.colNm{width:192px}.colPt{width:26px}.colWH{width:48px}.colC{width:56px}.colPv{width:42px}.colHl{width:40px}'
-    +'.sign{display:grid;grid-template-columns:1fr 1fr;gap:50px;margin-top:14px}.sg{text-align:center}.sg .ln{border-bottom:1.4px dotted var(--ink);height:26px;margin:0 16px}.sg .rl{font-size:11.5px;font-weight:700;margin-top:5px}.sg .dt{font-size:10px;color:var(--mut);margin-top:1px}'
+    +'.sign{display:grid;grid-template-columns:1fr 1fr;gap:50px;margin-top:auto;padding-top:14px}.sg{text-align:center}.sg .ln{border-bottom:1.4px dotted var(--ink);height:26px;margin:0 16px}.sg .rl{font-size:11.5px;font-weight:700;margin-top:5px}.sg .dt{font-size:10px;color:var(--mut);margin-top:1px}'
     +'.foot{display:flex;justify-content:space-between;margin-top:9px;padding-top:6px;border-top:1px solid var(--line2);font-size:9.5px;color:var(--mut)}'
-    +'@media print{@page{size:A4 landscape;margin:7mm}body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;width:auto;margin:0;padding:0;page-break-after:always}.sheet:last-child{page-break-after:auto}}';
+    +'@media print{@page{size:A4 landscape;margin:7mm}body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;margin:0;page-break-after:always}.sheet:last-child{page-break-after:auto}}';
   var AUTOFIT='function fit(){var MIN=6.5;document.querySelectorAll("tbody td").forEach(function(td){if(td.closest(".noterow"))return;if(!td.textContent.trim())return;td.style.fontSize="";var fs=parseFloat(getComputedStyle(td).fontSize)||10,g=0;while(td.scrollWidth>td.clientWidth+0.5&&fs>MIN&&g<40){fs-=0.5;td.style.fontSize=fs+"px";g++;}});}if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit);}window.addEventListener("load",fit);setTimeout(fit,400);';
-  var doc='<!doctype html><html lang="th"><head><meta charset="utf-8"><title>ใบผลิต '+esc(o.woId)+'</title>'
+  var fn=('ใบผลิต '+((o.customer&&o.customer!=='-')?o.customer:'')).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim();
+  var SAVEPDF='function savePDF(){var b=document.getElementById("pdfBtn"),t=b.textContent;if(!window.jspdf||!window.html2canvas){alert("โหลดตัวสร้าง PDF ไม่ทัน ลองใหม่อีกครั้ง หรือใช้ปุ่มพิมพ์แล้วเลือก Save as PDF");return;}b.disabled=true;b.textContent="กำลังสร้าง PDF...";var sh=document.querySelectorAll(".sheet");var pdf=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:"a4"});(function nx(i){if(i>=sh.length){pdf.save(FN+".pdf");b.disabled=false;b.textContent=t;return;}window.html2canvas(sh[i],{scale:2,backgroundColor:"#ffffff"}).then(function(cv){var img=cv.toDataURL("image/jpeg",0.95);var pw=297,ph=210,m=4,iw=pw-2*m,ih=cv.height*(iw/cv.width);if(ih>ph-2*m)ih=ph-2*m;if(i>0)pdf.addPage();pdf.addImage(img,"JPEG",m,m,iw,ih);nx(i+1);}).catch(function(e){alert("สร้าง PDF ไม่ได้: "+e.message);b.disabled=false;b.textContent=t;});})(0);}';
+  var doc='<!doctype html><html lang="th"><head><meta charset="utf-8"><title>'+esc(fn)+'</title>'
     +'<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">'
+    +'<'+'script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><'+'/script>'
+    +'<'+'script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><'+'/script>'
     +'<style>'+CSS+'</style></head><body>'
-    +'<div class="toolbar"><button onclick="window.print()">🖨 พิมพ์ / บันทึก PDF</button></div>'
+    +'<div class="toolbar"><button onclick="window.print()">🖨 พิมพ์</button><button id="pdfBtn" onclick="savePDF()">📄 บันทึก PDF</button></div>'
     +sheets
-    +'<'+'script>'+AUTOFIT+'<'+'/script></body></html>';
+    +'<'+'script>var FN='+JSON.stringify(fn)+';'+AUTOFIT+SAVEPDF+'<'+'/script></body></html>';
   var w=window.open('','_blank');
   if(!w){ toast('⚠️ เบราว์เซอร์บล็อก popup — อนุญาตหน้าต่างใหม่ก่อน'); return; }
   w.document.open(); w.document.write(doc); w.document.close();
