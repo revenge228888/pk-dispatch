@@ -907,6 +907,7 @@ function renderOfficeShell(){
             <div style="font-weight:800;font-size:16px;">🏭 ใบผลิต</div>
             <div style="font-size:13px;color:var(--mu,#6b7a94);">เลขใบ: <b id="pkpWoLabel">(ใบใหม่ — เลขออกตอนบันทึก)</b></div>
             <button class="btn btn-g btn-sm" onclick="pkpPrint()" style="margin-left:auto;">🖨 พิมพ์</button>
+            <button class="btn btn-g btn-sm" onclick="pkpReqPrint()">📋 ใบเบิก</button>
             <button class="btn btn-g btn-sm" onclick="pkpNew()">+ ใบใหม่</button>
           </div>
           <div class="row-form" style="margin-bottom:10px;">
@@ -923,6 +924,7 @@ function renderOfficeShell(){
           <datalist id="pkpColorList"><option value="อบขาว"></option><option value="ดำ"></option><option value="NA"></option><option value="น้ำตาลแดง"></option><option value="น้ำตาลเข้ม"></option><option value="เทาเข้มซาฮาร่า"></option><option value="เทาเงินซาฮาร่า"></option><option value="ดำซาฮาร่า"></option><option value="ลายไม้สักแดง"></option><option value="ลายไม้สักทอง"></option></datalist>
           <div style="font-size:12px;color:var(--mu,#6b7a94);margin-bottom:8px;">รายการ (สีในแต่ละชุดเว้นว่าง = ใช้สีหลัก, กรอกทับได้เฉพาะชุด)</div>
           <div id="pkpItemsWrap"></div>
+          <div id="pkpReqSummary" style="margin-top:10px;"></div>
           <div id="pkpSigWrap" style="margin-top:12px;"></div>
           <div class="row-form" style="margin-top:6px;">
             <button class="btn btn-g" onclick="pkpAddItem()">+ เพิ่มรายการ</button>
@@ -6203,6 +6205,132 @@ function pkpCalcItem(it){
   var r=pkpScreenCalc(t,it.w,it.h); if(!r.calculable)return{calculable:false,fields:{}};
   var f=Object.assign({},r.fields); f.jeeb=pkpRi(f.jeeb); f.pieces=pieces; f.pvcCount=pieces*2; return {calculable:true,kind:'normal',fields:f};
 }
+// ════════ ใบเบิกอุปกรณ์ (requisition) — คำนวณ frontend จากรายการ WO ════════
+// ล้อ [รธ-ซ, รธ-ข, รต-ซ, รต-ข] · ตัวดึง [เชือก, สลิง] · ข้อต่อ [รธ, รต-ซ, รต-ข] · plate=แผ่นแยกกลาง
+var pkpREQ={
+ 'มุ้งจีบมีรางธรรมดาบานเดี่ยว':       {w:[1,1,0,0],p:[2,0],j:[4,0,0],plate:0},
+ 'มุ้งจีบมีรางธรรมดาบานคู่':          {w:[2,2,0,0],p:[4,0],j:[4,0,0],plate:2},
+ 'มุ้งจีบมีรางธรรมดาบานอิสระ':        {w:[2,2,0,0],p:[4,0],j:[4,0,0],plate:0},
+ 'มุ้งจีบมีรางธรรมดาสลิงบานเดี่ยว':   {w:[1,1,0,0],p:[2,4],j:[4,0,0],plate:0},
+ 'มุ้งจีบมีรางธรรมดาสลิงบานคู่':      {w:[2,2,0,0],p:[4,4],j:[4,0,0],plate:2},
+ 'มุ้งจีบมีรางธรรมดาสลิงบานอิสระ':    {w:[2,2,0,0],p:[4,4],j:[4,0,0],plate:0},
+ 'มุ้งจีบรางเตี้ยบานเดี่ยวซ้าย':      {w:[0,1,1,0],p:[1,4],j:[2,1,1],plate:0},
+ 'มุ้งจีบรางเตี้ยบานเดี่ยวขวา':       {w:[1,0,0,1],p:[1,4],j:[2,1,1],plate:0},
+ 'มุ้งจีบรางเตี้ยบานคู่':             {w:[1,1,1,1],p:[2,4],j:[2,1,1],plate:2},
+ 'มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ':     {w:[1,1,1,1],p:[2,4],j:[2,1,1],plate:0},
+ 'มุ้งจีบมีรางธรรมดาบานอิสระ 4 มือจับ':   {w:[4,4,0,0],p:[8,0], j:[4,0,0],plate:0},
+ 'มุ้งจีบมีรางธรรมดาบานอิสระ 6 มือจับ':   {w:[6,6,0,0],p:[12,0],j:[4,0,0],plate:0},
+ 'มุ้งจีบมีรางธรรมดาสลิงบานอิสระ 4 มือจับ':{w:[4,4,0,0],p:[8,4], j:[4,0,0],plate:0},
+ 'มุ้งจีบมีรางธรรมดาสลิงบานอิสระ 6 มือจับ':{w:[6,6,0,0],p:[12,4],j:[4,0,0],plate:0},
+ 'มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ 4 มือจับ': {w:[2,2,2,2],p:[4,4],j:[2,1,1],plate:0},
+ 'มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ 6 มือจับ': {w:[3,3,3,3],p:[6,4],j:[2,1,1],plate:0},
+ 'มุ้งจีบมีรางธรรมดาแยกกลางไม่เท่ากัน':    {w:[2,2,0,0],p:[4,0],j:[4,0,0],plate:2},
+ 'มุ้งจีบมีรางธรรมดาสลิงแยกกลางไม่เท่ากัน':{w:[2,2,0,0],p:[4,4],j:[4,0,0],plate:2},
+ 'มุ้งจีบรางเตี้ยแยกกลางไม่เท่ากัน':       {w:[1,1,1,1],p:[2,4],j:[2,1,1],plate:2}
+};
+function pkpMagnetCount(t){ if(/6 มือจับ/.test(t))return 8; if(/4 มือจับ/.test(t))return 6; if(/อิสระ/.test(t))return 4; return 2; } // ตามรูปแบบบาน (ยาว/เส้น=PVC)
+// จำนวนเส้นราง/ชุด: มือจับ N · รางข้าง O · บน-ล่าง P · เตี้ย Q (อิงสูตร Sheet1; handle=เท่าอิสระ, แยกกลาง=เท่าคู่ ตาม cut engine)
+function pkpRailCount(t){
+  return { N:(/บานคู่|อิสระ|แยกกลาง|มือจับ/.test(t)?2:1), O:2, P:(/รางเตี้ย/.test(t)?1:2), Q:(/รางเตี้ย/.test(t)?1:0) };
+}
+function pkpIsReqScreen(t){ return !!pkpREQ[t]; }  // มุ้งจีบที่ทำใบเบิกได้
+// items = รายการ WO, mainAlu = สีอลูหลัก (ใช้เมื่อ item.cAlu ว่าง)
+function pkpRequisition(items, mainAlu){
+  var eq={ wheel:[0,0,0,0,0,0,0,0], ropePull:0, slingPull:0, joint:[0,0,0,0,0,0], plate:0,
+           ropeLen:0, ropeCount:0, magLen:0, magCount:0, pvcLen:0, pvcCount:0 };
+  var byColor={}, rails={}, totalSets=0, nonScreen=[], incomplete=0;
+  (items||[]).forEach(function(it){
+    var t=it.type; if(!t) return;
+    if(!pkpIsReqScreen(t)){ nonScreen.push(it); return; }
+    var c=pkpCalcItem(it); if(!c.calculable){ incomplete++; return; }
+    var f=c.fields, R=pkpREQ[t];
+    var col=(it.cAlu||mainAlu||'(ไม่ระบุสี)'), white=(col==='อบขาว');
+    totalSets++; byColor[col]=(byColor[col]||0)+1;
+    var wo=white?0:4; for(var k=0;k<4;k++) eq.wheel[wo+k]+=R.w[k];
+    eq.ropePull+=R.p[0]; eq.slingPull+=R.p[1];
+    var jo=white?0:3; for(var m=0;m<3;m++) eq.joint[jo+m]+=R.j[m];
+    eq.plate+=R.plate;
+    var rLen,rCnt;
+    if(c.kind==='split'){ rCnt=f.nRope*2; rLen=(f.cutRopeL+f.cutRopeR)*f.nRope; }
+    else { rCnt=f.nRope; rLen=f.cutRope*f.nRope; }
+    eq.ropeLen+=rLen; eq.ropeCount+=rCnt;
+    var len1=Math.max(0,f.pvc), mc=pkpMagnetCount(t);
+    eq.pvcLen+=len1*f.pvcCount; eq.pvcCount+=f.pvcCount;
+    eq.magLen+=len1*mc;         eq.magCount+=mc;
+    var rc=pkpRailCount(t), R0=rails[col]||(rails[col]={handle:0,side:0,topbot:0,low:0});
+    R0.handle+=(f.maajab||0)*rc.N; R0.side+=(f.rangkang||0)*rc.O; R0.topbot+=(f.rangbl||0)*rc.P; R0.low+=(f.rangtia||0)*rc.Q;
+  });
+  return { eq:eq, byColor:byColor, rails:rails, totalSets:totalSets, nonScreen:nonScreen, incomplete:incomplete };
+}
+function pkpReqColorDot(c){var m={'อบขาว':'#f3f4f6','ดำ':'#2b2b2b','NA':'#cbd3da','น้ำตาลแดง':'#7c3b28','น้ำตาลเข้ม':'#3e2a1e','เทาเข้มซาฮาร่า':'#555','เทาเงินซาฮาร่า':'#9aa0a6','ดำซาฮาร่า':'#222','ลายไม้สักแดง':'#8a4b32','ลายไม้สักทอง':'#9c6b34'};return m[c]||'#9aa0a6';}
+// สรุปมุ้งจีบในหน้า WO (จำนวนชุด + สีอลู + แจ้งเตือนรายการอื่น)
+function pkpRenderReqSummary(){
+  var el=document.getElementById('pkpReqSummary'); if(!el) return;
+  var items=(pkpItems||[]).filter(function(it){return it.type;});
+  var mainAlu=(document.getElementById('pkpMainAlu')||{}).value||'';
+  var r=pkpRequisition(items, mainAlu);
+  if(!r.totalSets && !r.nonScreen.length){ el.innerHTML=''; return; }
+  var chips=Object.keys(r.byColor).map(function(c){
+    return '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(127,140,170,.12);border:1px solid rgba(127,140,170,.3);border-radius:20px;padding:2px 9px;font-size:12px;font-weight:700;"><span style="width:9px;height:9px;border-radius:50%;background:'+pkpReqColorDot(c)+';border:1px solid #889;"></span>'+c+' '+r.byColor[c]+'</span>';
+  }).join(' ');
+  var notice=r.nonScreen.length?'<div style="margin-top:6px;font-size:12px;color:#ff9f43;">⚠ มีรายการที่ไม่ใช่มุ้งจีบ '+r.nonScreen.length+' รายการ — ไม่รวมในใบเบิก (เบิกเอง)</div>':'';
+  el.innerHTML='<div style="background:rgba(127,140,170,.08);border:1px solid rgba(127,140,170,.22);border-radius:10px;padding:10px 12px;">'
+    +'<div style="font-size:11px;color:var(--mu,#6b7a94);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">สรุปมุ้งจีบในใบนี้</div>'
+    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><b style="font-size:18px;color:#e8862e;">'+r.totalSets+' ชุด</b>'+chips+'</div>'+notice+'</div>';
+}
+// พิมพ์ใบเบิกอุปกรณ์ (A4 portrait · auto-fit 1 แผ่น)
+function pkpReqPrint(){
+  var items=(pkpItems||[]).filter(function(it){return it.type;});
+  if(!items.length){ toast('⚠️ ยังไม่มีรายการ'); return; }
+  var mainAlu=(document.getElementById('pkpMainAlu')||{}).value||'';
+  var r=pkpRequisition(items, mainAlu), E=r.eq;
+  var esc=function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
+  var f2=function(n){return (Math.round(n*100)/100).toLocaleString('th-TH',{maximumFractionDigits:2});};
+  var thDate=function(s){ if(!s)return'-'; var p=String(s).split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):s; };
+  var cust=esc((document.getElementById('pkpCust')||{}).value||'-');
+  var wo=esc(pkpEditingWO||'(ร่าง — ยังไม่บันทึก)');
+  var issue=thDate((document.getElementById('pkpIssue')||{}).value||'');
+  var install=thDate((document.getElementById('pkpInstall')||{}).value||'');
+  var mainAluD=esc(mainAlu||'-'), dot=pkpReqColorDot;
+  var chips=Object.keys(r.byColor).map(function(c){return '<span class="chip"><span class="dot" style="background:'+dot(c)+'"></span>'+esc(c)+' <b>'+r.byColor[c]+'</b></span>';}).join('');
+  var notice=r.nonScreen.length?'<div class="notice">⚠ มีรายการที่ไม่ใช่มุ้งจีบ '+r.nonScreen.length+' รายการ ('+r.nonScreen.map(function(x){return esc(x.type);}).join(', ')+') — ยังไม่รวมในใบเบิกนี้ ต้องเบิกเอง</div>':'';
+  var LIST=[['ล้อรางธรรมดา-ซ้าย (สีขาว)',E.wheel[0],'ตัว'],['ล้อรางธรรมดา-ขวา (สีขาว)',E.wheel[1],'ตัว'],['ล้อรางเตี้ย-ซ้าย (สีขาว)',E.wheel[2],'ตัว'],['ล้อรางเตี้ย-ขวา (สีขาว)',E.wheel[3],'ตัว'],['ล้อรางธรรมดา-ซ้าย (สีดำ)',E.wheel[4],'ตัว'],['ล้อรางธรรมดา-ขวา (สีดำ)',E.wheel[5],'ตัว'],['ล้อรางเตี้ย-ซ้าย (สีดำ)',E.wheel[6],'ตัว'],['ล้อรางเตี้ย-ขวา (สีดำ)',E.wheel[7],'ตัว'],['ตัวดึงเชือก',E.ropePull,'ตัว'],['ตัวดึงสลิง',E.slingPull,'ตัว'],['ข้อต่อรางธรรมดา (สีขาว)',E.joint[0],'ตัว'],['ข้อต่อรางเตี้ย-ซ้าย (สีขาว)',E.joint[1],'ตัว'],['ข้อต่อรางเตี้ย-ขวา (สีขาว)',E.joint[2],'ตัว'],['ข้อต่อรางธรรมดา (สีดำ)',E.joint[3],'ตัว'],['ข้อต่อรางเตี้ย-ซ้าย (สีดำ)',E.joint[4],'ตัว'],['ข้อต่อรางเตี้ย-ขวา (สีดำ)',E.joint[5],'ตัว'],['แผ่นแยกกลาง (เฉพาะบานคู่)',E.plate,'แผ่น'],['เชือก (ความยาวรวม)',E.ropeLen,'ซม.',E.ropeCount+' เส้น'],['แม่เหล็ก (ความยาวรวม)',E.magLen,'ซม.',E.magCount+' เส้น'],['PVC (ความยาวรวม)',E.pvcLen,'ซม.',E.pvcCount+' เส้น']];
+  var n=0,bodyR='';
+  LIST.forEach(function(row){ if(!row[1]||row[1]===0)return; n++; var unit=row[2],piece=(unit==='ตัว'||unit==='แผ่น'); bodyR+='<tr><td class="c">'+n+'</td><td>'+row[0]+'</td><td class="n qty">'+(piece?row[1]:f2(row[1]))+'</td><td class="unit">'+unit+'</td><td class="note">'+(row[3]||'')+'</td></tr>'; });
+  var RT=[['handle','รางมือจับ'],['side','รางข้าง'],['topbot','รางบน-ล่าง'],['low','รางเตี้ย']];
+  var colsU=RT.filter(function(rt){return Object.keys(r.rails).some(function(c){return r.rails[c][rt[0]]>0;});});
+  var colorsU=Object.keys(r.rails).filter(function(c){return RT.some(function(rt){return r.rails[c][rt[0]]>0;});});
+  var railHtml='';
+  if(colorsU.length){ var thr='<th>สีอลู</th>'+colsU.map(function(c){return '<th class="n">'+c[1]+'</th>';}).join(''); var tot={}; colsU.forEach(function(c){tot[c[0]]=0;});
+    var rrows=colorsU.map(function(col){return '<tr><td><span class="dot" style="display:inline-block;background:'+dot(col)+';margin-right:6px;vertical-align:middle"></span>'+esc(col)+'</td>'+colsU.map(function(rt){var v=r.rails[col][rt[0]];tot[rt[0]]+=v;return '<td class="n">'+(v?f2(v):'–')+'</td>';}).join('')+'</tr>';}).join('');
+    var totr='<tr class="tot"><td>รวม (ซม.)</td>'+colsU.map(function(rt){return '<td class="n">'+f2(tot[rt[0]])+'</td>';}).join('')+'</tr>';
+    railHtml='<div class="sech">ความยาวรางอลูมิเนียม (แยกสี × ชนิดราง) — ซม.</div><table><thead><tr>'+thr+'</tr></thead><tbody>'+rrows+totr+'</tbody></table>'; }
+  var inner='<div class="head"><div class="brand">PK มุ้งจีบ<small>EQUIPMENT REQUISITION · ใบเบิกอุปกรณ์</small></div><div class="woblk"><div class="lbl">เลขที่ใบผลิต</div><div class="wo">'+wo+'</div></div></div>'
+    +'<div class="info"><div class="cI"><div class="k">ชื่อลูกค้า</div><div class="v">'+cust+'</div></div><div class="cI"><div class="k">วันที่ออกใบผลิต</div><div class="v">'+issue+'</div></div><div class="cI"><div class="k">วันที่ติดตั้ง</div><div class="v">'+install+'</div></div><div class="cI"><div class="k">สีอลูหลัก</div><div class="v">'+mainAluD+'</div></div></div>'
+    +'<div class="sumcard"><div class="t">สรุปมุ้งจีบ</div><div class="sumrow"><div class="big">'+r.totalSets+' <small>ชุด</small></div>'+chips+'</div>'+notice+'</div>'
+    +'<div class="sech">รายการอุปกรณ์</div><table><thead><tr><th class="c">#</th><th>รายการ</th><th class="n">จำนวน</th><th>หน่วย</th><th>หมายเหตุ</th></tr></thead><tbody>'+bodyR+'</tbody></table>'+railHtml
+    +'<div class="foot"><div class="fnote">* ซ่อนรายการที่เป็น 0 · ความยาวรวม = ต่อเส้น × จำนวนเส้น<br>* ราง 4/6 มือจับ = เท่าบานอิสระ · แยกกลาง = เท่าบานคู่</div><div class="sign"><div class="ln"></div><div class="sl">ผู้เบิก / วันที่</div></div></div>';
+  var CSS='@import url(https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap);'
+    +'*{box-sizing:border-box;margin:0;padding:0}body{font-family:Sarabun,sans-serif;background:#eef1f4;color:#111a25;padding:18px;line-height:1.4}'
+    +'.bar{max-width:210mm;margin:0 auto 12px;display:flex;gap:10px;align-items:center}.bar button{font-family:inherit;border:none;background:#1c2733;color:#fff;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}.bar span{font-size:12px;color:#d4760f;font-weight:700}'
+    +'.sheet{width:210mm;max-width:100%;margin:0 auto;background:#fff;border-radius:6px;box-shadow:0 10px 36px rgba(0,0,0,.18);padding:14mm 14mm 12mm;overflow:hidden}#fit{transform-origin:top center}'
+    +'.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid #1c2733;padding-bottom:9px}.brand{font-size:20px;font-weight:800}.brand small{display:block;font-size:10px;font-weight:600;letter-spacing:2px;color:#4b5a6e;margin-top:1px}.woblk{text-align:right}.woblk .lbl{font-size:10px;color:#4b5a6e;letter-spacing:1px}.woblk .wo{font-size:19px;font-weight:800;color:#d4760f}'
+    +'.info{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#c2ccd6;border:1px solid #c2ccd6;border-radius:5px;overflow:hidden;margin:12px 0}.info .cI{background:#fff;padding:6px 9px}.info .k{font-size:10px;color:#4b5a6e}.info .v{font-size:13px;font-weight:700;margin-top:1px}'
+    +'.sumcard{background:#fbf6ef;border:1px solid #e6d8c4;border-radius:7px;padding:11px 13px;margin-bottom:13px}.sumcard .t{font-size:13px;font-weight:800;margin-bottom:7px}.sumrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.big{font-size:22px;font-weight:800;color:#d4760f;line-height:1}.big small{font-size:12px;color:#4b5a6e;font-weight:600}'
+    +'.chip{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px solid #c2ccd6;border-radius:20px;padding:3px 11px;font-size:12px;font-weight:700}.dot{width:11px;height:11px;border-radius:50%;border:1px solid #999}'
+    +'.notice{margin-top:9px;background:#fff7ed;border:1px solid #d4760f;border-left-width:4px;border-radius:5px;padding:7px 11px;font-size:12px;color:#8a4d09;font-weight:600}'
+    +'.sech{font-size:13px;font-weight:800;margin:15px 0 6px;color:#1c2733}'
+    +'table{width:100%;border-collapse:collapse;font-size:12.5px}th{background:#1c2733;color:#fff;font-weight:700;font-size:11px;padding:6px 9px;text-align:left}th.n,td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}th.c,td.c{text-align:center;width:34px}td{padding:5px 9px;border-bottom:1px solid #e7ecf0}td.qty{font-weight:800;font-size:13.5px}td.unit{color:#4b5a6e;width:46px}td.note{color:#4b5a6e;font-size:11px;width:84px}tr.tot td{background:#f4f1ec;font-weight:800;border-top:2px solid #1c2733}'
+    +'.foot{margin-top:14px;display:flex;justify-content:space-between;align-items:flex-end}.fnote{font-size:10.5px;color:#4b5a6e;max-width:62%}.sign{text-align:center}.sign .ln{border-bottom:1.4px dotted #111a25;width:150px;height:30px}.sign .sl{font-size:11px;margin-top:3px}'
+    +'@media print{body{background:#fff;padding:0}.sheet{box-shadow:none;border-radius:0;width:auto}.bar{display:none}@page{size:A4 portrait;margin:10mm}}';
+  var fit='function fp(){var f=document.getElementById("fit");f.style.transform="";var sh=f.parentNode;var ppm=96/25.4,pad=(14+12)*ppm,tg=277*ppm-pad,h=f.offsetHeight,s=1;if(h>tg){s=tg/h;f.style.transform="scale("+s+")";}sh.style.height=(h*s+pad)+"px";var si=document.getElementById("si");if(si)si.textContent=s<1?("ย่อ "+Math.round(s*100)+"% เพื่อพอดี 1 แผ่น"):"";}window.onload=fp;window.onresize=fp;';
+  var docHtml='<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>ใบเบิก '+cust+'</title><style>'+CSS+'</style></head><body>'
+    +'<div class="bar"><button onclick="window.print()">🖨 พิมพ์ / บันทึก PDF</button><span id="si"></span></div>'
+    +'<div class="sheet"><div id="fit">'+inner+'</div></div>'
+    +'<scr'+'ipt>'+fit+'</scr'+'ipt></body></html>';
+  var w=window.open('','_blank'); if(!w){ toast('เปิดหน้าต่างไม่ได้ (ตรวจป๊อปอัปบล็อก)'); return; }
+  w.document.open(); w.document.write(docHtml); w.document.close();
+}
 function pkpFmt(v){ if(v==null||v==='')return''; var n=Number(v); if(isNaN(n))return''; return (Math.round(n*100)/100).toLocaleString('th-TH',{maximumFractionDigits:2}); }
 
 // ── ประเภท (จัดกลุ่มไว้เผื่อ dropdown แยกหมวด ภายหลัง) ──
@@ -6316,7 +6444,7 @@ function pkpAddItem(){ pkpItems.push(pkpBlankItem()); pkpRenderRows(); }
 function pkpDelItem(i){ pkpItems.splice(i,1); if(!pkpItems.length)pkpItems.push(pkpBlankItem()); pkpRenderRows(); }
 function pkpOnType(i,val){ pkpItems[i].type=val; pkpRenderRows(); }            // เปลี่ยนประเภท → re-render (สลับช่องกว้าง/ซ้าย-ขวา)
 function pkpOnPatt(i){ var a=pkpItems[i]; var idx=pkpARROWS.indexOf(a.patt); a.patt=pkpARROWS[(idx+1)%pkpARROWS.length]; var el=document.getElementById('pkpPatt'+i); if(el)el.textContent=a.patt; }
-function pkpOnField(i,field,val){ pkpItems[i][field]=val; pkpRecalc(i); }       // ตัวเลข → คำนวณเฉพาะแถว (ไม่ re-render = ไม่เสีย focus)
+function pkpOnField(i,field,val){ pkpItems[i][field]=val; pkpRecalc(i); pkpRenderReqSummary(); }   // ตัวเลข → คำนวณเฉพาะแถว (ไม่ re-render = ไม่เสีย focus)
 
 // ── render การ์ดทุกรายการ ──
 function pkpRenderRows(){
@@ -6351,6 +6479,7 @@ function pkpRenderRows(){
   });
   wrap.innerHTML=html;
   pkpItems.forEach(function(_,i){ pkpRecalc(i); });
+  pkpRenderReqSummary();
 }
 
 // ── คำนวณ + แสดงสรุปต่อแถว ──
