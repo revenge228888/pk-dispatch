@@ -6318,31 +6318,39 @@ function pkpCutDocHTML(pieces, ids, set){
   pieces.forEach(function(p){ var c=byColor[p.color]||(byColor[p.color]={}); (c[p.rail]||(c[p.rail]=[])).push(p); });
   var colors=Object.keys(byColor).sort(), gBars=0,gWaste=0,gPieces=0,body='';
   var SEGC={handle:'#f0c84a',side:'#7fd6ab',topbot:'#8fc1f0',low:'#ec9ec5'};
+  var pagesArr=[];
   colors.forEach(function(color){
-    var railHtml='',cBars=0,cWaste=0;
     ORDER.forEach(function(rail){
       var ps=byColor[color][rail]; if(!ps||!ps.length) return;
       var stock=set['stock_'+rail]||600, res=pkpCutFFD(ps, stock, set.kerf||0);
-      cBars+=res.usedStock; cWaste+=res.waste; gPieces+=res.count;
+      gBars+=res.usedStock; gWaste+=res.waste; gPieces+=res.count;
       var util=res.usedStock?r2(res.totalLen/(res.usedStock*stock)*100):0;
-      var n=res.bars.length, barH=n<=6?54:n<=10?46:n<=16?38:n<=24?32:26, fs=n<=8?12:n<=16?11:10;
+      var n=res.bars.length, barH=n<=8?48:n<=16?40:n<=24?34:28, fs=n<=12?11:10, BARW=185;
       var bars=res.bars.map(function(b,i){
-        var lo=Math.max(0,stock-b.used), lpct=lo/stock*100;
-        var segs=b.pieces.map(function(pc){ var pct=Math.max(3,pc.len/stock*100);
-          return '<div class="seg" style="width:'+pct+'%;background:'+(SEGC[pc.rail]||'#bbb')+';">'
-            +'<span class="l1">'+esc(pc.name||pc.wo||'-')+' · ชุด '+pc.setNo+(pc.ptot>1?' ('+pc.pidx+'/'+pc.ptot+')':'')+'</span>'
-            +'<span class="l2">'+RN[pc.rail]+'</span>'
-            +'<span class="l3">'+pc.len+' cm</span></div>';
-        }).join('');
+        var lo=Math.max(0,stock-b.used), lpct=lo/stock*100, segs='', legend='', sm=0;
+        b.pieces.forEach(function(pc){
+          var pct=Math.max(2.5,pc.len/stock*100), segWmm=pct/100*BARW, nameTxt=esc(pc.name||pc.wo||'-');
+          var needChars=(pc.name||pc.wo||'').length+10, fits=segWmm>=needChars*1.6+4;   // ช่องกว้างพอใส่ชื่อเต็มไหม
+          if(fits){
+            segs+='<div class="seg" style="width:'+pct+'%;background:'+(SEGC[pc.rail]||'#bbb')+';">'
+              +'<span class="l1">'+nameTxt+' · ชุด '+pc.setNo+(pc.ptot>1?' ('+pc.pidx+'/'+pc.ptot+')':'')+'</span>'
+              +'<span class="l2">'+RN[pc.rail]+'</span><span class="l3">'+pc.len+' cm</span></div>';
+          } else {
+            sm++; var num=sm;
+            segs+='<div class="seg" style="width:'+pct+'%;background:'+(SEGC[pc.rail]||'#bbb')+';"><span class="sn">'+num+'</span><span class="sl">'+pc.len+'</span></div>';
+            legend+='<span class="lg"><span class="ln">'+num+'</span><span><b>'+nameTxt+'</b> · ชุด '+pc.setNo+' · '+RN[pc.rail]+(pc.ptot>1?' ('+pc.pidx+'/'+pc.ptot+')':'')+' · '+pc.len+' cm</span></span>';
+          }
+        });
         var waste=lo>0.05?'<div class="wseg" style="width:'+lpct+'%;">เศษ '+r2(lo)+'</div>':'';
+        var legendHtml=legend?'<div class="legend"><span class="lgh">ชิ้นเล็ก →</span>'+legend+'</div>':'';
         return '<div class="bk"><div class="bh"><span><b>เส้นที่ '+(i+1)+'</b>'+(b.over?' ⚠ ยาวเกินราง':'')+'</span><span>ใช้ '+r2(b.used)+' / '+stock+' cm · เศษ '+r2(lo)+' cm</span></div>'
-          +'<div class="vbar'+(b.over?' over':'')+'" style="height:'+barH+'px;font-size:'+fs+'px;">'+segs+waste+'</div></div>';
+          +'<div class="vbar'+(b.over?' over':'')+'" style="height:'+barH+'px;font-size:'+fs+'px;">'+segs+waste+'</div>'+legendHtml+'</div>';
       }).join('');
-      railHtml+='<div class="rail"><div class="rh">'+RN[rail]+' <span class="meta">สต็อก '+stock+' cm/เส้น · ใช้ '+res.usedStock+' เส้น · เศษรวม '+r2(res.waste)+' cm · ใช้จริง '+util+'%</span></div>'+bars+'</div>';
+      var rh='<div class="rh"><span class="rt">'+RN[rail]+'</span><span class="rc"><span class="dot" style="background:'+dot(color)+'"></span>สีอลู: '+esc(color)+'</span><span class="meta">สต็อก '+stock+' cm/เส้น · ใช้ '+res.usedStock+' เส้น · เศษรวม '+r2(res.waste)+' cm · ใช้จริง '+util+'%</span></div>';
+      pagesArr.push('<div class="railpage'+(pagesArr.length===0?' first':'')+'">'+rh+bars+'</div>');
     });
-    gBars+=cBars; gWaste+=cWaste;
-    body+='<div class="csec"><div class="cht"><span class="dot" style="background:'+dot(color)+'"></span>สีอลู: '+esc(color)+' <span class="meta">รวม '+cBars+' เส้น · เศษ '+r2(cWaste)+' cm</span></div>'+railHtml+'</div>';
   });
+  body=pagesArr.join('');
   var head='<div class="head"><div class="brand">PK มุ้งจีบ<small>CUTTING PLAN · ใบจัดตัดราง</small></div><div class="sumc"><div>ใช้รางรวม <b>'+gBars+'</b> เส้น</div><div>เศษรวม <b>'+r2(gWaste)+'</b> cm</div></div></div>'
     +'<div class="info">รวมจาก: '+esc(ids.join(', '))+' &nbsp;·&nbsp; kerf '+(set.kerf||0)+' cm &nbsp;·&nbsp; ชิ้นทั้งหมด '+gPieces+' ชิ้น &nbsp;·&nbsp; แยกตัดตามสีอลู (สีต่างกันไม่ตัดรวมเส้น)</div>';
   var CSS='@import url(https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap);'
@@ -6351,13 +6359,16 @@ function pkpCutDocHTML(pieces, ids, set){
     +'.sheet{width:210mm;max-width:100%;margin:0 auto;background:#fff;border-radius:6px;box-shadow:0 10px 36px rgba(0,0,0,.18);padding:9mm 10mm}'
     +'.head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #1c2733;padding-bottom:5px}.brand{font-size:16px;font-weight:800}.brand small{font-size:9px;letter-spacing:1.5px;color:#4b5a6e;font-weight:600;margin-left:6px}.sumc{font-size:11px;color:#4b5a6e}.sumc b{color:#d4760f;font-size:13px}'
     +'.info{font-size:10px;color:#4b5a6e;margin:5px 0 2px}'
-    +'.csec{margin-top:10px}.cht{font-size:13px;font-weight:800;display:flex;align-items:center;gap:6px;border-left:3px solid #d4760f;padding-left:7px;margin-bottom:6px}.meta{font-size:10px;font-weight:600;color:#4b5a6e}'
+    +'.meta{font-size:10px;font-weight:600;color:#4b5a6e}'
     +'.dot{width:12px;height:12px;border-radius:50%;border:1px solid #999;display:inline-block;flex:none}'
-    +'.rail{margin:0 0 9px 2px}.rh{font-size:11.5px;font-weight:700;margin-bottom:4px;color:#1c2733}'
+    +'.railpage{page-break-before:always;break-before:page;padding-top:4px}.railpage.first{page-break-before:auto;break-before:auto;padding-top:8px}'
+    +'.rh{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;border-bottom:1.5px solid #1c2733;padding-bottom:4px;margin-bottom:7px}.rt{font-size:14px;font-weight:800;color:#1c2733}.rc{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700}'
     +'.bk{margin-bottom:7px;break-inside:avoid}.bh{display:flex;justify-content:space-between;font-size:10px;color:#444;margin-bottom:2px}.bh b{color:#1c2733}'
     +'.vbar{display:flex;border:1px solid #555;border-radius:3px;overflow:hidden;background:#fff}'
     +'.vbar .seg{display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;padding:1px 2px;text-align:center;line-height:1.12;color:#1a1a1a;border-right:1px solid rgba(0,0,0,.35);min-width:0}'
     +'.seg .l1,.seg .l2{font-size:.82em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.seg .l2{opacity:.8}.seg .l3{font-weight:800}'
+    +'.seg .sn{display:inline-flex;align-items:center;justify-content:center;min-width:14px;height:14px;background:rgba(0,0,0,.5);color:#fff;border-radius:50%;font-size:8.5px;font-weight:800;font-family:monospace;line-height:1}.seg .sl{font-weight:800;font-size:1em;margin-top:1px;white-space:nowrap;overflow:hidden;max-width:100%}'
+    +'.legend{display:flex;flex-wrap:wrap;align-items:flex-start;gap:2px 9px;font-size:9px;color:#333;margin-top:3px;line-height:1.3}.lgh{font-weight:700;color:#8a4d09}.lg{display:inline-flex;align-items:flex-start;gap:3px}.lg .ln{display:inline-flex;align-items:center;justify-content:center;min-width:13px;height:13px;background:#1c2733;color:#fff;border-radius:50%;font-size:8px;font-weight:800;font-family:monospace;flex:none;margin-top:1px}.lg b{font-size:9.5px}'
     +'.wseg{display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(45deg,#e6e6e6,#e6e6e6 4px,#f5f5f5 4px,#f5f5f5 8px);color:#666;font-size:.8em;min-width:0}'
     +'.vbar.over{border-color:#ff453a}'
     +'@media print{body{background:#fff;padding:0}.sheet{box-shadow:none;border-radius:0;width:auto;padding:0}.bar2{display:none}@page{size:A4 portrait;margin:8mm}}';
