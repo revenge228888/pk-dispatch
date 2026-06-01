@@ -6310,10 +6310,50 @@ async function pkpCutOptimize(){
     var pieces=[];
     for(var i=0;i<ids.length;i++){ var o=await pkpFetchWO(ids[i]); if(!o)continue; pieces=pieces.concat(pkpRailPieces(o.items, o.mainColorAlu||'', {wo:o.woId, name:(o.customer&&o.customer.name)||''})); }
     if(!pieces.length){ toast('ไม่มีรางให้ตัด (ใบที่เลือกอาจไม่ใช่มุ้งจีบ)'); return; }
-    pkpReqOpenDoc_(pkpCutDocHTML(pieces, ids, pkpCutSet_()));
+    pkpCutPieces=pieces; pkpCutIds=ids; pkpCutPicker_();
   } finally { hideLoad(); }
 }
-function pkpCutDocHTML(pieces, ids, set){
+// ── ตัวเลือกก่อนสร้างใบจัดตัด: เลือกราง/สี + รูปแบบแผ่น ──
+var pkpCutPieces=[], pkpCutIds=[];
+function pkpCutModalEl_(){ var m=document.getElementById('pkpCutModal'); if(!m){ m=document.createElement('div'); m.className='modal-bg'; m.id='pkpCutModal'; m.onclick=function(e){ if(e.target===m) m.classList.remove('on'); }; document.body.appendChild(m); } return m; }
+function pkpCutChkAll_(v){ var cs=document.querySelectorAll('#pkpCutModal .pkpcChk'); for(var i=0;i<cs.length;i++) cs[i].checked=!!v; }
+function pkpCutClose_(){ var m=document.getElementById('pkpCutModal'); if(m) m.classList.remove('on'); }
+function pkpCutPicker_(){
+  var RN={handle:'รางมือจับ',side:'รางข้าง',topbot:'รางบน-ล่าง',low:'รางเตี้ย'}, ORDER=['handle','side','topbot','low'];
+  var by={}; pkpCutPieces.forEach(function(p){ (by[p.rail]||(by[p.rail]={})); by[p.rail][p.color]=(by[p.rail][p.color]||0)+p.qty; });
+  var rows='';
+  ORDER.forEach(function(rail){ if(!by[rail])return;
+    rows+='<div style="margin-bottom:11px;"><div style="font-weight:800;color:var(--ink,#e8edf3);border-bottom:1px solid var(--line,#2a3344);padding-bottom:3px;margin-bottom:6px;">'+RN[rail]+'</div>';
+    Object.keys(by[rail]).sort().forEach(function(color){
+      rows+='<label style="display:inline-flex;align-items:center;gap:6px;margin:0 16px 7px 0;font-size:13px;cursor:pointer;">'
+        +'<input type="checkbox" class="pkpcChk" checked data-rail="'+escAttr(rail)+'" data-color="'+escAttr(color)+'">'
+        +'<span style="display:inline-block;width:13px;height:13px;border-radius:50%;border:1px solid #999;background:'+pkpReqColorDot(color)+';"></span>'
+        +escHtml(color)+' <span style="color:var(--mu,#6b7a94);">('+by[rail][color]+' ชิ้น)</span></label>';
+    });
+    rows+='</div>';
+  });
+  var html='<div class="modal" style="max-width:680px;width:96vw;max-height:86vh;overflow-y:auto;padding:18px;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;font-size:17px;">🪚 เลือกราง / สี ที่จะตัด</h3>'
+    +'<button class="btn btn-sm" onclick="pkpCutClose_()">✕</button></div>'
+    +'<div style="margin-bottom:13px;font-size:13px;">รูปแบบแผ่น:'
+    +'<label style="display:block;margin-top:6px;cursor:pointer;"><input type="radio" name="pkpcMode" value="rail" checked> รวมทุกสีในแผ่นเดียว (แยกหน้าตามชนิดราง)</label>'
+    +'<label style="display:block;margin-top:4px;cursor:pointer;"><input type="radio" name="pkpcMode" value="both"> แยกทุกสี–ทุกชนิดราง คนละแผ่น</label></div>'
+    +'<div style="margin-bottom:9px;"><button class="btn btn-sm" onclick="pkpCutChkAll_(1)">เลือกทั้งหมด</button> <button class="btn btn-sm" onclick="pkpCutChkAll_(0)">ไม่เลือก</button></div>'
+    +rows
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;border-top:1px solid var(--line,#2a3344);padding-top:12px;"><button class="btn" onclick="pkpCutClose_()">ยกเลิก</button>'
+    +'<button class="btn btn-p" onclick="pkpCutGenerate_()">สร้างใบจัดตัด</button></div></div>';
+  var m=pkpCutModalEl_(); m.innerHTML=html; m.classList.add('on');
+}
+function pkpCutGenerate_(){
+  var sel={}, any=false, cs=document.querySelectorAll('#pkpCutModal .pkpcChk');
+  for(var i=0;i<cs.length;i++){ if(cs[i].checked){ sel[cs[i].getAttribute('data-rail')+'|'+cs[i].getAttribute('data-color')]=1; any=true; } }
+  if(!any){ toast('เลือกอย่างน้อย 1 รายการ'); return; }
+  var mode='rail', rs=document.querySelectorAll('#pkpCutModal input[name=pkpcMode]'); for(var j=0;j<rs.length;j++) if(rs[j].checked) mode=rs[j].value;
+  var filtered=pkpCutPieces.filter(function(p){ return sel[p.rail+'|'+p.color]; });
+  pkpCutClose_();
+  pkpReqOpenDoc_(pkpCutDocHTML(filtered, pkpCutIds, pkpCutSet_(), mode));
+}
+function pkpCutDocHTML(pieces, ids, set, mode){
   var esc=function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
   var r2=function(x){return Math.round(x*100)/100;}, dot=pkpReqColorDot;
   var RN={handle:'รางมือจับ',side:'รางข้าง',topbot:'รางบน-ล่าง',low:'รางเตี้ย'}, ORDER=['handle','side','topbot','low'];
@@ -6321,26 +6361,41 @@ function pkpCutDocHTML(pieces, ids, set){
   pieces.forEach(function(p){ var c=byColor[p.color]||(byColor[p.color]={}); (c[p.rail]||(c[p.rail]=[])).push(p); });
   var colors=Object.keys(byColor).sort(), gBars=0,gWaste=0,gPieces=0,body='';
   var SEGC={handle:'#f0c84a',side:'#7fd6ab',topbot:'#8fc1f0',low:'#ec9ec5'};
-  var stock=set.stock||600, kerf=set.kerf||0;
-  colors.forEach(function(color){
-    var railHtml='';
-    ORDER.forEach(function(rail){
-      var ps=byColor[color][rail]; if(!ps||!ps.length) return;
-      var res=pkpCutFFD(ps, stock, kerf);
-      gBars+=res.usedStock; gWaste+=res.waste; gPieces+=res.count;
-      var util=res.usedStock?r2(res.totalLen/(res.usedStock*stock)*100):0;
-      var bars=res.bars.map(function(b,i){
-        var lo=Math.max(0,stock-b.used), lpct=lo/stock*100;
-        var segs=b.pieces.map(function(pc,si){ var pct=Math.max(1.5,pc.len/stock*100); return '<div class="seg" style="width:'+pct+'%;background:'+(SEGC[pc.rail]||'#bbb')+';">'+(si+1)+'</div>'; }).join('');
-        var waste=lo>0.05?'<div class="wseg" style="width:'+lpct+'%;">เศษ</div>':'';
-        var rows=b.pieces.map(function(pc,si){ return '<tr><td class="c">'+(si+1)+'</td><td>'+esc(pc.name||pc.wo||'-')+'</td><td class="c">'+pc.setNo+'</td><td class="c">'+(pc.ptot>1?pc.pidx+'/'+pc.ptot:'–')+'</td><td class="n">'+pc.len+'</td></tr>'; }).join('');
-        return '<div class="bk"><div class="bh"><span><b>เส้นที่ '+(i+1)+'</b>'+(b.over?' ⚠ ยาวเกินราง':'')+'</span><span>ใช้ '+r2(b.used)+' / '+stock+' · เศษ '+r2(lo)+' cm</span></div>'
-          +'<div class="vbar'+(b.over?' over':'')+'">'+segs+waste+'</div>'
-          +'<table class="ct"><thead><tr><th class="c">#</th><th>ชื่องาน</th><th class="c">ชุด</th><th class="c">ชิ้นที่</th><th class="n">ยาว(cm)</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
-      }).join('');
-      railHtml+='<div class="rail"><div class="rh"><span class="rt">'+RN[rail]+'</span><span class="meta">ใช้ '+res.usedStock+' เส้น · เศษรวม '+r2(res.waste)+' cm · ใช้จริง '+util+'%</span></div><div class="bars">'+bars+'</div></div>';
-    });
-    body+='<div class="csec"><div class="cht"><span class="dot" style="background:'+dot(color)+'"></span>สีอลู: '+esc(color)+'</div>'+railHtml+'</div>';
+  var stock=set.stock||600, kerf=set.kerf||0, first=true;
+  mode=(mode==='both')?'both':'rail';
+  function renderBars(res){
+    return res.bars.map(function(b,i){
+      var lo=Math.max(0,stock-b.used), lpct=lo/stock*100;
+      var segs=b.pieces.map(function(pc,si){ var pct=Math.max(1.5,pc.len/stock*100); return '<div class="seg" style="width:'+pct+'%;background:'+(SEGC[pc.rail]||'#bbb')+';">'+(si+1)+'</div>'; }).join('');
+      var waste=lo>0.05?'<div class="wseg" style="width:'+lpct+'%;">เศษ</div>':'';
+      var rows=b.pieces.map(function(pc,si){ return '<tr><td class="c">'+(si+1)+'</td><td>'+esc(pc.name||pc.wo||'-')+'</td><td class="c">'+pc.setNo+'</td><td class="c">'+(pc.ptot>1?pc.pidx+'/'+pc.ptot:'–')+'</td><td class="n">'+pc.len+'</td></tr>'; }).join('');
+      return '<div class="bk"><div class="bh"><span><b>เส้นที่ '+(i+1)+'</b>'+(b.over?' ⚠ ยาวเกินราง':'')+'</span><span>ใช้ '+r2(b.used)+' / '+stock+' · เศษ '+r2(lo)+' cm</span></div>'
+        +'<div class="vbar'+(b.over?' over':'')+'">'+segs+waste+'</div>'
+        +'<table class="ct"><thead><tr><th class="c">#</th><th>ชื่องาน</th><th class="c">ชุด</th><th class="c">ชิ้นที่</th><th class="n">ยาว(cm)</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+    }).join('');
+  }
+  ORDER.forEach(function(rail){
+    var colsWith=colors.filter(function(c){ return byColor[c][rail] && byColor[c][rail].length; });
+    if(!colsWith.length) return;
+    if(mode==='both'){
+      colsWith.forEach(function(color){
+        var res=pkpCutFFD(byColor[color][rail], stock, kerf);
+        gBars+=res.usedStock; gWaste+=res.waste; gPieces+=res.count;
+        var util=res.usedStock?r2(res.totalLen/(res.usedStock*stock)*100):0;
+        body+='<div class="railpage'+(first?' first':'')+'"><div class="rhd"><span class="rt">'+RN[rail]+'</span><span class="rc"><span class="dot" style="background:'+dot(color)+'"></span>สีอลู: '+esc(color)+'</span><span class="meta">ใช้ '+res.usedStock+' เส้น · เศษ '+r2(res.waste)+' cm · ใช้จริง '+util+'%</span></div><div class="bars">'+renderBars(res)+'</div></div>';
+        first=false;
+      });
+    } else {
+      var inner='', railBars=0, railWaste=0;
+      colsWith.forEach(function(color){
+        var res=pkpCutFFD(byColor[color][rail], stock, kerf);
+        gBars+=res.usedStock; gWaste+=res.waste; gPieces+=res.count; railBars+=res.usedStock; railWaste+=res.waste;
+        var util=res.usedStock?r2(res.totalLen/(res.usedStock*stock)*100):0;
+        inner+='<div class="csec"><div class="cht"><span class="dot" style="background:'+dot(color)+'"></span>สีอลู: '+esc(color)+' <span class="meta">ใช้ '+res.usedStock+' เส้น · เศษ '+r2(res.waste)+' cm · ใช้จริง '+util+'%</span></div><div class="bars">'+renderBars(res)+'</div></div>';
+      });
+      body+='<div class="railpage'+(first?' first':'')+'"><div class="rhd"><span class="rt">'+RN[rail]+'</span><span class="meta">รวมทุกสี · ใช้ '+railBars+' เส้น · เศษรวม '+r2(railWaste)+' cm</span></div>'+inner+'</div>';
+      first=false;
+    }
   });
   var head='<div class="head"><div class="brand">PK มุ้งจีบ<small>CUTTING PLAN · ใบจัดตัดราง</small></div><div class="sumc"><div>รางเต็มเส้น <b>'+stock+'</b> cm · ใบตัด '+kerf+' cm</div><div>ใช้รางรวม <b>'+gBars+'</b> เส้น · เศษรวม <b>'+r2(gWaste)+'</b> cm</div></div></div>'
     +'<div class="info">รวมจาก: '+esc(ids.join(', '))+' &nbsp;·&nbsp; ชิ้นทั้งหมด '+gPieces+' ชิ้น &nbsp;·&nbsp; แยกตัดตามสีอลู (สีต่างกันไม่ตัดรวมเส้น)</div>';
@@ -6351,7 +6406,7 @@ function pkpCutDocHTML(pieces, ids, set){
     +'.head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #1c2733;padding-bottom:5px}.brand{font-size:16px;font-weight:800}.brand small{font-size:9px;letter-spacing:1.5px;color:#4b5a6e;font-weight:600;margin-left:6px}.sumc{text-align:right;font-size:11px;color:#4b5a6e}.sumc b{color:#d4760f;font-size:13px}'
     +'.info{font-size:10px;color:#4b5a6e;margin:5px 0 2px}'
     +'.csec{margin-top:10px}.cht{font-size:13px;font-weight:800;display:flex;align-items:center;gap:6px;border-left:3px solid #d4760f;padding-left:7px;margin-bottom:6px}.dot{width:12px;height:12px;border-radius:50%;border:1px solid #999;display:inline-block;flex:none}.meta{font-size:10px;font-weight:600;color:#4b5a6e}'
-    +'.rail{margin:0 0 9px 2px}.rh{display:flex;align-items:center;gap:8px;border-bottom:1px solid #c2ccd6;padding-bottom:2px;margin-bottom:6px}.rt{font-size:12.5px;font-weight:800;color:#1c2733}'
+    +'.railpage{page-break-before:always;break-before:page;padding-top:4px}.railpage.first{page-break-before:auto;break-before:auto}.rhd{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;border-bottom:2px solid #1c2733;padding-bottom:4px;margin:0 0 8px}.rt{font-size:15px;font-weight:800;color:#1c2733}.rc{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700}'
     +'.bars{column-count:2;column-gap:11px}'
     +'.bk{break-inside:avoid;margin-bottom:7px;border:1px solid #d4dbe2;border-radius:5px;padding:5px 7px;background:#fafbfc}'
     +'.bh{display:flex;justify-content:space-between;font-size:10.5px;color:#444;margin-bottom:3px}.bh b{color:#1c2733}'
