@@ -6263,6 +6263,13 @@ function pkpRequisition(items, mainAlu){
   return { eq:eq, byColor:byColor, rails:rails, totalSets:totalSets, nonScreen:nonScreen, incomplete:incomplete };
 }
 function pkpReqColorDot(c){var m={'อบขาว':'#f3f4f6','ดำ':'#2b2b2b','NA':'#cbd3da','น้ำตาลแดง':'#7c3b28','น้ำตาลเข้ม':'#3e2a1e','เทาเข้มซาฮาร่า':'#555','เทาเงินซาฮาร่า':'#9aa0a6','ดำซาฮาร่า':'#222','ลายไม้สักแดง':'#8a4b32','ลายไม้สักทอง':'#9c6b34'};return m[c]||'#9aa0a6';}
+// สีอลูที่นอกเหนือ อบขาว/ดำ (distinct) — เก็บเป็น flag ไว้ highlight ในรายการ
+function pkpSpecialColors(items, mainAlu){
+  var seen={}, out=[]; mainAlu=String(mainAlu||'');
+  (items||[]).forEach(function(it){ if(!it.type)return; var c=String((it.cAlu||mainAlu)||'').trim();
+    if(c && c!=='อบขาว' && c!=='ดำ' && !seen[c]){ seen[c]=1; out.push(c); } });
+  return out.join(', ');
+}
 // สรุปมุ้งจีบในหน้า WO (จำนวนชุด + สีอลู + แจ้งเตือนรายการอื่น)
 function pkpRenderReqSummary(){
   var el=document.getElementById('pkpReqSummary'); if(!el) return;
@@ -6279,7 +6286,8 @@ function pkpRenderReqSummary(){
     +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><b style="font-size:18px;color:#e8862e;">'+r.totalSets+' ชุด</b>'+chips+'</div>'+notice+'</div>';
 }
 // สร้าง HTML เอกสารใบเบิก (ใช้ทั้งใบเดี่ยว + รวมหลายใบ) — A4 portrait · auto-fit 1 แผ่น
-function pkpReqDocHTML(items, mainAlu, H){
+// เนื้อหาใบเบิก 1 ใบ (head+info+สรุป+ตาราง+ราง+foot)
+function pkpReqInnerHTML(items, mainAlu, H){
   H=H||{};
   var r=pkpRequisition(items, mainAlu), E=r.eq;
   var esc=function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
@@ -6299,16 +6307,20 @@ function pkpReqDocHTML(items, mainAlu, H){
     var rrows=colorsU.map(function(col){return '<tr><td><span class="dot" style="display:inline-block;background:'+dot(col)+';margin-right:6px;vertical-align:middle"></span>'+esc(col)+'</td>'+colsU.map(function(rt){var v=r.rails[col][rt[0]];tot[rt[0]]+=v;return '<td class="n">'+(v?f2(v):'–')+'</td>';}).join('')+'</tr>';}).join('');
     var totr='<tr class="tot"><td>รวม (ซม.)</td>'+colsU.map(function(rt){return '<td class="n">'+f2(tot[rt[0]])+'</td>';}).join('')+'</tr>';
     railHtml='<div class="sech">ความยาวรางอลูมิเนียม (แยกสี × ชนิดราง) — ซม.</div><table><thead><tr>'+thr+'</tr></thead><tbody>'+rrows+totr+'</tbody></table>'; }
-  var inner='<div class="head"><div class="brand">PK มุ้งจีบ<small>EQUIPMENT REQUISITION · ใบเบิกอุปกรณ์</small></div><div class="woblk"><div class="lbl">เลขที่ใบผลิต</div><div class="wo">'+wo+'</div></div></div>'
+  return '<div class="head"><div class="brand">PK มุ้งจีบ<small>EQUIPMENT REQUISITION · ใบเบิกอุปกรณ์</small></div><div class="woblk"><div class="lbl">เลขที่ใบผลิต</div><div class="wo">'+wo+'</div></div></div>'
     +(H.sub?'<div class="subln">'+esc(H.sub)+'</div>':'')
     +'<div class="info"><div class="cI"><div class="k">ชื่อลูกค้า</div><div class="v">'+cust+'</div></div><div class="cI"><div class="k">วันที่ออกใบผลิต</div><div class="v">'+issue+'</div></div><div class="cI"><div class="k">วันที่ติดตั้ง</div><div class="v">'+install+'</div></div><div class="cI"><div class="k">สีอลูหลัก</div><div class="v">'+mainAluD+'</div></div></div>'
     +'<div class="sumcard"><div class="t">สรุปมุ้งจีบ</div><div class="sumrow"><div class="big">'+r.totalSets+' <small>ชุด</small></div>'+chips+'</div>'+notice+'</div>'
     +'<div class="sech">รายการอุปกรณ์</div><table><thead><tr><th class="c">#</th><th>รายการ</th><th class="n">จำนวน</th><th>หน่วย</th><th>หมายเหตุ</th></tr></thead><tbody>'+bodyR+'</tbody></table>'+railHtml
     +'<div class="foot"><div class="fnote">* ซ่อนรายการที่เป็น 0 · ความยาวรวม = ต่อเส้น × จำนวนเส้น<br>* ราง 4/6 มือจับ = เท่าบานอิสระ · แยกกลาง = เท่าบานคู่</div><div class="sign"><div class="ln"></div><div class="sl">ผู้เบิก / วันที่</div></div></div>';
+}
+// ครอบหลายแผ่นใน PDF เดียว (แต่ละ inner = 1 แผ่น · auto-fit ต่อแผ่น · ขึ้นหน้าใหม่)
+function pkpReqDocShell_(inners, title){
+  var sheets=inners.map(function(x){return '<div class="sheet"><div class="fit">'+x+'</div></div>';}).join('');
   var CSS='@import url(https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap);'
     +'*{box-sizing:border-box;margin:0;padding:0}body{font-family:Sarabun,sans-serif;background:#eef1f4;color:#111a25;padding:18px;line-height:1.4}'
     +'.bar{max-width:210mm;margin:0 auto 12px;display:flex;gap:10px;align-items:center}.bar button{font-family:inherit;border:none;background:#1c2733;color:#fff;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}.bar span{font-size:12px;color:#d4760f;font-weight:700}'
-    +'.sheet{width:210mm;max-width:100%;margin:0 auto;background:#fff;border-radius:6px;box-shadow:0 10px 36px rgba(0,0,0,.18);padding:14mm 14mm 12mm;overflow:hidden}#fit{transform-origin:top center}'
+    +'.sheet{width:210mm;max-width:100%;margin:0 auto 18px;background:#fff;border-radius:6px;box-shadow:0 10px 36px rgba(0,0,0,.18);padding:14mm 14mm 12mm;overflow:hidden}.fit{transform-origin:top center}'
     +'.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid #1c2733;padding-bottom:9px}.brand{font-size:20px;font-weight:800}.brand small{display:block;font-size:10px;font-weight:600;letter-spacing:2px;color:#4b5a6e;margin-top:1px}.woblk{text-align:right}.woblk .lbl{font-size:10px;color:#4b5a6e;letter-spacing:1px}.woblk .wo{font-size:19px;font-weight:800;color:#d4760f}'
     +'.info{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#c2ccd6;border:1px solid #c2ccd6;border-radius:5px;overflow:hidden;margin:12px 0}.info .cI{background:#fff;padding:6px 9px}.info .k{font-size:10px;color:#4b5a6e}.info .v{font-size:13px;font-weight:700;margin-top:1px}'
     +'.sumcard{background:#fbf6ef;border:1px solid #e6d8c4;border-radius:7px;padding:11px 13px;margin-bottom:13px}.sumcard .t{font-size:13px;font-weight:800;margin-bottom:7px}.sumrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.big{font-size:22px;font-weight:800;color:#d4760f;line-height:1}.big small{font-size:12px;color:#4b5a6e;font-weight:600}'
@@ -6317,14 +6329,13 @@ function pkpReqDocHTML(items, mainAlu, H){
     +'.sech{font-size:13px;font-weight:800;margin:15px 0 6px;color:#1c2733}.subln{font-size:11px;color:#4b5a6e;font-weight:600;margin:7px 0 0}'
     +'table{width:100%;border-collapse:collapse;font-size:12.5px}th{background:#1c2733;color:#fff;font-weight:700;font-size:11px;padding:6px 9px;text-align:left}th.n,td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}th.c,td.c{text-align:center;width:34px}td{padding:5px 9px;border-bottom:1px solid #e7ecf0}td.qty{font-weight:800;font-size:13.5px}td.unit{color:#4b5a6e;width:46px}td.note{color:#4b5a6e;font-size:11px;width:84px}tr.tot td{background:#f4f1ec;font-weight:800;border-top:2px solid #1c2733}'
     +'.foot{margin-top:14px;display:flex;justify-content:space-between;align-items:flex-end}.fnote{font-size:10.5px;color:#4b5a6e;max-width:62%}.sign{text-align:center}.sign .ln{border-bottom:1.4px dotted #111a25;width:150px;height:30px}.sign .sl{font-size:11px;margin-top:3px}'
-    +'@media print{body{background:#fff;padding:0}.sheet{box-shadow:none;border-radius:0;width:auto}.bar{display:none}@page{size:A4 portrait;margin:10mm}}';
-  var fit='function fp(){var f=document.getElementById("fit");f.style.transform="";var sh=f.parentNode;var ppm=96/25.4,pad=(14+12)*ppm,tg=277*ppm-pad,h=f.offsetHeight,s=1;if(h>tg){s=tg/h;f.style.transform="scale("+s+")";}sh.style.height=(h*s+pad)+"px";var si=document.getElementById("si");if(si)si.textContent=s<1?("ย่อ "+Math.round(s*100)+"% เพื่อพอดี 1 แผ่น"):"";}window.onload=fp;window.onresize=fp;';
-  var docHtml='<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>ใบเบิก '+cust+'</title><style>'+CSS+'</style></head><body>'
+    +'@media print{body{background:#fff;padding:0}.sheet{box-shadow:none;border-radius:0;width:auto;margin:0;page-break-after:always}.sheet:last-of-type{page-break-after:auto}.bar{display:none}@page{size:A4 portrait;margin:10mm}}';
+  var fit='function fp(){var ppm=96/25.4,pad=(14+12)*ppm,tg=277*ppm-pad,L=document.querySelectorAll(".fit");for(var i=0;i<L.length;i++){var f=L[i];f.style.transform="";var h=f.offsetHeight,s=1;if(h>tg){s=tg/h;f.style.transform="scale("+s+")";}f.parentNode.style.height=(h*s+pad)+"px";}var si=document.getElementById("si");if(si)si.textContent=L.length+" แผ่น";}window.onload=fp;window.onresize=fp;';
+  return '<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>'+(title||'ใบเบิก')+'</title><style>'+CSS+'</style></head><body>'
     +'<div class="bar"><button onclick="window.print()">🖨 พิมพ์ / บันทึก PDF</button><span id="si"></span></div>'
-    +'<div class="sheet"><div id="fit">'+inner+'</div></div>'
-    +'<scr'+'ipt>'+fit+'</scr'+'ipt></body></html>';
-  return docHtml;
+    +sheets+'<scr'+'ipt>'+fit+'</scr'+'ipt></body></html>';
 }
+function pkpReqDocHTML(items, mainAlu, H){ return pkpReqDocShell_([pkpReqInnerHTML(items, mainAlu, H)], 'ใบเบิก '+((H&&H.customer)||'')); }
 function pkpReqOpenDoc_(docHtml){ var w=window.open('','_blank'); if(!w){ toast('เปิดหน้าต่างไม่ได้ (ตรวจป๊อปอัปบล็อก)'); return; } w.document.open(); w.document.write(docHtml); w.document.close(); }
 function pkpReqThDate_(s){ if(!s)return'-'; var p=String(s).split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):s; }
 // พิมพ์ใบเบิก — ใบที่เปิดอยู่ในหน้าแก้ไข
@@ -6361,28 +6372,17 @@ function pkpUpdateExportBtn(){
 async function pkpReqExportMulti(){
   var ids=Object.keys(pkpSelWOs).filter(function(k){return pkpSelWOs[k];});
   if(!ids.length){ toast('เลือก WO ก่อน'); return; }
-  showLoad('กำลังรวมใบเบิก '+ids.length+' ใบ...');
+  showLoad('กำลังสร้างใบเบิก '+ids.length+' ใบ...');
   try{
-    var all=[];
-    for(var i=0;i<ids.length;i++){ var o=await pkpFetchWO(ids[i]); if(o) all=all.concat(pkpWoResolvedItems(o)); }
-    if(!all.length){ toast('ไม่มีรายการมุ้งจีบในใบที่เลือก'); return; }
-    var H={ wo:'ใบเบิกรวม '+ids.length+' ใบ', customer:'(รวมหลายใบ)', issue:'-', install:'-', sub:'รวมจาก: '+ids.join(', ') };
-    pkpReqOpenDoc_(pkpReqDocHTML(all, '', H));   // สีถูก resolve ต่อชิ้นแล้ว → mainAlu=''
+    var inners=[];
+    for(var i=0;i<ids.length;i++){ var o=await pkpFetchWO(ids[i]); if(!o)continue;
+      var its=(o.items||[]).filter(function(it){return it.type;});
+      var H={ wo:o.woId, customer:(o.customer&&o.customer.name)||'-', issue:pkpReqThDate_(o.issueDate), install:pkpReqThDate_(o.installDate) };
+      inners.push(pkpReqInnerHTML(its, o.mainColorAlu||'', H));   // 1 ใบ/WO (resolve สีต่อใบ)
+    }
+    if(!inners.length){ toast('ไม่มีรายการ'); return; }
+    pkpReqOpenDoc_(pkpReqDocShell_(inners, 'ใบเบิกรวม '+inners.length+' ใบ'));   // รวมเป็น PDF เดียว แยกหน้า
   } finally { hideLoad(); }
-}
-// ── เติมสรุปย่อ (จำนวนชุด + สีอลู) ใต้แต่ละ WO ในรายการ (lazy, cache) ──
-async function pkpFillListSummaries(ids){
-  for(var i=0;i<ids.length;i++){
-    var woId=ids[i], slot=document.getElementById('pkpSum_'+woId); if(!slot) continue;
-    var o=await pkpFetchWO(woId);
-    if(!o){ slot.innerHTML=''; continue; }
-    var r=pkpRequisition(pkpWoResolvedItems(o), '');
-    if(!r.totalSets){ slot.innerHTML='<span style="color:var(--mu,#6b7a94);">— ไม่มีมุ้งจีบ —</span>'; continue; }
-    var chips=Object.keys(r.byColor).map(function(c){
-      return '<span style="display:inline-flex;align-items:center;gap:3px;"><span style="width:8px;height:8px;border-radius:50%;background:'+pkpReqColorDot(c)+';border:1px solid #889;"></span>'+c+' '+r.byColor[c]+'</span>';
-    }).join(' &nbsp;');
-    slot.innerHTML='<b style="color:#e8862e;">'+r.totalSets+' ชุด</b> &nbsp; '+chips + (r.nonScreen.length?' &nbsp; <span style="color:#ff9f43;">+อื่นๆ '+r.nonScreen.length+'</span>':'');
-  }
 }
 function pkpFmt(v){ if(v==null||v==='')return''; var n=Number(v); if(isNaN(n))return''; return (Math.round(n*100)/100).toLocaleString('th-TH',{maximumFractionDigits:2}); }
 
@@ -6570,7 +6570,8 @@ function pkpBody(){
       cAlu:it.cAlu, cMesh:it.cMesh, note:it.note||''
     };}),
     sigCheck: pkpSigCheck,
-    sigApprove: pkpSigApprove
+    sigApprove: pkpSigApprove,
+    specialColors: pkpSpecialColors(pkpItems.filter(function(it){return it.type;}), (document.getElementById('pkpMainAlu')||{}).value||'')
   };
 }
 function pkpValidate(b){
@@ -6615,19 +6616,20 @@ async function pkpLoadList(){
       +'<span style="font-size:11px;color:var(--mu,#6b7a94);">ติ๊กเลือกหลายใบเพื่อรวมใบเบิกทีเดียว</span></div>';
     r.orders.forEach(function(o){
       ids.push(o.woId);
-      h+='<div class="pkp-list-row" style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line,#2a3344);border-radius:8px;margin-bottom:7px;background:var(--surf,#171d27);">'
+      var sp=String(o.specialColors||'').trim();
+      var hl = sp ? 'border-left:4px solid #e8862e;' : '';
+      var badge = sp ? '<span style="margin-left:7px;font-size:11px;font-weight:700;color:#e8862e;background:rgba(232,134,46,.12);border:1px solid rgba(232,134,46,.4);border-radius:20px;padding:1px 8px;white-space:nowrap;">🎨 '+sp+'</span>' : '';
+      h+='<div class="pkp-list-row" style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line,#2a3344);'+hl+'border-radius:8px;margin-bottom:7px;background:var(--surf,#171d27);">'
         +'<input type="checkbox" value="'+o.woId+'" onclick="event.stopPropagation();pkpToggleSel(this)" style="width:17px;height:17px;flex:none;cursor:pointer;">'
         +'<div style="flex:1;min-width:0;cursor:pointer;" onclick="pkpOpen(\''+o.woId+'\')" title="คลิกเพื่อเปิด/แก้">'
-          +'<div style="font-weight:700;">'+o.woId+' · '+(o.customerName||'-')+'</div>'
+          +'<div style="font-weight:700;">'+o.woId+' · '+(o.customerName||'-')+badge+'</div>'
           +'<div style="font-size:12px;color:var(--mu,#6b7a94);">ออก '+(o.issueDate||'-')+' · ติดตั้ง '+(o.installDate||'-')+' · '+o.itemCount+' รายการ · '+(o.status||'-')+'</div>'
-          +'<div id="pkpSum_'+o.woId+'" style="font-size:12px;margin-top:3px;color:var(--mu,#6b7a94);">…</div>'
         +'</div>'
         +'<button class="btn btn-g btn-sm" onclick="event.stopPropagation();pkpDelete(\''+o.woId+'\')" style="color:var(--rd,#ff453a);flex:none;">ลบ</button>'
       +'</div>';
     });
     wrap.innerHTML=h;
     pkpUpdateExportBtn();
-    pkpFillListSummaries(ids);
   }catch(e){ wrap.innerHTML='<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
 }
 
