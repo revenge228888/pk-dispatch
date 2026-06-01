@@ -6417,7 +6417,30 @@ function pkpRenderSig(){
     + '</div>';
 }
 function pkpSigKey(){ return 'pk_sig_'+((CURRENT_USER&&CURRENT_USER.username)||'x'); }
-function pkpSavedSig(){ try{ return localStorage.getItem(pkpSigKey())||''; }catch(e){ return ''; } }
+var pkpSavedSigData=null, pkpSavedSigLoaded=false;   // ลายเซ็นที่บันทึก (จาก Drive · cache ในหน้านี้)
+function pkpSavedSig(){ if(pkpSavedSigData&&pkpSavedSigData.img) return pkpSavedSigData.img; try{ return localStorage.getItem(pkpSigKey())||''; }catch(e){ return ''; } }
+function pkpSigSaveBackend_(img){ try{ call({ action:'pk_prodSigSet', img:img, name:pkpSigName() }); }catch(e){} }
+// โหลดลายเซ็นที่บันทึกจาก Drive (ครั้งเดียวต่อ session) — มี localStorage เป็น fallback + auto-migrate ของเครื่องขึ้น Drive
+async function pkpLoadSavedSig(force){
+  if(pkpSavedSigLoaded && !force) return;
+  pkpSavedSigLoaded=true;
+  var ls=''; try{ ls=localStorage.getItem(pkpSigKey())||''; }catch(e){}
+  try{
+    var r=await call({ action:'pk_prodSigGet' });
+    if(r&&r.ok){
+      if(r.sig&&r.sig.img){ pkpSavedSigData={ img:r.sig.img, name:r.sig.name||'' }; try{ localStorage.setItem(pkpSigKey(),r.sig.img); }catch(e){} }
+      else if(ls){ pkpSavedSigData={ img:ls, name:'' }; pkpSigSaveBackend_(ls); }   // เคยเซฟไว้ในเครื่อง → ย้ายขึ้น Drive ให้
+      else pkpSavedSigData=null;
+    } else if(ls){ pkpSavedSigData={ img:ls, name:'' }; }
+  }catch(e){ if(ls) pkpSavedSigData={ img:ls, name:'' }; }   // ออฟไลน์ → ใช้ของเครื่อง
+  if(typeof pkpRenderSig==='function') pkpRenderSig();
+}
+function pkpSigForget(){
+  if(!confirm('ลบลายเซ็นที่บันทึกไว้?\n(ลายเซ็นที่ลงในใบที่ทำอยู่ยังคงอยู่)')) return;
+  pkpSavedSigData=null; try{ localStorage.removeItem(pkpSigKey()); }catch(e){}
+  pkpSigSaveBackend_('');   // img='' = เคลียร์บน Drive (ไฟล์ยังอยู่ กู้ได้)
+  pkpRenderSig(); toast('ลบลายเซ็นที่บันทึกแล้ว');
+}
 function pkpSigName(){ return (CURRENT_USER&&(CURRENT_USER.name||CURRENT_USER.username))||''; }
 function pkpSigApply(key,img){
   var sig={ name:pkpSigName(), img:String(img||''), ts:pkpToday() };
@@ -6437,10 +6460,14 @@ function pkpSigSlot(key,label,sig,enabled){
       +(enabled?'<button class="btn btn-g btn-sm" style="margin-top:5px;color:var(--rd,#ff453a);" onclick="pkpSigClear(\''+key+'\')">ลบลายเซ็น</button>':'');
   } else if(enabled){
     var btns='';
-    if(saved) btns+='<button class="btn btn-p btn-sm" onclick="pkpSigUseSaved(\''+key+'\')">'+actLabel+'</button>';
+    if(saved){
+      btns+='<div style="margin-bottom:7px;"><img src="'+saved+'" alt="ลายเซ็นที่บันทึก" style="max-height:40px;max-width:150px;object-fit:contain;background:#fff;border-radius:4px;padding:3px;border:1px solid var(--line,#2a3344);display:block;"></div>';
+      btns+='<button class="btn btn-p btn-sm" onclick="pkpSigUseSaved(\''+key+'\')">'+actLabel+'</button>';
+    }
     btns+='<button class="btn btn-g btn-sm" '+(saved?'style="margin-left:6px;"':'')+' onclick="document.getElementById(\'pkpSigFile_'+key+'\').click()">📎 '+(saved?'เปลี่ยนรูป':'แนบรูปลายเซ็น')+'</button>'
       +'<input type="file" accept="image/*" id="pkpSigFile_'+key+'" style="display:none;" onchange="pkpSigUpload(\''+key+'\',this)">';
-    inner='<div style="font-size:12px;color:var(--mu,#6b7a94);margin-bottom:6px;">'+(saved?'กดปุ่มเพื่อลงลายเซ็นที่บันทึกไว้':'ยังไม่เซ็น')+'</div>'+btns;
+    if(saved) btns+='<button class="btn btn-g btn-sm" style="margin-left:6px;color:var(--mu,#6b7a94);" onclick="pkpSigForget()">ลบลายเซ็นที่บันทึก</button>';
+    inner='<div style="font-size:12px;color:var(--mu,#6b7a94);margin-bottom:6px;">'+(saved?'ลายเซ็นที่บันทึกไว้ — กดปุ่มเพื่อลงในใบนี้':'ยังไม่เซ็น')+'</div>'+btns;
   } else {
     inner='<div style="font-size:12px;color:var(--mu,#6b7a94);">เฉพาะผู้จัดการเซ็นอนุมัติได้</div>';
   }
@@ -6454,9 +6481,11 @@ function pkpSigUpload(key,input){
   var rd=new FileReader();
   rd.onload=function(){
     var img=String(rd.result||'');
-    try{ localStorage.setItem(pkpSigKey(), img); }catch(e){}   // จำลายเซ็นไว้ใช้ครั้งต่อไป
+    try{ localStorage.setItem(pkpSigKey(), img); }catch(e){}   // cache เร็วในเครื่อง
+    pkpSavedSigData={ img:img, name:pkpSigName() };            // อัปเดต cache หน้านี้
+    pkpSigSaveBackend_(img);                                   // เก็บขึ้น Drive → ใช้ได้ทุกเครื่อง
     pkpSigApply(key,img);
-    toast('แนบ + บันทึกลายเซ็นแล้ว (ครั้งหน้ากดใช้ได้เลย)');
+    toast('แนบ + บันทึกลายเซ็นแล้ว (ใช้ได้ทุกเครื่อง)');
   };
   rd.onerror=function(){ toast('❌ อ่านไฟล์รูปไม่ได้'); };
   rd.readAsDataURL(f);
@@ -6474,6 +6503,7 @@ function pkpInit(){
   // default เดือนที่ list = เดือนนี้
   var mEl=document.getElementById('pkpListMonth'); if(mEl && !mEl.value){ mEl.value=pkpToday().slice(0,7); }
   if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
+  pkpLoadSavedSig();   // โหลดลายเซ็นที่บันทึกไว้ (Drive · ข้ามเครื่อง)
   pkpLoadList();
 }
 
