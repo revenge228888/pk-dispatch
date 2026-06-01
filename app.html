@@ -906,7 +906,8 @@ function renderOfficeShell(){
           <div class="row-form" style="margin-bottom:10px;align-items:center;">
             <div style="font-weight:800;font-size:16px;">🏭 ใบผลิต</div>
             <div style="font-size:13px;color:var(--mu,#6b7a94);">เลขใบ: <b id="pkpWoLabel">(ใบใหม่ — เลขออกตอนบันทึก)</b></div>
-            <button class="btn btn-g btn-sm" onclick="pkpNew()" style="margin-left:auto;">+ ใบใหม่</button>
+            <button class="btn btn-g btn-sm" onclick="pkpPrint()" style="margin-left:auto;">🖨 พิมพ์</button>
+            <button class="btn btn-g btn-sm" onclick="pkpNew()">+ ใบใหม่</button>
           </div>
           <div class="row-form" style="margin-bottom:10px;">
             <div class="fg" style="flex:1;min-width:180px;"><label class="fl">ชื่อลูกค้า</label><input class="fi" id="pkpCust" type="text" placeholder="ชื่อลูกค้า"></div>
@@ -6217,7 +6218,7 @@ var pkpEditingWO=null;   // null = ใบใหม่ / 'WO-xxxx' = กำลั
 var pkpLoadedStatus='';
 
 function pkpToday(){ return new Date().toISOString().slice(0,10); }
-function pkpBlankItem(){ return { type:'', patt:'→', w:'', h:'', wl:'', wr:'', cAlu:'', cMesh:'' }; }
+function pkpBlankItem(){ return { type:'', patt:'→', w:'', h:'', wl:'', wr:'', cAlu:'', cMesh:'', note:'' }; }
 
 // ── INIT (เรียกจาก setTab) ──
 function pkpInit(){
@@ -6278,6 +6279,7 @@ function pkpRenderRows(){
         +'<div class="fg" style="width:120px"><label class="fl">สีอลู (ว่าง=ตามหลัก)</label><input class="fi" type="text" list="pkpColorList" value="'+(it.cAlu||'')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cAlu\',this.value)"></div>'
         +'<div class="fg" style="width:120px"><label class="fl">สีผ้ามุ้ง (ว่าง=ตามหลัก)</label><input class="fi" type="text" list="pkpColorList" value="'+(it.cMesh||'')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cMesh\',this.value)"></div>'
       +'</div>'
+      +'<div class="row-form" style="gap:8px;margin-bottom:8px;"><div class="fg" style="flex:1;min-width:220px"><label class="fl">หมายเหตุชุดนี้ (พิมพ์เฉพาะที่กรอก)</label><input class="fi" type="text" value="'+(it.note||'')+'" placeholder="(ถ้ามี — จะโชว์ใต้รายการบนใบพิมพ์)" oninput="pkpOnField('+i+',\'note\',this.value)"></div></div>'
       +'<div id="pkpCalc'+i+'" style="font-size:12px;color:var(--mu,#6b7a94);line-height:1.7;border-top:1px dashed var(--line,#2a3344);padding-top:7px;"></div>'
     +'</div>';
   });
@@ -6317,7 +6319,7 @@ function pkpBody(){
     items: pkpItems.filter(function(it){return it.type;}).map(function(it){return {
       type:it.type, patt:it.patt||'',
       w:it.w, h:it.h, wl:it.wl, wr:it.wr,
-      cAlu:it.cAlu, cMesh:it.cMesh
+      cAlu:it.cAlu, cMesh:it.cMesh, note:it.note||''
     };})
   };
 }
@@ -6357,11 +6359,10 @@ async function pkpLoadList(){
     if(!r.orders.length){ wrap.innerHTML='<div class="loading-row">ยังไม่มีใบผลิตในเดือนนี้</div>'; return; }
     var h='';
     r.orders.forEach(function(o){
-      h+='<div class="pkp-list-row" style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line,#2a3344);border-radius:8px;margin-bottom:7px;background:var(--surf,#171d27);">'
+      h+='<div class="pkp-list-row" onclick="pkpOpen(\''+o.woId+'\')" title="คลิกเพื่อเปิด/แก้" style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line,#2a3344);border-radius:8px;margin-bottom:7px;background:var(--surf,#171d27);cursor:pointer;">'
         +'<div style="flex:1;min-width:0;"><div style="font-weight:700;">'+o.woId+' · '+(o.customerName||'-')+'</div>'
         +'<div style="font-size:12px;color:var(--mu,#6b7a94);">ออก '+(o.issueDate||'-')+' · ติดตั้ง '+(o.installDate||'-')+' · '+o.itemCount+' รายการ · '+(o.status||'-')+'</div></div>'
-        +'<button class="btn btn-g btn-sm" onclick="pkpOpen(\''+o.woId+'\')">เปิด/แก้</button>'
-        +'<button class="btn btn-g btn-sm" onclick="pkpDelete(\''+o.woId+'\')" style="color:var(--rd,#ff453a);">ลบ</button>'
+        +'<button class="btn btn-g btn-sm" onclick="event.stopPropagation();pkpDelete(\''+o.woId+'\')" style="color:var(--rd,#ff453a);">ลบ</button>'
       +'</div>';
     });
     wrap.innerHTML=h;
@@ -6379,7 +6380,7 @@ async function pkpOpen(woId){
     set('pkpCust',(o.customer&&o.customer.name)||''); set('pkpIssue',o.issueDate); set('pkpInstall',o.installDate);
     set('pkpRef',o.refNo); set('pkpNote',o.note); set('pkpMainAlu',o.mainColorAlu); set('pkpMainMesh',o.mainColorMesh);
     pkpItems=(o.items&&o.items.length?o.items:[pkpBlankItem()]).map(function(it){return {
-      type:it.type||'', patt:it.patt||'→', w:it.w||'', h:it.h||'', wl:it.wl||'', wr:it.wr||'', cAlu:it.cAlu||'', cMesh:it.cMesh||''
+      type:it.type||'', patt:it.patt||'→', w:it.w||'', h:it.h||'', wl:it.wl||'', wr:it.wr||'', cAlu:it.cAlu||'', cMesh:it.cMesh||'', note:it.note||''
     };});
     var woEl=document.getElementById('pkpWoLabel'); if(woEl)woEl.textContent=o.woId+(o.status?' · '+o.status:'');
     var sv=document.getElementById('pkpSaveBtn'); if(sv)sv.textContent='💾 บันทึกการแก้ไข';
@@ -6400,6 +6401,96 @@ async function pkpDelete(woId){
     if(pkpEditingWO===woId) pkpNew();
     pkpLoadList();
   }catch(e){ toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// ── พิมพ์ใบผลิต (เลย์เอาต์ table v4 + shrink-to-fit) จากข้อมูลบนจอ ──
+function pkpPrint(){
+  var o={
+    woId: pkpEditingWO || '(ร่าง — ยังไม่บันทึก)',
+    status: pkpLoadedStatus || 'รอตรวจ',
+    customer:(document.getElementById('pkpCust')||{}).value||'-',
+    issueDate:(document.getElementById('pkpIssue')||{}).value||'',
+    installDate:(document.getElementById('pkpInstall')||{}).value||'',
+    refNo:(document.getElementById('pkpRef')||{}).value||'',
+    note:(document.getElementById('pkpNote')||{}).value||'',
+    mainAlu:(document.getElementById('pkpMainAlu')||{}).value||'',
+    mainMesh:(document.getElementById('pkpMainMesh')||{}).value||'',
+    items: pkpItems.filter(function(it){return it.type;})
+  };
+  if(!o.items.length){ toast('⚠️ ยังไม่มีรายการให้พิมพ์'); return; }
+  var V=function(n){ if(n==null||n==='')return''; var x=Number(n); if(isNaN(x))return''; return (Math.round(x*100)/100).toLocaleString('th-TH',{maximumFractionDigits:2}); };
+  var thDate=function(s){ if(!s)return'-'; var p=String(s).split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):s; };
+  var esc=function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  var td=function(v,cls){ return '<td'+(cls?' class="'+cls+'"':'')+'>'+(v===''||v==null?'':v)+'</td>'; };
+  function rowsForItem(it,no){
+    var c=pkpCalcItem(it),f=c.fields||{},alu=esc(it.cAlu||o.mainAlu||''),mesh=esc(it.cMesh||o.mainMesh||''),rows=[];
+    if(c.kind==='split'){
+      rows.push('<tr class="grpstart">'+td('<b>'+no+'</b>')+td(esc(it.type),'nme')+td('<span class="arrow">'+esc(it.patt||'')+'</span>')
+        +td(V((+it.wl||0)+(+it.wr||0)))+td(V(it.h))+td(alu)+td(mesh)
+        +td(V(f.maajab))+td(V(f.rangkang))+td(V(f.rangbl))+td(V(f.rangtia))
+        +td('')+td('')+td('')+td('')+td(V(f.cutSling))+td(V(f.nSling))+td(V(f.pvc))+td(V(f.holePitch))+'</tr>');
+      rows.push('<tr class="sub">'+td('')+td('ด้านซ้าย','nme')+td('')+td(V(it.wl))+td('')+td('')+td('')+td('')+td('')+td('')+td('')+td('<b>'+V(f.cutScreen)+'</b>')+td('<b>'+f.jeebL+'</b>')+td(V(f.cutRopeL))+td(V(f.nRope))+td('')+td('')+td('')+td('')+'</tr>');
+      rows.push('<tr class="sub">'+td('')+td('ด้านขวา','nme')+td('')+td(V(it.wr))+td('')+td('')+td('')+td('')+td('')+td('')+td('')+td('<b>'+V(f.cutScreen)+'</b>')+td('<b>'+f.jeebR+'</b>')+td(V(f.cutRopeR))+td(V(f.nRope))+td('')+td('')+td('')+td('')+'</tr>');
+    } else {
+      var cut = c.calculable
+        ? td(V(f.maajab))+td(V(f.rangkang))+td(V(f.rangbl))+td(V(f.rangtia))+td('<b>'+V(f.cutScreen)+'</b>')+td('<b>'+f.jeeb+'</b>')+td(V(f.cutRope))+td(V(f.nRope))+td(V(f.cutSling))+td(V(f.nSling))+td(V(f.pvc))+td(V(f.holePitch))
+        : '<td colspan="12" style="color:#9aa7b6;font-style:italic;">— ไม่มีค่าตัด (บันทึกขนาด/สี) —</td>';
+      rows.push('<tr class="grpstart">'+td('<b>'+no+'</b>')+td(esc(it.type),'nme')+td('<span class="arrow">'+esc(it.patt||'')+'</span>')+td(V(it.w))+td(V(it.h))+td(alu)+td(mesh)+cut+'</tr>');
+    }
+    if(it.note && it.note.trim()) rows.push('<tr class="noterow"><td colspan="19">📝 หมายเหตุ: '+esc(it.note)+'</td></tr>');
+    return rows;
+  }
+  function emptyRow(no){ var c='<td class="b">'+no+'</td>'; for(var i=0;i<18;i++)c+='<td></td>'; return '<tr class="grpstart empty">'+c+'</tr>'; }
+  var PER=10, pages=[], cur=[], n=0;
+  o.items.forEach(function(it){ n++; cur.push(rowsForItem(it,n)); if(cur.length>=PER){pages.push(cur);cur=[];} });
+  if(cur.length||!pages.length) pages.push(cur);
+  var THEAD='<colgroup><col class="colNo"><col class="colNm"><col class="colPt"><col class="colWH"><col class="colWH"><col class="colC"><col class="colC"><col><col><col><col><col><col><col><col><col><col><col class="colPv"><col class="colHl"></colgroup>'
+    +'<thead><tr><th rowspan="2">No.</th><th rowspan="2">รายการ</th><th rowspan="2">แบบ</th><th rowspan="2">กว้าง</th><th rowspan="2">สูง</th><th rowspan="2">สีอลู</th><th rowspan="2">สีผ้ามุ้ง</th><th colspan="4">ขนาดตัดอลูมิเนียม</th><th colspan="2">ขนาดตัดมุ้ง</th><th colspan="2">ขนาดตัดเชือก</th><th colspan="2">ขนาดตัดสลิง</th><th rowspan="2">PVC</th><th rowspan="2">ระยะ<br>เจาะรู</th></tr>'
+    +'<tr><th>มือจับ</th><th>รางข้าง</th><th>รางบน-ล่าง</th><th>รางเตี้ย</th><th>ความยาว</th><th>จีบ</th><th>ความยาว</th><th>เส้น</th><th>ความยาว</th><th>เส้น</th></tr></thead>';
+  var headHTML=function(){
+    return '<div class="head"><div class="mark">PK</div><div><div class="co">PK มุ้งจีบ</div><div class="doc">Production Order · ใบผลิต</div></div>'
+      +'<div class="sp"></div><div class="wo"><span class="lab">เลขที่ใบผลิต</span><span class="no">'+esc(o.woId)+'</span><span class="stat">'+esc(o.status)+'</span></div></div>'
+      +'<div class="info"><div class="f w"><div class="k">ชื่อลูกค้า</div><div class="v">'+esc(o.customer)+'</div></div>'
+      +'<div class="f"><div class="k">วันที่ออกใบผลิต</div><div class="v">'+thDate(o.issueDate)+'</div></div>'
+      +'<div class="f"><div class="k">วันที่ติดตั้ง</div><div class="v">'+thDate(o.installDate)+'</div></div>'
+      +'<div class="f"><div class="k">เลขที่ใบจอง</div><div class="v">'+(esc(o.refNo)||'-')+'</div></div>'
+      +'<div class="f w"><div class="k">หมายเหตุ</div><div class="v">'+(esc(o.note)||'-')+'</div></div></div>';
+  };
+  var signHTML='<div class="sign"><div class="sg"><div class="ln"></div><div class="rl">ผู้ตรวจสอบ</div><div class="dt">วันที่ ......./......./...........</div></div>'
+    +'<div class="sg"><div class="ln"></div><div class="rl">ผู้อนุมัติ</div><div class="dt">วันที่ ......./......./...........</div></div></div>';
+  var sheets='';
+  pages.forEach(function(pg,pi){
+    var body=''; pg.forEach(function(rws){ body+=rws.join(''); });
+    for(var k=pg.length;k<PER;k++) body+=emptyRow((pi*PER)+k+1);
+    sheets+='<div class="sheet">'+headHTML()+'<table>'+THEAD+'<tbody>'+body+'</tbody></table>'+signHTML
+      +'<div class="foot"><span>PK Queue System · ใบผลิต</span><span>หน้า '+(pi+1)+'/'+pages.length+' · พิมพ์ '+thDate(new Date().toISOString().slice(0,10))+'</span></div></div>';
+  });
+  var CSS=':root{--ink:#16202e;--mut:#6b7a90;--line:#c8d2df;--line2:#e7edf4;--acc:#e8821a;--slate:#1f2a37;--soft:#f4f7fb}'
+    +'*{box-sizing:border-box;margin:0;padding:0}body{background:#aab3c0;font-family:Sarabun,sans-serif;color:var(--ink);padding:20px;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+    +'.toolbar{max-width:1090px;margin:0 auto 12px;text-align:right}.toolbar button{border:none;border-radius:8px;padding:9px 18px;background:var(--acc);color:#fff;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer}'
+    +'.sheet{width:1090px;margin:0 auto 22px;background:#fff;border-radius:5px;box-shadow:0 12px 40px rgba(0,0,0,.28);padding:14px 16px 12px;display:flex;flex-direction:column}'
+    +'.head{display:flex;align-items:center;gap:10px;border-bottom:2px solid var(--slate);padding-bottom:7px}.mark{width:24px;height:24px;border-radius:6px;background:var(--slate);color:var(--acc);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}'
+    +'.co{font-weight:800;font-size:15px}.doc{font-size:9.5px;color:var(--mut);letter-spacing:2.5px;font-weight:600;text-transform:uppercase}.head .sp{flex:1}'
+    +'.wo{display:flex;align-items:baseline;gap:8px}.wo .lab{font-size:9.5px;color:var(--mut);letter-spacing:1.5px;font-weight:600;text-transform:uppercase}.wo .no{font-size:18px;font-weight:800;color:var(--slate)}.wo .stat{font-size:10px;font-weight:700;color:var(--acc);border:1px solid var(--acc);border-radius:14px;padding:1px 9px}'
+    +'.info{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:6px;margin-top:8px;overflow:hidden}.f{padding:4px 11px;border-right:1px solid var(--line2);flex:1 1 auto}.f.w{flex:2 1 220px}.f:last-child{border-right:none}.f .k{font-size:9px;color:var(--mut);letter-spacing:.4px;font-weight:600;text-transform:uppercase}.f .v{font-size:13px;font-weight:600;line-height:1.25}'
+    +'table{width:100%;border-collapse:collapse;margin-top:9px;table-layout:fixed}th,td{border:.6px solid var(--line);text-align:center;font-size:10px;padding:1px 3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    +'thead th{background:var(--slate);color:#fff;font-weight:600;font-size:9px;padding:3px 2px;white-space:normal}tbody td{height:21px;vertical-align:middle}.nme{text-align:left;padding-left:5px;font-size:10px}'
+    +'.grpstart td{border-top:1.4px solid var(--slate)}.sub .nme{color:var(--mut);padding-left:14px;font-style:italic}.b{font-weight:700}.arrow{color:var(--acc);font-weight:700;font-size:12px}'
+    +'.noterow td{text-align:left;background:#fff7ec;color:#7a4a07;font-size:9.5px;padding:2px 8px;border-top:none;white-space:normal}.empty td{color:#cfd8e3}'
+    +'.colNo{width:24px}.colNm{width:192px}.colPt{width:26px}.colWH{width:48px}.colC{width:56px}.colPv{width:42px}.colHl{width:40px}'
+    +'.sign{display:grid;grid-template-columns:1fr 1fr;gap:50px;margin-top:14px}.sg{text-align:center}.sg .ln{border-bottom:1.4px dotted var(--ink);height:26px;margin:0 16px}.sg .rl{font-size:11.5px;font-weight:700;margin-top:5px}.sg .dt{font-size:10px;color:var(--mut);margin-top:1px}'
+    +'.foot{display:flex;justify-content:space-between;margin-top:9px;padding-top:6px;border-top:1px solid var(--line2);font-size:9.5px;color:var(--mut)}'
+    +'@media print{@page{size:A4 landscape;margin:7mm}body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;width:auto;margin:0;padding:0;page-break-after:always}.sheet:last-child{page-break-after:auto}}';
+  var AUTOFIT='function fit(){var MIN=6.5;document.querySelectorAll("tbody td").forEach(function(td){if(td.closest(".noterow"))return;if(!td.textContent.trim())return;td.style.fontSize="";var fs=parseFloat(getComputedStyle(td).fontSize)||10,g=0;while(td.scrollWidth>td.clientWidth+0.5&&fs>MIN&&g<40){fs-=0.5;td.style.fontSize=fs+"px";g++;}});}if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit);}window.addEventListener("load",fit);setTimeout(fit,400);';
+  var doc='<!doctype html><html lang="th"><head><meta charset="utf-8"><title>ใบผลิต '+esc(o.woId)+'</title>'
+    +'<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">'
+    +'<style>'+CSS+'</style></head><body>'
+    +'<div class="toolbar"><button onclick="window.print()">🖨 พิมพ์ / บันทึก PDF</button></div>'
+    +sheets
+    +'<'+'script>'+AUTOFIT+'<'+'/script></body></html>';
+  var w=window.open('','_blank');
+  if(!w){ toast('⚠️ เบราว์เซอร์บล็อก popup — อนุญาตหน้าต่างใหม่ก่อน'); return; }
+  w.document.open(); w.document.write(doc); w.document.close();
 }
 </script>
 </body>
