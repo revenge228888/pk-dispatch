@@ -923,6 +923,7 @@ function renderOfficeShell(){
           <datalist id="pkpColorList"><option value="อบขาว"></option><option value="ดำ"></option><option value="NA"></option><option value="น้ำตาลแดง"></option><option value="น้ำตาลเข้ม"></option><option value="เทาเข้มซาฮาร่า"></option><option value="เทาเงินซาฮาร่า"></option><option value="ดำซาฮาร่า"></option><option value="ลายไม้สักแดง"></option><option value="ลายไม้สักทอง"></option></datalist>
           <div style="font-size:12px;color:var(--mu,#6b7a94);margin-bottom:8px;">รายการ (สีในแต่ละชุดเว้นว่าง = ใช้สีหลัก, กรอกทับได้เฉพาะชุด)</div>
           <div id="pkpItemsWrap"></div>
+          <div id="pkpSigWrap" style="margin-top:12px;"></div>
           <div class="row-form" style="margin-top:6px;">
             <button class="btn btn-g" onclick="pkpAddItem()">+ เพิ่มรายการ</button>
             <button class="btn btn-p" id="pkpSaveBtn" onclick="pkpSave()" style="margin-left:auto;">💾 บันทึกใบผลิต</button>
@@ -1508,6 +1509,7 @@ let _expMaster = null;     // master data (cache ใน memory ทั้ง sess
 let _expCat = '';          // หมวดหลักที่เลือกอยู่
 let _expCanApprove = false;
 let _expPayeeMap = {};     // ชื่อผู้รับ → {bank, account} (สำหรับ auto-fill / เช็คชื่อใหม่)
+let _expPayeeAutofilled = false;  // ช่องบัญชีถูกเติมจากผู้รับเดิมอยู่หรือไม่ (ใช้ล้างค่าเมื่อสลับเป็นชื่อใหม่)
 let _expCurrentList = [];  // รายการที่โหลดล่าสุด (สำหรับ detail modal lookup)
 
 function _expFileToBase64(file){
@@ -1593,7 +1595,7 @@ function expenseSelectCat(cat, btn){
   }
 }
 
-// เช็คชื่อผู้รับ → เดิม: แสดงบัญชีอัตโนมัติ (ล็อค) · ใหม่: เปิดช่องกรอกบัญชี
+// เช็คชื่อผู้รับ → เดิม: เติมบัญชีให้อัตโนมัติ (แต่ยังแก้ได้) · ใหม่: เปิดช่องกรอก
 function expensePayeeCheck(){
   const name = (document.getElementById('expPayee').value||'').trim();
   const wrap   = document.getElementById('expPayeeBankWrap');
@@ -1603,16 +1605,17 @@ function expensePayeeCheck(){
   if (!name){ wrap.style.display = 'none'; return; }
   const found = _expPayeeMap[name];
   if (found){
-    bankEl.value = found.bank; accEl.value = found.account;
-    bankEl.readOnly = true; accEl.readOnly = true;
-    hint.style.display = 'none';
-    wrap.style.display = '';
+    bankEl.value = found.bank || ''; accEl.value = found.account || '';
+    _expPayeeAutofilled = true;
+    hint.textContent = (found.bank && found.account) ? '(ผู้รับเดิม — แก้ไขได้)' : '(ผู้รับเดิม — เติมบัญชีให้ครบได้)';
   } else {
-    if (bankEl.readOnly){ bankEl.value = ''; accEl.value = ''; }  // เพิ่งสลับจากชื่อเดิม → ล้าง
-    bankEl.readOnly = false; accEl.readOnly = false;
-    hint.style.display = '';
-    wrap.style.display = '';
+    if (_expPayeeAutofilled){ bankEl.value = ''; accEl.value = ''; }  // เพิ่งสลับจากชื่อเดิม → ล้าง
+    _expPayeeAutofilled = false;
+    hint.textContent = '(ผู้รับใหม่ — กรอกเพื่อบันทึกเข้าระบบ)';
   }
+  bankEl.readOnly = false; accEl.readOnly = false;   // กรอก/แก้ได้เสมอ
+  hint.style.display = '';
+  wrap.style.display = '';
 }
 
 // ════════ UI ค่าแรง (เลือกพนักงาน → ประเภท → ปฏิทินรายวัน) ════════
@@ -6214,16 +6217,63 @@ var pkpARROWS=['→','←','↑','↓','↔','↕'];
 
 // ── STATE ──
 var pkpItems=[];
+var pkpSigCheck=null, pkpSigApprove=null;   // ลายเซ็นดิจิทัล {name,img,ts} | null
 var pkpEditingWO=null;   // null = ใบใหม่ / 'WO-xxxx' = กำลังแก้
 var pkpLoadedStatus='';
 
 function pkpToday(){ return new Date().toISOString().slice(0,10); }
 function pkpBlankItem(){ return { type:'', patt:'→', w:'', h:'', wl:'', wr:'', cAlu:'', cMesh:'', note:'' }; }
 
+// ── ลายเซ็นดิจิทัล (แนบรูป) ──
+function pkpRenderSig(){
+  var wrap=document.getElementById('pkpSigWrap'); if(!wrap) return;
+  var isMgr = CURRENT_USER && CURRENT_USER.role==='manager';
+  wrap.innerHTML =
+    '<div class="fl" style="margin-bottom:6px;">ลายเซ็น (แนบรูปลายเซ็นที่เซฟไว้ — โชว์บนใบพิมพ์ ถ้าไม่แนบจะเป็นช่องเซ็นมือ)</div>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+    +   pkpSigSlot('check','ผู้ตรวจสอบ',pkpSigCheck,true)
+    +   pkpSigSlot('approve','ผู้อนุมัติ',pkpSigApprove,isMgr)
+    + '</div>';
+}
+function pkpSigSlot(key,label,sig,enabled){
+  var inner;
+  if(sig && sig.img){
+    inner='<img src="'+sig.img+'" alt="ลายเซ็น" style="max-height:46px;max-width:170px;object-fit:contain;background:#fff;border-radius:4px;padding:3px;display:block;">'
+      +'<div style="font-size:12px;margin-top:3px;font-weight:600;">'+(sig.name||'')+'</div>'
+      +'<div style="font-size:11px;color:var(--mu,#6b7a94);">'+(sig.ts||'')+'</div>'
+      +(enabled?'<button class="btn btn-g btn-sm" style="margin-top:5px;color:var(--rd,#ff453a);" onclick="pkpSigClear(\''+key+'\')">ลบลายเซ็น</button>':'');
+  } else if(enabled){
+    inner='<div style="font-size:12px;color:var(--mu,#6b7a94);margin-bottom:6px;">ยังไม่เซ็น</div>'
+      +'<button class="btn btn-g btn-sm" onclick="document.getElementById(\'pkpSigFile_'+key+'\').click()">📎 แนบรูปลายเซ็น</button>'
+      +'<input type="file" accept="image/*" id="pkpSigFile_'+key+'" style="display:none;" onchange="pkpSigUpload(\''+key+'\',this)">';
+  } else {
+    inner='<div style="font-size:12px;color:var(--mu,#6b7a94);">เฉพาะผู้จัดการเซ็นอนุมัติได้</div>';
+  }
+  return '<div style="flex:1;min-width:190px;border:1px solid var(--line,#2a3344);border-radius:8px;padding:10px;background:var(--surf,#171d27);">'
+    +'<div style="font-weight:700;font-size:13px;margin-bottom:5px;">'+label+'</div>'+inner+'</div>';
+}
+function pkpSigUpload(key,input){
+  var f=input.files&&input.files[0]; if(!f){ return; }
+  if(!/^image\//.test(f.type||'')){ toast('⚠️ ต้องเป็นไฟล์รูปภาพ'); input.value=''; return; }
+  if(f.size>500*1024){ toast('⚠️ รูปใหญ่เกิน 500KB — ใช้รูปลายเซ็นเล็กลง'); input.value=''; return; }
+  var rd=new FileReader();
+  rd.onload=function(){
+    var sig={ name:(CURRENT_USER&&(CURRENT_USER.name||CURRENT_USER.username))||'', img:String(rd.result||''), ts:pkpToday() };
+    if(key==='check') pkpSigCheck=sig; else pkpSigApprove=sig;
+    pkpRenderSig();
+    toast('แนบลายเซ็น'+(key==='check'?'ผู้ตรวจสอบ':'ผู้อนุมัติ')+'แล้ว');
+  };
+  rd.onerror=function(){ toast('❌ อ่านไฟล์รูปไม่ได้'); };
+  rd.readAsDataURL(f);
+  input.value='';
+}
+function pkpSigClear(key){ if(key==='check')pkpSigCheck=null; else pkpSigApprove=null; pkpRenderSig(); }
+
 // ── INIT (เรียกจาก setTab) ──
 function pkpInit(){
   if(!pkpItems.length){ pkpNew(true); }
   else { pkpRenderRows(); }
+  pkpRenderSig();
   // default วันที่ออก = วันนี้ (ถ้ายังว่าง)
   var iss=document.getElementById('pkpIssue'); if(iss && !iss.value){ iss.value=pkpToday(); }
   // default เดือนที่ list = เดือนนี้
@@ -6236,6 +6286,7 @@ function pkpInit(){
 function pkpNew(skipRender){
   pkpEditingWO=null; pkpLoadedStatus='';
   pkpItems=[pkpBlankItem(),pkpBlankItem(),pkpBlankItem()];
+  pkpSigCheck=null; pkpSigApprove=null;
   ['pkpCust','pkpRef','pkpNote','pkpMainAlu','pkpMainMesh'].forEach(function(id){var e=document.getElementById(id); if(e)e.value='';});
   var iss=document.getElementById('pkpIssue'); if(iss)iss.value=pkpToday();
   var ins=document.getElementById('pkpInstall'); if(ins)ins.value='';
@@ -6243,6 +6294,7 @@ function pkpNew(skipRender){
   var sv=document.getElementById('pkpSaveBtn'); if(sv)sv.textContent='💾 บันทึกใบผลิต';
   if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
   if(!skipRender) pkpRenderRows();
+  pkpRenderSig();
 }
 
 // ── items CRUD ──
@@ -6320,7 +6372,9 @@ function pkpBody(){
       type:it.type, patt:it.patt||'',
       w:it.w, h:it.h, wl:it.wl, wr:it.wr,
       cAlu:it.cAlu, cMesh:it.cMesh, note:it.note||''
-    };})
+    };}),
+    sigCheck: pkpSigCheck,
+    sigApprove: pkpSigApprove
   };
 }
 function pkpValidate(b){
@@ -6383,9 +6437,11 @@ async function pkpOpen(woId){
     pkpItems=(o.items&&o.items.length?o.items:[pkpBlankItem()]).map(function(it){return {
       type:it.type||'', patt:it.patt||'→', w:it.w||'', h:it.h||'', wl:it.wl||'', wr:it.wr||'', cAlu:it.cAlu||'', cMesh:it.cMesh||'', note:it.note||''
     };});
+    pkpSigCheck=o.sigCheck||null; pkpSigApprove=o.sigApprove||null;
     var woEl=document.getElementById('pkpWoLabel'); if(woEl)woEl.textContent=o.woId+(o.status?' · '+o.status:'');
     var sv=document.getElementById('pkpSaveBtn'); if(sv)sv.textContent='💾 บันทึกการแก้ไข';
     pkpRenderRows();
+    pkpRenderSig();
     if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
     if(window.scrollTo)window.scrollTo(0,0);
     toast('เปิด '+o.woId+' แล้ว');
@@ -6417,6 +6473,7 @@ function pkpPrint(){
     note:(document.getElementById('pkpNote')||{}).value||'',
     mainAlu:(document.getElementById('pkpMainAlu')||{}).value||'',
     mainMesh:(document.getElementById('pkpMainMesh')||{}).value||'',
+    sigCheck:pkpSigCheck, sigApprove:pkpSigApprove,
     items: pkpItems.filter(function(it){return it.type;})
   };
   if(!o.items.length){ toast('⚠️ ยังไม่มีรายการให้พิมพ์'); return; }
@@ -6458,8 +6515,13 @@ function pkpPrint(){
       +'<div class="f"><div class="k">เลขที่ใบจอง</div><div class="v">'+(esc(o.refNo)||'-')+'</div></div>'
       +'<div class="f w"><div class="k">หมายเหตุ</div><div class="v">'+(esc(o.note)||'-')+'</div></div></div>';
   };
-  var signHTML='<div class="sign"><div class="sg"><div class="ln"></div><div class="rl">ผู้ตรวจสอบ</div><div class="dt">วันที่ ......./......./...........</div></div>'
-    +'<div class="sg"><div class="ln"></div><div class="rl">ผู้อนุมัติ</div><div class="dt">วันที่ ......./......./...........</div></div></div>';
+  var sigCell=function(label,sig){
+    if(sig&&sig.img){
+      return '<div class="sg"><img class="sgimg" src="'+sig.img+'"><div class="rl">'+label+'</div><div class="dt">'+(esc(sig.name||'')||'&nbsp;')+(sig.ts?' · '+thDate(sig.ts):'')+'</div></div>';
+    }
+    return '<div class="sg"><div class="ln"></div><div class="rl">'+label+'</div><div class="dt">วันที่ ......./......./...........</div></div>';
+  };
+  var signHTML='<div class="sign">'+sigCell('ผู้ตรวจสอบ',o.sigCheck)+sigCell('ผู้อนุมัติ',o.sigApprove)+'</div>';
   var SPACER='<tr class="spc"><td colspan="19"></td></tr>';
   var sheets='';
   pages.forEach(function(pg,pi){
@@ -6477,12 +6539,12 @@ function pkpPrint(){
     +'.co{font-weight:800;font-size:15px}.doc{font-size:9.5px;color:var(--mut);letter-spacing:2.5px;font-weight:600;text-transform:uppercase}.head .sp{flex:1}'
     +'.wo{display:flex;align-items:baseline;gap:8px}.wo .lab{font-size:9.5px;color:var(--mut);letter-spacing:1.5px;font-weight:600;text-transform:uppercase}.wo .no{font-size:18px;font-weight:800;color:var(--slate)}.wo .stat{font-size:10px;font-weight:700;color:var(--acc);border:1px solid var(--acc);border-radius:14px;padding:1px 9px}'
     +'.info{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:6px;margin-top:8px;overflow:hidden}.f{padding:4px 11px;border-right:1px solid var(--line2);flex:1 1 auto}.f.w{flex:2 1 220px}.f:last-child{border-right:none}.f .k{font-size:9px;color:var(--mut);letter-spacing:.4px;font-weight:600;text-transform:uppercase}.f .v{font-size:13px;font-weight:600;line-height:1.25}'
-    +'table{width:100%;border-collapse:collapse;margin-top:9px;table-layout:fixed}th,td{border:.7px solid var(--line);text-align:center;font-size:11.5px;padding:1px 3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    +'table{width:100%;border-collapse:collapse;margin-top:9px;table-layout:fixed}th,td{border:.7px solid var(--line);text-align:center;font-size:11.5px;font-weight:600;padding:1px 3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     +'thead th{background:var(--slate);color:#fff;font-weight:600;font-size:9.5px;padding:3px 2px;white-space:normal}tbody td{height:23px;vertical-align:middle}.nme{text-align:left;padding-left:5px;font-size:10px}'
-    +'.grpstart td{border-top:1.4px solid var(--slate)}.sub .nme{color:var(--mut);padding-left:14px;font-style:italic}.b{font-weight:700}.arrow{color:var(--acc);font-weight:700;font-size:12px}'
+    +'.grpstart td{border-top:1.4px solid var(--slate)}.sub .nme{color:var(--mut);padding-left:14px;font-style:italic}.b{font-weight:800}.arrow{color:var(--acc);font-weight:700;font-size:12px}'
     +'.noterow td{text-align:left;background:#fff7ec;color:#7a4a07;font-size:9.5px;padding:2px 8px;border-top:none;white-space:normal}.empty td{color:#cfd8e3}.spc td{border:none;padding:0;height:18px;background:transparent}'
     +'.colNo{width:24px}.colNm{width:192px}.colPt{width:26px}.colWH{width:48px}.colC{width:56px}.colPv{width:42px}.colHl{width:40px}'
-    +'.sign{display:grid;grid-template-columns:1fr 1fr;gap:50px;margin-top:auto;padding-top:14px}.sg{text-align:center}.sg .ln{border-bottom:1.4px dotted var(--ink);height:26px;margin:0 16px}.sg .rl{font-size:11.5px;font-weight:700;margin-top:5px}.sg .dt{font-size:10px;color:var(--mut);margin-top:1px}'
+    +'.sign{display:grid;grid-template-columns:1fr 1fr;gap:50px;margin-top:auto;padding-top:14px}.sg{text-align:center}.sgimg{max-height:18mm;max-width:62mm;object-fit:contain;display:block;margin:0 auto 2px}.sg .ln{border-bottom:1.4px dotted var(--ink);height:26px;margin:0 16px}.sg .rl{font-size:11.5px;font-weight:700;margin-top:5px}.sg .dt{font-size:10px;color:var(--mut);margin-top:1px}'
     +'.foot{display:flex;justify-content:space-between;margin-top:9px;padding-top:6px;border-top:1px solid var(--line2);font-size:9.5px;color:var(--mut)}'
     +'@media print{@page{size:A4 landscape;margin:7mm}body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;margin:0;page-break-after:always}.sheet:last-child{page-break-after:auto}}';
   var AUTOFIT='function fit(){var MIN=6.5;document.querySelectorAll("tbody td").forEach(function(td){if(td.closest(".noterow"))return;if(!td.textContent.trim())return;td.style.fontSize="";var fs=parseFloat(getComputedStyle(td).fontSize)||10,g=0;while(td.scrollWidth>td.clientWidth+0.5&&fs>MIN&&g<40){fs-=0.5;td.style.fontSize=fs+"px";g++;}});}if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit);}window.addEventListener("load",fit);setTimeout(fit,400);';
