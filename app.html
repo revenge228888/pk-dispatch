@@ -923,17 +923,18 @@ function renderOfficeShell(){
             <button class="btn btn-g btn-sm" onclick="pkpPrint()" style="margin-left:auto;">🖨 พิมพ์</button>
             <button class="btn btn-g btn-sm" onclick="pkpReqPrint()">📋 ใบเบิก</button>
             <button class="btn btn-g btn-sm" onclick="pkpNew()">+ ใบใหม่</button>
+            <button class="btn btn-g btn-sm" onclick="pkpClearForm()" style="color:var(--rd,#ff453a);">🗑 ล้าง</button>
           </div>
           <div class="row-form" style="margin-bottom:10px;">
-            <div class="fg" style="flex:1;min-width:180px;"><label class="fl">ชื่อลูกค้า</label><input class="fi" id="pkpCust" type="text" placeholder="ชื่อลูกค้า"></div>
-            <div class="fg"><label class="fl">วันที่ออกใบผลิต</label><div class="date-wrap"><input class="fi" id="pkpIssue" type="date" oninput="updateDateDisplay(this)"><span class="date-display empty" data-for="pkpIssue">เลือกวันที่</span></div></div>
-            <div class="fg"><label class="fl">วันที่ติดตั้ง</label><div class="date-wrap"><input class="fi" id="pkpInstall" type="date" oninput="updateDateDisplay(this)"><span class="date-display empty" data-for="pkpInstall">เลือกวันที่</span></div></div>
-            <div class="fg" style="width:120px;"><label class="fl">เลขอ้างอิง</label><input class="fi" id="pkpRef" type="text" placeholder="(ถ้ามี)"></div>
+            <div class="fg" style="flex:1;min-width:180px;"><label class="fl">ชื่อลูกค้า</label><input class="fi" id="pkpCust" type="text" placeholder="ชื่อลูกค้า" oninput="pkpAutosave()"></div>
+            <div class="fg"><label class="fl">วันที่ออกใบผลิต</label><div class="date-wrap"><input class="fi" id="pkpIssue" type="date" oninput="updateDateDisplay(this);pkpAutosave()"><span class="date-display empty" data-for="pkpIssue">เลือกวันที่</span></div></div>
+            <div class="fg"><label class="fl">วันที่ติดตั้ง</label><div class="date-wrap"><input class="fi" id="pkpInstall" type="date" oninput="updateDateDisplay(this);pkpAutosave()"><span class="date-display empty" data-for="pkpInstall">เลือกวันที่</span></div></div>
+            <div class="fg" style="width:120px;"><label class="fl">เลขอ้างอิง</label><input class="fi" id="pkpRef" type="text" placeholder="(ถ้ามี)" oninput="pkpAutosave()"></div>
           </div>
           <div class="row-form" style="margin-bottom:10px;">
-            <div class="fg" style="flex:1;min-width:160px;"><label class="fl">หมายเหตุ</label><input class="fi" id="pkpNote" type="text" placeholder="(ถ้ามี)"></div>
-            <div class="fg" style="width:150px;"><label class="fl">สีหลัก-อลู (ทั้งใบ)</label><input class="fi" id="pkpMainAlu" type="text" list="pkpColorList" placeholder="เลือก/พิมพ์เอง"></div>
-            <div class="fg" style="width:150px;"><label class="fl">สีหลัก-ผ้ามุ้ง (ทั้งใบ)</label><input class="fi" id="pkpMainMesh" type="text" list="pkpColorList" placeholder="เลือก/พิมพ์เอง"></div>
+            <div class="fg" style="flex:1;min-width:160px;"><label class="fl">หมายเหตุ</label><input class="fi" id="pkpNote" type="text" placeholder="(ถ้ามี)" oninput="pkpAutosave()"></div>
+            <div class="fg" style="width:150px;"><label class="fl">สีหลัก-อลู (ทั้งใบ)</label><input class="fi" id="pkpMainAlu" type="text" list="pkpColorList" placeholder="เลือก/พิมพ์เอง" oninput="pkpAutosave()"></div>
+            <div class="fg" style="width:150px;"><label class="fl">สีหลัก-ผ้ามุ้ง (ทั้งใบ)</label><input class="fi" id="pkpMainMesh" type="text" list="pkpColorList" placeholder="เลือก/พิมพ์เอง" oninput="pkpAutosave()"></div>
           </div>
           <datalist id="pkpColorList"><option value="อบขาว"></option><option value="ดำ"></option><option value="NA"></option><option value="น้ำตาลแดง"></option><option value="น้ำตาลเข้ม"></option><option value="เทาเข้มซาฮาร่า"></option><option value="เทาเงินซาฮาร่า"></option><option value="ดำซาฮาร่า"></option><option value="ลายไม้สักแดง"></option><option value="ลายไม้สักทอง"></option></datalist>
           <datalist id="pkpTypeList"></datalist>
@@ -6855,7 +6856,15 @@ function pkpSigClear(key){ if(key==='check')pkpSigCheck=null; else pkpSigApprove
 
 // ── INIT (เรียกจาก setTab) ──
 function pkpInit(){
-  if(!pkpItems.length){ pkpNew(true); }
+  if(!pkpItems.length){
+    var raw=null; try{raw=localStorage.getItem(PKP_DRAFT_KEY);}catch(e){}
+    if(raw && pkpDraftHasData(raw) && confirm('พบใบผลิตที่กรอกค้างไว้ ต้องการกู้คืนไหม?\n(กดยกเลิก = เริ่มใบใหม่ · ข้อมูลค้างจะถูกล้าง)')){
+      pkpNew(true); pkpRestoreDraft(raw);
+    } else {
+      try{localStorage.removeItem(PKP_DRAFT_KEY);}catch(e){}
+      pkpNew(true);
+    }
+  }
   else { pkpRenderRows(); }
   pkpRenderSig();
   // default วันที่ออก = วันนี้ (ถ้ายังว่าง)
@@ -6882,18 +6891,52 @@ function pkpNew(skipRender){
   pkpRenderSig();
 }
 
+// ── autosave ใบผลิตที่กรอกค้าง (เฉพาะใบใหม่ · localStorage) ──
+var PKP_DRAFT_KEY='pk_prod_draft';
+function pkpCollectDraft(){
+  var g=function(id){var e=document.getElementById(id);return e?e.value:'';};
+  return { cust:g('pkpCust'), issue:g('pkpIssue'), install:g('pkpInstall'), ref:g('pkpRef'), note:g('pkpNote'), mainAlu:g('pkpMainAlu'), mainMesh:g('pkpMainMesh'), items:pkpItems };
+}
+function pkpDraftHasData(raw){
+  try{ var d=JSON.parse(raw); return !!(d.cust||d.ref||d.note||d.mainAlu||d.mainMesh||(d.items&&d.items.some(function(it){return it.type||it.w||it.h||it.wl||it.wr||it.cAlu||it.cMesh||it.note;}))); }catch(e){ return false; }
+}
+function pkpAutosave(){
+  if(pkpEditingWO) return;   // ไม่ autosave ตอนแก้ใบเดิม (กันทับ)
+  try{
+    var raw=JSON.stringify(pkpCollectDraft());
+    if(pkpDraftHasData(raw)) localStorage.setItem(PKP_DRAFT_KEY,raw);
+    else localStorage.removeItem(PKP_DRAFT_KEY);
+  }catch(e){}
+}
+function pkpRestoreDraft(raw){
+  try{
+    var d=JSON.parse(raw); var s=function(id,v){var e=document.getElementById(id);if(e)e.value=v||'';};
+    s('pkpCust',d.cust); s('pkpIssue',d.issue); s('pkpInstall',d.install); s('pkpRef',d.ref); s('pkpNote',d.note); s('pkpMainAlu',d.mainAlu); s('pkpMainMesh',d.mainMesh);
+    pkpItems=(d.items&&d.items.length)?d.items:[pkpBlankItem()];
+    if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
+    pkpRenderRows();
+    toast('กู้คืนใบที่ค้างไว้แล้ว');
+  }catch(e){}
+}
+function pkpClearForm(){
+  if(!confirm('ล้างข้อมูลที่กรอกทั้งหมด? (กู้คืนไม่ได้)')) return;
+  try{localStorage.removeItem(PKP_DRAFT_KEY);}catch(e){}
+  pkpNew();
+  toast('ล้างข้อมูลแล้ว');
+}
+
 // ── items CRUD ──
-function pkpAddItem(){ pkpItems.push(pkpBlankItem()); pkpRenderRows(); }
-function pkpDelItem(i){ pkpItems.splice(i,1); if(!pkpItems.length)pkpItems.push(pkpBlankItem()); pkpRenderRows(); }
+function pkpAddItem(){ pkpItems.push(pkpBlankItem()); pkpRenderRows(); pkpAutosave(); }
+function pkpDelItem(i){ pkpItems.splice(i,1); if(!pkpItems.length)pkpItems.push(pkpBlankItem()); pkpRenderRows(); pkpAutosave(); }
 function pkpAllTypes(){ var a=[]; pkpTYPES.forEach(function(g){ a=a.concat(g.items); }); return a; }
 function pkpValidType(v){ return pkpAllTypes().indexOf(v)>=0; }
 function pkpOnType(i,val){
   val=(val||'').trim();
   if(val && !pkpValidType(val)){ toast('"'+val+'" ไม่ตรงรายการชนิด — เลือกจากที่ระบบแนะนำ'); pkpRenderRows(); return; }  // บังคับให้ตรง dropdown
-  pkpItems[i].type=val; pkpRenderRows();
+  pkpItems[i].type=val; pkpRenderRows(); pkpAutosave();
 }
-function pkpOnPatt(i){ var a=pkpItems[i]; var idx=pkpARROWS.indexOf(a.patt); a.patt=pkpARROWS[(idx+1)%pkpARROWS.length]; var el=document.getElementById('pkpPatt'+i); if(el)el.textContent=a.patt; }
-function pkpOnField(i,field,val){ pkpItems[i][field]=val; pkpRecalc(i); pkpRenderReqSummary(); }   // ตัวเลข → คำนวณเฉพาะแถว (ไม่ re-render = ไม่เสีย focus)
+function pkpOnPatt(i){ var a=pkpItems[i]; var idx=pkpARROWS.indexOf(a.patt); a.patt=pkpARROWS[(idx+1)%pkpARROWS.length]; var el=document.getElementById('pkpPatt'+i); if(el)el.textContent=a.patt; pkpAutosave(); }
+function pkpOnField(i,field,val){ pkpItems[i][field]=val; pkpRecalc(i); pkpRenderReqSummary(); pkpAutosave(); }   // ตัวเลข → คำนวณเฉพาะแถว (ไม่ re-render = ไม่เสีย focus)
 
 // ── render การ์ดทุกรายการ ──
 function pkpRenderRows(){
@@ -6990,6 +7033,7 @@ async function pkpSave(){
     var woEl=document.getElementById('pkpWoLabel'); if(woEl)woEl.textContent=r.woId+(pkpLoadedStatus?' · '+pkpLoadedStatus:'');
     if(sv)sv.textContent='💾 บันทึกการแก้ไข';
     toast('✅ บันทึกแล้ว — '+r.woId+(r.status?' ('+r.status+')':''));
+    try{localStorage.removeItem(PKP_DRAFT_KEY);}catch(e){}   // บันทึกสำเร็จ → ล้าง draft ค้าง
     pkpLoadList();
   }catch(e){ toast('❌ เชื่อมต่อไม่ได้'); }
   finally{ if(sv){sv.disabled=false; if(sv.textContent==='กำลังบันทึก...')sv.textContent='💾 บันทึกใบผลิต';} }
