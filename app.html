@@ -884,7 +884,8 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="production" onclick="setTab('production',this)"><span class="sidebar-ico">🏭</span><span class="sidebar-label">ใบผลิต</span></button>
           <button class="sidebar-item" data-tab="expenseapprove" onclick="setTab('expenseapprove',this)"><span class="sidebar-ico">✅</span><span class="sidebar-label">อนุมัติเบิก</span><span id="expApproveBadge" class="exp-badge"></span></button>
           <button class="sidebar-item" data-tab="salesreport" onclick="setTab('salesreport',this)"><span class="sidebar-ico">📊</span><span class="sidebar-label">รายงานเซลล์</span></button>
-          <button class="sidebar-item" data-tab="employees" onclick="setTab('employees',this)"><span class="sidebar-ico">👥</span><span class="sidebar-label">พนักงาน</span></button>` : ''}
+          <button class="sidebar-item" data-tab="employees" onclick="setTab('employees',this)"><span class="sidebar-ico">👥</span><span class="sidebar-label">พนักงาน</span></button>
+          <button class="sidebar-item" data-tab="summary" onclick="setTab('summary',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">สรุปรายเดือน</span></button>` : ''}
         </div>
         <div class="sidebar-bottom">
           <div class="sidebar-user"><span class="sidebar-ico">👤</span><span class="sidebar-label">${CURRENT_USER.name || CURRENT_USER.username}</span></div>
@@ -1376,6 +1377,20 @@ function renderOfficeShell(){
             </select>
           </div>
           <div id="tlRecList"></div>
+        </div>
+      </div>
+
+      <!-- สรุปรายเดือน (manager) -->
+      <div id="tabSummary" style="display:none;">
+        <div class="section-pad">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+            <div style="font-weight:700;font-size:15px;">📈 สรุปรายเดือน (เฉพาะที่จ่ายแล้ว)</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input class="fi" type="month" id="sumMonth" style="width:auto;" onchange="summaryLoad()">
+              <button class="btn btn-g" onclick="summaryLoad()">🔄</button>
+            </div>
+          </div>
+          <div id="sumBody"><div class="loading-row">เลือกเดือนเพื่อดูสรุป</div></div>
         </div>
       </div>
         </div>
@@ -2434,6 +2449,54 @@ async function timelogDelete(id){
   } catch(e){ hideLoad(); }
 }
 
+// ════════════════════════════════════════
+//  📈 สรุปรายเดือน (manager)
+// ════════════════════════════════════════
+function summaryInit(){
+  const el = document.getElementById('sumMonth');
+  if (el && !el.value){ const d = new Date(); el.value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+  summaryLoad();
+}
+async function summaryLoad(){
+  const box = document.getElementById('sumBody');
+  const month = document.getElementById('sumMonth').value;
+  if (!month){ box.innerHTML = '<div class="loading-row">เลือกเดือน</div>'; return; }
+  box.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  try {
+    const r = await call({ action:'pk_expenseMonthSummary', month: month });
+    if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
+    summaryRender(r);
+  } catch(e){ box.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
+}
+function summaryRender(d){
+  const box = document.getElementById('sumBody');
+  if (!d.count){ box.innerHTML = '<div class="loading-row">เดือนนี้ยังไม่มีรายการที่จ่ายแล้ว</div>'; return; }
+  const baht = function(n){ return '฿' + (n||0).toLocaleString('th-TH', { minimumFractionDigits:2 }); };
+  let html = '<div style="background:var(--surf2);border-radius:12px;padding:16px;margin-bottom:16px;">' +
+    '<div style="font-size:12px;color:var(--mu);">ยอดจ่ายรวมทั้งเดือน (' + d.count + ' รายการ)</div>' +
+    '<div style="font-size:26px;font-weight:800;color:var(--acc);">' + baht(d.total) + '</div></div>';
+  // แยกหมวด
+  html += '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">แยกตามหมวด</div>';
+  const catColor = { 'ค่าแรง':'var(--acc)', 'ค่าเดินทาง':'var(--blu)', 'ต้นทุน ค่าใช้จ่าย':'var(--grn)' };
+  (d.cats||[]).forEach(c => {
+    const pct = d.total ? Math.round(c.total / d.total * 100) : 0;
+    const col = catColor[c.cat] || 'var(--mu)';
+    html += '<div style="margin-bottom:11px;">' +
+      '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span>' + c.cat + '</span><span style="font-weight:600;">' + baht(c.total) + ' · ' + pct + '%</span></div>' +
+      '<div style="height:8px;background:var(--bg);border-radius:4px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + col + ';border-radius:4px;"></div></div></div>';
+  });
+  // รายวัน
+  html += '<div style="font-weight:700;font-size:13px;margin:20px 0 10px;">ยอดรวมรายวัน</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:7px 14px;font-size:13px;align-items:center;">';
+  html += '<div style="color:var(--mu);font-size:11px;">วันที่</div><div style="color:var(--mu);font-size:11px;text-align:right;">รายการ</div><div style="color:var(--mu);font-size:11px;text-align:right;">ยอด</div>';
+  (d.byDay||[]).forEach(row => {
+    const dt = new Date(row.date + 'T00:00:00').toLocaleDateString('th-TH', { day:'numeric', month:'short' });
+    html += '<div>' + dt + '</div><div style="text-align:right;color:var(--mu);">' + row.count + '</div><div style="text-align:right;font-weight:600;">' + baht(row.total) + '</div>';
+  });
+  html += '</div>';
+  box.innerHTML = html;
+}
+
 async function expenseDoApprove(id){
   if (!confirm('ยืนยันอนุมัติ ' + id + ' ?')) return;
   showLoad('อนุมัติ...');
@@ -2475,7 +2538,7 @@ async function expenseRejectConfirm(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -2501,6 +2564,7 @@ function setTab(t, btn){
   if (t === 'expenseapprove') expenseApproveInit();
   if (t === 'employees') employeesInit();
   if (t === 'timelog') timelogInit();
+  if (t === 'summary') summaryInit();
   if (t === 'production') pkpInit();
 }
 
