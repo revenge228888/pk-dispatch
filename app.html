@@ -2065,6 +2065,26 @@ function expenseStatusBadge(s){
 }
 
 // ════════ detail modal — รายละเอียดเต็ม + บัญชีโอน + ปุ่มอนุมัติ/ตีกลับ ════════
+// คัดลอกเลขบัญชี (มี fallback สำหรับเบราว์เซอร์ที่บล็อก clipboard API)
+function pkCopyAccount(t, btn){
+  const txt = String(t);
+  const done = function(){
+    if (btn){ const o = btn.innerHTML; btn.innerHTML = '✓ คัดลอกแล้ว'; setTimeout(function(){ btn.innerHTML = o; }, 1200); }
+    toast('คัดลอกเลขบัญชีแล้ว');
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(function(){ pkCopyFallback(txt); done(); });
+  } else { pkCopyFallback(txt); done(); }
+}
+function pkCopyFallback(t){
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+  } catch(e){}
+}
+
 function expenseDetailOpen(id){
   const it = _expCurrentList.find(x => x.id === id);
   if (!it){ toast('ไม่พบรายการ'); return; }
@@ -2082,7 +2102,7 @@ function expenseDetailOpen(id){
     recBlock = '<div class="exp-bank-box">' +
       '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">ผู้รับเงิน</span><span class="v">' + (it.payee||'-') + '</span></div>' +
       '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">ธนาคาร</span><span class="v">' + (it.payeeBank||'-') + '</span></div>' +
-      '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">เลขบัญชี</span><span class="v" style="font-family:var(--mono);">' + (it.payeeAccount||'-') + '</span></div></div>';
+      '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">เลขบัญชี</span><span class="v" style="font-family:var(--mono);">' + (it.payeeAccount||'-') + (it.payeeAccount ? ' <button type="button" onclick="pkCopyAccount(\'' + String(it.payeeAccount).replace(/'/g,"\\'") + '\',this)" style="background:var(--surf2);border:1px solid var(--bdr);border-radius:6px;color:var(--blu);cursor:pointer;font-size:11px;padding:2px 8px;margin-left:8px;">📋 คัดลอก</button>' : '') + '</span></div></div>';
   }
 
   const invoice  = it.invoiceUrl ? '<div class="exp-dt-row"><span class="k">ใบแจ้งหนี้</span><span class="v"><a href="' + it.invoiceUrl + '" target="_blank" style="color:var(--acc);">เปิดไฟล์ →</a></span></div>' : '';
