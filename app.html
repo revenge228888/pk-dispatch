@@ -264,7 +264,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 .recm-head{position:sticky;top:0;background:var(--surf);border-bottom:1px solid var(--bdr);padding:12px 18px;display:flex;align-items:center;gap:10px;z-index:5;}
 .recm-title{flex:1;font-size:15px;font-weight:700;color:var(--tx);}
 .recm-body{padding:16px 18px;flex:1;overflow-y:auto;}
-.recm-save-bar{position:sticky;bottom:0;background:var(--surf);border-top:1px solid var(--bdr);padding:12px 18px;display:flex;align-items:center;gap:10px;z-index:5;}
+.recm-save-bar{position:sticky;bottom:0;background:var(--surf);border-top:1px solid var(--bdr);padding:12px 18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;z-index:5;}
 .recm-section{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:14px;margin-bottom:14px;}
 .recm-section-head{font-size:11px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
 .recm-entry{background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:14px;margin-bottom:12px;}
@@ -365,7 +365,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 .quom-grand-total{background:linear-gradient(135deg,rgba(52,199,89,.12),rgba(74,158,255,.08));border:2px solid var(--grn);border-radius:12px;padding:16px 18px;margin:18px 0;text-align:center;}
 .quom-grand-label{font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;}
 .quom-grand-amt{font-size:32px;font-weight:700;color:var(--grn);font-family:var(--mono);}
-.quom-save-bar{position:sticky;bottom:0;background:var(--surf);border-top:1px solid var(--bdr);padding:12px 18px;display:flex;align-items:center;gap:10px;z-index:5;}
+.quom-save-bar{position:sticky;bottom:0;background:var(--surf);border-top:1px solid var(--bdr);padding:12px 18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;z-index:5;}
 .quom-save-status{flex:1;font-size:11px;color:var(--mu);}
 .quom-readonly input,.quom-readonly textarea,.quom-readonly select{pointer-events:none;opacity:.85;}
 .quom-readonly .quom-type{pointer-events:none;opacity:.85;}
@@ -583,7 +583,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
     </div>
     <div class="recm-body" id="recmBody"></div>
     <div class="recm-save-bar" id="recmSaveBar">
-      <span class="recm-save-status" id="recmSaveStatus">—</span>
+      <button class="btn btn-g" onclick="recordAddEntry()">+ เพิ่มรายการ</button>
+      <span class="recm-save-status" id="recmSaveStatus" style="margin-left:auto;">—</span>
       <button class="btn btn-d" onclick="recordCloseModal()">ยกเลิก</button>
       <button class="btn btn-p" id="recmSaveBtn" onclick="recordSubmit()">💾 บันทึก</button>
     </div>
@@ -600,7 +601,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
     </div>
     <div class="quom-body" id="quomBody"></div>
     <div class="quom-save-bar" id="quomSaveBar">
-      <span class="quom-save-status" id="quomSaveStatus">—</span>
+      <button class="btn btn-g" onclick="quoteAddEntry()">+ เพิ่มรายการ</button>
+      <span class="quom-save-status" id="quomSaveStatus" style="margin-left:auto;">—</span>
       <button class="btn btn-d" onclick="quoteCloseModal()">ยกเลิก</button>
       <button class="btn btn-p" id="quomSaveBtn" onclick="quoteSubmit()">💾 บันทึก</button>
     </div>
@@ -4777,9 +4779,7 @@ function recordRenderForm(){
   });
 
   if (!ro) {
-    html += `
-      <button class="recm-add-btn" onclick="recordAddEntry()">+ เพิ่มรายการ</button>
-    `;
+    html += ``;
   }
 
   body.innerHTML = html;
@@ -5760,7 +5760,7 @@ function quoteRenderForm(){
   });
 
   if (!ro) {
-    html += `<button class="quom-add-btn" onclick="quoteAddEntry()">+ เพิ่มรายการ</button>`;
+    html += ``;
   }
 
   // ── ค่าใช้จ่ายเพิ่มเติม ──
