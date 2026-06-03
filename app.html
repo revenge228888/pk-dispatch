@@ -147,8 +147,9 @@ select.fi{cursor:pointer;}
 /* FORM */
 .section-pad{padding:14px 16px;}
 .row-form{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;}
-.pkp-btn-row .btn-p{margin-left:auto;}
-@media(max-width:600px){.pkp-btn-row .btn{flex:1 1 100%;margin-left:0;}}
+.pkp-btn-row{justify-content:space-between;align-items:center;}
+.pkp-btn-row .btn-p{margin-left:0;}
+.pkp-btn-row .btn{white-space:nowrap;}
 .fg{display:flex;flex-direction:column;gap:4px;}
 .fl{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;}
 .btn{padding:8px 16px;border-radius:7px;border:none;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all .15s;white-space:nowrap;}
