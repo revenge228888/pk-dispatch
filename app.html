@@ -6444,7 +6444,7 @@ var pkpREQ={
  'มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ 6 มือจับ': {w:[3,3,3,3],p:[6,4],j:[2,1,1],plate:0},
  'มุ้งจีบมีรางธรรมดาแยกกลางไม่เท่ากัน':    {w:[2,2,0,0],p:[4,0],j:[4,0,0],plate:2},
  'มุ้งจีบมีรางธรรมดาสลิงแยกกลางไม่เท่ากัน':{w:[2,2,0,0],p:[4,4],j:[4,0,0],plate:2},
- 'มุ้งจีบรางเตี้ยแยกกลางไม่เท่ากัน':       {w:[1,1,1,1],p:[2,4],j:[2,1,1],plate:2}
+ 'มุ้งจีบรางเตี้ยแยกกลางไม่เท่ากัน':       {w:[1,1,1,1],p:[2,4],j:[2,1,1],plate:2,eg:2}
 };
 function pkpMagnetCount(t){ if(/6 มือจับ/.test(t))return 8; if(/4 มือจับ/.test(t))return 6; if(/อิสระ/.test(t))return 4; return 2; } // ตามรูปแบบบาน (ยาว/เส้น=PVC)
 // จำนวนเส้นราง/ชุด: มือจับ N · รางข้าง O · บน-ล่าง P · เตี้ย Q (อิงสูตร Sheet1; handle=เท่าอิสระ, แยกกลาง=เท่าคู่ ตาม cut engine)
@@ -6454,7 +6454,7 @@ function pkpRailCount(t){
 function pkpIsReqScreen(t){ return !!pkpREQ[t]; }  // มุ้งจีบที่ทำใบเบิกได้
 // items = รายการ WO, mainAlu = สีอลูหลัก (ใช้เมื่อ item.cAlu ว่าง)
 function pkpRequisition(items, mainAlu){
-  var eq={ wheel:[0,0,0,0,0,0,0,0], ropePull:0, slingPull:0, joint:[0,0,0,0,0,0], plate:0,
+  var eq={ wheel:[0,0,0,0,0,0,0,0], ropePull:0, slingPull:0, joint:[0,0,0,0,0,0], plate:0, eyelet:0,
            ropeLen:0, ropeCount:0, magLen:0, magCount:0, pvcLen:0, pvcCount:0 };
   var byColor={}, rails={}, totalSets=0, nonScreen=[], incomplete=0;
   (items||[]).forEach(function(it){
@@ -6468,6 +6468,7 @@ function pkpRequisition(items, mainAlu){
     eq.ropePull+=R.p[0]; eq.slingPull+=R.p[1];
     var jo=white?0:3; for(var m=0;m<3;m++) eq.joint[jo+m]+=R.j[m];
     eq.plate+=R.plate;
+    eq.eyelet+=(R.eg||0);   // ตาไก่ทอง (สีเฉพาะ ไม่แยกตามสีอลู)
     var rLen,rCnt;
     if(c.kind==='split'){ rCnt=f.nRope*2; rLen=(f.cutRopeL+f.cutRopeR)*f.nRope; }
     else { rCnt=f.nRope; rLen=f.cutRope*f.nRope; }
@@ -6672,7 +6673,7 @@ function pkpReqInnerHTML(items, mainAlu, H){
   var mainAluD=esc(mainAlu||'-'), dot=pkpReqColorDot;
   var chips=Object.keys(r.byColor).map(function(c){return '<span class="chip"><span class="dot" style="background:'+dot(c)+'"></span>'+esc(c)+' <b>'+r.byColor[c]+'</b></span>';}).join('');
   var notice=r.nonScreen.length?'<div class="notice">⚠ มีรายการที่ไม่ใช่มุ้งจีบ '+r.nonScreen.length+' รายการ ('+r.nonScreen.map(function(x){return esc(x.type);}).join(', ')+') — ยังไม่รวมในใบเบิกนี้ ต้องเบิกเอง</div>':'';
-  var LIST=[['ล้อรางธรรมดา-ซ้าย (สีขาว)',E.wheel[0],'ตัว'],['ล้อรางธรรมดา-ขวา (สีขาว)',E.wheel[1],'ตัว'],['ล้อรางเตี้ย-ซ้าย (สีขาว)',E.wheel[2],'ตัว'],['ล้อรางเตี้ย-ขวา (สีขาว)',E.wheel[3],'ตัว'],['ล้อรางธรรมดา-ซ้าย (สีดำ)',E.wheel[4],'ตัว'],['ล้อรางธรรมดา-ขวา (สีดำ)',E.wheel[5],'ตัว'],['ล้อรางเตี้ย-ซ้าย (สีดำ)',E.wheel[6],'ตัว'],['ล้อรางเตี้ย-ขวา (สีดำ)',E.wheel[7],'ตัว'],['ตัวดึงเชือก',E.ropePull,'ตัว'],['ตัวดึงสลิง',E.slingPull,'ตัว'],['ข้อต่อรางธรรมดา (สีขาว)',E.joint[0],'ตัว'],['ข้อต่อรางเตี้ย-ซ้าย (สีขาว)',E.joint[1],'ตัว'],['ข้อต่อรางเตี้ย-ขวา (สีขาว)',E.joint[2],'ตัว'],['ข้อต่อรางธรรมดา (สีดำ)',E.joint[3],'ตัว'],['ข้อต่อรางเตี้ย-ซ้าย (สีดำ)',E.joint[4],'ตัว'],['ข้อต่อรางเตี้ย-ขวา (สีดำ)',E.joint[5],'ตัว'],['แผ่นแยกกลาง (เฉพาะบานคู่)',E.plate,'แผ่น'],['เชือก (ความยาวรวม)',E.ropeLen,'ซม.',E.ropeCount+' เส้น'],['แม่เหล็ก (ความยาวรวม)',E.magLen,'ซม.',E.magCount+' เส้น'],['PVC (ความยาวรวม)',E.pvcLen,'ซม.',E.pvcCount+' เส้น']];
+  var LIST=[['ล้อรางธรรมดา-ซ้าย (สีขาว)',E.wheel[0],'ตัว'],['ล้อรางธรรมดา-ขวา (สีขาว)',E.wheel[1],'ตัว'],['ล้อรางเตี้ย-ซ้าย (สีขาว)',E.wheel[2],'ตัว'],['ล้อรางเตี้ย-ขวา (สีขาว)',E.wheel[3],'ตัว'],['ล้อรางธรรมดา-ซ้าย (สีดำ)',E.wheel[4],'ตัว'],['ล้อรางธรรมดา-ขวา (สีดำ)',E.wheel[5],'ตัว'],['ล้อรางเตี้ย-ซ้าย (สีดำ)',E.wheel[6],'ตัว'],['ล้อรางเตี้ย-ขวา (สีดำ)',E.wheel[7],'ตัว'],['ตัวดึงเชือก',E.ropePull,'ตัว'],['ตัวดึงสลิง',E.slingPull,'ตัว'],['ข้อต่อรางธรรมดา (สีขาว)',E.joint[0],'ตัว'],['ข้อต่อรางเตี้ย-ซ้าย (สีขาว)',E.joint[1],'ตัว'],['ข้อต่อรางเตี้ย-ขวา (สีขาว)',E.joint[2],'ตัว'],['ข้อต่อรางธรรมดา (สีดำ)',E.joint[3],'ตัว'],['ข้อต่อรางเตี้ย-ซ้าย (สีดำ)',E.joint[4],'ตัว'],['ข้อต่อรางเตี้ย-ขวา (สีดำ)',E.joint[5],'ตัว'],['แผ่นแยกกลาง (เฉพาะบานคู่)',E.plate,'แผ่น'],['ตาไก่ทอง (แยกกลางรางเตี้ย)',E.eyelet,'อัน'],['เชือก (ความยาวรวม)',E.ropeLen,'ซม.',E.ropeCount+' เส้น'],['แม่เหล็ก (ความยาวรวม)',E.magLen,'ซม.',E.magCount+' เส้น'],['PVC (ความยาวรวม)',E.pvcLen,'ซม.',E.pvcCount+' เส้น']];
   var n=0,bodyR='';
   LIST.forEach(function(row){ if(!row[1]||row[1]===0)return; n++; var unit=row[2],piece=(unit==='ตัว'||unit==='แผ่น'); bodyR+='<tr><td class="c">'+n+'</td><td>'+row[0]+'</td><td class="n qty">'+(piece?row[1]:f2(row[1]))+'</td><td class="unit">'+unit+'</td><td class="note">'+(row[3]||'')+'</td></tr>'; });
   var RT=[['handle','รางมือจับ'],['side','รางข้าง'],['topbot','รางบน-ล่าง'],['low','รางเตี้ย']];
