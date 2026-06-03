@@ -6444,7 +6444,7 @@ var pkpREQ={
  'มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ 6 มือจับ': {w:[3,3,3,3],p:[6,4],j:[2,1,1],plate:0},
  'มุ้งจีบมีรางธรรมดาแยกกลางไม่เท่ากัน':    {w:[2,2,0,0],p:[4,0],j:[4,0,0],plate:2},
  'มุ้งจีบมีรางธรรมดาสลิงแยกกลางไม่เท่ากัน':{w:[2,2,0,0],p:[4,4],j:[4,0,0],plate:2},
- 'มุ้งจีบรางเตี้ยแยกกลางไม่เท่ากัน':       {w:[1,1,1,1],p:[2,4],j:[2,1,1],plate:2,eg:2}
+ 'มุ้งจีบรางเตี้ยแยกกลางไม่เท่ากัน':       {w:[1,1,1,1],p:[2,4],j:[2,1,1],plate:2}
 };
 function pkpMagnetCount(t){ if(/6 มือจับ/.test(t))return 8; if(/4 มือจับ/.test(t))return 6; if(/อิสระ/.test(t))return 4; return 2; } // ตามรูปแบบบาน (ยาว/เส้น=PVC)
 // จำนวนเส้นราง/ชุด: มือจับ N · รางข้าง O · บน-ล่าง P · เตี้ย Q (อิงสูตร Sheet1; handle=เท่าอิสระ, แยกกลาง=เท่าคู่ ตาม cut engine)
@@ -6468,7 +6468,7 @@ function pkpRequisition(items, mainAlu){
     eq.ropePull+=R.p[0]; eq.slingPull+=R.p[1];
     var jo=white?0:3; for(var m=0;m<3;m++) eq.joint[jo+m]+=R.j[m];
     eq.plate+=R.plate;
-    eq.eyelet+=(R.eg||0);   // ตาไก่ทอง (สีเฉพาะ ไม่แยกตามสีอลู)
+    eq.eyelet+=(/รางเตี้ย/.test(t) && R.plate>0)?2:0;   // ตาไก่ทอง: รางเตี้ย + แยกกลาง/บานคู่ (มีแผ่นแยกกลาง)
     var rLen,rCnt;
     if(c.kind==='split'){ rCnt=f.nRope*2; rLen=(f.cutRopeL+f.cutRopeR)*f.nRope; }
     else { rCnt=f.nRope; rLen=f.cutRope*f.nRope; }
