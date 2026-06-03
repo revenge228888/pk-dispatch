@@ -147,6 +147,8 @@ select.fi{cursor:pointer;}
 /* FORM */
 .section-pad{padding:14px 16px;}
 .row-form{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;}
+.pkp-btn-row .btn-p{margin-left:auto;}
+@media(max-width:600px){.pkp-btn-row .btn{flex:1 1 100%;margin-left:0;}}
 .fg{display:flex;flex-direction:column;gap:4px;}
 .fl{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;}
 .btn{padding:8px 16px;border-radius:7px;border:none;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all .15s;white-space:nowrap;}
@@ -712,20 +714,22 @@ async function call(body, opts){
     });
     const data = await r.json();
 
-    // ถ้า server บอกว่า session ไม่ valid → kick กลับหน้า login
+    // ถ้า server บอกว่า session ไม่ valid → verify อีกครั้งก่อน kick (กัน glitch ชั่วคราว)
     if (data && data.ok === false && data.error &&
         (data.error.indexOf('session') !== -1 ||
          data.error.indexOf('login ใหม่') !== -1 ||
          data.error.indexOf('user ถูก') !== -1)) {
-      if (CURRENT_USER) {
-        // อย่า kick ตอน checkSession ปกติ — มันจัดการเอง
-        if (body.action !== 'pk_checkSession') {
-          toast('⚠️ ' + data.error);
-          setTimeout(() => {
-            localStorage.removeItem('pk_user');
-            location.reload();
-          }, 1500);
-        }
+      if (CURRENT_USER && body.action !== 'pk_checkSession') {
+        try {
+          const v = await call({ action:'pk_checkSession', username:CURRENT_USER.username, token:CURRENT_USER.token });
+          if (v && v.ok === true && v.valid === false) {   // ยืนยันตายจริงเท่านั้น
+            toast('⚠️ ' + data.error);
+            setTimeout(() => {
+              localStorage.removeItem('pk_user');
+              location.reload();
+            }, 1500);
+          }
+        } catch(e) { /* glitch → ไม่ kick */ }
       }
     }
 
@@ -845,16 +849,24 @@ function enterApp(){
   else                                      c.innerHTML = '<div class="empty-section"><h2>ไม่รู้จัก role</h2></div>';
 
   if (window._pkSessionInterval) clearInterval(window._pkSessionInterval);
+  window._pkSessionFails = 0;
   window._pkSessionInterval = setInterval(async () => {
     try {
       const r = await call({ action:'pk_checkSession', username:CURRENT_USER.username, token:CURRENT_USER.token });
-      if (!r.valid) {
-        clearInterval(window._pkSessionInterval);
-        toast('❌ ' + (r.error || 'Session ถูกยกเลิก'));
-        setTimeout(() => { localStorage.removeItem('pk_user'); location.reload(); }, 2000);
+      // logout เฉพาะเมื่อ backend ยืนยันชัดว่า session ตายจริง (ok:true + valid:false)
+      // ไม่เด้งตอน error/timeout ชั่วคราว (r.ok=false) — กัน false logout จาก glitch
+      if (r && r.ok === true && r.valid === false) {
+        window._pkSessionFails++;
+        if (window._pkSessionFails >= 2) {   // ต้องยืนยัน 2 ครั้งติดกันก่อนเด้งออก
+          clearInterval(window._pkSessionInterval);
+          toast('❌ ' + (r.error || 'Session ถูกยกเลิก'));
+          setTimeout(() => { localStorage.removeItem('pk_user'); location.reload(); }, 2000);
+        }
+      } else {
+        window._pkSessionFails = 0;   // ผ่าน หรือ error ชั่วคราว → รีเซ็ตตัวนับ
       }
-    } catch(e) {}
-  }, 60000);
+    } catch(e) { window._pkSessionFails = 0; }   // network error → ไม่นับ
+  }, 180000);   // เช็คทุก 3 นาที (เดิม 1 นาที — ลดโอกาสเจอ glitch)
 }
 
 // ════════════════════════════════════════════════════════════
@@ -942,9 +954,9 @@ function renderOfficeShell(){
           <div id="pkpItemsWrap"></div>
           <div id="pkpReqSummary" style="margin-top:10px;"></div>
           <div id="pkpSigWrap" style="margin-top:12px;"></div>
-          <div class="row-form" style="margin-top:6px;">
+          <div class="row-form pkp-btn-row" style="margin-top:6px;">
             <button class="btn btn-g" onclick="pkpAddItem()">+ เพิ่มรายการ</button>
-            <button class="btn btn-p" id="pkpSaveBtn" onclick="pkpSave()" style="margin-left:auto;">💾 บันทึกใบผลิต</button>
+            <button class="btn btn-p" id="pkpSaveBtn" onclick="pkpSave()">💾 บันทึกใบผลิต</button>
           </div>
         </div>
         <div class="mem-existing">
@@ -2065,6 +2077,8 @@ function expenseCardHtml(it){
         '<div class="exp-amount">฿' + amt + '</div></div>' +
     '</div>' +
     '<div class="exp-card-cat">' + catIcon + ' ' + (it.mainCat||'') + ' · ' + (it.subType||'') + '</div>' +
+    (it.payee ? '<div style="font-size:13px;font-weight:600;margin-top:4px;">👤 ' + it.payee + '</div>'
+              : (it.vehicle ? '<div style="font-size:13px;margin-top:4px;">🚗 ' + it.vehicle + '</div>' : '')) +
     '<div class="exp-card-desc">' + (it.detail||'-') + '</div>' +
     '<div class="exp-card-foot">ดูรายละเอียด →</div></div>';
 }
