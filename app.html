@@ -6557,7 +6557,9 @@ async function pkpCostCalc(){
   pkpCostRender({lines:lines, railLines:railLines, partTotal:partTotal, railTotal:railTotal, grand:partTotal+railTotal, missing:missing, sets:req.totalSets});
   } finally { hideLoad(); }
 }
+var _pkpCostResult=null;
 function pkpCostRender(d){
+  _pkpCostResult={ calculatedAt:Date.now(), grand:d.grand, partTotal:d.partTotal, railTotal:d.railTotal, lines:d.lines, railLines:d.railLines, missing:d.missing, sets:d.sets };
   var box=document.getElementById('pkpCostWrap'); if(!box)return;
   var baht=function(n){return '฿'+(n||0).toLocaleString('th-TH',{minimumFractionDigits:2});};
   var row=function(l){ return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--line,#1e2535);"><span>'+l.label+(l.note?' <span style="color:var(--rd,#ff453a);">('+l.note+')</span>':' <span style="color:var(--mu,#6b7a94);">'+l.qty+' '+l.unit+' × '+baht(l.unitPrice)+'</span>')+'</span><b>'+baht(l.cost)+'</b></div>'; };
@@ -7131,7 +7133,7 @@ function pkpValidate(b){
 
 // ── บันทึก (create / update) ──
 async function pkpSave(){
-  var b=pkpBody(); var err=pkpValidate(b);
+  var b=pkpBody(); if(_pkpCostResult) b.costSnapshot=_pkpCostResult; var err=pkpValidate(b);
   if(err){ toast('⚠️ '+err); return; }
   var sv=document.getElementById('pkpSaveBtn'); if(sv){sv.disabled=true;sv.textContent='กำลังบันทึก...';}
   try{
