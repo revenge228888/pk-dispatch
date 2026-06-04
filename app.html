@@ -84,6 +84,7 @@ select.fi{cursor:pointer;}
 .sidebar-label{overflow:hidden;opacity:0;transition:opacity .2s;}
 .sidebar.expanded .sidebar-label{opacity:1;}
 .sidebar-divider{height:1px;background:var(--bdr);margin:8px 12px;}
+.sidebar-group{font-size:10px;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;padding:12px 16px 4px;font-weight:700;}
 .exp-badge{display:inline-block;min-width:18px;padding:0 5px;height:18px;line-height:18px;text-align:center;font-size:11px;border-radius:9px;background:var(--rd);color:#fff;margin-left:6px;font-weight:700;}
 .exp-badge:empty{display:none;}
 .exp-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;}
@@ -885,22 +886,29 @@ function renderOfficeShell(){
           <span class="sidebar-brand">PK Dispatch</span>
         </div>
         <div class="sidebar-nav">
+          <div class="sidebar-group">คิวงาน & ติดตั้ง</div>
           <button class="sidebar-item on" data-tab="dash" onclick="setTab('dash',this)"><span class="sidebar-ico">📊</span><span class="sidebar-label">Dashboard</span></button>
           <button class="sidebar-item" data-tab="access" onclick="setTab('access',this)"><span class="sidebar-ico">📅</span><span class="sidebar-label">กำหนดคิว + สมาชิก</span></button>
           <button class="sidebar-item" data-tab="booking" onclick="setTab('booking',this)"><span class="sidebar-ico">➕</span><span class="sidebar-label">ลงคิวใหม่</span></button>
           <button class="sidebar-item" data-tab="jobs" onclick="setTab('jobs',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">รายการงาน</span></button>
+
+          <div class="sidebar-group">วัด & เสนอราคา</div>
           <button class="sidebar-item" data-tab="records" onclick="setTab('records',this)"><span class="sidebar-ico">📐</span><span class="sidebar-label">จดขนาด</span></button>
-          <button class="sidebar-item" data-tab="quotes" onclick="setTab('quotes',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">คำนวณราคา</span></button>
-          <div class="sidebar-divider"></div>
+          <button class="sidebar-item" data-tab="quotes" onclick="setTab('quotes',this)"><span class="sidebar-ico">🧮</span><span class="sidebar-label">คำนวณราคา</span></button>
+          ${CURRENT_USER.role === 'manager' ? `
+          <div class="sidebar-group">ผลิต</div>
+          <button class="sidebar-item" data-tab="production" onclick="setTab('production',this)"><span class="sidebar-ico">🏭</span><span class="sidebar-label">ใบผลิต</span></button>` : ''}
+
+          <div class="sidebar-group">การเงิน / เบิกจ่าย</div>
           <button class="sidebar-item" data-tab="expensesubmit" onclick="setTab('expensesubmit',this)"><span class="sidebar-ico">💸</span><span class="sidebar-label">ตั้งเบิก</span></button>
-          <button class="sidebar-item" data-tab="expensemy" onclick="setTab('expensemy',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">เบิกของฉัน</span><span id="expMyBadge" class="exp-badge"></span></button>
-          <button class="sidebar-item" data-tab="timelog" onclick="setTab('timelog',this)"><span class="sidebar-ico">📅</span><span class="sidebar-label">บันทึกเวลา</span></button>
-          ${CURRENT_USER.role === 'manager' ? `<div class="sidebar-divider"></div>
-          <button class="sidebar-item" data-tab="production" onclick="setTab('production',this)"><span class="sidebar-ico">🏭</span><span class="sidebar-label">ใบผลิต</span></button>
-          <button class="sidebar-item" data-tab="expenseapprove" onclick="setTab('expenseapprove',this)"><span class="sidebar-ico">✅</span><span class="sidebar-label">อนุมัติเบิก</span><span id="expApproveBadge" class="exp-badge"></span></button>
-          <button class="sidebar-item" data-tab="salesreport" onclick="setTab('salesreport',this)"><span class="sidebar-ico">📊</span><span class="sidebar-label">รายงานเซลล์</span></button>
-          <button class="sidebar-item" data-tab="employees" onclick="setTab('employees',this)"><span class="sidebar-ico">👥</span><span class="sidebar-label">พนักงาน</span></button>
+          <button class="sidebar-item" data-tab="expensemy" onclick="setTab('expensemy',this)"><span class="sidebar-ico">🧾</span><span class="sidebar-label">เบิกของฉัน</span><span id="expMyBadge" class="exp-badge"></span></button>
+          ${CURRENT_USER.role === 'manager' ? `<button class="sidebar-item" data-tab="expenseapprove" onclick="setTab('expenseapprove',this)"><span class="sidebar-ico">✅</span><span class="sidebar-label">อนุมัติเบิก</span><span id="expApproveBadge" class="exp-badge"></span></button>
           <button class="sidebar-item" data-tab="summary" onclick="setTab('summary',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">สรุปรายเดือน</span></button>` : ''}
+
+          <div class="sidebar-group">บุคคล & รายงาน</div>
+          <button class="sidebar-item" data-tab="timelog" onclick="setTab('timelog',this)"><span class="sidebar-ico">⏰</span><span class="sidebar-label">บันทึกเวลา</span></button>
+          ${CURRENT_USER.role === 'manager' ? `<button class="sidebar-item" data-tab="employees" onclick="setTab('employees',this)"><span class="sidebar-ico">👥</span><span class="sidebar-label">พนักงาน</span></button>
+          <button class="sidebar-item" data-tab="salesreport" onclick="setTab('salesreport',this)"><span class="sidebar-ico">📊</span><span class="sidebar-label">รายงานเซลล์</span></button>` : ''}
         </div>
         <div class="sidebar-bottom">
           <div class="sidebar-user"><span class="sidebar-ico">👤</span><span class="sidebar-label">${CURRENT_USER.name || CURRENT_USER.username}</span></div>
