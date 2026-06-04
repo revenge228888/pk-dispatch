@@ -969,7 +969,8 @@ function renderOfficeShell(){
             <button class="btn btn-g" onclick="pkpAddItem()">+ เพิ่มรายการ</button>
             <button class="btn btn-p" id="pkpSaveBtn" onclick="pkpSave()">💾 บันทึกใบผลิต</button>
           </div>
-          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <select class="fi" id="pkpRailSize" style="width:auto;" onchange="if(document.getElementById('pkpCostWrap').innerHTML)pkpCostCalc()"><option value="6">ราง 6 ม.</option><option value="6.4">ราง 6.4 ม.</option></select>
             <button class="btn btn-g" onclick="pkpCostCalc()">💵 คำนวณต้นทุน</button>
             <button class="btn btn-g" onclick="pkpUpdateCostPrices()" style="font-size:12px;">🔄 อัปเดตราคา</button>
           </div>
@@ -6510,10 +6511,12 @@ function pkpRailPriceList_(prices,railName,color){
     .map(function(x){return {size:x.divisor, buyPrice:x.buyPrice};});
 }
 async function pkpCostCalc(){
-  var prices=await pkpLoadCostPrices(false); if(!prices) return;
+  showLoad('คำนวณต้นทุน...');
+  try{
+  var prices=await pkpLoadCostPrices(false); if(!prices){ hideLoad(); return; }
   var mainAlu=(document.getElementById('pkpMainAlu')||{}).value||'';
   var req=pkpRequisition(pkpItems, mainAlu), eq=req.eq;
-  if(!req.totalSets){ toast('ยังไม่มีรายการมุ้งจีบให้คำนวณ'); return; }
+  if(!req.totalSets){ hideLoad(); toast('ยังไม่มีรายการมุ้งจีบให้คำนวณ'); return; }
   var P=function(n){return pkpPriceOf_(prices,n);};
   var lines=[], missing=[];
   function add(label,qty,unitPrice,unit){ if(qty<=0)return; lines.push({label:label,qty:qty,unit:unit,unitPrice:unitPrice,cost:qty*unitPrice}); if(unitPrice<=0)missing.push(label); }
@@ -6535,7 +6538,8 @@ async function pkpCostCalc(){
   var slingCm=0;
   (pkpItems||[]).forEach(function(it){ if(!it.type||!pkpIsReqScreen(it.type))return; var c=pkpCalcItem(it); if(!c.calculable)return; var f=c.fields; if(f.cutSling&&f.nSling) slingCm+=f.cutSling*f.nSling; });
   add('สลิง', R2(slingCm/100), P('สลิง'),'เมตร');
-  // ราง — cutting per (rail+สี) เลือกขนาด 6/6.4 ที่ต้นทุนต่ำสุด
+  // ราง — ใช้ขนาดที่เลือก (6 หรือ 6.4) · ถ้าสีนั้นไม่มีขนาดที่เลือก → fallback ขนาดที่มี
+  var railSize=parseFloat((document.getElementById('pkpRailSize')||{}).value)||6;
   var pieces=pkpRailPieces(pkpItems, mainAlu, {}), byRC={};
   pieces.forEach(function(p){ var k=p.rail+'|'+p.color; (byRC[k]||(byRC[k]=[])).push(p); });
   var railTotal=0, railLines=[], kerf=pkpCutSet_().kerf;
@@ -6543,14 +6547,15 @@ async function pkpCostCalc(){
     var parts=k.split('|'), rail=parts[0], color=parts[1], rn=pkpRailName_(rail);
     var pl=pkpRailPriceList_(prices, rn, color);
     if(!pl.length){ railLines.push({label:rn+' ['+color+']', note:'ไม่มีราคา', cost:0}); missing.push(rn+' ['+color+']'); return; }
-    var best=null;
-    pl.forEach(function(pr){ var ffd=pkpCutFFD(byRC[k], pr.size*100, kerf); var cost=ffd.usedStock*pr.buyPrice;
-      if(!best||cost<best.cost) best={size:pr.size, stock:ffd.usedStock, buyPrice:pr.buyPrice, cost:cost}; });
-    railTotal+=best.cost;
-    railLines.push({label:rn+' ['+color+']', qty:best.stock, unit:'เส้น ×'+best.size+'ม.', unitPrice:best.buyPrice, cost:best.cost});
+    var pr=pl.find(function(x){return x.size===railSize;}) || pl[0];   // เลือกขนาดที่กำหนด ถ้าไม่มีใช้ที่มี
+    var fb=(pr.size!==railSize) ? ' (ไม่มี '+railSize+'ม. ใช้ '+pr.size+'ม.)' : '';
+    var ffd=pkpCutFFD(byRC[k], pr.size*100, kerf), cost=ffd.usedStock*pr.buyPrice;
+    railTotal+=cost;
+    railLines.push({label:rn+' ['+color+']'+fb, qty:ffd.usedStock, unit:'เส้น ×'+pr.size+'ม.', unitPrice:pr.buyPrice, cost:cost, detail:'ใช้จริง '+R2(ffd.totalLen/100)+' ม. · เศษ '+R2(ffd.waste/100)+' ม.'});
   });
   var partTotal=lines.reduce(function(s,l){return s+l.cost;},0);
   pkpCostRender({lines:lines, railLines:railLines, partTotal:partTotal, railTotal:railTotal, grand:partTotal+railTotal, missing:missing, sets:req.totalSets});
+  } finally { hideLoad(); }
 }
 function pkpCostRender(d){
   var box=document.getElementById('pkpCostWrap'); if(!box)return;
@@ -6561,7 +6566,7 @@ function pkpCostRender(d){
   h+='<div style="font-size:11px;color:var(--mu,#6b7a94);text-transform:uppercase;margin:8px 0 2px;">อุปกรณ์ — '+baht(d.partTotal)+'</div>';
   d.lines.forEach(function(l){ h+=row(l); });
   h+='<div style="font-size:11px;color:var(--mu,#6b7a94);text-transform:uppercase;margin:10px 0 2px;">ราง (จัดตัดแล้ว) — '+baht(d.railTotal)+'</div>';
-  d.railLines.forEach(function(l){ h+=row(l); });
+  d.railLines.forEach(function(l){ h+=row(l); if(l.detail) h+='<div style="font-size:10px;color:var(--mu,#6b7a94);padding:0 0 3px 4px;">'+l.detail+'</div>'; });
   if(d.missing.length) h+='<div style="margin-top:10px;font-size:11px;color:var(--rd,#ff453a);">⚠️ ไม่มีราคาในชีต: '+d.missing.join(', ')+' — เพิ่มในชีต "ราคาต้นทุน" แล้วกดอัปเดตราคา</div>';
   h+='</div>';
   box.innerHTML=h;
