@@ -6578,6 +6578,17 @@ async function pkpUpdateCostPrices(){
   try{ var p=await pkpLoadCostPrices(true); if(p){ toast('อัปเดตราคาแล้ว'); if(document.getElementById('pkpCostWrap').innerHTML) pkpCostCalc(); } }
   finally{ hideLoad(); }
 }
+// แสดงราคาที่เก็บไว้ตอนบันทึก (snapshot) เมื่อเปิดใบเก่า
+function pkpShowSnapshot(snap){
+  if(!snap || !snap.grand) return;
+  pkpCostRender(snap);
+  _pkpCostResult=snap;   // คืน snapshot เดิม (กัน pkpCostRender เขียนทับ calculatedAt)
+  var box=document.getElementById('pkpCostWrap');
+  if(box){
+    var dt=snap.calculatedAt? new Date(snap.calculatedAt).toLocaleString('th-TH',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+    box.insertAdjacentHTML('afterbegin','<div style="background:rgba(74,158,255,.1);border:1px solid var(--blu,#4a9eff);border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:12px;color:var(--blu,#4a9eff);">💾 ราคา ณ ตอนบันทึก'+(dt?' · '+dt:'')+' — กด "💵 คำนวณต้นทุน" เพื่อดูราคาปัจจุบัน</div>');
+  }
+}
 // ════════ จัดตัดราง (1D cutting-stock · แยกสี) — frontend-only · ดึงชิ้นจาก engine ════════
 // ชิ้นรางต่อรายการ: ความยาวจาก pkpCalcItem (maajab/rangkang/rangbl/rangtia) × จำนวนจาก pkpRailCount → ตรงกับใบเบิก
 function pkpRailPieces(items, mainAlu, meta){
@@ -6994,6 +7005,8 @@ function pkpNew(skipRender){
   pkpEditingWO=null; pkpLoadedStatus='';
   pkpItems=[pkpBlankItem(),pkpBlankItem(),pkpBlankItem()];
   pkpSigCheck=null; pkpSigApprove=null;
+  _pkpCostResult=null;
+  var cw=document.getElementById('pkpCostWrap'); if(cw)cw.innerHTML='';   // ล้างต้นทุน/snapshot
   ['pkpCust','pkpRef','pkpNote','pkpMainAlu','pkpMainMesh'].forEach(function(id){var e=document.getElementById(id); if(e)e.value='';});
   var iss=document.getElementById('pkpIssue'); if(iss)iss.value=pkpToday();
   var ins=document.getElementById('pkpInstall'); if(ins)ins.value='';
@@ -7211,6 +7224,8 @@ async function pkpOpen(woId){
     var sv=document.getElementById('pkpSaveBtn'); if(sv)sv.textContent='💾 บันทึกการแก้ไข';
     pkpRenderRows();
     pkpRenderSig();
+    var cw=document.getElementById('pkpCostWrap'); if(cw)cw.innerHTML='';   // ล้างต้นทุนของใบก่อน
+    if(o.costSnapshot) pkpShowSnapshot(o.costSnapshot);                     // แสดงราคา ณ ตอนบันทึก (ถ้ามี)
     if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
     if(window.scrollTo)window.scrollTo(0,0);
     toast('เปิด '+o.woId+' แล้ว');
