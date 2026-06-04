@@ -2753,7 +2753,7 @@ async function loadDashboard(){
   if (!date) { document.getElementById('dashContent').innerHTML='<div class="loading-row">เลือกวันที่ก่อน</div>'; return; }
   document.getElementById('dashContent').innerHTML = skelDashboard();
   try {
-    const r = await call({ action:'pk_dashboard', date }, { cache: true });
+    const r = await call({ action:'pk_dashboard', date });
     if (!r.ok) { document.getElementById('dashContent').innerHTML='<div class="loading-row">'+r.error+'</div>'; return; }
     const s = r.summary;
     if (s.totalJobs === 0) { document.getElementById('dashContent').innerHTML='<div class="loading-row">ไม่มีงานในวันที่ '+fmtD(date)+'</div>'; return; }
@@ -6448,7 +6448,7 @@ var pkpREQ={
  'มุ้งจีบมีรางธรรมดาสลิงบานอิสระ':    {w:[2,2,0,0],p:[4,4],j:[4,0,0],plate:0},
  'มุ้งจีบรางเตี้ยบานเดี่ยวซ้าย':      {w:[0,1,1,0],p:[1,4],j:[2,1,1],plate:0},
  'มุ้งจีบรางเตี้ยบานเดี่ยวขวา':       {w:[1,0,0,1],p:[1,4],j:[2,1,1],plate:0},
- 'มุ้งจีบรางเตี้ยบานคู่':             {w:[1,1,1,1],p:[2,4],j:[2,1,1],plate:2},
+ 'มุ้งจีบรางเตี้ยบานคู่':             {w:[1,1,1,1],p:[2,4],j:[2,1,1],plate:1},
  'มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ':     {w:[1,1,1,1],p:[2,4],j:[2,1,1],plate:0},
  'มุ้งจีบมีรางธรรมดาบานอิสระ 4 มือจับ':   {w:[4,4,0,0],p:[8,0], j:[4,0,0],plate:0},
  'มุ้งจีบมีรางธรรมดาบานอิสระ 6 มือจับ':   {w:[6,6,0,0],p:[12,0],j:[4,0,0],plate:0},
@@ -6458,7 +6458,7 @@ var pkpREQ={
  'มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ 6 มือจับ': {w:[3,3,3,3],p:[6,4],j:[2,1,1],plate:0},
  'มุ้งจีบมีรางธรรมดาแยกกลางไม่เท่ากัน':    {w:[2,2,0,0],p:[4,0],j:[4,0,0],plate:2},
  'มุ้งจีบมีรางธรรมดาสลิงแยกกลางไม่เท่ากัน':{w:[2,2,0,0],p:[4,4],j:[4,0,0],plate:2},
- 'มุ้งจีบรางเตี้ยแยกกลางไม่เท่ากัน':       {w:[1,1,1,1],p:[2,4],j:[2,1,1],plate:2}
+ 'มุ้งจีบรางเตี้ยแยกกลางไม่เท่ากัน':       {w:[1,1,1,1],p:[2,4],j:[2,1,1],plate:1}
 };
 function pkpMagnetCount(t){ if(/6 มือจับ/.test(t))return 8; if(/4 มือจับ/.test(t))return 6; if(/อิสระ/.test(t))return 4; return 2; } // ตามรูปแบบบาน (ยาว/เส้น=PVC)
 // จำนวนเส้นราง/ชุด: มือจับ N · รางข้าง O · บน-ล่าง P · เตี้ย Q (อิงสูตร Sheet1; handle=เท่าอิสระ, แยกกลาง=เท่าคู่ ตาม cut engine)
