@@ -7271,6 +7271,13 @@ async function pkpDelete(woId){
 
 // ── พิมพ์ใบผลิต (เลย์เอาต์ table v4 + shrink-to-fit) จากข้อมูลบนจอ ──
 // ── ใบผลิต: สร้าง .sheet HTML ของ 1 ใบ จาก order object (ใช้ร่วม: พิมพ์ใบเดียว + รวมหลายใบ) ──
+// ── ชื่อไฟล์ PDF ต่อใบ: WO-YYMM-NNNN → "MM-NNNN ชื่อลูกค้า" (ตัด WO- + ปี 2 หลักออก · ไม่ผูกปี) ──
+function pkpWoFileName_(woId, customer){
+  var base=String(woId||''), m=base.match(/^WO-\d{2}(\d{2})-(\d{4,})$/);
+  var mmnn = m ? (m[1]+'-'+m[2]) : base.replace(/^WO-/,'');
+  var cust=(customer&&customer!=='-')?(' '+customer):'';
+  return ((mmnn||'ใบผลิต')+cust).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim();
+}
 function pkpProdSheetsHTML_(o){
   var V=function(n){ if(n==null||n==='')return''; var x=Number(n); if(isNaN(x))return''; return (Math.round(x*100)/100).toLocaleString('th-TH',{maximumFractionDigits:2}); };
   var thDate=function(s){ if(!s)return'-'; var p=String(s).split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):s; };
@@ -7323,7 +7330,7 @@ function pkpProdSheetsHTML_(o){
     var blocks=pg.map(function(rws){ return rws.join(''); });
     for(var k=pg.length;k<PER;k++) blocks.push(emptyRow((pi*PER)+k+1));
     var body=blocks.join(SPACER);
-    sheets+='<div class="sheet">'+headHTML()+'<table>'+THEAD+'<tbody>'+body+'</tbody></table>'+signHTML
+    sheets+='<div class="sheet" data-wo="'+esc(o.woId)+'" data-fn="'+esc(pkpWoFileName_(o.woId,o.customer))+'">'+headHTML()+'<table>'+THEAD+'<tbody>'+body+'</tbody></table>'+signHTML
       +'<div class="foot"><span>PK Queue System · ใบผลิต</span><span>หน้า '+(pi+1)+'/'+pages.length+' · พิมพ์ '+thDate(new Date().toISOString().slice(0,10))+'</span></div></div>';
   });
   return sheets;
@@ -7349,14 +7356,16 @@ function pkpProdDocWrap_(sheets, fn){
     +'@media print{@page{size:A4 landscape;margin:0}body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;margin:0;page-break-after:always}.sheet:last-child{page-break-after:auto}}';
   var AUTOFIT='function fit(){var MIN=6.5;document.querySelectorAll("tbody td").forEach(function(td){if(td.closest(".noterow"))return;if(!td.textContent.trim())return;td.style.fontSize="";var fs=parseFloat(getComputedStyle(td).fontSize)||10,g=0;while(td.scrollWidth>td.clientWidth+0.5&&fs>MIN&&g<40){fs-=0.5;td.style.fontSize=fs+"px";g++;}});}if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit);}window.addEventListener("load",fit);setTimeout(fit,400);';
   var SAVEPDF='function savePDF(){var b=document.getElementById("pdfBtn"),t=b.textContent;if(!window.jspdf||!window.html2canvas){alert("โหลดตัวสร้าง PDF ไม่ทัน ลองใหม่อีกครั้ง หรือใช้ปุ่มพิมพ์แล้วเลือก Save as PDF");return;}b.disabled=true;b.textContent="กำลังสร้าง PDF...";var sh=document.querySelectorAll(".sheet");var pdf=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:"a4"});(function nx(i){if(i>=sh.length){pdf.save(FN+".pdf");b.disabled=false;b.textContent=t;return;}window.html2canvas(sh[i],{scale:2,backgroundColor:"#ffffff"}).then(function(cv){var img=cv.toDataURL("image/jpeg",0.95);var pw=297,ph=210,m=4,iw=pw-2*m,ih=cv.height*(iw/cv.width);if(ih>ph-2*m)ih=ph-2*m;if(i>0)pdf.addPage();pdf.addImage(img,"JPEG",m,m,iw,ih);nx(i+1);}).catch(function(e){alert("สร้าง PDF ไม่ได้: "+e.message);b.disabled=false;b.textContent=t;});})(0);}';
+  var SAVESEP='function saveSep(){var b=document.getElementById("pdfSepBtn"),t=b.textContent;if(!window.jspdf||!window.html2canvas){alert("โหลดตัวสร้าง PDF ไม่ทัน ลองใหม่อีกครั้ง หรือใช้ปุ่มพิมพ์แล้วเลือก Save as PDF");return;}var all=Array.prototype.slice.call(document.querySelectorAll(".sheet"));var groups=[],key=null,cur=null;all.forEach(function(s){var k=s.getAttribute("data-wo")||"";if(k!==key||!cur){key=k;cur={fn:s.getAttribute("data-fn")||"ใบผลิต",sheets:[]};groups.push(cur);}cur.sheets.push(s);});if(!groups.length)return;b.disabled=true;(function ng(gi){if(gi>=groups.length){b.disabled=false;b.textContent=t;return;}b.textContent="กำลังบันทึก "+(gi+1)+"/"+groups.length+"...";var g=groups[gi],pdf=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:"a4"});(function ns(si){if(si>=g.sheets.length){pdf.save(g.fn+".pdf");setTimeout(function(){ng(gi+1);},350);return;}window.html2canvas(g.sheets[si],{scale:2,backgroundColor:"#ffffff"}).then(function(cv){var img=cv.toDataURL("image/jpeg",0.95),pw=297,ph=210,m=4,iw=pw-2*m,ih=cv.height*(iw/cv.width);if(ih>ph-2*m)ih=ph-2*m;if(si>0)pdf.addPage();pdf.addImage(img,"JPEG",m,m,iw,ih);ns(si+1);}).catch(function(e){alert("สร้าง PDF ไม่ได้: "+e.message);b.disabled=false;b.textContent=t;});})(0);})(0);}';
+  var woSet={},mm,reWo=/data-wo="([^"]*)"/g; while((mm=reWo.exec(sheets))) woSet[mm[1]]=1; var nWo=Object.keys(woSet).length;
   var doc='<!doctype html><html lang="th"><head><meta charset="utf-8"><title>'+esc(fn)+'</title>'
     +'<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">'
     +'<'+'script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><'+'/script>'
     +'<'+'script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><'+'/script>'
     +'<style>'+CSS+'</style></head><body>'
-    +'<div class="toolbar"><button onclick="window.print()">🖨 พิมพ์</button><button id="pdfBtn" onclick="savePDF()">📄 บันทึก PDF</button></div>'
+    +'<div class="toolbar"><button onclick="window.print()">🖨 พิมพ์</button><button id="pdfBtn" onclick="savePDF()">📄 บันทึก PDF'+(nWo>1?' (รวม)':'')+'</button>'+(nWo>1?'<button id="pdfSepBtn" onclick="saveSep()">📑 บันทึกแยกไฟล์</button>':'')+'</div>'
     +sheets
-    +'<'+'script>var FN='+JSON.stringify(fn)+';'+AUTOFIT+SAVEPDF+'<'+'/script></body></html>';
+    +'<'+'script>var FN='+JSON.stringify(fn)+';'+AUTOFIT+SAVEPDF+(nWo>1?SAVESEP:'')+'<'+'/script></body></html>';
   return doc;
 }
 // ── พิมพ์ใบผลิตใบเดียว (จากข้อมูลบนจอ) ──
