@@ -6852,6 +6852,7 @@ function pkpToggleSel(chk){ pkpSelWOs[chk.value]=chk.checked; pkpUpdateExportBtn
 function pkpUpdateExportBtn(){
   var n=Object.keys(pkpSelWOs).filter(function(k){return pkpSelWOs[k];}).length;
   var b0=document.getElementById('pkpApproveSelBtn'); if(b0){ b0.textContent='✅ อนุมัติที่เลือก'+(n?' ('+n+')':''); b0.disabled=!n; b0.style.opacity=n?'1':'.5'; }
+  var bp=document.getElementById('pkpPrintSelBtn'); if(bp){ bp.textContent='🖨 พิมพ์ใบผลิต'+(n?' ('+n+')':''); bp.disabled=!n; bp.style.opacity=n?'1':'.5'; }
   var b1=document.getElementById('pkpExportSelBtn'); if(b1){ b1.textContent='📋 export ใบเบิกรวม'+(n?' ('+n+')':''); b1.disabled=!n; b1.style.opacity=n?'1':'.5'; }
   var b2=document.getElementById('pkpCutBtn'); if(b2){ b2.textContent='🪚 จัดตัดราง'+(n?' ('+n+')':''); b2.disabled=!n; b2.style.opacity=n?'1':'.5'; }
 }
@@ -7200,9 +7201,10 @@ async function pkpLoadList(){
     var isMgr = CURRENT_USER && CURRENT_USER.role==='manager';
     var h='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">'
       +(isMgr?'<button class="btn btn-g btn-sm" id="pkpApproveSelBtn" onclick="pkpBatchApprove()" disabled style="opacity:.5;">✅ อนุมัติที่เลือก</button>':'')
+      +'<button class="btn btn-g btn-sm" id="pkpPrintSelBtn" onclick="pkpPrintMulti()" disabled style="opacity:.5;">🖨 พิมพ์ใบผลิต</button>'
       +'<button class="btn btn-g btn-sm" id="pkpExportSelBtn" onclick="pkpReqExportMulti()" disabled style="opacity:.5;">📋 export ใบเบิกรวม</button>'
       +'<button class="btn btn-g btn-sm" id="pkpCutBtn" onclick="pkpCutOptimize()" disabled style="opacity:.5;">🪚 จัดตัดราง</button>'
-      +'<span style="font-size:11px;color:var(--mu,#6b7a94);">ติ๊กเลือกหลายใบ → '+(isMgr?'อนุมัติ / ':'')+'รวมใบเบิก / จัดตัดราง</span></div>'
+      +'<span style="font-size:11px;color:var(--mu,#6b7a94);">ติ๊กเลือกหลายใบ → '+(isMgr?'อนุมัติ / ':'')+'พิมพ์ใบผลิต / รวมใบเบิก / จัดตัดราง</span></div>'
       +'<div style="display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;padding:7px 9px;border:1px solid var(--line,#2a3344);border-radius:8px;">'
         +'<span style="font-size:12px;color:var(--mu,#6b7a94);align-self:center;">⚙ ตั้งค่าตัดราง:</span>'
         +pkpCutField_('stock','ความยาวรางเต็มเส้น (cm)',st.stock)
@@ -7268,21 +7270,8 @@ async function pkpDelete(woId){
 }
 
 // ── พิมพ์ใบผลิต (เลย์เอาต์ table v4 + shrink-to-fit) จากข้อมูลบนจอ ──
-function pkpPrint(){
-  var o={
-    woId: pkpEditingWO || '(ร่าง — ยังไม่บันทึก)',
-    status: (pkpSigApprove?'อนุมัติแล้ว':(pkpSigCheck?'ตรวจแล้ว':(pkpLoadedStatus||'รอตรวจ'))),
-    customer:(document.getElementById('pkpCust')||{}).value||'-',
-    issueDate:(document.getElementById('pkpIssue')||{}).value||'',
-    installDate:(document.getElementById('pkpInstall')||{}).value||'',
-    refNo:(document.getElementById('pkpRef')||{}).value||'',
-    note:(document.getElementById('pkpNote')||{}).value||'',
-    mainAlu:(document.getElementById('pkpMainAlu')||{}).value||'',
-    mainMesh:(document.getElementById('pkpMainMesh')||{}).value||'',
-    sigCheck:pkpSigCheck, sigApprove:pkpSigApprove,
-    items: pkpItems.filter(function(it){return it.type;})
-  };
-  if(!o.items.length){ toast('⚠️ ยังไม่มีรายการให้พิมพ์'); return; }
+// ── ใบผลิต: สร้าง .sheet HTML ของ 1 ใบ จาก order object (ใช้ร่วม: พิมพ์ใบเดียว + รวมหลายใบ) ──
+function pkpProdSheetsHTML_(o){
   var V=function(n){ if(n==null||n==='')return''; var x=Number(n); if(isNaN(x))return''; return (Math.round(x*100)/100).toLocaleString('th-TH',{maximumFractionDigits:2}); };
   var thDate=function(s){ if(!s)return'-'; var p=String(s).split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):s; };
   var esc=function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
@@ -7337,6 +7326,11 @@ function pkpPrint(){
     sheets+='<div class="sheet">'+headHTML()+'<table>'+THEAD+'<tbody>'+body+'</tbody></table>'+signHTML
       +'<div class="foot"><span>PK Queue System · ใบผลิต</span><span>หน้า '+(pi+1)+'/'+pages.length+' · พิมพ์ '+thDate(new Date().toISOString().slice(0,10))+'</span></div></div>';
   });
+  return sheets;
+}
+// ── ใบผลิต: ห่อ .sheet ทั้งหมดเป็นเอกสาร HTML พร้อมพิมพ์/บันทึก PDF (ใช้ร่วม) ──
+function pkpProdDocWrap_(sheets, fn){
+  var esc=function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   var CSS=':root{--ink:#111a25;--mut:#4b5a6e;--line:#94a1b2;--line2:#d3dbe6;--acc:#d4760f;--slate:#1c2733;--soft:#eaf0f6}'
     +'*{box-sizing:border-box;margin:0;padding:0}body{background:#aab3c0;font-family:Sarabun,sans-serif;color:var(--ink);padding:20px;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
     +'.toolbar{max-width:297mm;margin:0 auto 12px;text-align:right}.toolbar button{border:none;border-radius:8px;padding:9px 18px;background:var(--acc);color:#fff;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer}.toolbar button+button{margin-left:8px}#pdfBtn{background:var(--slate)}'
@@ -7354,7 +7348,6 @@ function pkpPrint(){
     +'.foot{display:flex;justify-content:space-between;margin-top:9px;padding-top:6px;border-top:1px solid var(--line2);font-size:9.5px;color:var(--mut)}'
     +'@media print{@page{size:A4 landscape;margin:0}body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;margin:0;page-break-after:always}.sheet:last-child{page-break-after:auto}}';
   var AUTOFIT='function fit(){var MIN=6.5;document.querySelectorAll("tbody td").forEach(function(td){if(td.closest(".noterow"))return;if(!td.textContent.trim())return;td.style.fontSize="";var fs=parseFloat(getComputedStyle(td).fontSize)||10,g=0;while(td.scrollWidth>td.clientWidth+0.5&&fs>MIN&&g<40){fs-=0.5;td.style.fontSize=fs+"px";g++;}});}if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit);}window.addEventListener("load",fit);setTimeout(fit,400);';
-  var fn=('ใบผลิต '+((o.customer&&o.customer!=='-')?o.customer:'')).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim();
   var SAVEPDF='function savePDF(){var b=document.getElementById("pdfBtn"),t=b.textContent;if(!window.jspdf||!window.html2canvas){alert("โหลดตัวสร้าง PDF ไม่ทัน ลองใหม่อีกครั้ง หรือใช้ปุ่มพิมพ์แล้วเลือก Save as PDF");return;}b.disabled=true;b.textContent="กำลังสร้าง PDF...";var sh=document.querySelectorAll(".sheet");var pdf=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:"a4"});(function nx(i){if(i>=sh.length){pdf.save(FN+".pdf");b.disabled=false;b.textContent=t;return;}window.html2canvas(sh[i],{scale:2,backgroundColor:"#ffffff"}).then(function(cv){var img=cv.toDataURL("image/jpeg",0.95);var pw=297,ph=210,m=4,iw=pw-2*m,ih=cv.height*(iw/cv.width);if(ih>ph-2*m)ih=ph-2*m;if(i>0)pdf.addPage();pdf.addImage(img,"JPEG",m,m,iw,ih);nx(i+1);}).catch(function(e){alert("สร้าง PDF ไม่ได้: "+e.message);b.disabled=false;b.textContent=t;});})(0);}';
   var doc='<!doctype html><html lang="th"><head><meta charset="utf-8"><title>'+esc(fn)+'</title>'
     +'<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">'
@@ -7364,9 +7357,47 @@ function pkpPrint(){
     +'<div class="toolbar"><button onclick="window.print()">🖨 พิมพ์</button><button id="pdfBtn" onclick="savePDF()">📄 บันทึก PDF</button></div>'
     +sheets
     +'<'+'script>var FN='+JSON.stringify(fn)+';'+AUTOFIT+SAVEPDF+'<'+'/script></body></html>';
-  var w=window.open('','_blank');
-  if(!w){ toast('⚠️ เบราว์เซอร์บล็อก popup — อนุญาตหน้าต่างใหม่ก่อน'); return; }
-  w.document.open(); w.document.write(doc); w.document.close();
+  return doc;
+}
+// ── พิมพ์ใบผลิตใบเดียว (จากข้อมูลบนจอ) ──
+function pkpPrint(){
+  var o={
+    woId: pkpEditingWO || '(ร่าง — ยังไม่บันทึก)',
+    status: (pkpSigApprove?'อนุมัติแล้ว':(pkpSigCheck?'ตรวจแล้ว':(pkpLoadedStatus||'รอตรวจ'))),
+    customer:(document.getElementById('pkpCust')||{}).value||'-',
+    issueDate:(document.getElementById('pkpIssue')||{}).value||'',
+    installDate:(document.getElementById('pkpInstall')||{}).value||'',
+    refNo:(document.getElementById('pkpRef')||{}).value||'',
+    note:(document.getElementById('pkpNote')||{}).value||'',
+    mainAlu:(document.getElementById('pkpMainAlu')||{}).value||'',
+    mainMesh:(document.getElementById('pkpMainMesh')||{}).value||'',
+    sigCheck:pkpSigCheck, sigApprove:pkpSigApprove,
+    items: pkpItems.filter(function(it){return it.type;})
+  };
+  if(!o.items.length){ toast('⚠️ ยังไม่มีรายการให้พิมพ์'); return; }
+  var fn=('ใบผลิต '+((o.customer&&o.customer!=='-')?o.customer:'')).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim();
+  pkpReqOpenDoc_(pkpProdDocWrap_(pkpProdSheetsHTML_(o), fn));
+}
+// ── งาน B: พิมพ์/บันทึก PDF ใบผลิตหลายใบที่เลือก (รวมเอกสารเดียว · แยกหน้าต่อใบ) ──
+async function pkpPrintMulti(){
+  var ids=Object.keys(pkpSelWOs).filter(function(k){return pkpSelWOs[k];});
+  if(!ids.length){ toast('เลือกใบผลิตก่อน'); return; }
+  showLoad('กำลังสร้างใบผลิต '+ids.length+' ใบ...');
+  try{
+    var sheets='';
+    for(var i=0;i<ids.length;i++){
+      var wo=await pkpFetchWO(ids[i]); if(!wo)continue;
+      var o={ woId:wo.woId, status:wo.status||'', customer:(wo.customer&&wo.customer.name)||'-',
+        issueDate:wo.issueDate||'', installDate:wo.installDate||'', refNo:wo.refNo||'', note:wo.note||'',
+        mainAlu:wo.mainColorAlu||'', mainMesh:wo.mainColorMesh||'',
+        sigCheck:wo.sigCheck||null, sigApprove:wo.sigApprove||null,
+        items:(wo.items||[]).filter(function(it){return it.type;}) };
+      if(!o.items.length) continue;
+      sheets+=pkpProdSheetsHTML_(o);
+    }
+    if(!sheets){ toast('ไม่มีรายการให้พิมพ์'); return; }
+    pkpReqOpenDoc_(pkpProdDocWrap_(sheets, 'ใบผลิตรวม '+ids.length+' ใบ'));
+  } finally { hideLoad(); }
 }
 </script>
 </body>
