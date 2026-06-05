@@ -6561,7 +6561,7 @@ var _pkpCostResult=null;
 function pkpCostRender(d){
   _pkpCostResult={ calculatedAt:Date.now(), grand:d.grand, partTotal:d.partTotal, railTotal:d.railTotal, lines:d.lines, railLines:d.railLines, missing:d.missing, sets:d.sets };
   var box=document.getElementById('pkpCostWrap'); if(!box)return;
-  var baht=function(n){return '฿'+(n||0).toLocaleString('th-TH',{minimumFractionDigits:2});};
+  var baht=function(n){return '฿'+(Math.round((n||0)*100)/100).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});};
   var row=function(l){ return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--line,#1e2535);"><span>'+l.label+(l.note?' <span style="color:var(--rd,#ff453a);">('+l.note+')</span>':' <span style="color:var(--mu,#6b7a94);">'+l.qty+' '+l.unit+' × '+baht(l.unitPrice)+'</span>')+'</span><b>'+baht(l.cost)+'</b></div>'; };
   var h='<div style="background:var(--surf2,#1e2535);border-radius:10px;padding:14px;margin-top:10px;">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span style="font-size:12px;color:var(--mu,#6b7a94);">ต้นทุนรวม '+d.sets+' ชุด</span><b style="font-size:22px;color:var(--acc,#f5a623);">'+baht(d.grand)+'</b></div>';
@@ -6851,6 +6851,7 @@ var pkpSelWOs={};
 function pkpToggleSel(chk){ pkpSelWOs[chk.value]=chk.checked; pkpUpdateExportBtn(); }
 function pkpUpdateExportBtn(){
   var n=Object.keys(pkpSelWOs).filter(function(k){return pkpSelWOs[k];}).length;
+  var b0=document.getElementById('pkpApproveSelBtn'); if(b0){ b0.textContent='✅ อนุมัติที่เลือก'+(n?' ('+n+')':''); b0.disabled=!n; b0.style.opacity=n?'1':'.5'; }
   var b1=document.getElementById('pkpExportSelBtn'); if(b1){ b1.textContent='📋 export ใบเบิกรวม'+(n?' ('+n+')':''); b1.disabled=!n; b1.style.opacity=n?'1':'.5'; }
   var b2=document.getElementById('pkpCutBtn'); if(b2){ b2.textContent='🪚 จัดตัดราง'+(n?' ('+n+')':''); b2.disabled=!n; b2.style.opacity=n?'1':'.5'; }
 }
@@ -6868,6 +6869,25 @@ async function pkpReqExportMulti(){
     if(!inners.length){ toast('ไม่มีรายการ'); return; }
     pkpReqOpenDoc_(pkpReqDocShell_(inners, 'ใบเบิกรวม '+inners.length+' ใบ'));   // รวมเป็น PDF เดียว แยกหน้า
   } finally { hideLoad(); }
+}
+// ── งาน A: อนุมัติใบผลิตหลายใบที่เลือก (manager) → ประทับลายเซ็นที่เซฟไว้ ──
+async function pkpBatchApprove(){
+  var ids=Object.keys(pkpSelWOs).filter(function(k){return pkpSelWOs[k];});
+  if(!ids.length){ toast('เลือกใบผลิตก่อน'); return; }
+  if(!(CURRENT_USER&&CURRENT_USER.role==='manager')){ toast('เฉพาะผู้จัดการ'); return; }
+  if(!confirm('อนุมัติ '+ids.length+' ใบที่เลือก?\nระบบจะประทับลายเซ็นอนุมัติที่คุณบันทึกไว้ในใบเหล่านี้\n(ใบที่อนุมัติแล้ว/ถูกลบ จะถูกข้าม)')) return;
+  showLoad('กำลังอนุมัติ '+ids.length+' ใบ...');
+  try{
+    var r=await call({ action:'pk_prodBatchApprove', woIds:ids });
+    if(!r.ok){ toast('❌ '+(r.error||'อนุมัติไม่สำเร็จ')); return; }
+    var msg='✅ อนุมัติ '+r.approvedCount+' ใบ'+(r.skippedCount?(' · ข้าม '+r.skippedCount+' ใบ'):'');
+    toast(msg);
+    if(r.skippedCount && r.skipped && r.skipped.length){
+      alert('ข้าม '+r.skippedCount+' ใบ:\n\n'+r.skipped.map(function(s){return '• '+s.woId+' — '+s.reason;}).join('\n'));
+    }
+    pkpLoadList();   // โหลดใหม่ให้สถานะอัปเดต (เคลียร์ที่เลือกด้วย)
+  }catch(e){ toast('❌ เชื่อมต่อไม่ได้'); }
+  finally{ hideLoad(); }
 }
 function pkpFmt(v){ if(v==null||v==='')return''; var n=Number(v); if(isNaN(n))return''; return (Math.round(n*100)/100).toLocaleString('th-TH',{maximumFractionDigits:2}); }
 
@@ -7177,10 +7197,12 @@ async function pkpLoadList(){
     pkpSelWOs={};
     var ids=[];
     var st=pkpCutSet_();
+    var isMgr = CURRENT_USER && CURRENT_USER.role==='manager';
     var h='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">'
+      +(isMgr?'<button class="btn btn-g btn-sm" id="pkpApproveSelBtn" onclick="pkpBatchApprove()" disabled style="opacity:.5;">✅ อนุมัติที่เลือก</button>':'')
       +'<button class="btn btn-g btn-sm" id="pkpExportSelBtn" onclick="pkpReqExportMulti()" disabled style="opacity:.5;">📋 export ใบเบิกรวม</button>'
       +'<button class="btn btn-g btn-sm" id="pkpCutBtn" onclick="pkpCutOptimize()" disabled style="opacity:.5;">🪚 จัดตัดราง</button>'
-      +'<span style="font-size:11px;color:var(--mu,#6b7a94);">ติ๊กเลือกหลายใบ → รวมใบเบิก / จัดตัดราง</span></div>'
+      +'<span style="font-size:11px;color:var(--mu,#6b7a94);">ติ๊กเลือกหลายใบ → '+(isMgr?'อนุมัติ / ':'')+'รวมใบเบิก / จัดตัดราง</span></div>'
       +'<div style="display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;padding:7px 9px;border:1px solid var(--line,#2a3344);border-radius:8px;">'
         +'<span style="font-size:12px;color:var(--mu,#6b7a94);align-self:center;">⚙ ตั้งค่าตัดราง:</span>'
         +pkpCutField_('stock','ความยาวรางเต็มเส้น (cm)',st.stock)
