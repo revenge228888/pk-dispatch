@@ -1103,6 +1103,17 @@ function renderOfficeShell(){
             </div>
           </div>
 
+          <!-- จังหวะ1: ดูวันแนะนำ (ระบบแนะนำคิว · ยังไม่ผูกทีม) -->
+          <div style="margin-top:10px;padding:10px;border:1px dashed var(--mu);border-radius:8px;">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:4px;">
+              <button class="btn btn-g" onclick="bkSuggestDates()">📅 ดูวันแนะนำ</button>
+              <label style="font-size:13px;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="bkUrgent"> ด่วน (เร่ง lead)</label>
+              <label style="font-size:13px;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="bkGlass"> งานกระจก</label>
+              <span style="font-size:11px;color:var(--mu);">เสนอวันตามคิวว่าง+โซน · กดวันเพื่อเลือก (ยังไม่ผูกทีม)</span>
+            </div>
+            <div id="bkSuggest"></div>
+          </div>
+
           <button class="btn btn-p" style="margin-top:8px;" onclick="submitBooking()">💾 บันทึกคิว (สถานะ "รอ CF")</button>
           <button class="btn btn-g" style="margin-top:8px;margin-left:6px;" onclick="clearBookingForm()">ล้างฟอร์ม</button>
 
@@ -2734,6 +2745,57 @@ function renderRecentBookings(){
     `).join('');
 }
 
+// ── จังหวะ1: ดูวันแนะนำ (pk_queueSuggest · ยังไม่ผูกทีม) ──
+const _BK_TYPE_MAP = { measure:'วัดงาน', install:'ติดตั้ง' };
+async function bkSuggestDates(){
+  const type = _BK_TYPE_MAP[_bkType] || 'ติดตั้ง';
+  const address = document.getElementById('bkAddress').value.trim();
+  const score = document.getElementById('bkScore').value;
+  const urgent = document.getElementById('bkUrgent').checked;
+  const glass = document.getElementById('bkGlass').checked;
+  const box = document.getElementById('bkSuggest');
+  showLoad('กำลังหาวันแนะนำ...');
+  try {
+    const r = await call({ action:'pk_queueSuggest', type, address, score, urgent, glass });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error || 'ผิดพลาด')); box.innerHTML=''; return; }
+    bkRenderSuggest(r);
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+function bkRenderSuggest(r){
+  const box = document.getElementById('bkSuggest');
+  if (!r.suggestions || !r.suggestions.length){
+    box.innerHTML = '<div style="font-size:13px;color:var(--rd);padding:6px 0;">ไม่มีวันว่างในกรอบเวลา (คิวเต็ม / ติด buffer 15%) — ลองลดคะแนน หรือกรอกวันเอง</div>';
+    return;
+  }
+  const zoneNote = r.hasCoords ? ('โซน: ' + (r.zone || '-')) : 'ไม่มีพิกัดโซน (เสนอตามคิวว่างอย่างเดียว)';
+  let h = '<div style="font-size:12px;color:var(--mu);margin:6px 0 8px;">' + zoneNote + ' · เพดานช่าง ' + r.meta.techCap + '/วัน</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+  r.suggestions.forEach((s, i) => {
+    const bc = i===0 ? 'var(--grn)' : 'var(--mu)';
+    const tag = i===0 ? ' <span style="color:var(--grn);font-weight:600;font-size:11px;">แนะนำสุด</span>' : '';
+    h += '<div onclick="bkPickDate(\'' + s.dateKey + '\')" style="cursor:pointer;border:1.5px solid ' + bc + ';border-radius:8px;padding:8px 12px;min-width:150px;">'
+       +   '<div style="font-size:15px;font-weight:600;">' + s.dateKey + tag + '</div>'
+       +   '<div style="font-size:11px;color:var(--mu);margin-top:3px;line-height:1.5;">' + s.reasons.join('<br>') + '</div>'
+       +   '<div style="font-size:11px;margin-top:3px;color:var(--acc);">ถัง: ' + s.pool + '</div>'
+       + '</div>';
+  });
+  h += '</div>';
+  box.innerHTML = h;
+}
+
+function bkPickDate(dateKey){
+  const p = String(dateKey).split('/');
+  if (p.length === 3){
+    const iso = p[2] + '-' + p[1].padStart(2,'0') + '-' + p[0].padStart(2,'0');
+    const dt = document.getElementById('bkDate');
+    dt.value = iso;
+    updateDateDisplay(dt);
+    toast('เลือกวัน ' + dateKey + ' แล้ว (ยังไม่ผูกทีม) — กดบันทึกคิว');
+  }
+}
+
 function clearBookingForm(){
   if (_bkMode === 'form') {
     document.getElementById('bkCustomer').value = '';
@@ -2745,6 +2807,9 @@ function clearBookingForm(){
   } else {
     document.getElementById('bkRawText').value = '';
   }
+  const _bs = document.getElementById('bkSuggest'); if (_bs) _bs.innerHTML = '';
+  const _bu = document.getElementById('bkUrgent'); if (_bu) _bu.checked = false;
+  const _bg = document.getElementById('bkGlass'); if (_bg) _bg.checked = false;
 }
 
 // ─── DASHBOARD ───
