@@ -1454,6 +1454,16 @@ function renderOfficeShell(){
               <button class="btn btn-g" onclick="summaryLoad()">🔄</button>
             </div>
           </div>
+          <div id="sumToggle" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;align-items:center;">
+            <button class="btn" data-v="overview" onclick="sumSetView('overview')" style="font-size:12px;padding:5px 11px;">ภาพรวม</button>
+            <button class="btn" data-v="employee" onclick="sumSetView('employee')" style="font-size:12px;padding:5px 11px;">แยกพนักงาน</button>
+            <button class="btn" data-v="payee" onclick="sumSetView('payee')" style="font-size:12px;padding:5px 11px;">แยก supplier</button>
+            <span style="flex:1;"></span>
+            <span id="sumStatusWrap" style="display:none;gap:6px;">
+              <button class="btn" data-s="จ่ายแล้ว" onclick="sumSetStatus('จ่ายแล้ว')" style="font-size:12px;padding:5px 11px;">จ่ายแล้ว</button>
+              <button class="btn" data-s="all" onclick="sumSetStatus('all')" style="font-size:12px;padding:5px 11px;">ทั้งหมด</button>
+            </span>
+          </div>
           <div id="sumBody"><div class="loading-row">เลือกเดือนเพื่อดูสรุป</div></div>
         </div>
       </div>
@@ -2523,7 +2533,68 @@ function summaryInit(){
   if (el && !el.value){ const d = new Date(); el.value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
   summaryLoad();
 }
+let _sumView = 'overview';
+let _sumStatus = 'จ่ายแล้ว';
+function sumPaintToggle(){
+  document.querySelectorAll('#sumToggle [data-v]').forEach(b => { const a = b.getAttribute('data-v') === _sumView; b.style.background = a ? 'var(--acc)' : 'var(--surf2)'; b.style.color = a ? '#fff' : 'var(--tx)'; });
+  document.querySelectorAll('#sumToggle [data-s]').forEach(b => { const a = b.getAttribute('data-s') === _sumStatus; b.style.background = a ? 'var(--acc)' : 'var(--surf2)'; b.style.color = a ? '#fff' : 'var(--tx)'; });
+  const sd = document.getElementById('sumStatusWrap'); if (sd) sd.style.display = (_sumView === 'overview') ? 'none' : 'flex';
+}
+function sumSetView(v){ _sumView = v; sumPaintToggle(); summaryLoad(); }
+function sumSetStatus(s){ _sumStatus = s; sumPaintToggle(); summaryLoad(); }
+
 async function summaryLoad(){
+  const box = document.getElementById('sumBody');
+  const month = document.getElementById('sumMonth').value;
+  if (!month){ box.innerHTML = '<div class="loading-row">เลือกเดือน</div>'; return; }
+  sumPaintToggle();
+  box.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  try {
+    if (_sumView === 'overview'){
+      const r = await call({ action:'pk_expenseMonthSummary', month: month });
+      if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
+      summaryRender(r);
+    } else {
+      const r = await call({ action:'pk_expenseGroupSummary', month: month, groupBy: _sumView, status: _sumStatus });
+      if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
+      summaryRenderGroup(r);
+    }
+  } catch(e){ box.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
+}
+function summaryRenderGroup(d){
+  const box = document.getElementById('sumBody');
+  const baht = function(n){ return '฿' + (n||0).toLocaleString('th-TH', { minimumFractionDigits:2 }); };
+  const stTxt = d.statusFilter === 'all' ? 'ทุกสถานะ' : 'จ่ายแล้ว';
+  if (!d.count){ box.innerHTML = '<div class="loading-row">ไม่มีรายการ (' + stTxt + ')</div>'; return; }
+  const label = d.groupBy === 'payee' ? 'ผู้รับเงิน (supplier)' : 'พนักงาน (ผู้เบิก)';
+  let h = '<div style="background:var(--surf2);border-radius:12px;padding:16px;margin-bottom:16px;">' +
+    '<div style="font-size:12px;color:var(--mu);">รวมแยก' + label + ' · ' + d.count + ' รายการ · ' + stTxt + '</div>' +
+    '<div style="font-size:26px;font-weight:800;color:var(--acc);">' + baht(d.total) + '</div></div>';
+  (d.groups||[]).forEach(function(g, gi){
+    const pct = d.total ? Math.round(g.total / d.total * 100) : 0;
+    h += '<div style="margin-bottom:8px;border:1px solid var(--surf2);border-radius:10px;overflow:hidden;">' +
+      '<div onclick="sumToggleGroup(' + gi + ')" style="cursor:pointer;padding:11px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
+        '<div><span style="font-weight:600;">' + (g.key||'(ไม่ระบุ)') + '</span> <span style="font-size:11px;color:var(--mu);">' + g.count + ' รายการ · ' + pct + '%</span></div>' +
+        '<div style="font-weight:700;color:var(--acc);white-space:nowrap;">' + baht(g.total) + ' <span style="color:var(--mu);font-size:11px;">▾</span></div>' +
+      '</div>' +
+      '<div id="sumg' + gi + '" style="display:none;border-top:1px solid var(--surf2);">';
+    g.items.forEach(function(it){
+      const dt = new Date(it.date + 'T00:00:00').toLocaleDateString('th-TH', { day:'numeric', month:'short' });
+      const stCol = it.status === 'จ่ายแล้ว' ? 'var(--grn)' : (it.status === 'อนุมัติแล้ว' ? 'var(--blu)' : 'var(--mu)');
+      const other = d.groupBy === 'payee' ? ('เบิก: ' + (it.createdBy||'-')) : ('ผู้รับ: ' + (it.payee||'-'));
+      h += '<div style="padding:8px 14px;border-top:1px solid var(--bg);font-size:12px;display:flex;justify-content:space-between;gap:8px;">' +
+        '<div><span style="color:var(--mu);">' + dt + '</span> ' + (it.mainCat ? ('[' + it.mainCat + '] ') : '') + (it.detail||'-') +
+          '<br><span style="font-size:11px;color:var(--mu);">' + other + '</span></div>' +
+        '<div style="text-align:right;white-space:nowrap;"><div style="font-weight:600;">' + baht(it.amount) + '</div><div style="font-size:10px;color:' + stCol + ';">' + it.status + '</div></div>' +
+      '</div>';
+    });
+    h += '</div></div>';
+  });
+  box.innerHTML = h;
+}
+function sumToggleGroup(i){ const el = document.getElementById('sumg' + i); if (el) el.style.display = (el.style.display === 'none') ? 'block' : 'none'; }
+
+async function summaryLoad_OLD_UNUSED(){
   const box = document.getElementById('sumBody');
   const month = document.getElementById('sumMonth').value;
   if (!month){ box.innerHTML = '<div class="loading-row">เลือกเดือน</div>'; return; }
