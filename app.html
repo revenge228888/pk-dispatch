@@ -1464,6 +1464,7 @@ function renderOfficeShell(){
               <button class="btn" data-s="all" onclick="sumSetStatus('all')" style="font-size:12px;padding:5px 11px;">ทั้งหมด</button>
             </span>
           </div>
+          <div id="sumCatFilter" style="display:none;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
           <div id="sumBody"><div class="loading-row">เลือกเดือนเพื่อดูสรุป</div></div>
         </div>
       </div>
@@ -2535,13 +2536,23 @@ function summaryInit(){
 }
 let _sumView = 'overview';
 let _sumStatus = 'จ่ายแล้ว';
+let _sumCat = 'all';
+let _sumCats = [];
 function sumPaintToggle(){
   document.querySelectorAll('#sumToggle [data-v]').forEach(b => { const a = b.getAttribute('data-v') === _sumView; b.style.background = a ? 'var(--acc)' : 'var(--surf2)'; b.style.color = a ? '#fff' : 'var(--tx)'; });
   document.querySelectorAll('#sumToggle [data-s]').forEach(b => { const a = b.getAttribute('data-s') === _sumStatus; b.style.background = a ? 'var(--acc)' : 'var(--surf2)'; b.style.color = a ? '#fff' : 'var(--tx)'; });
   const sd = document.getElementById('sumStatusWrap'); if (sd) sd.style.display = (_sumView === 'overview') ? 'none' : 'flex';
 }
-function sumSetView(v){ _sumView = v; sumPaintToggle(); summaryLoad(); }
+function sumPaintCats(){
+  const wrap = document.getElementById('sumCatFilter'); if (!wrap) return;
+  if (_sumView === 'overview' || !_sumCats.length){ wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+  wrap.style.display = 'flex';
+  const mk = (val, txt) => { const a = (_sumCat === val); return '<button class="btn" onclick="sumSetCat(\'' + String(val).replace(/'/g,"\\'") + '\')" style="font-size:11px;padding:4px 10px;background:' + (a?'var(--acc)':'var(--surf2)') + ';color:' + (a?'#fff':'var(--tx)') + ';">' + txt + '</button>'; };
+  wrap.innerHTML = '<span style="font-size:11px;color:var(--mu);align-self:center;margin-right:2px;">หมวด:</span>' + mk('all','ทุกหมวด') + _sumCats.map(c => mk(c, c)).join('');
+}
+function sumSetView(v){ _sumView = v; _sumCat = 'all'; sumPaintToggle(); summaryLoad(); }
 function sumSetStatus(s){ _sumStatus = s; sumPaintToggle(); summaryLoad(); }
+function sumSetCat(c){ _sumCat = c; summaryLoad(); }
 
 async function summaryLoad(){
   const box = document.getElementById('sumBody');
@@ -2551,12 +2562,14 @@ async function summaryLoad(){
   box.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
   try {
     if (_sumView === 'overview'){
+      _sumCats = []; sumPaintCats();
       const r = await call({ action:'pk_expenseMonthSummary', month: month });
       if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
       summaryRender(r);
     } else {
-      const r = await call({ action:'pk_expenseGroupSummary', month: month, groupBy: _sumView, status: _sumStatus });
+      const r = await call({ action:'pk_expenseGroupSummary', month: month, groupBy: _sumView, status: _sumStatus, mainCat: _sumCat });
       if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
+      _sumCats = r.availableCats || []; sumPaintCats();
       summaryRenderGroup(r);
     }
   } catch(e){ box.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
