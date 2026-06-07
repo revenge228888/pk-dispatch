@@ -2957,7 +2957,7 @@ async function assignFetch(useOverrides){
       _asTeamInfo[t.team] = { routeKm: t.routeKm };
       t.stops.forEach(s => { _asJobs.push(Object.assign({team:t.team}, s)); _asAssign[s.id]=t.team; });
     });
-    (r.unassigned||[]).forEach(u => { _asJobs.push({ id:u.id, customer:u.customer, kind:u.kind, glass:u.glass, score:u.score, address:u.address||'', team:null, reason:u.reason }); });
+    (r.unassigned||[]).forEach(u => { _asJobs.push({ id:u.id, customer:u.customer, kind:u.kind, glass:u.glass, score:u.score, address:u.address||'', job:u.job||'', hasCoord:u.hasCoord, team:null, reason:u.reason }); });
     _asDirty = false;
     assignRenderBoard();
   } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
@@ -3017,15 +3017,18 @@ function assignRenderBoard(){
     list.forEach(j => {
       const diffColor = j.difficulty==='หนัก'?'var(--rd)':(j.difficulty==='ปานกลาง'?'var(--acc)':'var(--grn)');
       const bad = !_asCanDo(j, team);
+      const jobTxt = String(j.job||'').replace('[กระจก]','').trim();
+      const noScore = !(Number(j.score)>0);
       h += '<div style="font-size:12px;padding:6px 0;border-top:1px solid var(--surf2);'+(bad?'background:rgba(255,0,0,.06);':'')+'">'
          + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
          +   '<div>'
          +     (!_asDirty&&j.seq?'<span style="color:var(--acc);font-weight:600;">'+j.seq+'.</span> ':'')
          +     (_asPins[team]===j.id?'📌 ':'')+(j.glass?'🔷 ':'')+'<b>'+(j.customer||'-')+'</b>'
-         +     ' <span style="color:'+diffColor+';">['+(j.difficulty||'')+' '+j.score+']</span>'
+         +     ' <span style="color:'+(noScore?'var(--rd)':diffColor)+';">['+(noScore?'⚠️ ไม่มีคะแนน':(j.difficulty+' '+j.score))+']</span>'
          +     (j.kind==='measure'?' <span style="color:var(--mu);font-size:11px;">วัด</span>':'')
          +     (bad?' <span style="color:var(--rd);font-weight:600;">⚠️ ผิดกติกา</span>':'')
-         +     (!_asDirty&&j.legKm!=null? ' <span style="color:var(--mu);">· '+j.legKm+' กม.</span>':'')
+         +     (j.hasCoord===false?' <span style="color:var(--rd);font-size:11px;">📍ไม่มีพิกัด</span>':(!_asDirty&&j.legKm!=null? ' <span style="color:var(--mu);">· '+j.legKm+' กม.</span>':''))
+         +     (jobTxt? '<br><span style="font-size:12px;">📋 '+jobTxt+'</span>':'')
          +     (j.address? '<br><span style="font-size:11px;color:var(--mu);">'+j.address+'</span>':'')
          +     (j.why? '<br><span style="font-size:11px;color:var(--mu);">เหตุผล: '+j.why+'</span>':'')
          +   '</div>'
@@ -3044,8 +3047,11 @@ function assignRenderBoard(){
     h += '<div style="border:1.5px solid var(--rd);border-radius:8px;padding:10px;">'
        + '<div style="font-weight:600;color:var(--rd);margin-bottom:6px;">⚠️ ยังไม่จัด '+unassigned.length+' งาน (ย้ายลงทีมเพื่อ OT ได้)</div>';
     unassigned.forEach(u => {
+      const ujob = String(u.job||'').replace('[กระจก]','').trim();
       h += '<div style="font-size:12px;padding:5px 0;border-top:1px solid var(--surf2);display:flex;justify-content:space-between;align-items:center;gap:8px;">'
-         + '<span>'+(u.glass?'🔷 ':'')+(u.customer||u.id)+' <span style="color:var(--mu);">['+u.score+'] '+(u.reason||'')+'</span></span>'
+         + '<span>'+(u.glass?'🔷 ':'')+'<b>'+(u.customer||u.id)+'</b> <span style="color:var(--mu);">['+((Number(u.score)>0)?u.score:'ไม่มีคะแนน')+'] '+(u.reason||'')+'</span>'
+         + (u.hasCoord===false?' <span style="color:var(--rd);font-size:11px;">📍ไม่มีพิกัด</span>':'')
+         + (ujob? '<br><span style="font-size:11px;">📋 '+ujob+'</span>':'')+'</span>'
          + _asTeamSelect(u)
          + '</div>';
     });
