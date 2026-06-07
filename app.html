@@ -909,6 +909,7 @@ function renderOfficeShell(){
           <div class="sidebar-group">บุคคล & รายงาน</div>
           <button class="sidebar-item" data-tab="timelog" onclick="setTab('timelog',this)"><span class="sidebar-ico">⏰</span><span class="sidebar-label">บันทึกเวลา</span></button>
           ${CURRENT_USER.role === 'manager' ? `<button class="sidebar-item" data-tab="employees" onclick="setTab('employees',this)"><span class="sidebar-ico">👥</span><span class="sidebar-label">พนักงาน</span></button>
+          <button class="sidebar-item" data-tab="payroll" onclick="setTab('payroll',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">งวดเงินเดือน</span></button>
           <button class="sidebar-item" data-tab="salesreport" onclick="setTab('salesreport',this)"><span class="sidebar-ico">📊</span><span class="sidebar-label">รายงานเซลล์</span></button>` : ''}
         </div>
         <div class="sidebar-bottom">
@@ -1447,6 +1448,27 @@ function renderOfficeShell(){
       </div>
 
       <!-- สรุปรายเดือน (manager) -->
+      <!-- PAYROLL (💰 งวดเงินเดือน · manager) -->
+      <div id="tabPayroll" style="display:none;">
+        <div class="section-pad">
+          <div style="font-weight:700;font-size:15px;margin-bottom:12px;">💰 งวดเงินเดือน</div>
+          <div class="row-form">
+            <div class="fg" style="flex:1;min-width:200px;"><label class="fl">พนักงาน</label>
+              <select class="fi" id="payEmp" onchange="payrollEmpChange()"><option value="">— เลือก —</option></select></div>
+          </div>
+          <div class="row-form">
+            <div class="fg" style="max-width:150px;"><label class="fl">ตั้งแต่</label><input class="fi" id="payFrom" type="date"></div>
+            <div class="fg" style="max-width:150px;"><label class="fl">ถึง</label><input class="fi" id="payTo" type="date"></div>
+            <div class="fg"><label class="fl">ชื่องวด</label><input class="fi" id="payLabel" type="text" placeholder="เช่น งวด1 มิ.ย."></div>
+            <div class="fg" style="max-width:150px;"><label class="fl">เงินงวดนี้ (บาท)</label><input class="fi" id="payGross" type="number" min="0" placeholder="0"></div>
+          </div>
+          <button class="btn btn-p" onclick="payrollCalc()">🧮 คำนวณงวด</button>
+          <div id="payResult" style="margin-top:14px;"></div>
+          <div style="font-weight:700;font-size:14px;margin:22px 0 10px;">ประวัติงวด</div>
+          <div id="payRuns"><div class="loading-row">เลือกพนักงานเพื่อดูประวัติ</div></div>
+        </div>
+      </div>
+
       <div id="tabSummary" style="display:none;">
         <div class="section-pad">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
@@ -2539,6 +2561,109 @@ function summaryInit(){
   if (el && !el.value){ const d = new Date(); el.value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
   summaryLoad();
 }
+let _payEmps = [], _payCalc = null;
+function _payBaht(n){ return '฿' + (Number(n)||0).toLocaleString('th-TH', { minimumFractionDigits:2 }); }
+async function payrollInit(){
+  const t = new Date();
+  const d1 = new Date(t.getFullYear(), t.getMonth(), 1), d2 = new Date(t.getFullYear(), t.getMonth()+1, 0);
+  const iso = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  if (!document.getElementById('payFrom').value) document.getElementById('payFrom').value = iso(d1);
+  if (!document.getElementById('payTo').value) document.getElementById('payTo').value = iso(d2);
+  if (_payEmps.length) return;
+  try {
+    const r = await call({ action:'pk_payListEmployees' });
+    if (r.ok){ _payEmps = r.employees || [];
+      document.getElementById('payEmp').innerHTML = '<option value="">— เลือก —</option>' +
+        _payEmps.map(e => '<option value="' + e.id + '">' + e.name + ' (' + (e.type||'-') + ')</option>').join(''); }
+  } catch(e){}
+}
+function payrollEmpChange(){ _payCalc = null; document.getElementById('payResult').innerHTML = ''; payrollLoadRuns(); }
+async function payrollCalc(){
+  const empId = document.getElementById('payEmp').value;
+  const from = document.getElementById('payFrom').value, to = document.getElementById('payTo').value;
+  const gross = document.getElementById('payGross').value;
+  if (!empId){ toast('เลือกพนักงาน'); return; }
+  if (!from || !to){ toast('ระบุช่วงงวด'); return; }
+  showLoad('คำนวณ...');
+  try {
+    const r = await call({ action:'pk_paySalaryV2', empId: empId, from: from, to: to, gross: gross });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'')); return; }
+    _payCalc = r; payrollRenderCalc(r);
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+function payrollRenderCalc(r){
+  const box = document.getElementById('payResult');
+  box.innerHTML = '<div style="background:var(--surf2);border-radius:12px;padding:16px;">' +
+    '<div style="font-size:13px;color:var(--mu);margin-bottom:8px;">' + r.employee.name + ' · ฐาน ' + _payBaht(r.base) + ' (' + _payBaht(r.perDay) + '/วัน)</div>' +
+    '<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;"><span>เงินงวดนี้</span><span style="font-weight:600;">' + _payBaht(r.gross) + '</span></div>' +
+    '<label style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:13px;border-top:1px solid var(--bg);"><span><input type="checkbox" id="payDedAbsent" ' + (r.dedAbsent?'checked':'') + ' onchange="payrollNet()"> หักขาด/ลา (' + r.absentDays + ' วัน)</span><span style="color:var(--rd);">−' + _payBaht(r.dedAbsent) + '</span></label>' +
+    '<label style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:13px;"><span><input type="checkbox" id="payDedLate" ' + (r.lateTotal?'checked':'') + ' onchange="payrollNet()"> หักสาย</span><span style="color:var(--rd);">−' + _payBaht(r.lateTotal) + '</span></label>' +
+    '<div style="padding:8px 0;font-size:13px;border-top:1px solid var(--bg);"><div style="display:flex;justify-content:space-between;"><span>เบิกล่วงหน้าคงค้าง</span><span style="font-weight:600;color:var(--acc);">' + _payBaht(r.advOutstanding) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;"><span>หักล่วงหน้างวดนี้</span><input class="fi" id="payAdv" type="number" min="0" max="' + r.advOutstanding + '" value="0" oninput="payrollNet()" style="width:130px;text-align:right;"></div></div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:13px;"><span>หักอื่นๆ</span><input class="fi" id="payOther" type="number" min="0" value="0" oninput="payrollNet()" style="width:130px;text-align:right;"></div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--bg);padding-top:10px;margin-top:4px;"><span style="font-weight:700;">สุทธิ</span><span id="payNet" style="font-size:22px;font-weight:800;color:var(--grn);">' + _payBaht(r.gross) + '</span></div>' +
+    '<button class="btn btn-p" style="width:100%;margin-top:14px;" onclick="payrollCommit()">✅ ยืนยันบันทึกงวด</button>' +
+    '</div>';
+  payrollNet();
+}
+function payrollNet(){
+  if (!_payCalc) return; const r = _payCalc;
+  const a = document.getElementById('payDedAbsent').checked ? r.dedAbsent : 0;
+  const l = document.getElementById('payDedLate').checked ? r.lateTotal : 0;
+  let adv = Number(document.getElementById('payAdv').value) || 0;
+  if (adv > r.advOutstanding){ adv = r.advOutstanding; document.getElementById('payAdv').value = adv; }
+  if (adv < 0){ adv = 0; document.getElementById('payAdv').value = 0; }
+  const o = Number(document.getElementById('payOther').value) || 0;
+  const gross = Number(document.getElementById('payGross').value) || 0;
+  const net = Math.round((gross - a - l - adv - o) * 100) / 100;
+  document.getElementById('payNet').textContent = _payBaht(net);
+}
+async function payrollCommit(){
+  if (!_payCalc) return; const r = _payCalc;
+  const empId = document.getElementById('payEmp').value;
+  const from = document.getElementById('payFrom').value, to = document.getElementById('payTo').value;
+  const gross = document.getElementById('payGross').value;
+  const label = document.getElementById('payLabel').value.trim();
+  const deductAbsent = document.getElementById('payDedAbsent').checked;
+  const deductLate = document.getElementById('payDedLate').checked;
+  const advanceDeduct = Number(document.getElementById('payAdv').value) || 0;
+  const other = Number(document.getElementById('payOther').value) || 0;
+  const a = deductAbsent ? r.dedAbsent : 0, l = deductLate ? r.lateTotal : 0;
+  const net = Math.round((Number(gross) - a - l - advanceDeduct - other) * 100) / 100;
+  let msg = 'ยืนยันบันทึกงวด ' + r.employee.name + '\nสุทธิ ' + _payBaht(net);
+  if (advanceDeduct) msg += '\nหักล่วงหน้า ' + _payBaht(advanceDeduct) + ' (เหลือค้าง ' + _payBaht(r.advOutstanding - advanceDeduct) + ')';
+  if (!confirm(msg + '\n\nเขียนลงระบบ?')) return;
+  showLoad('บันทึก...');
+  try {
+    const w = await call({ action:'pk_paySalaryCommit', empId, from, to, label, gross, deductAbsent, deductLate, advanceDeduct, other });
+    hideLoad();
+    if (!w.ok){ toast('❌ ' + (w.error||'')); return; }
+    toast('✅ บันทึกงวด ' + w.runId + ' · สุทธิ ' + _payBaht(w.net));
+    document.getElementById('payResult').innerHTML = ''; _payCalc = null;
+    payrollLoadRuns();
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+async function payrollLoadRuns(){
+  const empId = document.getElementById('payEmp').value; const box = document.getElementById('payRuns');
+  if (!empId){ box.innerHTML = '<div class="loading-row">เลือกพนักงานเพื่อดูประวัติ</div>'; return; }
+  box.innerHTML = '<div class="loading-row">โหลด...</div>';
+  try {
+    const r = await call({ action:'pk_paySalaryRuns', empId: empId });
+    if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'') + '</div>'; return; }
+    if (!r.runs.length){ box.innerHTML = '<div class="loading-row">ยังไม่มีงวด</div>'; return; }
+    const b0 = n => '฿' + (Number(n)||0).toLocaleString('th-TH');
+    box.innerHTML = r.runs.map(function(g){
+      const f = g.from ? new Date(g.from).toLocaleDateString('th-TH', { day:'numeric', month:'short' }) : '';
+      const t = g.to ? new Date(g.to).toLocaleDateString('th-TH', { day:'numeric', month:'short' }) : '';
+      return '<div style="background:var(--surf2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">' +
+        '<div style="display:flex;justify-content:space-between;"><span style="font-weight:600;">' + (g.label||g.runId) + ' <span style="font-size:11px;color:var(--mu);">' + f + '–' + t + '</span></span><span style="font-weight:700;color:var(--grn);">' + b0(g.net) + '</span></div>' +
+        '<div style="font-size:11px;color:var(--mu);margin-top:3px;">เงินงวด ' + b0(g.gross) + (g.dedAbsent?' · หักขาด '+b0(g.dedAbsent):'') + (g.dedLate?' · หักสาย '+b0(g.dedLate):'') + (g.dedAdvance?' · หักล่วงหน้า '+b0(g.dedAdvance):'') + (g.dedOther?' · อื่นๆ '+b0(g.dedOther):'') + ' · ค้างล่วงหน้า ' + b0(g.advOutstanding) + '</div>' +
+        '</div>';
+    }).join('');
+  } catch(e){ box.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
+}
+
 let _sumView = 'overview';
 let _sumStatus = 'จ่ายแล้ว';
 let _sumCat = 'all';
@@ -2698,7 +2823,7 @@ async function expenseRejectConfirm(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -2717,6 +2842,7 @@ function setTab(t, btn){
   if (t === 'dash') loadDashboard();
   if (t === 'booking') initBookingTab();
   if (t === 'assign') assignInit();
+  if (t === 'payroll') payrollInit();
   if (t === 'records') recordsInit();
   if (t === 'quotes') quotesInit();
   if (t === 'salesreport') salesReportInit();
