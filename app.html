@@ -1456,6 +1456,14 @@ function renderOfficeShell(){
             <div class="fg" style="flex:1;min-width:200px;"><label class="fl">พนักงาน</label>
               <select class="fi" id="payEmp" onchange="payrollEmpChange()"><option value="">— เลือก —</option></select></div>
           </div>
+          <div class="row-form" style="align-items:flex-end;">
+            <div class="fg" style="max-width:150px;"><label class="fl">เดือน</label><input class="fi" id="payMonth" type="month"></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;padding-bottom:2px;">
+              <button class="btn btn-g" style="font-size:12px;" onclick="payQuick(1)">งวด 1 (1–15)</button>
+              <button class="btn btn-g" style="font-size:12px;" onclick="payQuick(2)">งวด 2 (16–สิ้นเดือน)</button>
+              <button class="btn btn-g" style="font-size:12px;" onclick="payQuick(0)">ทั้งเดือน</button>
+            </div>
+          </div>
           <div class="row-form">
             <div class="fg" style="max-width:150px;"><label class="fl">ตั้งแต่</label><input class="fi" id="payFrom" type="date"></div>
             <div class="fg" style="max-width:150px;"><label class="fl">ถึง</label><input class="fi" id="payTo" type="date"></div>
@@ -2562,9 +2570,34 @@ function summaryInit(){
   summaryLoad();
 }
 let _payEmps = [], _payCalc = null;
+const _PAY_TH_MO = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 function _payBaht(n){ return '฿' + (Number(n)||0).toLocaleString('th-TH', { minimumFractionDigits:2 }); }
+function payQuick(half){
+  const empId = document.getElementById('payEmp').value;
+  if (!empId){ toast('เลือกพนักงานก่อน'); return; }
+  let mon = document.getElementById('payMonth').value;
+  if (!mon){ const t = new Date(); mon = t.getFullYear() + '-' + String(t.getMonth()+1).padStart(2,'0'); document.getElementById('payMonth').value = mon; }
+  const parts = mon.split('-'); const y = +parts[0], m = +parts[1];
+  const last = new Date(y, m, 0).getDate();
+  const pad = n => String(n).padStart(2,'0');
+  const emp = _payEmps.find(e => e.id === empId) || {};
+  const base = Number(emp.baseSalary) || 0;
+  const half1 = Math.round(base / 2);
+  const moTh = _PAY_TH_MO[m-1] + ' ' + ((y+543) % 100);
+  let from, to, gross, label;
+  if (half === 1){ from = y+'-'+pad(m)+'-01'; to = y+'-'+pad(m)+'-15'; gross = half1; label = 'งวด1 '+moTh; }
+  else if (half === 2){ from = y+'-'+pad(m)+'-16'; to = y+'-'+pad(m)+'-'+pad(last); gross = base - half1; label = 'งวด2 '+moTh; }
+  else { from = y+'-'+pad(m)+'-01'; to = y+'-'+pad(m)+'-'+pad(last); gross = base; label = moTh; }
+  document.getElementById('payFrom').value = from;
+  document.getElementById('payTo').value = to;
+  document.getElementById('payGross').value = gross;
+  document.getElementById('payLabel').value = label;
+  payrollCalc();
+}
 async function payrollInit(){
   const t = new Date();
+  const pm = document.getElementById('payMonth');
+  if (pm && !pm.value) pm.value = t.getFullYear() + '-' + String(t.getMonth()+1).padStart(2,'0');
   const d1 = new Date(t.getFullYear(), t.getMonth(), 1), d2 = new Date(t.getFullYear(), t.getMonth()+1, 0);
   const iso = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
   if (!document.getElementById('payFrom').value) document.getElementById('payFrom').value = iso(d1);
