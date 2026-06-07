@@ -2830,9 +2830,23 @@ function bkRenderSuggest(r){
   let h = '<div style="font-size:12px;color:var(--mu);margin:6px 0 8px;">' + zoneNote + ' · เพดานช่าง ' + r.meta.techCap + '/วัน</div>';
   h += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
   r.suggestions.forEach((s, i) => {
-    const bc = i===0 ? 'var(--grn)' : 'var(--mu)';
-    const tag = i===0 ? ' <span style="color:var(--grn);font-weight:600;font-size:11px;">แนะนำสุด</span>' : '';
-    h += '<div onclick="bkPickDate(\'' + s.dateKey + '\')" style="cursor:pointer;border:1.5px solid ' + bc + ';border-radius:8px;padding:8px 12px;min-width:150px;">'
+    const isMax = s.mode === 'rush_max';
+    const isZone = s.mode === 'rush_zone';
+    let bc, tag;
+    if (isMax) {
+      bc = 'var(--rd)';
+      tag = ' <span style="color:var(--rd);font-weight:700;font-size:11px;">⚡ ด่วนที่สุด</span>';
+    } else if (isZone) {
+      bc = 'var(--acc)';
+      tag = ' <span style="color:var(--acc);font-weight:600;font-size:11px;">เร่งตามโซน</span>';
+    } else if (i === 0) {
+      bc = 'var(--grn)';
+      tag = ' <span style="color:var(--grn);font-weight:600;font-size:11px;">แนะนำสุด</span>';
+    } else {
+      bc = 'var(--mu)'; tag = '';
+    }
+    const bw = isMax ? '2px' : '1.5px';
+    h += '<div onclick="bkPickDate(\'' + s.dateKey + '\')" style="cursor:pointer;border:' + bw + ' solid ' + bc + ';border-radius:8px;padding:8px 12px;min-width:150px;">'
        +   '<div style="font-size:15px;font-weight:600;">' + s.dateKey + tag + '</div>'
        +   '<div style="font-size:11px;color:var(--mu);margin-top:3px;line-height:1.5;">' + s.reasons.join('<br>') + '</div>'
        +   '<div style="font-size:11px;margin-top:3px;color:var(--acc);">ถัง: ' + s.pool + '</div>'
