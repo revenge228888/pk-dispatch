@@ -1165,8 +1165,10 @@ function renderOfficeShell(){
               <span class="date-display empty" data-for="asDate">เลือกวันที่</span>
             </div>
           </div>
+          <div class="fg" style="max-width:120px;"><label class="fl">ทีมช่างวันนี้</label><input class="fi" id="asTech" type="number" min="0" max="26" placeholder="default"></div>
+          <div class="fg" style="max-width:120px;"><label class="fl">ทีมเซลล์วันนี้</label><input class="fi" id="asSales" type="number" min="0" max="26" placeholder="default"></div>
           <button class="btn btn-p" onclick="assignPreview()">🚚 ดูแผนจัดทีม</button>
-          <span style="font-size:11px;color:var(--mu);align-self:center;">แสดงแผน (ยังไม่เขียน) · จัดกลุ่มโซน + เรียงจุดแวะจาก depot</span>
+          <span style="font-size:11px;color:var(--mu);align-self:center;">เว้นช่องทีม = ใช้ค่า default · จัดกลุ่มโซน + เรียงจุดแวะจาก depot</span>
         </div>
         <div id="asResult" class="section-pad"></div>
       </div>
@@ -2891,7 +2893,13 @@ function clearBookingForm(){
   // ── จังหวะ2A: หน้าจัดทีม (preview · ยังไม่เขียน) ──
   return clearBookingForm_impl();
 }
-let _asPins = {};   // team → jobId (ปักหมุดงานแรก)
+let _asPins = {};       // team → jobId (ปักหมุดงานแรก)
+let _asAssign = {};      // jobId → team (override map · มีครบทุกงานหลัง fetch แรก)
+let _asJobs = [];        // งานทั้งหมด (สถานะกระดานปัจจุบัน)
+let _asMeta = {};        // {date, cap, techTeams, salesTeams, glassTeams, hasDepot, ...}
+let _asTeamInfo = {};    // team → {routeKm} (จาก backend · ใช้ตอนไม่ dirty)
+let _asDirty = false;
+
 function assignInit(){
   const d = document.getElementById('asDate');
   if (d && !d.value){
@@ -2900,68 +2908,151 @@ function assignInit(){
     updateDateDisplay(d);
   }
 }
-async function assignPreview(keepPins){
-  if (!keepPins) _asPins = {};
+function _esc(s){ return String(s==null?'':s).replace(/'/g,"\\'"); }
+
+// valid teams ของงาน (กติกา: วัด=เซลล์/ช่าง · ติดตั้ง=ช่าง · กระจก=ทีมกระจก)
+function _asCanDo(job, team){
+  const tech=_asMeta.techTeams||[], sales=_asMeta.salesTeams||[], glass=_asMeta.glassTeams||[];
+  const isTech=tech.indexOf(team)>=0, isSales=sales.indexOf(team)>=0;
+  if(job.kind==='measure') return isTech||isSales;
+  if(!isTech) return false;
+  if(job.glass) return glass.indexOf(team)>=0;
+  return true;
+}
+function _asValidTeams(job){
+  const tech=_asMeta.techTeams||[], sales=_asMeta.salesTeams||[], glass=_asMeta.glassTeams||[];
+  if(job.kind==='measure') return sales.concat(tech);
+  if(job.glass) return glass.slice();
+  return tech.slice();
+}
+
+async function assignFetch(useOverrides){
   const iso = document.getElementById('asDate').value;
   const box = document.getElementById('asResult');
   if (!iso){ toast('เลือกวันที่ก่อน'); return; }
   const p = iso.split('-');
   const dateKey = p[2]+'/'+p[1]+'/'+p[0];   // YYYY-MM-DD → DD/MM/YYYY
+  const body = { action:'pk_queueAssignPreview', date: dateKey, pins: _asPins };
+  const tT = document.getElementById('asTech').value;
+  const tS = document.getElementById('asSales').value;
+  if (tT !== '') body.techTeams = tT;
+  if (tS !== '') body.salesTeams = tS;
+  if (useOverrides) body.overrides = _asAssign;
   showLoad('กำลังจัดทีม...');
   try {
-    const r = await call({ action:'pk_queueAssignPreview', date: dateKey, pins: _asPins });
+    const r = await call(body);
     hideLoad();
     if (!r.ok){ toast('❌ '+(r.error||'ผิดพลาด')); box.innerHTML=''; return; }
-    assignRender(r);
+    if (r.teamCounts){
+      const eT=document.getElementById('asTech'), eS=document.getElementById('asSales');
+      if (eT && eT.value==='') eT.value=r.teamCounts.tech;
+      if (eS && eS.value==='') eS.value=r.teamCounts.sales;
+    }
+    // สร้างสถานะกระดานจาก response
+    _asMeta = { date:r.date, cap:r.capPerTeam, hasDepot:r.hasDepot, noCoord:r.noCoord,
+                assignedCount:r.assignedCount, jobCount:r.jobCount,
+                techTeams:r.techTeams||[], salesTeams:r.salesTeams||[], glassTeams:r.glassTeams||[] };
+    _asJobs = []; _asAssign = {}; _asTeamInfo = {};
+    (r.teams||[]).forEach(t => {
+      _asTeamInfo[t.team] = { routeKm: t.routeKm };
+      t.stops.forEach(s => { _asJobs.push(Object.assign({team:t.team}, s)); _asAssign[s.id]=t.team; });
+    });
+    (r.unassigned||[]).forEach(u => { _asJobs.push({ id:u.id, customer:u.customer, kind:u.kind, glass:u.glass, score:u.score, address:u.address||'', team:null, reason:u.reason }); });
+    _asDirty = false;
+    assignRenderBoard();
   } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
-function asPinFirst(team, jobId){ _asPins[team] = jobId; assignPreview(true); toast('ปักหมุดงานแรก → จัดเส้นทางใหม่'); }
-function asUnpin(team){ delete _asPins[team]; assignPreview(true); }
-function _esc(s){ return String(s==null?'':s).replace(/'/g,"\\'"); }
+function assignPreview(){ _asPins={}; _asAssign={}; assignFetch(false); }   // ดูแผนใหม่ (auto)
+function assignReroute(){ assignFetch(true); }                              // จัดเส้นทางใหม่ (ใช้ overrides+pins)
 
-function assignRender(r){
-  const box = document.getElementById('asResult');
-  let h = '<div style="font-size:13px;color:var(--mu);margin-bottom:10px;">'
-        + 'วันที่ '+r.date+' · งานรอจัด '+r.jobCount+' · จัดมือแล้ว '+r.locked
-        + (r.noCoord? ' · ไม่มีพิกัด '+r.noCoord:'')
-        + (r.hasDepot? ' · เริ่มจาก depot':' · ไม่มี depot (เรียง chain)')
-        + ' · ทีมกระจก: '+(r.glassTeams&&r.glassTeams.length? r.glassTeams.join(','):'-')
-        + '</div>';
-  if (!r.teams || !r.teams.length){
-    h += '<div style="color:var(--mu);">ไม่มีงานรอจัดทีมในวันนี้</div>';
-  } else {
-    r.teams.forEach(t => {
-      h += '<div style="border:1px solid var(--mu);border-radius:8px;padding:10px;margin-bottom:10px;">'
-         + '<div style="font-weight:600;font-size:14px;margin-bottom:8px;">'+t.team
-         + ' <span style="font-size:11px;color:var(--mu);font-weight:400;">('+t.jobCount+' งาน · '+t.totalScore+' คะแนน · เส้นทาง ~'+t.routeKm+' กม.)</span></div>';
-      t.stops.forEach(s => {
-        const diffColor = s.difficulty==='หนัก'?'var(--rd)':(s.difficulty==='ปานกลาง'?'var(--acc)':'var(--grn)');
-        h += '<div style="font-size:12px;padding:6px 0;border-top:1px solid var(--surf2);">'
-           + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
-           +   '<div>'
-           +     '<span style="color:var(--acc);font-weight:600;">'+s.seq+'.</span> '
-           +     (s.pinned?'📌 ':'')+(s.glass?'🔷 ':'')+'<b>'+(s.customer||'-')+'</b>'
-           +     ' <span style="color:'+diffColor+';">['+s.difficulty+' '+s.score+']</span>'
-           +     (s.legKm!=null? ' <span style="color:var(--mu);">· '+s.legKm+' กม.จากจุดก่อน</span>':'')
-           +     (s.address? '<br><span style="font-size:11px;color:var(--mu);">'+s.address+'</span>':'')
-           +     '<br><span style="font-size:11px;color:var(--mu);">เหตุผล: '+s.why+'</span>'
-           +   '</div>'
-           +   (s.pinned
-                ? '<button class="btn btn-g" style="font-size:10px;padding:2px 6px;" onclick="asUnpin(\''+_esc(t.team)+'\')">ยกเลิกหมุด</button>'
-                : '<button class="btn btn-g" style="font-size:10px;padding:2px 6px;" onclick="asPinFirst(\''+_esc(t.team)+'\',\''+_esc(s.id)+'\')">⏰ ทำก่อน</button>')
-           + '</div></div>';
-      });
-      h += '</div>';
-    });
+function asMove(id, team){
+  if(!team) return;
+  const j=_asJobs.find(x=>x.id===id); if(!j) return;
+  j.team=team; _asAssign[id]=team; _asDirty=true;
+  Object.keys(_asPins).forEach(t=>{ if(_asPins[t]===id && t!==team) delete _asPins[t]; });
+  assignRenderBoard();
+}
+function asPinFirst(team, jobId){ _asPins[team]=jobId; _asDirty=true; assignRenderBoard(); toast('ปักหมุดงานแรก → กดจัดเส้นทางใหม่'); }
+function asUnpin(team){ delete _asPins[team]; _asDirty=true; assignRenderBoard(); }
+
+function _asTeamSelect(j){
+  const valid=_asValidTeams(j);
+  let opts = (j.team===null) ? '<option value="">— เลือกทีม —</option>' : '';
+  // ถ้าทีมปัจจุบันไม่อยู่ใน valid (ผิดกติกา) ให้โชว์ด้วย
+  if (j.team && valid.indexOf(j.team)<0) opts += '<option value="'+j.team+'" selected>'+j.team+' (ผิดกติกา)</option>';
+  valid.forEach(t => { opts += '<option value="'+t+'"'+(t===j.team?' selected':'')+'>'+t+'</option>'; });
+  return '<select onchange="asMove(\''+_esc(j.id)+'\',this.value)" style="font-size:11px;padding:2px 4px;max-width:130px;">'+opts+'</select>';
+}
+
+function assignRenderBoard(){
+  const box=document.getElementById('asResult');
+  const cap=_asMeta.cap||10;
+  // จัดกลุ่มตามทีม
+  const groups={}; const unassigned=[];
+  _asJobs.forEach(j => { if(j.team){ (groups[j.team]=groups[j.team]||[]).push(j); } else unassigned.push(j); });
+
+  let h='<div style="font-size:13px;color:var(--mu);margin-bottom:8px;">'
+       + 'วันที่ '+_asMeta.date+' · งานทั้งหมด '+(_asMeta.jobCount||0)+' · จัดมาแล้ว '+(_asMeta.assignedCount||0)
+       + (_asMeta.noCoord? ' · ไม่มีพิกัด '+_asMeta.noCoord:'')
+       + (_asMeta.hasDepot? ' · เริ่มจาก depot':' · ไม่มี depot')
+       + ' · ทีมกระจก: '+((_asMeta.glassTeams||[]).join(',')||'-')+'</div>';
+
+  if (_asDirty){
+    h += '<div style="background:var(--acc);color:#fff;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+       + '<span style="font-size:12px;">มีการย้าย/ปักหมุด — ลำดับ &amp; ระยะทางยังไม่อัปเดต</span>'
+       + '<button class="btn" style="background:#fff;color:var(--acc);font-size:12px;padding:4px 10px;" onclick="assignReroute()">🔄 จัดเส้นทางใหม่</button></div>';
   }
-  if (r.unassigned && r.unassigned.length){
+
+  const order = (_asMeta.techTeams||[]).concat(_asMeta.salesTeams||[]);
+  order.forEach(team => {
+    const list=groups[team]; if(!list||!list.length) return;
+    const sum=list.reduce((a,b)=>a+(Number(b.score)||0),0);
+    const over=sum>cap;
+    if(!_asDirty){ list.sort((a,b)=>(a.seq||0)-(b.seq||0)); }
+    h += '<div style="border:1px solid '+(over?'var(--acc)':'var(--mu)')+';border-radius:8px;padding:10px;margin-bottom:10px;">'
+       + '<div style="font-weight:600;font-size:14px;margin-bottom:8px;">'+team
+       + ' <span style="font-size:11px;font-weight:400;color:'+(over?'var(--acc)':'var(--mu)')+';">('+list.length+' งาน · '+sum+'/'+cap+' คะแนน'
+       + (over?' ⚠️ เกินเพดาน OT':'')
+       + (!_asDirty&&_asTeamInfo[team]? ' · เส้นทาง ~'+_asTeamInfo[team].routeKm+' กม.':'')+')</span></div>';
+    list.forEach(j => {
+      const diffColor = j.difficulty==='หนัก'?'var(--rd)':(j.difficulty==='ปานกลาง'?'var(--acc)':'var(--grn)');
+      const bad = !_asCanDo(j, team);
+      h += '<div style="font-size:12px;padding:6px 0;border-top:1px solid var(--surf2);'+(bad?'background:rgba(255,0,0,.06);':'')+'">'
+         + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
+         +   '<div>'
+         +     (!_asDirty&&j.seq?'<span style="color:var(--acc);font-weight:600;">'+j.seq+'.</span> ':'')
+         +     (_asPins[team]===j.id?'📌 ':'')+(j.glass?'🔷 ':'')+'<b>'+(j.customer||'-')+'</b>'
+         +     ' <span style="color:'+diffColor+';">['+(j.difficulty||'')+' '+j.score+']</span>'
+         +     (j.kind==='measure'?' <span style="color:var(--mu);font-size:11px;">วัด</span>':'')
+         +     (bad?' <span style="color:var(--rd);font-weight:600;">⚠️ ผิดกติกา</span>':'')
+         +     (!_asDirty&&j.legKm!=null? ' <span style="color:var(--mu);">· '+j.legKm+' กม.</span>':'')
+         +     (j.address? '<br><span style="font-size:11px;color:var(--mu);">'+j.address+'</span>':'')
+         +     (j.why? '<br><span style="font-size:11px;color:var(--mu);">เหตุผล: '+j.why+'</span>':'')
+         +   '</div>'
+         +   '<div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;">'
+         +     _asTeamSelect(j)
+         +     (_asPins[team]===j.id
+                ? '<button class="btn btn-g" style="font-size:10px;padding:2px 6px;" onclick="asUnpin(\''+_esc(team)+'\')">ยกเลิกหมุด</button>'
+                : '<button class="btn btn-g" style="font-size:10px;padding:2px 6px;" onclick="asPinFirst(\''+_esc(team)+'\',\''+_esc(j.id)+'\')">⏰ ทำก่อน</button>')
+         +   '</div>'
+         + '</div></div>';
+    });
+    h += '</div>';
+  });
+
+  if (unassigned.length){
     h += '<div style="border:1.5px solid var(--rd);border-radius:8px;padding:10px;">'
-       + '<div style="font-weight:600;color:var(--rd);margin-bottom:6px;">⚠️ จัดไม่ได้ '+r.unassigned.length+' งาน</div>';
-    r.unassigned.forEach(u => { h += '<div style="font-size:12px;padding:2px 0;">'+(u.customer||u.id)+' — '+u.reason+'</div>'; });
+       + '<div style="font-weight:600;color:var(--rd);margin-bottom:6px;">⚠️ ยังไม่จัด '+unassigned.length+' งาน (ย้ายลงทีมเพื่อ OT ได้)</div>';
+    unassigned.forEach(u => {
+      h += '<div style="font-size:12px;padding:5px 0;border-top:1px solid var(--surf2);display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+         + '<span>'+(u.glass?'🔷 ':'')+(u.customer||u.id)+' <span style="color:var(--mu);">['+u.score+'] '+(u.reason||'')+'</span></span>'
+         + _asTeamSelect(u)
+         + '</div>';
+    });
     h += '</div>';
   }
-  h += '<div style="font-size:11px;color:var(--mu);margin-top:8px;">* แผนนี้ยังไม่เขียนลงระบบ · "⏰ ทำก่อน" = ปักงานนัดเวลาเป็นจุดแรกแล้วจัดเส้นทางที่เหลือใหม่ · ปุ่มยืนยันจัดทีมจะเปิดขั้น 2B</div>';
-  box.innerHTML = h;
+  h += '<div style="font-size:11px;color:var(--mu);margin-top:8px;">* กระดานนี้ยังไม่เขียนลงระบบ · ย้ายงาน/ปักหมุดได้หลายรายการ แล้วกด "จัดเส้นทางใหม่" ทีเดียว · ปุ่มยืนยันจัดทีม (เขียนจริง) จะเปิดขั้น 2B</div>';
+  box.innerHTML=h;
 }
 function clearBookingForm_impl(){
   if (_bkMode === 'form') {
