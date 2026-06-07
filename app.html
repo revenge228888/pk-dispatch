@@ -2965,6 +2965,33 @@ async function assignFetch(useOverrides){
 function assignPreview(){ _asPins={}; _asAssign={}; assignFetch(false); }   // ดูแผนใหม่ (auto)
 function assignReroute(){ assignFetch(true); }                              // จัดเส้นทางใหม่ (ใช้ overrides+pins)
 
+async function asCommit(){
+  if (_asDirty){ toast('กดจัดเส้นทางใหม่ก่อนยืนยัน'); return; }
+  const items = _asJobs.filter(j=>j.team).map(j=>({ id:j.id, team:j.team, seq:j.seq }));
+  if (!items.length){ toast('ไม่มีงานให้จัด'); return; }
+  const p = document.getElementById('asDate').value.split('-');
+  const dateKey = p[2]+'/'+p[1]+'/'+p[0];
+  showLoad('ตรวจรายการ...');
+  let r;
+  try { r = await call({ action:'pk_queueAssignCommit', date:dateKey, items, dryRun:true }); }
+  catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); return; }
+  hideLoad();
+  if (!r.ok){ toast('❌ '+(r.error||'ผิดพลาด')); return; }
+  if (!r.changeCount){ toast('ไม่มีการเปลี่ยนแปลง (ทุกงานทีมเดิมอยู่แล้ว)'); return; }
+  let msg = 'จะเขียนทีมจริง '+r.changeCount+' งาน:\n'
+          + r.changes.slice(0,15).map(c=>'• '+c.customer+': '+c.from+' → '+c.to).join('\n');
+  if (r.changes.length>15) msg += '\n... และอีก '+(r.changes.length-15)+' งาน';
+  if (r.invalid && r.invalid.length) msg += '\n\n⚠️ ข้าม (ผิดกติกา) '+r.invalid.length+' งาน';
+  if (!confirm(msg+'\n\nยืนยันเขียนลงระบบ?')) return;
+  showLoad('กำลังเขียน...');
+  try {
+    const w = await call({ action:'pk_queueAssignCommit', date:dateKey, items, dryRun:false });
+    hideLoad();
+    if (w.ok){ toast('✅ จัดทีมแล้ว '+w.written+' งาน'); assignPreview(); }
+    else toast('❌ '+(w.error||'ผิดพลาด'));
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
 function asMove(id, team){
   if(!team) return;
   const j=_asJobs.find(x=>x.id===id); if(!j) return;
@@ -3001,6 +3028,9 @@ function assignRenderBoard(){
     h += '<div style="background:var(--acc);color:#fff;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:8px;">'
        + '<span style="font-size:12px;">มีการย้าย/ปักหมุด — ลำดับ &amp; ระยะทางยังไม่อัปเดต</span>'
        + '<button class="btn" style="background:#fff;color:var(--acc);font-size:12px;padding:4px 10px;" onclick="assignReroute()">🔄 จัดเส้นทางใหม่</button></div>';
+  } else if (_asJobs.some(function(j){return j.team;})) {
+    h += '<div style="display:flex;justify-content:flex-end;margin-bottom:10px;">'
+       + '<button class="btn btn-p" style="font-size:13px;" onclick="asCommit()">✅ ยืนยันจัดทีม (เขียนจริง)</button></div>';
   }
 
   const order = (_asMeta.techTeams||[]).concat(_asMeta.salesTeams||[]);
