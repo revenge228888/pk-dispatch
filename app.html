@@ -2891,6 +2891,7 @@ function clearBookingForm(){
   // ── จังหวะ2A: หน้าจัดทีม (preview · ยังไม่เขียน) ──
   return clearBookingForm_impl();
 }
+let _asPins = {};   // team → jobId (ปักหมุดงานแรก)
 function assignInit(){
   const d = document.getElementById('asDate');
   if (d && !d.value){
@@ -2899,7 +2900,8 @@ function assignInit(){
     updateDateDisplay(d);
   }
 }
-async function assignPreview(){
+async function assignPreview(keepPins){
+  if (!keepPins) _asPins = {};
   const iso = document.getElementById('asDate').value;
   const box = document.getElementById('asResult');
   if (!iso){ toast('เลือกวันที่ก่อน'); return; }
@@ -2907,12 +2909,16 @@ async function assignPreview(){
   const dateKey = p[2]+'/'+p[1]+'/'+p[0];   // YYYY-MM-DD → DD/MM/YYYY
   showLoad('กำลังจัดทีม...');
   try {
-    const r = await call({ action:'pk_queueAssignPreview', date: dateKey });
+    const r = await call({ action:'pk_queueAssignPreview', date: dateKey, pins: _asPins });
     hideLoad();
     if (!r.ok){ toast('❌ '+(r.error||'ผิดพลาด')); box.innerHTML=''; return; }
     assignRender(r);
   } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
+function asPinFirst(team, jobId){ _asPins[team] = jobId; assignPreview(true); toast('ปักหมุดงานแรก → จัดเส้นทางใหม่'); }
+function asUnpin(team){ delete _asPins[team]; assignPreview(true); }
+function _esc(s){ return String(s==null?'':s).replace(/'/g,"\\'"); }
+
 function assignRender(r){
   const box = document.getElementById('asResult');
   let h = '<div style="font-size:13px;color:var(--mu);margin-bottom:10px;">'
@@ -2926,15 +2932,24 @@ function assignRender(r){
   } else {
     r.teams.forEach(t => {
       h += '<div style="border:1px solid var(--mu);border-radius:8px;padding:10px;margin-bottom:10px;">'
-         + '<div style="font-weight:600;font-size:14px;margin-bottom:6px;">'+t.team
-         + ' <span style="font-size:11px;color:var(--mu);font-weight:400;">('+t.jobCount+' งาน · '+t.totalScore+' คะแนน)</span></div>';
+         + '<div style="font-weight:600;font-size:14px;margin-bottom:8px;">'+t.team
+         + ' <span style="font-size:11px;color:var(--mu);font-weight:400;">('+t.jobCount+' งาน · '+t.totalScore+' คะแนน · เส้นทาง ~'+t.routeKm+' กม.)</span></div>';
       t.stops.forEach(s => {
-        h += '<div style="font-size:12px;padding:3px 0;border-top:1px solid var(--surf2);">'
-           + '<span style="color:var(--acc);font-weight:600;">'+s.seq+'.</span> '
-           + (s.glass?'🔷 ':'')+(s.customer||'-')
-           + ' <span style="color:var(--mu);">· '+s.score+' คะแนน</span>'
-           + (s.address? '<br><span style="font-size:11px;color:var(--mu);">'+s.address+'</span>':'')
-           + '</div>';
+        const diffColor = s.difficulty==='หนัก'?'var(--rd)':(s.difficulty==='ปานกลาง'?'var(--acc)':'var(--grn)');
+        h += '<div style="font-size:12px;padding:6px 0;border-top:1px solid var(--surf2);">'
+           + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
+           +   '<div>'
+           +     '<span style="color:var(--acc);font-weight:600;">'+s.seq+'.</span> '
+           +     (s.pinned?'📌 ':'')+(s.glass?'🔷 ':'')+'<b>'+(s.customer||'-')+'</b>'
+           +     ' <span style="color:'+diffColor+';">['+s.difficulty+' '+s.score+']</span>'
+           +     (s.legKm!=null? ' <span style="color:var(--mu);">· '+s.legKm+' กม.จากจุดก่อน</span>':'')
+           +     (s.address? '<br><span style="font-size:11px;color:var(--mu);">'+s.address+'</span>':'')
+           +     '<br><span style="font-size:11px;color:var(--mu);">เหตุผล: '+s.why+'</span>'
+           +   '</div>'
+           +   (s.pinned
+                ? '<button class="btn btn-g" style="font-size:10px;padding:2px 6px;" onclick="asUnpin(\''+_esc(t.team)+'\')">ยกเลิกหมุด</button>'
+                : '<button class="btn btn-g" style="font-size:10px;padding:2px 6px;" onclick="asPinFirst(\''+_esc(t.team)+'\',\''+_esc(s.id)+'\')">⏰ ทำก่อน</button>')
+           + '</div></div>';
       });
       h += '</div>';
     });
@@ -2942,12 +2957,10 @@ function assignRender(r){
   if (r.unassigned && r.unassigned.length){
     h += '<div style="border:1.5px solid var(--rd);border-radius:8px;padding:10px;">'
        + '<div style="font-weight:600;color:var(--rd);margin-bottom:6px;">⚠️ จัดไม่ได้ '+r.unassigned.length+' งาน</div>';
-    r.unassigned.forEach(u => {
-      h += '<div style="font-size:12px;padding:2px 0;">'+(u.customer||u.id)+' — '+u.reason+'</div>';
-    });
+    r.unassigned.forEach(u => { h += '<div style="font-size:12px;padding:2px 0;">'+(u.customer||u.id)+' — '+u.reason+'</div>'; });
     h += '</div>';
   }
-  h += '<div style="font-size:11px;color:var(--mu);margin-top:8px;">* แผนนี้ยังไม่เขียนลงระบบ · ปุ่มยืนยันจัดทีมจะเปิดในขั้น 2B</div>';
+  h += '<div style="font-size:11px;color:var(--mu);margin-top:8px;">* แผนนี้ยังไม่เขียนลงระบบ · "⏰ ทำก่อน" = ปักงานนัดเวลาเป็นจุดแรกแล้วจัดเส้นทางที่เหลือใหม่ · ปุ่มยืนยันจัดทีมจะเปิดขั้น 2B</div>';
   box.innerHTML = h;
 }
 function clearBookingForm_impl(){
