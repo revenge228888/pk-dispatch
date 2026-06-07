@@ -1068,9 +1068,14 @@ function renderOfficeShell(){
               </div>
             </div>
             <div class="row-form" style="margin-bottom:10px;">
+              <div class="fg" style="flex:1;min-width:100%;">
+                <label class="fl">ตัวช่วยคิดคะแนน (เลือกประเภทงาน → เติมคะแนนให้)</label>
+                <select class="fi" id="bkScorePicker" onchange="bkPickScore()"><option value="">— เลือกเพื่อช่วยคิดคะแนน —</option></select>
+                <div id="bkScoreHint" style="font-size:11px;color:var(--mu);margin-top:4px;"></div>
+              </div>
               <div class="fg" style="min-width:100px;">
-                <label class="fl">คะแนน (1-5)</label>
-                <input class="fi" id="bkScore" type="number" min="1" max="5" step="0.5" value="1">
+                <label class="fl">คะแนน (1-10)</label>
+                <input class="fi" id="bkScore" type="number" min="1" max="10" step="0.5" value="1">
               </div>
               <div class="fg" style="flex:1;min-width:140px;">
                 <label class="fl">ยอดเงิน</label>
@@ -2679,6 +2684,8 @@ async function initBookingTab(){
   fillTeamDropdowns();
   // เติม bkTeam ตามประเภทปัจจุบัน
   fillBookingTeam();
+  // เติม dropdown ตัวช่วยคิดคะแนน
+  fillScorePicker();
 }
 
 function setBookingType(t){
@@ -2743,6 +2750,38 @@ function renderRecentBookings(){
         <span class="bk-meta">${r.date}${r.team?' · '+r.team:''} · ฿${fmt(r.amount)} · รอ CF</span>
       </div>
     `).join('');
+}
+
+// ── ตารางคะแนนงานติดตั้ง 8 ชั้น (แก้ label/คะแนนได้ตรงนี้) ──
+const SCORE_TIERS = [
+  { label:'มุ้งจีบ บานเดี่ยว', min:2, max:2 },
+  { label:'มุ้งจีบ บานคู่ / ประตูมุ้งจีบ', min:3, max:3 },
+  { label:'มุ้งจีบ ชุดหลายบาน', min:3, max:4 },
+  { label:'หน้าต่าง/ประตูอลู หรือ กระจกบานเลื่อนเล็ก-กลาง', min:5, max:6 },
+  { label:'กระจกบานเลื่อน ใหญ่/หนัก', min:8, max:8 },
+  { label:'กระจกฟิกซ์ / บานใหญ่พิเศษ', min:8, max:10 },
+  { label:'งานชุดทั้งบ้าน / หลายห้อง', min:8, max:10 },
+  { label:'งานพิเศษ/ซับซ้อน (รื้อเก่า+ชั้นสูง)', min:8, max:10 }
+];
+function fillScorePicker(){
+  const sel = document.getElementById('bkScorePicker');
+  if (!sel || sel.dataset.filled) return;
+  SCORE_TIERS.forEach((t, i) => {
+    const rng = (t.min === t.max) ? ('' + t.min) : (t.min + '-' + t.max);
+    const o = document.createElement('option');
+    o.value = i; o.textContent = (i+1) + '. ' + t.label + ' (' + rng + ')';
+    sel.appendChild(o);
+  });
+  sel.dataset.filled = '1';
+}
+function bkPickScore(){
+  const sel  = document.getElementById('bkScorePicker');
+  const hint = document.getElementById('bkScoreHint');
+  if (sel.value === ''){ hint.textContent = ''; return; }
+  const t = SCORE_TIERS[+sel.value];
+  document.getElementById('bkScore').value = t.min;
+  if (t.min === t.max){ hint.textContent = 'คะแนน ' + t.min; }
+  else { hint.textContent = 'ช่วง ' + t.min + '-' + t.max + ' · ตั้งให้ ' + t.min + ' แล้ว — ปรับขึ้นถ้างานใหญ่/ซับซ้อน (มุ้งจีบยิ่งขนาดใหญ่ยิ่งสูง)'; }
 }
 
 // ── จังหวะ1: ดูวันแนะนำ (pk_queueSuggest · ยังไม่ผูกทีม) ──
