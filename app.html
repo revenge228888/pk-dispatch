@@ -891,6 +891,7 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="access" onclick="setTab('access',this)"><span class="sidebar-ico">📅</span><span class="sidebar-label">กำหนดคิว + สมาชิก</span></button>
           <button class="sidebar-item" data-tab="booking" onclick="setTab('booking',this)"><span class="sidebar-ico">➕</span><span class="sidebar-label">ลงคิวใหม่</span></button>
           <button class="sidebar-item" data-tab="jobs" onclick="setTab('jobs',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">รายการงาน</span></button>
+          <button class="sidebar-item" data-tab="assign" onclick="setTab('assign',this)"><span class="sidebar-ico">🚚</span><span class="sidebar-label">จัดทีม</span></button>
 
           <div class="sidebar-group">วัด & เสนอราคา</div>
           <button class="sidebar-item" data-tab="records" onclick="setTab('records',this)"><span class="sidebar-ico">📐</span><span class="sidebar-label">จดขนาด</span></button>
@@ -1153,6 +1154,21 @@ function renderOfficeShell(){
           </tr></thead>
           <tbody id="jTbody"><tr><td colspan="10" class="loading-row">เลือกวันที่แล้วกด "ดูรายการ"</td></tr></tbody></table>
         </div>
+      </div>
+
+      <!-- ASSIGN (🚚 จัดทีมวันที่ X · จังหวะ2 preview) -->
+      <div id="tabAssign" style="display:none;">
+        <div class="section-pad row-form">
+          <div class="fg"><label class="fl">วันที่จัดทีม</label>
+            <div class="date-wrap">
+              <input class="fi" id="asDate" type="date" oninput="updateDateDisplay(this)">
+              <span class="date-display empty" data-for="asDate">เลือกวันที่</span>
+            </div>
+          </div>
+          <button class="btn btn-p" onclick="assignPreview()">🚚 ดูแผนจัดทีม</button>
+          <span style="font-size:11px;color:var(--mu);align-self:center;">แสดงแผน (ยังไม่เขียน) · จัดกลุ่มโซน + เรียงจุดแวะจาก depot</span>
+        </div>
+        <div id="asResult" class="section-pad"></div>
       </div>
 
       <!-- RECORDS (📐 จดขนาด) -->
@@ -2586,7 +2602,7 @@ async function expenseRejectConfirm(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -2604,6 +2620,7 @@ function setTab(t, btn){
   closeSidebarMobile();
   if (t === 'dash') loadDashboard();
   if (t === 'booking') initBookingTab();
+  if (t === 'assign') assignInit();
   if (t === 'records') recordsInit();
   if (t === 'quotes') quotesInit();
   if (t === 'salesreport') salesReportInit();
@@ -2871,6 +2888,69 @@ function bkPickDate(dateKey){
 }
 
 function clearBookingForm(){
+  // ── จังหวะ2A: หน้าจัดทีม (preview · ยังไม่เขียน) ──
+  return clearBookingForm_impl();
+}
+function assignInit(){
+  const d = document.getElementById('asDate');
+  if (d && !d.value){
+    const t = new Date();
+    d.value = t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+    updateDateDisplay(d);
+  }
+}
+async function assignPreview(){
+  const iso = document.getElementById('asDate').value;
+  const box = document.getElementById('asResult');
+  if (!iso){ toast('เลือกวันที่ก่อน'); return; }
+  const p = iso.split('-');
+  const dateKey = p[2]+'/'+p[1]+'/'+p[0];   // YYYY-MM-DD → DD/MM/YYYY
+  showLoad('กำลังจัดทีม...');
+  try {
+    const r = await call({ action:'pk_queueAssignPreview', date: dateKey });
+    hideLoad();
+    if (!r.ok){ toast('❌ '+(r.error||'ผิดพลาด')); box.innerHTML=''; return; }
+    assignRender(r);
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+function assignRender(r){
+  const box = document.getElementById('asResult');
+  let h = '<div style="font-size:13px;color:var(--mu);margin-bottom:10px;">'
+        + 'วันที่ '+r.date+' · งานรอจัด '+r.jobCount+' · จัดมือแล้ว '+r.locked
+        + (r.noCoord? ' · ไม่มีพิกัด '+r.noCoord:'')
+        + (r.hasDepot? ' · เริ่มจาก depot':' · ไม่มี depot (เรียง chain)')
+        + ' · ทีมกระจก: '+(r.glassTeams&&r.glassTeams.length? r.glassTeams.join(','):'-')
+        + '</div>';
+  if (!r.teams || !r.teams.length){
+    h += '<div style="color:var(--mu);">ไม่มีงานรอจัดทีมในวันนี้</div>';
+  } else {
+    r.teams.forEach(t => {
+      h += '<div style="border:1px solid var(--mu);border-radius:8px;padding:10px;margin-bottom:10px;">'
+         + '<div style="font-weight:600;font-size:14px;margin-bottom:6px;">'+t.team
+         + ' <span style="font-size:11px;color:var(--mu);font-weight:400;">('+t.jobCount+' งาน · '+t.totalScore+' คะแนน)</span></div>';
+      t.stops.forEach(s => {
+        h += '<div style="font-size:12px;padding:3px 0;border-top:1px solid var(--surf2);">'
+           + '<span style="color:var(--acc);font-weight:600;">'+s.seq+'.</span> '
+           + (s.glass?'🔷 ':'')+(s.customer||'-')
+           + ' <span style="color:var(--mu);">· '+s.score+' คะแนน</span>'
+           + (s.address? '<br><span style="font-size:11px;color:var(--mu);">'+s.address+'</span>':'')
+           + '</div>';
+      });
+      h += '</div>';
+    });
+  }
+  if (r.unassigned && r.unassigned.length){
+    h += '<div style="border:1.5px solid var(--rd);border-radius:8px;padding:10px;">'
+       + '<div style="font-weight:600;color:var(--rd);margin-bottom:6px;">⚠️ จัดไม่ได้ '+r.unassigned.length+' งาน</div>';
+    r.unassigned.forEach(u => {
+      h += '<div style="font-size:12px;padding:2px 0;">'+(u.customer||u.id)+' — '+u.reason+'</div>';
+    });
+    h += '</div>';
+  }
+  h += '<div style="font-size:11px;color:var(--mu);margin-top:8px;">* แผนนี้ยังไม่เขียนลงระบบ · ปุ่มยืนยันจัดทีมจะเปิดในขั้น 2B</div>';
+  box.innerHTML = h;
+}
+function clearBookingForm_impl(){
   if (_bkMode === 'form') {
     document.getElementById('bkCustomer').value = '';
     document.getElementById('bkAddress').value = '';
