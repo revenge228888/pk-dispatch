@@ -2686,6 +2686,8 @@ async function initBookingTab(){
   fillBookingTeam();
   // เติม dropdown ตัวช่วยคิดคะแนน
   fillScorePicker();
+  // ดึงตารางคะแนนจากชีต (override default ถ้ามี)
+  loadScoreTiers();
 }
 
 function setBookingType(t){
@@ -2753,7 +2755,8 @@ function renderRecentBookings(){
 }
 
 // ── ตารางคะแนนงานติดตั้ง 8 ชั้น (แก้ label/คะแนนได้ตรงนี้) ──
-const SCORE_TIERS = [
+// ── ตารางคะแนน default (fallback ถ้าชีต "คะแนนงาน" ยังไม่มี/โหลดพลาด) ──
+const SCORE_TIERS_DEFAULT = [
   { label:'มุ้งจีบ บานเดี่ยว', min:2, max:2 },
   { label:'มุ้งจีบ บานคู่ / ประตูมุ้งจีบ', min:3, max:3 },
   { label:'มุ้งจีบ ชุดหลายบาน', min:3, max:4 },
@@ -2763,22 +2766,37 @@ const SCORE_TIERS = [
   { label:'งานชุดทั้งบ้าน / หลายห้อง', min:8, max:10 },
   { label:'งานพิเศษ/ซับซ้อน (รื้อเก่า+ชั้นสูง)', min:8, max:10 }
 ];
+let _scoreTiers = SCORE_TIERS_DEFAULT.slice();  // ตัวที่ picker ใช้จริง (override จากชีตได้)
+
 function fillScorePicker(){
   const sel = document.getElementById('bkScorePicker');
-  if (!sel || sel.dataset.filled) return;
-  SCORE_TIERS.forEach((t, i) => {
+  if (!sel) return;
+  // reset แล้วเติมใหม่ (เรียกซ้ำได้ตอนชีตโหลดเสร็จ)
+  sel.innerHTML = '<option value="">— เลือกเพื่อช่วยคิดคะแนน —</option>';
+  _scoreTiers.forEach((t, i) => {
     const rng = (t.min === t.max) ? ('' + t.min) : (t.min + '-' + t.max);
     const o = document.createElement('option');
     o.value = i; o.textContent = (i+1) + '. ' + t.label + ' (' + rng + ')';
     sel.appendChild(o);
   });
-  sel.dataset.filled = '1';
 }
+
+// ดึงตารางคะแนนจากชีต → ถ้ามีข้อมูล override default แล้วเติม dropdown ใหม่
+async function loadScoreTiers(){
+  try {
+    const r = await call({ action:'pk_queueScoreTiers' });
+    if (r && r.ok && Array.isArray(r.tiers) && r.tiers.length){
+      _scoreTiers = r.tiers;
+      fillScorePicker();
+    }
+  } catch(e){ /* เงียบ — ใช้ default */ }
+}
+
 function bkPickScore(){
   const sel  = document.getElementById('bkScorePicker');
   const hint = document.getElementById('bkScoreHint');
   if (sel.value === ''){ hint.textContent = ''; return; }
-  const t = SCORE_TIERS[+sel.value];
+  const t = _scoreTiers[+sel.value];
   document.getElementById('bkScore').value = t.min;
   if (t.min === t.max){ hint.textContent = 'คะแนน ' + t.min; }
   else { hint.textContent = 'ช่วง ' + t.min + '-' + t.max + ' · ตั้งให้ ' + t.min + ' แล้ว — ปรับขึ้นถ้างานใหญ่/ซับซ้อน (มุ้งจีบยิ่งขนาดใหญ่ยิ่งสูง)'; }
