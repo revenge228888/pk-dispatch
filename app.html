@@ -1456,8 +1456,8 @@ function renderOfficeShell(){
           </div>
           <div id="sumToggle" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;align-items:center;">
             <button class="btn" data-v="overview" onclick="sumSetView('overview')" style="font-size:12px;padding:5px 11px;">ภาพรวม</button>
-            <button class="btn" data-v="employee" onclick="sumSetView('employee')" style="font-size:12px;padding:5px 11px;">แยกพนักงาน</button>
-            <button class="btn" data-v="payee" onclick="sumSetView('payee')" style="font-size:12px;padding:5px 11px;">แยก supplier</button>
+            <button class="btn" data-v="employee" onclick="sumSetView('employee')" style="font-size:12px;padding:5px 11px;">แยกผู้เบิก</button>
+            <button class="btn" data-v="payee" onclick="sumSetView('payee')" style="font-size:12px;padding:5px 11px;">แยกผู้รับเงิน</button>
             <span style="flex:1;"></span>
             <span id="sumStatusWrap" style="display:none;gap:6px;">
               <button class="btn" data-s="จ่ายแล้ว" onclick="sumSetStatus('จ่ายแล้ว')" style="font-size:12px;padding:5px 11px;">จ่ายแล้ว</button>
@@ -2566,7 +2566,7 @@ function summaryRenderGroup(d){
   const baht = function(n){ return '฿' + (n||0).toLocaleString('th-TH', { minimumFractionDigits:2 }); };
   const stTxt = d.statusFilter === 'all' ? 'ทุกสถานะ' : 'จ่ายแล้ว';
   if (!d.count){ box.innerHTML = '<div class="loading-row">ไม่มีรายการ (' + stTxt + ')</div>'; return; }
-  const label = d.groupBy === 'payee' ? 'ผู้รับเงิน (supplier)' : 'พนักงาน (ผู้เบิก)';
+  const label = d.groupBy === 'payee' ? 'ผู้รับเงิน (พนักงาน/ช่าง/ร้าน)' : 'ผู้เบิก (คนกดเบิก)';
   let h = '<div style="background:var(--surf2);border-radius:12px;padding:16px;margin-bottom:16px;">' +
     '<div style="font-size:12px;color:var(--mu);">รวมแยก' + label + ' · ' + d.count + ' รายการ · ' + stTxt + '</div>' +
     '<div style="font-size:26px;font-weight:800;color:var(--acc);">' + baht(d.total) + '</div></div>';
