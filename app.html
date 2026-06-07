@@ -2717,7 +2717,10 @@ async function submitBooking(){
     const amount   = document.getElementById('bkAmount').value;
     const team     = document.getElementById('bkTeam').value;
     if (!date || !customer) { toast('กรอก วันที่ และ ชื่อลูกค้า'); return; }
-    Object.assign(body, { date, customer, address, job, score, amount, team });
+    // ติ๊กงานกระจก → ต่อท้าย JOB ด้วย [กระจก] (ใช้เป็น flag จังหวะ2)
+    const _glassChk = document.getElementById('bkGlass');
+    const job2 = (_glassChk && _glassChk.checked && job.indexOf('[กระจก]') === -1) ? (job + ' [กระจก]').trim() : job;
+    Object.assign(body, { date, customer, address, job: job2, score, amount, team });
   } else {
     const raw = document.getElementById('bkRawText').value.trim();
     if (!raw) { toast('พิมพ์ข้อมูลก่อน'); return; }
