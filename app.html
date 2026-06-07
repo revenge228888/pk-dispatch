@@ -1422,6 +1422,8 @@ function renderOfficeShell(){
           <div class="fg" id="tlLateWrap" style="display:none;">
             <label class="fl">นาทีที่สาย</label>
             <input class="fi" id="tlLateMin" type="number" inputmode="numeric" min="0" placeholder="0">
+            <label class="fl" style="margin-top:8px;">ยอดหัก (บาท)</label>
+            <input class="fi" id="tlLateAmt" type="number" inputmode="decimal" min="0" placeholder="0">
           </div>
           <div class="fg" style="display:flex;align-items:center;justify-content:space-between;background:var(--surf2);padding:11px 14px;border-radius:8px;">
             <span style="font-size:13px;">หักเงินรายการนี้?</span>
@@ -2449,6 +2451,7 @@ async function timelogSave(){
     type: _tlType,
     deduct: _tlDeduct,
     lateMin: document.getElementById('tlLateMin').value,
+    lateAmt: document.getElementById('tlLateAmt').value,
     note: document.getElementById('tlNote').value.trim()
   };
   if (!payload.empId){ toast('เลือกพนักงาน'); return; }
@@ -2469,6 +2472,7 @@ function timelogResetForm(){
   document.getElementById('tlId').value = '';
   document.getElementById('tlNote').value = '';
   document.getElementById('tlLateMin').value = '';
+  document.getElementById('tlLateAmt').value = '';
   document.getElementById('tlLateWrap').style.display = 'none';
   _tlType = ''; _tlDeduct = false;
   document.querySelectorAll('#tlTypeBtns .wt').forEach(b => b.classList.remove('on'));
@@ -2485,7 +2489,7 @@ function timelogRender(){
   box.innerHTML = recs.map(rec => {
     const d = rec.date ? new Date(rec.date).toLocaleDateString('th-TH') : '';
     const c = typeColor[rec.type] || 'var(--mu)';
-    const tag = rec.type + (rec.type==='มาสาย' && rec.lateMin ? (' ' + rec.lateMin + ' นาที') : '') + ' · ' + (rec.deduct ? 'หัก' : 'ไม่หัก');
+    const tag = rec.type + (rec.type==='มาสาย' && rec.lateMin ? (' ' + rec.lateMin + ' นาที') : '') + ' · ' + (rec.type==='มาสาย' ? (rec.lateAmt ? ('หัก ฿' + Number(rec.lateAmt).toLocaleString()) : 'ไม่หัก') : (rec.deduct ? 'หัก' : 'ไม่หัก'));
     return '<div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
       '<div style="min-width:0;"><div style="font-weight:600;font-size:13px;">' + rec.empName + ' · ' + d + '</div>' +
       '<div style="font-size:11px;color:' + c + ';">' + tag + (rec.note ? (' · ' + rec.note) : '') + '</div></div>' +
