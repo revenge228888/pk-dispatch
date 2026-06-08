@@ -3222,11 +3222,17 @@ async function assignFetch(useOverrides){
   const p = iso.split('-');
   const dateKey = p[2]+'/'+p[1]+'/'+p[0];   // YYYY-MM-DD → DD/MM/YYYY
   const body = { action:'pk_queueAssignPreview', date: dateKey, pins: _asPins };
-  const tT = document.getElementById('asTech').value;
-  const tS = document.getElementById('asSales').value;
-  if (tT !== '') body.techTeams = tT;
-  if (tS !== '') body.salesTeams = tS;
-  if (useOverrides) body.overrides = _asAssign;
+  if (useOverrides) {
+    body.overrides = _asAssign;
+    // ล็อกจำนวนทีมให้ตรงกับที่สร้างกระดาน — กัน override "ทีมที่ 3" กลายเป็น invalid แล้วเด้งกลับ
+    if (_asMeta.techTeams && _asMeta.techTeams.length) body.techTeams = _asMeta.techTeams.length;
+    if (_asMeta.salesTeams && _asMeta.salesTeams.length) body.salesTeams = _asMeta.salesTeams.length;
+  } else {
+    const tT = document.getElementById('asTech').value;
+    const tS = document.getElementById('asSales').value;
+    if (tT !== '') body.techTeams = tT;
+    if (tS !== '') body.salesTeams = tS;
+  }
   showLoad('กำลังจัดทีม...');
   try {
     const r = await call(body);
@@ -7539,6 +7545,7 @@ async function pkpBatchApprove(){
     if(r.skippedCount && r.skipped && r.skipped.length){
       alert('ข้าม '+r.skippedCount+' ใบ:\n\n'+r.skipped.map(function(s){return '• '+s.woId+' — '+s.reason;}).join('\n'));
     }
+    pkpWoCache = {};   // ล้าง cache — กันพิมพ์รวมได้ข้อมูลเก่า (ก่อนลงลายเซ็น)
     pkpLoadList();   // โหลดใหม่ให้สถานะอัปเดต (เคลียร์ที่เลือกด้วย)
   }catch(e){ toast('❌ เชื่อมต่อไม่ได้'); }
   finally{ hideLoad(); }
@@ -8044,6 +8051,7 @@ function pkpPrint(){
 async function pkpPrintMulti(){
   var ids=Object.keys(pkpSelWOs).filter(function(k){return pkpSelWOs[k];});
   if(!ids.length){ toast('เลือกใบผลิตก่อน'); return; }
+  ids.forEach(function(id){ delete pkpWoCache[id]; });   // ดึงสด — ลายเซ็น/สถานะต้องล่าสุดบนใบพิมพ์
   showLoad('กำลังสร้างใบผลิต '+ids.length+' ใบ...');
   try{
     var sheets='';
