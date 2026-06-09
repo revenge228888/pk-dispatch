@@ -2784,8 +2784,18 @@ function summaryRenderGroup(d){
   let h = '<div style="background:var(--surf2);border-radius:12px;padding:16px;margin-bottom:16px;">' +
     '<div style="font-size:12px;color:var(--mu);">รวมแยก' + label + ' · ' + d.count + ' รายการ · ' + stTxt + '</div>' +
     '<div style="font-size:26px;font-weight:800;color:var(--acc);">' + baht(d.total) + '</div></div>';
+  let _sumLastSide = null;
   (d.groups||[]).forEach(function(g, gi){
     const pct = d.total ? Math.round(g.total / d.total * 100) : 0;
+    // หัวคั่นกลุ่ม (เฉพาะมุมมองแยกผู้รับเงิน): ค่าแรง vs หมวดอื่น
+    if (d.groupBy === 'payee'){
+      const side = g.wageSide ? 'wage' : 'other';
+      if (side !== _sumLastSide){
+        _sumLastSide = side;
+        h += '<div style="font-weight:700;font-size:13px;color:' + (side==='wage'?'var(--grn)':'var(--blu)') + ';margin:14px 0 8px;border-left:3px solid ' + (side==='wage'?'var(--grn)':'var(--blu)') + ';padding-left:8px;">' +
+          (side==='wage' ? '👷 ผู้รับเงิน — หมวดค่าแรง (พนักงาน/ช่าง)' : '🏪 ผู้รับเงิน — หมวดอื่น (ร้าน/supplier)') + '</div>';
+      }
+    }
     h += '<div style="margin-bottom:8px;border:1px solid var(--surf2);border-radius:10px;overflow:hidden;">' +
       '<div onclick="sumToggleGroup(' + gi + ')" style="cursor:pointer;padding:11px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
         '<div><span style="font-weight:600;">' + (g.key||'(ไม่ระบุ)') + '</span> <span style="font-size:11px;color:var(--mu);">' + g.count + ' รายการ · ' + pct + '%</span></div>' +
