@@ -3659,6 +3659,28 @@ function renderAccess(){
 }
 
 // ─── JOB TABLE ───
+// ── office/manager แนบรูปอ้างอิงให้งาน (≤5) — ช่างเห็นตอนรับงาน ──
+function officeAttachRef(jobId){
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+  inp.onchange = async () => {
+    const files = Array.from(inp.files).slice(0, 5);
+    if (!files.length) return;
+    showLoad('อัปโหลดรูป...');
+    try {
+      const photos = await Promise.all(files.map(f => new Promise((res, rej) => {
+        const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f);
+      })));
+      const r = await call({ action:'pk_setJobRefPhotos', id: jobId, photos: photos });
+      hideLoad();
+      if (!r.ok){ toast('❌ ' + (r.error||'แนบรูปไม่ได้')); return; }
+      toast('✅ แนบรูปงานแล้ว ' + r.count + ' รูป');
+      loadJobTable();
+    } catch(e){ hideLoad(); toast('❌ อัปโหลดไม่ได้'); }
+  };
+  inp.click();
+}
+
 async function loadJobTable(){
   const team = document.getElementById('jTeam').value;
   const date = document.getElementById('jDate').value;
@@ -3690,7 +3712,7 @@ async function loadJobTable(){
       <td style="font-family:var(--mono);font-size:12px;color:var(--acc);">${j.amount?'฿'+fmt(j.amount):'-'}</td>
       <td><span class="badge ${sl[j.status]||'bp'}">${ll[j.status]||j.status}</span></td>
       <td>${j.lat?`<a class="lnk" onclick="showMap(${j.lat},${j.lng},'${j.name.replace(/'/g,'')}','${(j.doneAt||'')}')">📍 ดูจุดจบงาน</a>`:(j.mapLink?`<a class="lnk" href="${j.mapLink}" target="_blank">🗺 ที่อยู่งาน</a>`:'-')}</td>
-      <td>${j.photos && j.photos.length ? `<a class="lnk" onclick="showOfficePhoto(${idx})">📷 ดู ${j.photos.length} รูป</a>` : '-'}</td>
+      <td>${j.photos && j.photos.length ? `<a class="lnk" onclick="showOfficePhoto(${idx})">📷 ดู ${j.photos.length} รูป</a>` : '-'}${(isOfficeLevel()||CURRENT_USER.role==='manager') ? `<br><button class="btn btn-g" style="font-size:10px;padding:1px 6px;margin-top:3px;" onclick="officeAttachRef('${j.id}')">📎 แนบรูปงาน${j.refPhotos&&j.refPhotos.length?' ('+j.refPhotos.length+')':''}</button>` : ''}</td>
       <td id="jrec-${idx}" style="font-size:11px;color:var(--mu);">…</td>
       <td id="jquo-${idx}" style="font-size:11px;color:var(--mu);">…</td>
     </tr>`).join('');
@@ -4902,6 +4924,13 @@ function techRenderJobs(){
         ${j.status !== 'pending' && j.address ? `<div class="t-jobaddr">📍 ${j.address}</div>` : ''}
         ${j.status === 'pending' ? `<div class="t-jobaddr" style="color:var(--mu);font-style:italic;">📍 (กดรับงานเพื่อดูที่อยู่)</div>` : ''}
         ${j.description ? `<div class="t-jobdesc">🔧 ${j.description}</div>` : ''}
+        ${j.status !== 'pending' && j.refPhotos && j.refPhotos.length ? `
+          <div style="margin-top:8px;">
+            <div style="font-size:11px;color:var(--acc);margin-bottom:4px;">📎 รูปอ้างอิงจากออฟฟิศ (${j.refPhotos.length})</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              ${j.refPhotos.map(p => `<a href="${fixDriveUrl(p)}" target="_blank"><img src="${fixDriveUrl(p)}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1.5px solid var(--acc);" referrerpolicy="no-referrer" onerror="this.style.opacity='0.3';this.title='โหลดรูปไม่ได้';"></a>`).join('')}
+            </div>
+          </div>` : ''}
         <div class="t-jobmeta">
           ${j.amount ? `<span style="color:var(--acc);font-family:var(--mono);">฿${fmt(j.amount)}</span>` : ''}
           ${j.worker ? `<span style="color:var(--blu);">👤 ${j.worker}</span>` : ''}
