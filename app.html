@@ -625,6 +625,27 @@ const WORKER_URL   = 'https://pk-discord-relay.revenge2288.workers.dev';
 const API          = 'https://pk-discord-relay.revenge2288.workers.dev/api';
 const API_SECRET   = '2389';   // ค่าเดียวกับ PK_SECRET ใน Cloudflare Worker
 
+// ── เฟส 1: list คิว ผ่าน Sheets API (/jobs) แทน GAS pk_getJobs ──
+// USE_SHEETS_JOBS=false → ใช้ GAS เดิมทุกอย่าง · =true → ลอง /jobs ก่อน, พลาดเมื่อไหร่ fallback GAS อัตโนมัติ (ไม่ downtime)
+let USE_SHEETS_JOBS = false;
+async function getJobsFast(team, date){
+  if (USE_SHEETS_JOBS && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/jobs'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ team, date, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.jobs)) return data;   // {ok, jobs, ms, ...}
+      console.warn('[getJobsFast] /jobs ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e) {
+      console.warn('[getJobsFast] /jobs error → fallback GAS:', e.message);
+    }
+  }
+  return call({ action:'pk_getJobs', team, date });   // GAS เดิม (พฤติกรรมเหมือนเดิมเป๊ะ)
+}
+
 let CURRENT_USER = null;
 // manager ทำได้ทุกอย่างที่ office ทำ — ใช้เช็คสิทธิ์ระดับ office
 function isOfficeLevel(){ return CURRENT_USER && (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'manager'); }
@@ -3495,7 +3516,7 @@ async function showTeamDetail(team, date){
   m.classList.add('on');
 
   try {
-    const r = await call({ action:'pk_getJobs', team, date });
+    const r = await getJobsFast(team, date);
     if (!r.ok) { b.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
     const jobs = r.jobs || [];
     if (!jobs.length) { b.innerHTML = '<div class="loading-row">ไม่มีงานในวันนี้</div>'; return; }
@@ -3692,11 +3713,11 @@ async function loadJobTable(){
     let allJobs = [];
     if (team === '__ALL__') {
       for (const t of _teams) {
-        const r = await call({ action:'pk_getJobs', team:t, date });
+        const r = await getJobsFast(t, date);
         if (r.ok && r.jobs) allJobs = allJobs.concat(r.jobs.map(j => ({...j, _team:t})));
       }
     } else {
-      const r = await call({ action:'pk_getJobs', team, date });
+      const r = await getJobsFast(team, date);
       if (r.ok && r.jobs) allJobs = r.jobs.map(j => ({...j, _team:team}));
     }
     if (status) allJobs = allJobs.filter(j => j.status === status);
