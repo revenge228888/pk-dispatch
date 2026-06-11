@@ -792,6 +792,26 @@ async function getExpenseMonthSummaryFast(month){
   _markJobSource('gas');
   return _g;
 }
+async function getExpenseGroupSummaryFast(opts){
+  opts = opts || {};
+  if (USE_SHEETS_EXPSUM && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/expense-group-summary'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.groups)) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getExpenseGroupSummaryFast] /expense-group-summary ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e) {
+      console.warn('[getExpenseGroupSummaryFast] error → fallback GAS:', e.message);
+    }
+  }
+  const _g = await call({ action:'pk_expenseGroupSummary', ...opts });   // GAS เดิม (spread กัน sed ซ้ำ)
+  _markJobSource('gas');
+  return _g;
+}
 
 let CURRENT_USER = null;
 // manager ทำได้ทุกอย่างที่ office ทำ — ใช้เช็คสิทธิ์ระดับ office
@@ -2935,7 +2955,7 @@ async function summaryLoad(){
       if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
       summaryRender(r);
     } else {
-      const r = await call({ action:'pk_expenseGroupSummary', month: month, groupBy: _sumView, status: _sumStatus, mainCat: _sumCat });
+      const r = await getExpenseGroupSummaryFast({ month: month, groupBy: _sumView, status: _sumStatus, mainCat: _sumCat });
       if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
       _sumCats = r.availableCats || []; sumPaintCats();
       summaryRenderGroup(r);
