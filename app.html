@@ -771,6 +771,28 @@ async function getDashboardFast(date){
   return _g;
 }
 
+// ── เฟส 1: expense summaries ผ่าน /expense-*-summary — flag แยก ──
+let USE_SHEETS_EXPSUM = true;   // ON: expense summaries · fallback GAS อัตโนมัติ
+async function getExpenseMonthSummaryFast(month){
+  if (USE_SHEETS_EXPSUM && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/expense-month-summary'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ month, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.cats) && Array.isArray(data.byDay)) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getExpenseMonthSummaryFast] /expense-month-summary ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e) {
+      console.warn('[getExpenseMonthSummaryFast] error → fallback GAS:', e.message);
+    }
+  }
+  const _g = await call({ action:'pk_expenseMonthSummary', month });   // GAS เดิม (shorthand กัน sed ซ้ำ)
+  _markJobSource('gas');
+  return _g;
+}
+
 let CURRENT_USER = null;
 // manager ทำได้ทุกอย่างที่ office ทำ — ใช้เช็คสิทธิ์ระดับ office
 function isOfficeLevel(){ return CURRENT_USER && (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'manager'); }
@@ -2909,7 +2931,7 @@ async function summaryLoad(){
   try {
     if (_sumView === 'overview'){
       _sumCats = []; sumPaintCats();
-      const r = await call({ action:'pk_expenseMonthSummary', month: month });
+      const r = await getExpenseMonthSummaryFast(month);
       if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
       summaryRender(r);
     } else {
@@ -3006,7 +3028,7 @@ async function summaryLoad_OLD_UNUSED(){
   if (!month){ box.innerHTML = '<div class="loading-row">เลือกเดือน</div>'; return; }
   box.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
   try {
-    const r = await call({ action:'pk_expenseMonthSummary', month: month });
+    const r = await getExpenseMonthSummaryFast(month);
     if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
     summaryRender(r);
   } catch(e){ box.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
