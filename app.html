@@ -812,6 +812,25 @@ async function getExpenseGroupSummaryFast(opts){
   _markJobSource('gas');
   return _g;
 }
+async function getExpenseEmployeeReconFast(empId, empName){
+  if (USE_SHEETS_EXPSUM && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/expense-employee-recon'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ empId, empName, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && data.employee) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getExpenseEmployeeReconFast] /expense-employee-recon ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e) {
+      console.warn('[getExpenseEmployeeReconFast] error → fallback GAS:', e.message);
+    }
+  }
+  const _g = await call({ action:'pk_expenseEmployeeRecon', empId, empName });   // GAS เดิม (shorthand กัน sed ซ้ำ)
+  _markJobSource('gas');
+  return _g;
+}
 
 let CURRENT_USER = null;
 // manager ทำได้ทุกอย่างที่ office ทำ — ใช้เช็คสิทธิ์ระดับ office
@@ -3027,7 +3046,7 @@ async function sumLoadRecon(i){
   rec.dataset.loaded = '1';
   rec.innerHTML = '<span style="font-size:12px;color:var(--mu);">กำลังโหลดสรุปเงินเดือน...</span>';
   try {
-    const r = await call({ action:'pk_expenseEmployeeRecon', empId: g.empId, empName: g.key });
+    const r = await getExpenseEmployeeReconFast(g.empId, g.key);
     if (!r.ok){ rec.innerHTML = '<span style="font-size:12px;color:var(--rd);">' + (r.error||'โหลดไม่ได้') + '</span>'; rec.dataset.loaded = ''; return; }
     const baht = function(n){ return '฿' + (Number(n)||0).toLocaleString('th-TH', { minimumFractionDigits:2 }); };
     const neg = r.remaining < 0;
