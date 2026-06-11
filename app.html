@@ -707,6 +707,48 @@ async function getProdListFast(opts){
   return _g;
 }
 
+// ── เฟส 1: list เบิกจ่าย ผ่าน /expense-list-* — flag แยก ──
+let USE_SHEETS_EXP = false;
+async function getExpenseListMyFast(statusFilter){
+  if (USE_SHEETS_EXP && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/expense-list-my'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ statusFilter, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.items)) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getExpenseListMyFast] /expense-list-my ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e) {
+      console.warn('[getExpenseListMyFast] /expense-list-my error → fallback GAS:', e.message);
+    }
+  }
+  const _g = await call({ action:'pk_expenseListMy', statusFilter });
+  _markJobSource('gas');
+  return _g;
+}
+async function getExpenseListAllFast(opts){
+  opts = opts || {};
+  if (USE_SHEETS_EXP && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/expense-list-all'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.items)) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getExpenseListAllFast] /expense-list-all ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e) {
+      console.warn('[getExpenseListAllFast] /expense-list-all error → fallback GAS:', e.message);
+    }
+  }
+  const _g = await call({ action:'pk_expenseListAll', ...opts });
+  _markJobSource('gas');
+  return _g;
+}
+
 let CURRENT_USER = null;
 // manager ทำได้ทุกอย่างที่ office ทำ — ใช้เช็คสิทธิ์ระดับ office
 function isOfficeLevel(){ return CURRENT_USER && (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'manager'); }
@@ -2103,7 +2145,7 @@ async function expenseMyLoad(){
   const fEl = document.getElementById('expMyFilter');
   const sf = fEl ? fEl.value : '';
   try {
-    const r = await call({ action:'pk_expenseListMy', statusFilter: sf });
+    const r = await getExpenseListMyFast(sf);
     if (!r.ok){ box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">โหลดไม่ได้: ' + (r.error||'') + '</div>'; return; }
     const items = r.items || [];
     _expCurrentList = items.slice();
@@ -2129,7 +2171,7 @@ async function expenseApproveLoad(){
     if (!_batchMode) tgl.textContent = (sf === 'รออนุมัติ') ? '✅ อนุมัติหลายใบ' : '🧾 รวบจ่าย'; }
   if (!canBatch && _batchMode) expenseBatchExit();
   try {
-    const r = await call({ action:'pk_expenseListAll', statusFilter: sf });
+    const r = await getExpenseListAllFast({ statusFilter: sf });
     if (!r.ok){ box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
     const items = r.items || [];
     _expCurrentList = items.slice();
