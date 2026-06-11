@@ -749,6 +749,28 @@ async function getExpenseListAllFast(opts){
   return _g;
 }
 
+// ── เฟส 1: dashboard สรุปต่อทีม ผ่าน /dashboard — flag แยก ──
+let USE_SHEETS_DASH = true;   // ON: dashboard ใช้ /dashboard · fallback GAS อัตโนมัติ
+async function getDashboardFast(date){
+  if (USE_SHEETS_DASH && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/dashboard'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ date, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && data.summary && Array.isArray(data.teams)) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getDashboardFast] /dashboard ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e) {
+      console.warn('[getDashboardFast] /dashboard error → fallback GAS:', e.message);
+    }
+  }
+  const _g = await call({ action:'pk_dashboard', date: date });   // GAS เดิม
+  _markJobSource('gas');
+  return _g;
+}
+
 let CURRENT_USER = null;
 // manager ทำได้ทุกอย่างที่ office ทำ — ใช้เช็คสิทธิ์ระดับ office
 function isOfficeLevel(){ return CURRENT_USER && (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'manager'); }
@@ -3579,7 +3601,7 @@ async function loadDashboard(){
   if (!date) { document.getElementById('dashContent').innerHTML='<div class="loading-row">เลือกวันที่ก่อน</div>'; return; }
   document.getElementById('dashContent').innerHTML = skelDashboard();
   try {
-    const r = await call({ action:'pk_dashboard', date });
+    const r = await getDashboardFast(date);
     if (!r.ok) { document.getElementById('dashContent').innerHTML='<div class="loading-row">'+r.error+'</div>'; return; }
     const s = r.summary;
     if (s.totalJobs === 0) { document.getElementById('dashContent').innerHTML='<div class="loading-row">ไม่มีงานในวันที่ '+fmtD(date)+'</div>'; return; }
