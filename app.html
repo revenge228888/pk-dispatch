@@ -832,6 +832,28 @@ async function getExpenseEmployeeReconFast(empId, empName){
   return _g;
 }
 
+// ── เฟส 1: ราคาต้นทุน ผ่าน /cost-prices — flag แยก ──
+let USE_SHEETS_COST = true;   // ON: cost prices /cost-prices · fallback GAS อัตโนมัติ
+async function getCostPricesFast(){
+  if (USE_SHEETS_COST && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/cost-prices'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.prices)) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getCostPricesFast] /cost-prices ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e) {
+      console.warn('[getCostPricesFast] error → fallback GAS:', e.message);
+    }
+  }
+  const _g = await call({ action:'pk_costListPrices' });   // GAS เดิม (มี space กัน sed ซ้ำ)
+  _markJobSource('gas');
+  return _g;
+}
+
 let CURRENT_USER = null;
 // manager ทำได้ทุกอย่างที่ office ทำ — ใช้เช็คสิทธิ์ระดับ office
 function isOfficeLevel(){ return CURRENT_USER && (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'manager'); }
@@ -7438,7 +7460,7 @@ function pkpRequisition(items, mainAlu){
 var pkpCostPrices=null;   // cache: [{name,color,buyPrice,divisor,useUnit,unitPrice}]
 async function pkpLoadCostPrices(force){
   if(pkpCostPrices && !force) return pkpCostPrices;
-  var r=await call({action:'pk_costListPrices'});
+  var r=await getCostPricesFast();
   if(!r||!r.ok){ toast('โหลดราคาไม่ได้: '+((r&&r.error)||'')); return null; }
   pkpCostPrices=r.prices||[]; return pkpCostPrices;
 }
