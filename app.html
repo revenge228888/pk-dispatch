@@ -685,7 +685,7 @@ async function getTechJobsFast(date){
 }
 
 // ── เฟส 1: list ใบผลิต ผ่าน /prod-list (manager-only) — flag แยก ──
-let USE_SHEETS_PROD = false;
+let USE_SHEETS_PROD = true;   // ON: ใบผลิต /prod-list
 async function getProdListFast(opts){
   opts = opts || {};
   if (USE_SHEETS_PROD && CURRENT_USER) {
