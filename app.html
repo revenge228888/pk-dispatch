@@ -854,6 +854,28 @@ async function getCostPricesFast(){
   return _g;
 }
 
+// ── เฟส 1: config คำนวณราคา ผ่าน /quote-metadata (static) — flag แยก ──
+let USE_SHEETS_QUOTE = true;   // ON: quote metadata /quote-metadata · fallback GAS อัตโนมัติ
+async function getQuoteMetadataFast(){
+  if (USE_SHEETS_QUOTE && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/quote-metadata'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && data.priceTable) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getQuoteMetadataFast] /quote-metadata ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e) {
+      console.warn('[getQuoteMetadataFast] error → fallback GAS:', e.message);
+    }
+  }
+  const _g = await call({ action:'pk_quoteMetadata' }, {cache:true});   // GAS เดิม (ไม่มี space ใน cache กัน sed ซ้ำ)
+  _markJobSource('gas');
+  return _g;
+}
+
 let CURRENT_USER = null;
 // manager ทำได้ทุกอย่างที่ office ทำ — ใช้เช็คสิทธิ์ระดับ office
 function isOfficeLevel(){ return CURRENT_USER && (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'manager'); }
@@ -6301,7 +6323,7 @@ function quotesInit(){
 
 async function quoteLoadMetadata(){
   try {
-    const r = await call({ action:'pk_quoteMetadata' }, { cache: true });
+    const r = await getQuoteMetadataFast();
     if (r.ok) {
       _quoteMetadata = {
         priceTable: r.priceTable,
