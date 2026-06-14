@@ -1165,6 +1165,7 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="assign" onclick="setTab('assign',this)"><span class="sidebar-ico">🚚</span><span class="sidebar-label">จัดทีม</span></button>
           <button class="sidebar-item" data-tab="outstanding" onclick="setTab('outstanding',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">ตามยอดคงค้าง</span></button>
           <button class="sidebar-item" data-tab="mytasks" onclick="setTab('mytasks',this)"><span class="sidebar-ico">✅</span><span class="sidebar-label">งานของฉัน</span></button>
+          ${CURRENT_USER.role === 'manager' ? `<button class="sidebar-item" data-tab="taskmgr" onclick="setTab('taskmgr',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">มอบหมายงาน</span></button>` : ''}
 
           <div class="sidebar-group">วัด & เสนอราคา</div>
           <button class="sidebar-item" data-tab="records" onclick="setTab('records',this)"><span class="sidebar-ico">📐</span><span class="sidebar-label">จดขนาด</span></button>
@@ -1469,6 +1470,56 @@ function renderOfficeShell(){
 
       <!-- ✅ MY TASKS (งานของฉัน) — Feature #2 -->
       <div id="tabMytasks" style="display:none;">${myTasksScreenHTML()}</div>
+
+      <!-- 📋 TASK MANAGER (มอบหมายงาน · manager) — Feature #2 -->
+      <div id="tabTaskmgr" style="display:none;">
+        <div class="section-pad">
+          <div class="tabs" style="margin-bottom:12px;">
+            <button class="tab on" id="tmgrTabList" onclick="taskMgrSetSubtab('list')">📋 รายการงาน</button>
+            <button class="tab" id="tmgrTabDash" onclick="taskMgrSetSubtab('dash')">📊 Dashboard</button>
+          </div>
+          <div id="tmgrListWrap">
+            <div class="row-form" style="gap:8px;align-items:flex-end;margin-bottom:10px;">
+              <button class="btn btn-p" onclick="tmgrOpenForm('create')">+ มอบหมายงานใหม่</button>
+              <div class="fg" style="max-width:170px;"><label class="fl">ผู้รับ</label><select class="fi" id="tmgrFilterAssignee"><option value="">ทุกคน</option></select></div>
+              <div class="fg" style="max-width:160px;"><label class="fl">สถานะ</label>
+                <select class="fi" id="tmgrFilterStatus">
+                  <option value="">ทั้งหมด</option>
+                  <option value="pending">รอเริ่ม</option>
+                  <option value="in_progress">กำลังทำ</option>
+                  <option value="done">รอตรวจ</option>
+                  <option value="accepted">ผ่านแล้ว</option>
+                  <option value="rejected">ตีกลับ</option>
+                  <option value="cancelled">ยกเลิก</option>
+                </select>
+              </div>
+              <button class="btn btn-g" onclick="taskMgrLoadList()">🔄</button>
+            </div>
+            <div id="tmgrList"><div class="loading-row">กำลังโหลด...</div></div>
+          </div>
+          <div id="tmgrDashWrap" style="display:none;">
+            <div id="tmgrDashSummary" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;"></div>
+            <div id="tmgrDashList"><div class="loading-row">กำลังโหลด...</div></div>
+          </div>
+        </div>
+        <div class="modal-bg" id="tmgrFormModal">
+          <div class="modal">
+            <div class="card-head"><span id="tmgrFormTitle">📋 มอบหมายงานใหม่</span>
+              <button onclick="tmgrCloseForm()" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button>
+            </div>
+            <div class="card-body">
+              <div class="fg" style="margin-bottom:10px;"><label class="fl">หัวข้องาน <span style="color:var(--rd)">*</span></label><input class="fi" id="tmgrFTitle" type="text"></div>
+              <div class="fg" style="margin-bottom:10px;"><label class="fl">รายละเอียด</label><textarea class="fi" id="tmgrFDetail" rows="3" style="resize:vertical;"></textarea></div>
+              <div class="fg" style="margin-bottom:10px;"><label class="fl">มอบให้ <span style="color:var(--rd)">*</span></label><select class="fi" id="tmgrFAssignee"><option value="">— เลือกผู้รับ —</option></select></div>
+              <div class="row-form" style="gap:8px;">
+                <div class="fg" style="flex:1;"><label class="fl">กำหนดส่ง</label><input class="fi" id="tmgrFDue" type="date"></div>
+                <div class="fg" style="flex:1;"><label class="fl">ความสำคัญ</label><select class="fi" id="tmgrFPriority"><option value="สูง">สูง</option><option value="กลาง" selected>กลาง</option><option value="ต่ำ">ต่ำ</option></select></div>
+              </div>
+              <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:10px;" onclick="tmgrSubmitForm()">💾 บันทึก</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- RECORDS (📐 จดขนาด) -->
       <div id="tabRecords" style="display:none;">
@@ -3231,7 +3282,7 @@ async function expenseRejectConfirm(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -3252,6 +3303,7 @@ function setTab(t, btn){
   if (t === 'assign') assignInit();
   if (t === 'outstanding') outstandingInit();
   if (t === 'mytasks') myTasksLoad();
+  if (t === 'taskmgr') taskMgrInit();
   if (t === 'payroll') payrollInit();
   if (t === 'records') recordsInit();
   if (t === 'quotes') quotesInit();
@@ -5871,6 +5923,155 @@ async function mtSubmit(){
     if (!r.ok){ toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast('✅ ส่งผลงานแล้ว — รอตรวจรับ'); mtCloseSubmit(); myTasksLoad();
   } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// ════════════════════════════════════════
+//  📋 TASK MANAGER — มอบหมายงาน (Feature #2 · manager)
+// ════════════════════════════════════════
+let _allTasks = [];
+let _taskUsers = [];
+let _tmgrFormMode = 'create';
+let _tmgrEditId = null;
+
+function taskMgrInit(){ taskMgrLoadUsers(); taskMgrSetSubtab('list'); taskMgrLoadList(); }
+
+async function taskMgrLoadUsers(){
+  try {
+    const r = await call({ action:'pk_listUsers' });
+    if (!r.ok) return;
+    _taskUsers = (r.users || []).filter(u => u.active);
+    const opts = _taskUsers.map(u => '<option value="'+escAttr(u.username)+'">'+escHtml(u.name||u.username)+' ('+escHtml(u.role)+')</option>').join('');
+    const fa = document.getElementById('tmgrFAssignee'); if (fa) fa.innerHTML = '<option value="">— เลือกผู้รับ —</option>' + opts;
+    const ff = document.getElementById('tmgrFilterAssignee'); if (ff) ff.innerHTML = '<option value="">ทุกคน</option>' + opts;
+  } catch(e){}
+}
+
+function taskMgrSetSubtab(which){
+  const isList = which === 'list';
+  document.getElementById('tmgrListWrap').style.display = isList ? '' : 'none';
+  document.getElementById('tmgrDashWrap').style.display = isList ? 'none' : '';
+  document.getElementById('tmgrTabList').classList.toggle('on', isList);
+  document.getElementById('tmgrTabDash').classList.toggle('on', !isList);
+  if (!isList) taskMgrLoadDashboard();
+}
+
+async function taskMgrLoadList(){
+  const w = document.getElementById('tmgrList');
+  if (w) w.innerHTML = (typeof skelCards === 'function') ? skelCards(3) : '<div class="loading-row">กำลังโหลด...</div>';
+  const assignee = document.getElementById('tmgrFilterAssignee')?.value || '';
+  const status = document.getElementById('tmgrFilterStatus')?.value || '';
+  try {
+    const r = await call({ action:'pk_taskListAll', assignee, status });
+    if (!r.ok){ if (w) w.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
+    _allTasks = r.tasks || [];
+    if (w) w.innerHTML = _allTasks.length ? _allTasks.map(tmgrCard).join('') : '<div class="loading-row">ไม่มีงาน</div>';
+  } catch(e){ if (w) w.innerHTML = '<div class="loading-row">❌ เชื่อมต่อไม่ได้</div>'; }
+}
+
+function tmgrCard(t){
+  const due = t.dueDate ? '⏰ ' + escHtml(t.dueDate) : '';
+  const photos = (t.resultPhotos || []).map(p => '<a href="'+fixDriveUrl(p)+'" target="_blank"><img src="'+fixDriveUrl(p)+'" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--bdr);" referrerpolicy="no-referrer"></a>').join('');
+  const result = t.result ? '<div style="background:var(--surf2);border-radius:7px;padding:8px;margin:6px 0;font-size:13px;white-space:pre-wrap;">'+escHtml(t.result)+'</div>' : '';
+  const review = t.review ? '<div style="font-size:12px;color:var(--mu);">📝 '+escHtml(t.review)+'</div>' : '';
+  let actions = '';
+  if (t.status === 'done') actions += '<button class="btn btn-p btn-sm" onclick="tmgrAccept(\''+escAttr(t.taskId)+'\')">✅ ผ่าน</button><button class="btn btn-g btn-sm" onclick="tmgrReject(\''+escAttr(t.taskId)+'\')">↩ ตีกลับ</button>';
+  if (['accepted','cancelled'].indexOf(t.status) === -1)
+    actions += '<button class="btn btn-g btn-sm" onclick="tmgrOpenForm(\'edit\',\''+escAttr(t.taskId)+'\')">✏️ แก้</button><button class="btn btn-g btn-sm" onclick="tmgrCancel(\''+escAttr(t.taskId)+'\')">🚫 ยกเลิก</button>';
+  return '<div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--bdr);border-radius:10px;">'
+    + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
+      + '<div style="font-weight:700;">'+escHtml(t.title)+' <span style="font-family:var(--mono);font-size:11px;color:var(--mu);">'+escHtml(t.taskId)+'</span></div>'
+      + '<div style="font-size:12px;">'+mtStatusBadge(t.status)+'</div>'
+    + '</div>'
+    + '<div style="font-size:12px;color:var(--mu);margin:4px 0;">👤 '+escHtml(t.assignedToName||t.assignedTo)+(due?' · '+due:'')+(t.priority?' · '+escHtml(t.priority):'')+'</div>'
+    + (t.detail ? '<div style="font-size:13px;margin:4px 0;white-space:pre-wrap;">'+escHtml(t.detail)+'</div>' : '')
+    + result
+    + (photos ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0;">'+photos+'</div>' : '')
+    + review
+    + (actions ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">'+actions+'</div>' : '')
+  + '</div>';
+}
+
+function tmgrOpenForm(mode, id){
+  _tmgrFormMode = mode; _tmgrEditId = id || null;
+  document.getElementById('tmgrFormTitle').textContent = (mode === 'edit') ? '✏️ แก้ไขงาน' : '📋 มอบหมายงานใหม่';
+  let t = null;
+  if (mode === 'edit') t = _allTasks.find(x => String(x.taskId) === String(id));
+  document.getElementById('tmgrFTitle').value    = t ? (t.title||'') : '';
+  document.getElementById('tmgrFDetail').value   = t ? (t.detail||'') : '';
+  document.getElementById('tmgrFAssignee').value = t ? (t.assignedTo||'') : '';
+  document.getElementById('tmgrFDue').value      = t ? (t.dueDate||'') : '';
+  document.getElementById('tmgrFPriority').value = t ? (t.priority||'กลาง') : 'กลาง';
+  document.getElementById('tmgrFormModal').classList.add('on');
+}
+function tmgrCloseForm(){ document.getElementById('tmgrFormModal').classList.remove('on'); }
+
+async function tmgrSubmitForm(){
+  const title = document.getElementById('tmgrFTitle').value.trim();
+  const assignedTo = document.getElementById('tmgrFAssignee').value;
+  const detail = document.getElementById('tmgrFDetail').value.trim();
+  const dueDate = document.getElementById('tmgrFDue').value;
+  const priority = document.getElementById('tmgrFPriority').value;
+  if (!title){ toast('กรอกหัวข้องาน'); return; }
+  if (!assignedTo){ toast('เลือกผู้รับ'); return; }
+  showLoad('กำลังบันทึก...');
+  try {
+    const r = (_tmgrFormMode === 'edit')
+      ? await call({ action:'pk_taskEdit', id:_tmgrEditId, title, detail, assignedTo, dueDate, priority })
+      : await call({ action:'pk_taskCreate', title, detail, assignedTo, dueDate, priority });
+    hideLoad();
+    if (!r.ok){ toast('❌ '+(r.error||'ผิดพลาด')); return; }
+    toast(_tmgrFormMode === 'edit' ? '✅ แก้ไขแล้ว' : '✅ มอบหมายแล้ว');
+    tmgrCloseForm(); taskMgrLoadList();
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+function tmgrAccept(id){
+  if (!confirm('อนุมัติงานนี้?')) return;
+  showLoad('กำลังอัปเดต...');
+  call({ action:'pk_taskReview', id, decision:'accept' }).then(r => { hideLoad(); if (!r.ok){ toast('❌ '+(r.error||'')); return; } toast('🎉 อนุมัติแล้ว'); taskMgrLoadList(); }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
+}
+function tmgrReject(id){
+  const reason = prompt('เหตุผลที่ตีกลับ:');
+  if (reason === null) return;
+  if (!reason.trim()){ toast('ต้องระบุเหตุผล'); return; }
+  showLoad('กำลังอัปเดต...');
+  call({ action:'pk_taskReview', id, decision:'reject', review:reason.trim() }).then(r => { hideLoad(); if (!r.ok){ toast('❌ '+(r.error||'')); return; } toast('↩ ตีกลับแล้ว'); taskMgrLoadList(); }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
+}
+function tmgrCancel(id){
+  if (!confirm('ยกเลิกงานนี้?')) return;
+  showLoad('กำลังอัปเดต...');
+  call({ action:'pk_taskCancel', id }).then(r => { hideLoad(); if (!r.ok){ toast('❌ '+(r.error||'')); return; } toast('🚫 ยกเลิกแล้ว'); taskMgrLoadList(); }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
+}
+
+async function taskMgrLoadDashboard(){
+  const w = document.getElementById('tmgrDashList');
+  if (w) w.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  try {
+    const r = await call({ action:'pk_taskDashboard' });
+    if (!r.ok){ if (w) w.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
+    const sm = document.getElementById('tmgrDashSummary');
+    const tot = r.totals || {};
+    if (sm) sm.innerHTML =
+        '<div class="dstat"><div class="dstat-num">'+(tot.total||0)+'</div><div class="dstat-lbl">งานทั้งหมด</div></div>'
+      + '<div class="dstat"><div class="dstat-num" style="color:var(--grn)">'+(tot.accepted||0)+'</div><div class="dstat-lbl">ผ่านแล้ว</div></div>'
+      + '<div class="dstat"><div class="dstat-num" style="color:var(--rd)">'+(tot.overdue||0)+'</div><div class="dstat-lbl">เกินกำหนด</div></div>';
+    const people = r.people || [];
+    if (w) w.innerHTML = people.length ? people.map(tmgrPersonCard).join('') : '<div class="loading-row">ยังไม่มีข้อมูล</div>';
+  } catch(e){ if (w) w.innerHTML = '<div class="loading-row">❌ เชื่อมต่อไม่ได้</div>'; }
+}
+
+function tmgrPersonCard(p){
+  return '<div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--bdr);border-radius:10px;">'
+    + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
+      + '<div style="font-weight:700;">'+escHtml(p.assignedToName||p.assignedTo)+'</div>'
+      + '<div style="font-size:12px;color:var(--mu);">เสร็จ '+(p.pctDone||0)+'%</div>'
+    + '</div>'
+    + '<div style="font-size:12px;color:var(--mu);margin-top:6px;display:flex;gap:10px;flex-wrap:wrap;">'
+      + '<span>📋 '+p.total+'</span><span>⏳ '+p.pending+'</span><span>🔧 '+p.in_progress+'</span>'
+      + '<span>📤 '+p.done+'</span><span style="color:var(--grn)">✅ '+p.accepted+'</span>'
+      + (p.overdue ? '<span style="color:var(--rd)">⚠️ เกิน '+p.overdue+'</span>' : '')
+    + '</div>'
+  + '</div>';
 }
 
 // ════════════════════════════════════════
