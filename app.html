@@ -5007,10 +5007,31 @@ function renderTechStub(){
           <!-- Continue note -->
           <div class="fg" style="margin-bottom:14px;">
             <label class="fl">โน้ต (ถ้ามีงานต่อในวันถัดไป)</label>
-            <textarea class="fi" id="tDoneNote" rows="2" placeholder="(เว้นว่าง = จบงาน · ใส่ข้อความ = ต่องาน)" style="resize:vertical;"></textarea>
+            <textarea class="fi" id="tDoneNote" rows="2" placeholder="(เว้นว่าง = จบงาน · ใส่ข้อความ = ต่องาน)" style="resize:vertical;" oninput="techToggleContinue()"></textarea>
             <div style="font-size:11px;color:var(--mu);margin-top:4px;">
               💡 ใส่โน้ต = "➡ ต่องาน" · เว้นว่าง = "✅ จบงาน"
             </div>
+          </div>
+
+          <!-- ★ Feature #1: การเก็บเงิน (แสดงเฉพาะจบงานจริง = โน้ตว่าง) -->
+          <div class="fg" id="tPaySection" style="margin-bottom:14px;border-top:1px solid var(--bdr);padding-top:12px;">
+            <label class="fl">💰 การเก็บเงิน <span style="color:var(--rd)">*</span></label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 8px;">
+              <button type="button" class="btn btn-g btn-sm" id="tPayBtn_collected"  onclick="techSetPay('collected')">💵 เก็บครบ</button>
+              <button type="button" class="btn btn-g btn-sm" id="tPayBtn_partial"    onclick="techSetPay('partial')">½ เก็บบางส่วน</button>
+              <button type="button" class="btn btn-g btn-sm" id="tPayBtn_unpaid"     onclick="techSetPay('unpaid')">⏳ ยังไม่เก็บ</button>
+              <button type="button" class="btn btn-g btn-sm" id="tPayBtn_no_charge"  onclick="techSetPay('no_charge')">🆓 ไม่มียอด</button>
+            </div>
+            <div id="tPayAmountWrap" style="display:none;margin-bottom:8px;">
+              <label class="fl" style="font-size:12px;">จำนวนที่เก็บได้ (บาท)</label>
+              <input class="fi" id="tPayAmount" type="number" inputmode="numeric" placeholder="0">
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <button type="button" class="btn btn-g btn-sm" id="tPayM_cash"     onclick="techSetPayMethod('cash')">เงินสด</button>
+                <button type="button" class="btn btn-g btn-sm" id="tPayM_transfer" onclick="techSetPayMethod('transfer')">โอน</button>
+                <button type="button" class="btn btn-g btn-sm" id="tPayM_other"    onclick="techSetPayMethod('other')">อื่นๆ</button>
+              </div>
+            </div>
+            <input class="fi" id="tPayNote" type="text" placeholder="หมายเหตุการเก็บเงิน (ถ้ามี เช่น ลูกค้าจะโอนสิ้นเดือน)" style="font-size:13px;">
           </div>
 
           <button class="btn btn-p" style="width:100%;justify-content:center;" onclick="techSubmitDone()">💾 บันทึก</button>
@@ -5035,6 +5056,10 @@ let _doneJobId = null;
 let _donePhotos = [];        // array of base64
 let _doneGpsWatch = null;
 let _doneGps = null;
+// ★ Feature #1 payment state
+let _payStatus  = '';        // collected | partial | unpaid | no_charge
+let _payMethod  = 'cash';    // cash | transfer | other
+let _doneAmount = '';        // ยอดงาน (prefill จาก j.amount)
 
 async function initTech(){
   if (!CURRENT_USER.team) return;
@@ -5365,6 +5390,14 @@ function techOpenDone(id){
   document.getElementById('tPhotoPreview').innerHTML = '';
   document.getElementById('tDoneNote').value = '';
   document.getElementById('tGpsStatus').innerHTML = 'กดปุ่ม "📍 ดึงพิกัด" เพื่อบันทึก';
+  // ★ Feature #1: reset payment UI
+  _payStatus = ''; _payMethod = 'cash'; _doneAmount = j.amount || '';
+  ['collected','partial','unpaid','no_charge'].forEach(k => _payHi(document.getElementById('tPayBtn_'+k), false));
+  ['cash','transfer','other'].forEach(k => _payHi(document.getElementById('tPayM_'+k), k === 'cash'));
+  document.getElementById('tPayAmountWrap').style.display = 'none';
+  document.getElementById('tPayAmount').value = '';
+  document.getElementById('tPayNote').value = '';
+  document.getElementById('tPaySection').style.display = '';
   document.getElementById('tDoneModal').classList.add('on');
 }
 
@@ -5492,6 +5525,21 @@ async function techSubmitDone(){
     body.lng = _doneGps.lng;
   }
 
+  // ★ Feature #1: แนบข้อมูลเก็บเงิน — เฉพาะ "จบงานจริง" (โน้ตว่าง) · ต่องานข้าม
+  if (!note) {
+    if (!_payStatus) { toast('เลือกสถานะการเก็บเงิน'); return; }
+    body.payStatus = _payStatus;
+    if (_payStatus === 'collected' || _payStatus === 'partial') {
+      const amt = Number(document.getElementById('tPayAmount').value) || 0;
+      if (amt <= 0) { toast('กรอกจำนวนเงินที่เก็บได้'); return; }
+      body.payCollected = amt;
+      body.payMethod = _payMethod;
+    } else {
+      body.payCollected = 0;   // unpaid / no_charge
+    }
+    body.payNote = document.getElementById('tPayNote').value.trim();
+  }
+
   showLoad(_donePhotos.length ? 'กำลังอัปโหลดรูปและบันทึก...' : 'กำลังบันทึก...');
   try {
     const r = await call(body);
@@ -5501,6 +5549,46 @@ async function techSubmitDone(){
     techCloseModal();
     techLoadJobs();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// ════════════════════════════════════════
+//  ★ Feature #1 — payment UI helpers (modal จบงาน)
+// ════════════════════════════════════════
+// ไฮไลต์ปุ่มที่เลือก (inline style — ไม่พึ่ง class นอก)
+function _payHi(el, on){
+  if (!el) return;
+  el.style.borderColor = on ? 'var(--acc)' : '';
+  el.style.background  = on ? 'rgba(96,165,250,.15)' : '';
+  el.style.color       = on ? 'var(--acc)' : '';
+  el.style.fontWeight  = on ? '700' : '';
+}
+
+// โน้ตต่องาน → ซ่อนส่วนเก็บเงิน (กันยอดมั่ว)
+function techToggleContinue(){
+  const isContinue = !!document.getElementById('tDoneNote').value.trim();
+  document.getElementById('tPaySection').style.display = isContinue ? 'none' : '';
+}
+
+// เลือกสถานะเก็บเงิน
+function techSetPay(s){
+  _payStatus = s;
+  ['collected','partial','unpaid','no_charge'].forEach(k => _payHi(document.getElementById('tPayBtn_'+k), k === s));
+  const wrap = document.getElementById('tPayAmountWrap');
+  const amt  = document.getElementById('tPayAmount');
+  if (s === 'collected' || s === 'partial'){
+    wrap.style.display = '';
+    if (s === 'collected') { amt.value = _doneAmount || ''; }
+    else { amt.value = ''; amt.focus(); }
+  } else {
+    wrap.style.display = 'none';
+    amt.value = '';
+  }
+}
+
+// เลือกวิธีจ่าย
+function techSetPayMethod(m){
+  _payMethod = m;
+  ['cash','transfer','other'].forEach(k => _payHi(document.getElementById('tPayM_'+k), k === m));
 }
 
 // ════════════════════════════════════════
