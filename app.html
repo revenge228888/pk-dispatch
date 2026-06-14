@@ -6130,27 +6130,45 @@ async function taskMgrLoadDashboard(){
       + '<div class="dstat"><div class="dstat-num" style="color:var(--grn)">'+(tot.accepted||0)+'</div><div class="dstat-lbl">ผ่านแล้ว</div></div>'
       + '<div class="dstat"><div class="dstat-num" style="color:var(--rd)">'+(tot.overdue||0)+'</div><div class="dstat-lbl">เกินกำหนด</div></div>';
     const people = r.people || [];
-    if (w) w.innerHTML = people.length ? people.map(tmgrPersonCard).join('') : '<div class="loading-row">ยังไม่มีข้อมูล</div>';
+    if (w) w.innerHTML = people.length
+      ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(146px,1fr));gap:14px;">' + people.map(tmgrPersonCard).join('') + '</div>'
+      : '<div class="loading-row">ยังไม่มีข้อมูล</div>';
   } catch(e){ if (w) w.innerHTML = '<div class="loading-row">❌ เชื่อมต่อไม่ได้</div>'; }
 }
 
 function tmgrPersonCard(p){
-  const active = (p.pending||0) + (p.in_progress||0) + (p.done||0) + (p.rejected||0);  // งานค้าง (ยังไม่ปิด)
-  // highlight: เกินกำหนด = แดง · มีงานค้าง = เหลือง · ไม่ค้าง = ปกติ
-  let hl = 'border:1px solid var(--bdr);';
-  if (p.overdue > 0)   hl = 'border:1.5px solid var(--rd);background:rgba(255,59,48,.08);';
-  else if (active > 0) hl = 'border:1.5px solid #f59e0b;background:rgba(245,158,11,.07);';
+  const active = (p.pending||0) + (p.in_progress||0) + (p.done||0) + (p.rejected||0);  // งานค้าง
+  let accent, tag, tagCol;
+  if (p.overdue > 0){      accent = 'var(--rd)';  tag = '⚠️ เกินกำหนด ' + p.overdue; tagCol = 'var(--rd)'; }
+  else if (active > 0){    accent = 'var(--acc)'; tag = '● ค้าง ' + active;          tagCol = 'var(--acc)'; }
+  else {                   accent = 'var(--grn)'; tag = '✓ เคลียร์';                  tagCol = 'var(--grn)'; }
   const nm = p.assignedToName || p.assignedTo;
-  return '<div class="card" style="margin-bottom:10px;padding:12px;border-radius:10px;cursor:pointer;'+hl+'" onclick="tmgrShowPerson(\''+escAttr(p.assignedTo)+'\',\''+escAttr(nm)+'\')">'
-    + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;">'
-      + '<div style="font-weight:700;">👤 '+escHtml(nm)+(p.overdue>0?' <span style="color:var(--rd);font-size:12px;">⚠️ เกินกำหนด '+p.overdue+'</span>':(active>0?' <span style="color:#f59e0b;font-size:12px;">● ค้าง '+active+'</span>':''))+'</div>'
-      + '<div style="font-size:12px;color:var(--mu);">เสร็จ '+(p.pctDone||0)+'% ›</div>'
-    + '</div>'
-    + '<div style="font-size:12px;color:var(--mu);margin-top:6px;display:flex;gap:10px;flex-wrap:wrap;">'
-      + '<span>📋 '+p.total+'</span><span>⏳ '+p.pending+'</span><span>🔧 '+p.in_progress+'</span>'
-      + '<span>📤 '+p.done+'</span><span style="color:var(--grn)">✅ '+p.accepted+'</span>'
-      + (p.overdue ? '<span style="color:var(--rd)">⚠️ เกิน '+p.overdue+'</span>' : '')
-    + '</div>'
+  const initial = escHtml(String(nm || '?').trim().charAt(0).toUpperCase());
+  const pct = p.pctDone || 0;
+  const ring = 'background:conic-gradient(var(--grn) ' + (pct * 3.6) + 'deg, var(--surf2) 0deg);';
+  return ''
+  + '<div onclick="tmgrShowPerson(\'' + escAttr(p.assignedTo) + '\',\'' + escAttr(nm) + '\')" '
+  +   'onmouseover="this.style.transform=\'translateY(-3px)\';this.style.boxShadow=\'0 6px 16px rgba(0,0,0,.3)\'" '
+  +   'onmouseout="this.style.transform=\'\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,.18)\'" '
+  +   'style="aspect-ratio:4/6;cursor:pointer;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;'
+  +   'background:var(--surf);border:1.5px solid ' + accent + ';box-shadow:0 2px 8px rgba(0,0,0,.18);transition:transform .12s,box-shadow .12s;">'
+  +   '<div style="height:6px;background:' + accent + ';flex:none;"></div>'
+  +   '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:14px 10px;text-align:center;">'
+  +     '<div style="width:52px;height:52px;border-radius:50%;background:' + accent + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:23px;font-weight:700;flex:none;">' + initial + '</div>'
+  +     '<div style="width:100%;">'
+  +       '<div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(nm) + '</div>'
+  +       '<div style="font-size:11px;color:' + tagCol + ';margin-top:3px;">' + tag + '</div>'
+  +     '</div>'
+  +     '<div style="width:58px;height:58px;border-radius:50%;' + ring + 'display:flex;align-items:center;justify-content:center;flex:none;">'
+  +       '<div style="width:44px;height:44px;border-radius:50%;background:var(--surf);display:flex;flex-direction:column;align-items:center;justify-content:center;">'
+  +         '<div style="font-weight:700;font-size:14px;line-height:1;">' + pct + '%</div>'
+  +         '<div style="font-size:8px;color:var(--mu);">เสร็จ</div>'
+  +       '</div>'
+  +     '</div>'
+  +     '<div style="font-size:11px;color:var(--mu);display:flex;gap:9px;justify-content:center;">'
+  +       '<span>📋 ' + p.total + '</span><span style="color:var(--grn)">✅ ' + p.accepted + '</span>'
+  +     '</div>'
+  +   '</div>'
   + '</div>';
 }
 
