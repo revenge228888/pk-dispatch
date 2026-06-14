@@ -708,6 +708,56 @@ async function getProdListFast(opts){
 }
 
 // ── เฟส 1: list เบิกจ่าย ผ่าน /expense-list-* — flag แยก ──
+// ── [Part A] list ใบจดขนาด ผ่าน /record-list — flag แยก + ใช้ cache เดิม (ไม่ regression) ──
+let USE_SHEETS_RECORD = true;   // ON: ใบจดขนาด /record-list
+async function getRecordListFast(opts, cacheOpts){
+  opts = opts || {}; cacheOpts = cacheOpts || {};
+  const useCache = !!cacheOpts.cache && CACHEABLE_ACTIONS.has('pk_recordList') && !cacheOpts.bypassCache;
+  const ckey = useCache ? _cacheKey({ action:'pk_recordList', ...opts }) : null;
+  if (useCache) { const hit = _apiCache.get(ckey); if (hit && hit.expires > Date.now()) return hit.data; }
+  let result = null;
+  if (USE_SHEETS_RECORD && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/record-list'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.records)) { _markJobSource('sheets', data.ms); result = data; }
+      else console.warn('[getRecordListFast] /record-list ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e){ console.warn('[getRecordListFast] error → fallback GAS:', e.message); }
+  }
+  if (!result) { result = await call({ action:'pk_recordList', ...opts }); _markJobSource('gas'); }
+  if (useCache && result && result.ok) _apiCache.set(ckey, { data: result, expires: Date.now() + CACHE_TTL_MS });
+  return result;
+}
+
+// ── [Part A] list คำนวณราคา ผ่าน /quote-list — flag แยก + ใช้ cache เดิม ──
+let USE_SHEETS_QUOTE = true;    // ON: คำนวณราคา /quote-list
+async function getQuoteListFast(opts, cacheOpts){
+  opts = opts || {}; cacheOpts = cacheOpts || {};
+  const useCache = !!cacheOpts.cache && CACHEABLE_ACTIONS.has('pk_quoteList') && !cacheOpts.bypassCache;
+  const ckey = useCache ? _cacheKey({ action:'pk_quoteList', ...opts }) : null;
+  if (useCache) { const hit = _apiCache.get(ckey); if (hit && hit.expires > Date.now()) return hit.data; }
+  let result = null;
+  if (USE_SHEETS_QUOTE && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/quote-list'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.quotes)) { _markJobSource('sheets', data.ms); result = data; }
+      else console.warn('[getQuoteListFast] /quote-list ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e){ console.warn('[getQuoteListFast] error → fallback GAS:', e.message); }
+  }
+  if (!result) { result = await call({ action:'pk_quoteList', ...opts }); _markJobSource('gas'); }
+  if (useCache && result && result.ok) _apiCache.set(ckey, { data: result, expires: Date.now() + CACHE_TTL_MS });
+  return result;
+}
+
 let USE_SHEETS_EXP = true;   // ON: เบิกจ่าย /expense-list-*
 async function getExpenseListMyFast(statusFilter){
   if (USE_SHEETS_EXP && CURRENT_USER) {
@@ -789,89 +839,6 @@ async function getExpenseMonthSummaryFast(month){
     }
   }
   const _g = await call({ action:'pk_expenseMonthSummary', month });   // GAS เดิม (shorthand กัน sed ซ้ำ)
-  _markJobSource('gas');
-  return _g;
-}
-async function getExpenseGroupSummaryFast(opts){
-  opts = opts || {};
-  if (USE_SHEETS_EXPSUM && CURRENT_USER) {
-    try {
-      const r = await fetch(API.replace(/\/api$/, '/expense-group-summary'), {
-        method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
-        body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
-      });
-      const data = await r.json();
-      if (data && data.ok && Array.isArray(data.groups)) { _markJobSource('sheets', data.ms); return data; }
-      console.warn('[getExpenseGroupSummaryFast] /expense-group-summary ไม่ ok → fallback GAS:', data && data.error);
-    } catch(e) {
-      console.warn('[getExpenseGroupSummaryFast] error → fallback GAS:', e.message);
-    }
-  }
-  const _g = await call({ action:'pk_expenseGroupSummary', ...opts });   // GAS เดิม (spread กัน sed ซ้ำ)
-  _markJobSource('gas');
-  return _g;
-}
-async function getExpenseEmployeeReconFast(empId, empName){
-  if (USE_SHEETS_EXPSUM && CURRENT_USER) {
-    try {
-      const r = await fetch(API.replace(/\/api$/, '/expense-employee-recon'), {
-        method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
-        body: JSON.stringify({ empId, empName, username:CURRENT_USER.username, token:CURRENT_USER.token })
-      });
-      const data = await r.json();
-      if (data && data.ok && data.employee) { _markJobSource('sheets', data.ms); return data; }
-      console.warn('[getExpenseEmployeeReconFast] /expense-employee-recon ไม่ ok → fallback GAS:', data && data.error);
-    } catch(e) {
-      console.warn('[getExpenseEmployeeReconFast] error → fallback GAS:', e.message);
-    }
-  }
-  const _g = await call({ action:'pk_expenseEmployeeRecon', empId, empName });   // GAS เดิม (shorthand กัน sed ซ้ำ)
-  _markJobSource('gas');
-  return _g;
-}
-
-// ── เฟส 1: ราคาต้นทุน ผ่าน /cost-prices — flag แยก ──
-let USE_SHEETS_COST = true;   // ON: cost prices /cost-prices · fallback GAS อัตโนมัติ
-async function getCostPricesFast(){
-  if (USE_SHEETS_COST && CURRENT_USER) {
-    try {
-      const r = await fetch(API.replace(/\/api$/, '/cost-prices'), {
-        method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
-        body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token })
-      });
-      const data = await r.json();
-      if (data && data.ok && Array.isArray(data.prices)) { _markJobSource('sheets', data.ms); return data; }
-      console.warn('[getCostPricesFast] /cost-prices ไม่ ok → fallback GAS:', data && data.error);
-    } catch(e) {
-      console.warn('[getCostPricesFast] error → fallback GAS:', e.message);
-    }
-  }
-  const _g = await call({ action:'pk_costListPrices' });   // GAS เดิม (มี space กัน sed ซ้ำ)
-  _markJobSource('gas');
-  return _g;
-}
-
-// ── เฟส 1: config คำนวณราคา ผ่าน /quote-metadata (static) — flag แยก ──
-let USE_SHEETS_QUOTE = true;   // ON: quote metadata /quote-metadata · fallback GAS อัตโนมัติ
-async function getQuoteMetadataFast(){
-  if (USE_SHEETS_QUOTE && CURRENT_USER) {
-    try {
-      const r = await fetch(API.replace(/\/api$/, '/quote-metadata'), {
-        method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
-        body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token })
-      });
-      const data = await r.json();
-      if (data && data.ok && data.priceTable) { _markJobSource('sheets', data.ms); return data; }
-      console.warn('[getQuoteMetadataFast] /quote-metadata ไม่ ok → fallback GAS:', data && data.error);
-    } catch(e) {
-      console.warn('[getQuoteMetadataFast] error → fallback GAS:', e.message);
-    }
-  }
-  const _g = await call({ action:'pk_quoteMetadata' }, {cache:true});   // GAS เดิม (ไม่มี space ใน cache กัน sed ซ้ำ)
   _markJobSource('gas');
   return _g;
 }
@@ -3018,7 +2985,7 @@ async function summaryLoad(){
       if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
       summaryRender(r);
     } else {
-      const r = await getExpenseGroupSummaryFast({ month: month, groupBy: _sumView, status: _sumStatus, mainCat: _sumCat });
+      const r = await call({ action:'pk_expenseGroupSummary', month: month, groupBy: _sumView, status: _sumStatus, mainCat: _sumCat });
       if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
       _sumCats = r.availableCats || []; sumPaintCats();
       summaryRenderGroup(r);
@@ -3090,7 +3057,7 @@ async function sumLoadRecon(i){
   rec.dataset.loaded = '1';
   rec.innerHTML = '<span style="font-size:12px;color:var(--mu);">กำลังโหลดสรุปเงินเดือน...</span>';
   try {
-    const r = await getExpenseEmployeeReconFast(g.empId, g.key);
+    const r = await call({ action:'pk_expenseEmployeeRecon', empId: g.empId, empName: g.key });
     if (!r.ok){ rec.innerHTML = '<span style="font-size:12px;color:var(--rd);">' + (r.error||'โหลดไม่ได้') + '</span>'; rec.dataset.loaded = ''; return; }
     const baht = function(n){ return '฿' + (Number(n)||0).toLocaleString('th-TH', { minimumFractionDigits:2 }); };
     const neg = r.remaining < 0;
@@ -3985,7 +3952,7 @@ async function loadJobTable(){
 async function loadRecordCountsForJobs(jobs){
   // อ่าน records ทั้งหมดของผู้ใช้ปัจจุบันครั้งเดียว แล้ว match
   try {
-    const r = await call({ action:'pk_recordList', limit: 200 });
+    const r = await getRecordListFast({ limit: 200 });
     if (!r.ok) return;
     const byJob = {};
     (r.records||[]).forEach(rec => {
@@ -4049,7 +4016,7 @@ async function openJobRecords(jobIdx){
 // ── โหลดจำนวน quotes ของแต่ละงาน (office/sales) ──
 async function loadQuoteCountsForJobs(jobs){
   try {
-    const r = await call({ action:'pk_quoteList', limit: 200 });
+    const r = await getQuoteListFast({ limit: 200 });
     if (!r.ok) return;
     const byJob = {};
     (r.quotes||[]).forEach(q => {
@@ -5521,7 +5488,7 @@ async function recordsLoad(useCache){
   const showDeletedEl = document.getElementById('recShowDeleted');
   const includeDeleted = showDeletedEl ? showDeletedEl.checked : false;
   try {
-    const r = await call({ action:'pk_recordList', search, includeDeleted, limit: 200 },
+    const r = await getRecordListFast({ search, includeDeleted, limit: 200 },
                          { cache: true, bypassCache: !useCache });
     if (!r.ok) { w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
     _records = r.records || [];
@@ -6323,7 +6290,7 @@ function quotesInit(){
 
 async function quoteLoadMetadata(){
   try {
-    const r = await getQuoteMetadataFast();
+    const r = await call({ action:'pk_quoteMetadata' }, { cache: true });
     if (r.ok) {
       _quoteMetadata = {
         priceTable: r.priceTable,
@@ -6345,7 +6312,7 @@ async function quotesLoad(useCache){
   const showDeletedEl = document.getElementById('quoShowDeleted');
   const includeDeleted = showDeletedEl ? showDeletedEl.checked : false;
   try {
-    const r = await call({ action:'pk_quoteList', search, includeDeleted, limit: 200 },
+    const r = await getQuoteListFast({ search, includeDeleted, limit: 200 },
                          { cache: true, bypassCache: !useCache });
     if (!r.ok) { w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
     _quotes = r.quotes || [];
@@ -7482,7 +7449,7 @@ function pkpRequisition(items, mainAlu){
 var pkpCostPrices=null;   // cache: [{name,color,buyPrice,divisor,useUnit,unitPrice}]
 async function pkpLoadCostPrices(force){
   if(pkpCostPrices && !force) return pkpCostPrices;
-  var r=await getCostPricesFast();
+  var r=await call({action:'pk_costListPrices'});
   if(!r||!r.ok){ toast('โหลดราคาไม่ได้: '+((r&&r.error)||'')); return null; }
   pkpCostPrices=r.prices||[]; return pkpCostPrices;
 }
