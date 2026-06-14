@@ -1498,8 +1498,15 @@ function renderOfficeShell(){
             <div id="tmgrList"><div class="loading-row">กำลังโหลด...</div></div>
           </div>
           <div id="tmgrDashWrap" style="display:none;">
-            <div id="tmgrDashSummary" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;"></div>
-            <div id="tmgrDashList"><div class="loading-row">กำลังโหลด...</div></div>
+            <div id="tmgrPeopleView">
+              <div id="tmgrDashSummary" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;"></div>
+              <div id="tmgrDashList"><div class="loading-row">กำลังโหลด...</div></div>
+            </div>
+            <div id="tmgrPersonDrill" style="display:none;">
+              <button class="btn btn-g btn-sm" onclick="tmgrBackToDash()">← กลับ Dashboard</button>
+              <div id="tmgrPersonTitle" style="font-weight:700;font-size:16px;margin:12px 0 8px;"></div>
+              <div id="tmgrPersonTasks"></div>
+            </div>
           </div>
         </div>
         <div class="modal-bg" id="tmgrFormModal">
@@ -6083,29 +6090,34 @@ async function tmgrSubmitForm(){
     hideLoad();
     if (!r.ok){ toast('❌ '+(r.error||'ผิดพลาด')); return; }
     toast(_tmgrFormMode === 'edit' ? '✅ แก้ไขแล้ว' : '✅ มอบหมายแล้ว');
-    tmgrCloseForm(); taskMgrLoadList();
+    tmgrCloseForm(); tmgrRefresh();
   } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
 function tmgrAccept(id){
   if (!confirm('อนุมัติงานนี้?')) return;
   showLoad('กำลังอัปเดต...');
-  call({ action:'pk_taskReview', id, decision:'accept' }).then(r => { hideLoad(); if (!r.ok){ toast('❌ '+(r.error||'')); return; } toast('🎉 อนุมัติแล้ว'); taskMgrLoadList(); }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
+  call({ action:'pk_taskReview', id, decision:'accept' }).then(r => { hideLoad(); if (!r.ok){ toast('❌ '+(r.error||'')); return; } toast('🎉 อนุมัติแล้ว'); tmgrRefresh(); }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
 }
 function tmgrReject(id){
   const reason = prompt('เหตุผลที่ตีกลับ:');
   if (reason === null) return;
   if (!reason.trim()){ toast('ต้องระบุเหตุผล'); return; }
   showLoad('กำลังอัปเดต...');
-  call({ action:'pk_taskReview', id, decision:'reject', review:reason.trim() }).then(r => { hideLoad(); if (!r.ok){ toast('❌ '+(r.error||'')); return; } toast('↩ ตีกลับแล้ว'); taskMgrLoadList(); }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
+  call({ action:'pk_taskReview', id, decision:'reject', review:reason.trim() }).then(r => { hideLoad(); if (!r.ok){ toast('❌ '+(r.error||'')); return; } toast('↩ ตีกลับแล้ว'); tmgrRefresh(); }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
 }
 function tmgrCancel(id){
   if (!confirm('ยกเลิกงานนี้?')) return;
   showLoad('กำลังอัปเดต...');
-  call({ action:'pk_taskCancel', id }).then(r => { hideLoad(); if (!r.ok){ toast('❌ '+(r.error||'')); return; } toast('🚫 ยกเลิกแล้ว'); taskMgrLoadList(); }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
+  call({ action:'pk_taskCancel', id }).then(r => { hideLoad(); if (!r.ok){ toast('❌ '+(r.error||'')); return; } toast('🚫 ยกเลิกแล้ว'); tmgrRefresh(); }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
 }
 
+let _tmgrDrillUser = null, _tmgrDrillName = '';
+
 async function taskMgrLoadDashboard(){
+  // กลับมุมมองรายคนเสมอเมื่อโหลด
+  document.getElementById('tmgrPersonDrill').style.display = 'none';
+  document.getElementById('tmgrPeopleView').style.display = '';
   const w = document.getElementById('tmgrDashList');
   if (w) w.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
   try {
@@ -6123,10 +6135,16 @@ async function taskMgrLoadDashboard(){
 }
 
 function tmgrPersonCard(p){
-  return '<div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--bdr);border-radius:10px;">'
-    + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
-      + '<div style="font-weight:700;">'+escHtml(p.assignedToName||p.assignedTo)+'</div>'
-      + '<div style="font-size:12px;color:var(--mu);">เสร็จ '+(p.pctDone||0)+'%</div>'
+  const active = (p.pending||0) + (p.in_progress||0) + (p.done||0) + (p.rejected||0);  // งานค้าง (ยังไม่ปิด)
+  // highlight: เกินกำหนด = แดง · มีงานค้าง = เหลือง · ไม่ค้าง = ปกติ
+  let hl = 'border:1px solid var(--bdr);';
+  if (p.overdue > 0)   hl = 'border:1.5px solid var(--rd);background:rgba(255,59,48,.08);';
+  else if (active > 0) hl = 'border:1.5px solid #f59e0b;background:rgba(245,158,11,.07);';
+  const nm = p.assignedToName || p.assignedTo;
+  return '<div class="card" style="margin-bottom:10px;padding:12px;border-radius:10px;cursor:pointer;'+hl+'" onclick="tmgrShowPerson(\''+escAttr(p.assignedTo)+'\',\''+escAttr(nm)+'\')">'
+    + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;">'
+      + '<div style="font-weight:700;">👤 '+escHtml(nm)+(p.overdue>0?' <span style="color:var(--rd);font-size:12px;">⚠️ เกินกำหนด '+p.overdue+'</span>':(active>0?' <span style="color:#f59e0b;font-size:12px;">● ค้าง '+active+'</span>':''))+'</div>'
+      + '<div style="font-size:12px;color:var(--mu);">เสร็จ '+(p.pctDone||0)+'% ›</div>'
     + '</div>'
     + '<div style="font-size:12px;color:var(--mu);margin-top:6px;display:flex;gap:10px;flex-wrap:wrap;">'
       + '<span>📋 '+p.total+'</span><span>⏳ '+p.pending+'</span><span>🔧 '+p.in_progress+'</span>'
@@ -6134,6 +6152,30 @@ function tmgrPersonCard(p){
       + (p.overdue ? '<span style="color:var(--rd)">⚠️ เกิน '+p.overdue+'</span>' : '')
     + '</div>'
   + '</div>';
+}
+
+// กดชื่อ → drill เข้าไปดูงานของคนนั้นเป็น card (กดแต่ละงานดู A4 ได้)
+async function tmgrShowPerson(username, name){
+  _tmgrDrillUser = username; _tmgrDrillName = name;
+  document.getElementById('tmgrPeopleView').style.display = 'none';
+  document.getElementById('tmgrPersonDrill').style.display = '';
+  document.getElementById('tmgrPersonTitle').textContent = '👤 งานของ ' + name;
+  const w = document.getElementById('tmgrPersonTasks');
+  w.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  try {
+    const r = await call({ action:'pk_taskListAll', assignee: username });
+    if (!r.ok){ w.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
+    _allTasks = r.tasks || [];   // ให้ tmgrCard/openTaskDetail หาเจอ
+    w.innerHTML = _allTasks.length ? _allTasks.map(tmgrCard).join('') : '<div class="loading-row">ไม่มีงาน</div>';
+  } catch(e){ w.innerHTML = '<div class="loading-row">❌ เชื่อมต่อไม่ได้</div>'; }
+}
+function tmgrBackToDash(){ _tmgrDrillUser = null; taskMgrLoadDashboard(); }
+
+// reload วิวที่กำลังเปิดอยู่ (drill หรือ list) หลังทำ action
+function tmgrRefresh(){
+  const drill = document.getElementById('tmgrPersonDrill');
+  if (drill && drill.style.display !== 'none' && _tmgrDrillUser) tmgrShowPerson(_tmgrDrillUser, _tmgrDrillName);
+  else taskMgrLoadList();
 }
 
 // ════════════════════════════════════════
