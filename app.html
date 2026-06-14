@@ -758,6 +758,58 @@ async function getQuoteListFast(opts, cacheOpts){
   return result;
 }
 
+// ── [Part B] เปิดดู 1 ใบ ผ่าน Drive API — flag แยก + fallback GAS อัตโนมัติ ──
+let USE_SHEETS_RECORD_GET = true;
+async function getRecordGetFast(id){
+  if (USE_SHEETS_RECORD_GET && CURRENT_USER && id) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/record-get'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ id, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && data.record) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getRecordGetFast] ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e){ console.warn('[getRecordGetFast] error → fallback GAS:', e.message); }
+  }
+  const _g = await call({ action: 'pk_recordGet', id: id }); _markJobSource('gas'); return _g;
+}
+
+let USE_SHEETS_QUOTE_GET = true;
+async function getQuoteGetFast(id){
+  if (USE_SHEETS_QUOTE_GET && CURRENT_USER && id) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/quote-get'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ id, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && data.quote) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getQuoteGetFast] ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e){ console.warn('[getQuoteGetFast] error → fallback GAS:', e.message); }
+  }
+  const _g = await call({ action: 'pk_quoteGet', id: id }); _markJobSource('gas'); return _g;
+}
+
+let USE_SHEETS_PROD_GET = true;
+async function getProdGetFast(woId){
+  if (USE_SHEETS_PROD_GET && CURRENT_USER && woId) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/prod-get'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ woId, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && data.order) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getProdGetFast] ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e){ console.warn('[getProdGetFast] error → fallback GAS:', e.message); }
+  }
+  const _g = await call({ action: 'pk_prodGet', woId: woId }); _markJobSource('gas'); return _g;
+}
+
 let USE_SHEETS_EXP = true;   // ON: เบิกจ่าย /expense-list-*
 async function getExpenseListMyFast(statusFilter){
   if (USE_SHEETS_EXP && CURRENT_USER) {
@@ -4584,7 +4636,7 @@ async function salesMeasureQuote(j){
     if (rr.ok && rr.records && rr.records.length > 0) {
       const latest = rr.records.sort((a,b) => b.updatedAt - a.updatedAt)[0];
       showLoad('กำลังโหลดขนาด...');
-      const rg = await call({ action:'pk_recordGet', id: latest.id });
+      const rg = await getRecordGetFast(latest.id);
       hideLoad();
       if (rg.ok && rg.record) {
         quoteEntries = pkRecordEntriesToQuote(rg.record.entries);
@@ -5612,7 +5664,7 @@ async function recordOpenView(id){
   _modalOpening = true;
   showLoad('กำลังโหลด...');
   try {
-    const r = await call({ action:'pk_recordGet', id });
+    const r = await getRecordGetFast(id);
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
     const rec = r.record;
@@ -5641,7 +5693,7 @@ async function recordOpenEdit(id){
   _modalOpening = true;
   showLoad('กำลังโหลด...');
   try {
-    const r = await call({ action:'pk_recordGet', id });
+    const r = await getRecordGetFast(id);
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
     const rec = r.record;
@@ -6466,7 +6518,7 @@ async function quoteOpenView(id){
   showLoad('กำลังโหลด...');
   try {
     if (!await quoteEnsureMetadata()) { return; }
-    const r = await call({ action:'pk_quoteGet', id });
+    const r = await getQuoteGetFast(id);
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
     const q = r.quote;
@@ -6500,7 +6552,7 @@ async function quoteOpenEdit(id){
   showLoad('กำลังโหลด...');
   try {
     if (!await quoteEnsureMetadata()) { return; }
-    const r = await call({ action:'pk_quoteGet', id });
+    const r = await getQuoteGetFast(id);
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
     const q = r.quote;
@@ -7785,7 +7837,7 @@ function pkpReqPrint(){
 var pkpWoCache={};
 async function pkpFetchWO(woId){
   if(pkpWoCache[woId]) return pkpWoCache[woId];
-  try{ var r=await call({ action:'pk_prodGet', woId:woId }); if(r&&r.ok&&r.order){ pkpWoCache[woId]=r.order; return r.order; } }catch(e){}
+  try{ var r=await getProdGetFast(woId); if(r&&r.ok&&r.order){ pkpWoCache[woId]=r.order; return r.order; } }catch(e){}
   return null;
 }
 // รายการมุ้งจีบของ WO โดย resolve สีต่อชิ้น (cAlu ว่าง = ใช้สีหลักของใบนั้น)
@@ -8183,7 +8235,7 @@ async function pkpLoadList(){
 async function pkpOpen(woId){
   showLoad('กำลังเปิดใบผลิต...');
   try{
-    var r=await call({ action:'pk_prodGet', woId:woId });
+    var r=await getProdGetFast(woId);
     if(!r.ok){ toast('❌ '+(r.error||'เปิดไม่ได้')); return; }
     var o=r.order;
     pkpEditingWO=o.woId; pkpLoadedStatus=o.status||'';
