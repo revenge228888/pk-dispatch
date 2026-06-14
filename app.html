@@ -5789,8 +5789,10 @@ function mtSubmitModalHTML(){
   +     '</div>'
   +     '<div class="card-body">'
   +       '<div class="fg" style="margin-bottom:12px;">'
-  +         '<label class="fl">รายละเอียดผลงาน (เขียนแบบรายงานได้)</label>'
-  +         '<textarea class="fi" id="mtResult" rows="8" placeholder="สรุปผลการทำงาน รายละเอียด ปัญหาที่เจอ ฯลฯ" style="resize:vertical;min-height:160px;"></textarea>'
+  +         '<label class="fl">รายละเอียดผลงาน (เขียนแบบรายงานได้ · วางรูปด้วย Ctrl+V ได้)</label>'
+  +         '<div style="background:var(--surf2);padding:14px;border-radius:6px;display:flex;justify-content:center;">'
+  +           '<textarea class="fi" id="mtResult" rows="16" onpaste="mtResultPaste(event)" placeholder="พิมพ์รายงานผลการทำงานที่นี่...&#10;(วางรูปจาก clipboard ได้ — รูปจะไปอยู่ที่แนบรูปด้านล่าง)" style="resize:vertical;width:100%;max-width:720px;min-height:380px;background:#fff;color:#222;line-height:1.7;padding:32px 36px;font-family:Sarabun,sans-serif;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.3);border-radius:3px;border:none;"></textarea>'
+  +         '</div>'
   +       '</div>'
   +       '<div class="fg" style="margin-bottom:12px;">'
   +         '<label class="fl">แนบรูป (สูงสุด 5 รูป · ถ้ามี)</label>'
@@ -5839,10 +5841,10 @@ function myTasksRender(){
 function mtCard(t){
   const pri = { 'สูง':'color:var(--rd);font-weight:700;', 'กลาง':'color:#f59e0b;', 'ต่ำ':'color:var(--mu);' }[t.priority] || '';
   const due = t.dueDate ? '⏰ ส่ง ' + escHtml(t.dueDate) : '';
-  let actions = '';
-  if (t.status === 'pending')          actions = '<button class="btn btn-p btn-sm" onclick="mtStart(\'' + escAttr(t.taskId) + '\')">▶ เริ่มงาน</button>';
-  else if (t.status === 'in_progress') actions = '<button class="btn btn-p btn-sm" onclick="mtOpenSubmit(\'' + escAttr(t.taskId) + '\')">📤 ส่งผลงาน</button>';
-  else if (t.status === 'rejected')    actions = '<button class="btn btn-p btn-sm" onclick="mtOpenSubmit(\'' + escAttr(t.taskId) + '\')">↩ แก้แล้วส่งใหม่</button>';
+  let actions = '<button class="btn btn-g btn-sm" onclick="openTaskDetail(\'' + escAttr(t.taskId) + '\')">📄 ดู</button>';
+  if (t.status === 'pending')          actions += '<button class="btn btn-p btn-sm" onclick="mtStart(\'' + escAttr(t.taskId) + '\')">▶ เริ่มงาน</button>';
+  else if (t.status === 'in_progress') actions += '<button class="btn btn-p btn-sm" onclick="mtOpenSubmit(\'' + escAttr(t.taskId) + '\')">📤 ส่งผลงาน</button>';
+  else if (t.status === 'rejected')    actions += '<button class="btn btn-p btn-sm" onclick="mtOpenSubmit(\'' + escAttr(t.taskId) + '\')">↩ แก้แล้วส่งใหม่</button>';
   const reject = (t.status === 'rejected' && t.review) ? '<div style="font-size:12px;color:var(--rd);margin-top:4px;">↩ ' + escHtml(t.review) + '</div>' : '';
   return '<div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--bdr);border-radius:10px;">'
     + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
@@ -5869,47 +5871,107 @@ function mtStart(id){
 function mtOpenSubmit(id){
   const t = _myTasks.find(x => String(x.taskId) === String(id));
   if (!t) return;
-  _mtSubmitId = id; _mtPhotos = [];
+  _mtSubmitId = id;
+  _mtPhotos = (t.resultPhotos || []).slice();   // ★ คงรูปเดิมไว้ (กันหายตอนส่งใหม่หลังตีกลับ)
   document.getElementById('mtSubmitTitle').textContent = t.title;
-  document.getElementById('mtResult').value = (t.status === 'rejected') ? (t.result || '') : '';
+  document.getElementById('mtResult').value = t.result || '';   // ★ prefill ข้อความเดิม
   document.getElementById('mtPhoto').value = '';
-  document.getElementById('mtPhotoPreview').innerHTML = '';
+  mtRenderPreview();
   document.getElementById('mtSubmitModal').classList.add('on');
 }
 function mtCloseSubmit(){ document.getElementById('mtSubmitModal').classList.remove('on'); _mtSubmitId = null; }
 
 function mtPhotoSelected(){
-  const files = Array.from(document.getElementById('mtPhoto').files || []).slice(0,5);
-  _mtPhotos = [];
-  const pv = document.getElementById('mtPhotoPreview');
-  if (!files.length){ pv.innerHTML=''; return; }
-  pv.innerHTML = '<div style="font-size:12px;color:var(--mu);">กำลังประมวลผลรูป...</div>';
-  let done = 0;
-  files.forEach((file, idx) => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let w = img.width, h = img.height; const mx = 1280;
-        if (w > mx || h > mx){ const r = Math.min(mx/w, mx/h); w = Math.round(w*r); h = Math.round(h*r); }
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        _mtPhotos[idx] = canvas.toDataURL('image/jpeg', 0.8);
-        if (++done === files.length) mtRenderPreview();
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
+  const files = Array.from(document.getElementById('mtPhoto').files || []);
+  files.forEach(f => _mtCompressAdd(f));
+  document.getElementById('mtPhoto').value = '';
 }
+
+// บีบอัด + เพิ่มเข้า _mtPhotos (append · ใช้ทั้งเลือกไฟล์และ paste)
+function _mtCompressAdd(file){
+  if (!file) return;
+  if (_mtPhotos.filter(Boolean).length >= 5){ toast('แนบได้สูงสุด 5 รูป'); return; }
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height; const mx = 1280;
+      if (w > mx || h > mx){ const r = Math.min(mx/w, mx/h); w = Math.round(w*r); h = Math.round(h*r); }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      _mtPhotos.push(canvas.toDataURL('image/jpeg', 0.8));
+      mtRenderPreview();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// วางรูปจาก clipboard (เหมือน Word — รูปไปอยู่ที่แนบรูป)
+function mtResultPaste(e){
+  const items = (e.clipboardData && e.clipboardData.items) ? e.clipboardData.items : [];
+  let handled = false;
+  for (let i = 0; i < items.length; i++){
+    if (items[i].type && items[i].type.indexOf('image') === 0){
+      const f = items[i].getAsFile();
+      if (f){ handled = true; _mtCompressAdd(f); }
+    }
+  }
+  if (handled){ e.preventDefault(); toast('📎 วางรูปแล้ว — ดูที่แนบรูปด้านล่าง'); }
+}
+
 function mtRenderPreview(){
   const valid = _mtPhotos.filter(Boolean);
-  document.getElementById('mtPhotoPreview').innerHTML = valid.map((src,i) =>
-    '<div style="position:relative;"><img src="'+src+'" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--bdr);"><button onclick="mtRemovePhoto('+i+')" style="position:absolute;top:-6px;right:-6px;background:var(--rd);color:#fff;border:none;width:20px;height:20px;border-radius:50%;cursor:pointer;font-size:13px;line-height:1;">×</button></div>'
-  ).join('');
+  document.getElementById('mtPhotoPreview').innerHTML = valid.map((src,i) => {
+    const show = (String(src).indexOf('data:') === 0) ? src : fixDriveUrl(src);
+    return '<div style="position:relative;"><img src="'+show+'" referrerpolicy="no-referrer" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--bdr);"><button onclick="mtRemovePhoto('+i+')" style="position:absolute;top:-6px;right:-6px;background:var(--rd);color:#fff;border:none;width:20px;height:20px;border-radius:50%;cursor:pointer;font-size:13px;line-height:1;">×</button></div>';
+  }).join('');
 }
 function mtRemovePhoto(i){ _mtPhotos.splice(i,1); mtRenderPreview(); }
+
+// ════════════════════════════════════════
+//  📄 TASK DETAIL — ดูรายละเอียดเป็นหน้า A4 จำลอง (ใช้ร่วม assignee/manager)
+// ════════════════════════════════════════
+function ensureTaskDetailModal(){
+  if (document.getElementById('taskDetailModal')) return;
+  const div = document.createElement('div');
+  div.className = 'modal-bg'; div.id = 'taskDetailModal';
+  div.innerHTML = '<div class="modal" style="max-width:860px;width:96%;">'
+    + '<div class="card-head"><span>📄 รายละเอียดงาน</span>'
+    +   '<button onclick="closeTaskDetail()" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button></div>'
+    + '<div class="card-body" style="background:var(--surf2);max-height:78vh;overflow:auto;"><div id="taskDetailPage"></div></div>'
+    + '</div>';
+  document.body.appendChild(div);
+}
+function openTaskDetail(id){
+  ensureTaskDetailModal();
+  const all = ([]).concat(_myTasks || [], _allTasks || []);
+  const t = all.find(x => String(x.taskId) === String(id));
+  if (!t) return;
+  document.getElementById('taskDetailPage').innerHTML = taskA4HTML(t);
+  document.getElementById('taskDetailModal').classList.add('on');
+}
+function closeTaskDetail(){ const m = document.getElementById('taskDetailModal'); if (m) m.classList.remove('on'); }
+
+function taskA4HTML(t){
+  const fmtDate = ms => ms ? new Date(Number(ms)).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}) : '-';
+  const photos = (t.resultPhotos || []).map(p =>
+    '<a href="'+fixDriveUrl(p)+'" target="_blank"><img src="'+fixDriveUrl(p)+'" referrerpolicy="no-referrer" style="max-width:100%;border-radius:4px;border:1px solid #ddd;margin:8px 0;display:block;"></a>'
+  ).join('');
+  return '<div style="background:#fff;color:#222;max-width:760px;margin:0 auto;padding:40px 46px;box-shadow:0 2px 14px rgba(0,0,0,.35);border-radius:3px;font-family:Sarabun,sans-serif;line-height:1.75;">'
+    + '<div style="font-size:21px;font-weight:700;border-bottom:2px solid #222;padding-bottom:8px;margin-bottom:14px;">' + escHtml(t.title) + '</div>'
+    + '<div style="font-size:12.5px;color:#555;margin-bottom:3px;">รหัส ' + escHtml(t.taskId) + ' · มอบให้ ' + escHtml(t.assignedToName || t.assignedTo) + ' · โดย ' + escHtml(t.assignedBy || '-') + '</div>'
+    + '<div style="font-size:12.5px;color:#555;margin-bottom:3px;">ความสำคัญ ' + escHtml(t.priority || '-') + (t.dueDate ? ' · กำหนดส่ง ' + escHtml(t.dueDate) : '') + '</div>'
+    + '<div style="font-size:12.5px;color:#555;margin-bottom:16px;">มอบหมาย ' + fmtDate(t.createdAt) + (t.resultAt ? ' · ส่งผล ' + fmtDate(t.resultAt) : '') + '</div>'
+    + (t.detail ? '<div style="margin-bottom:16px;"><b>โจทย์งาน</b><div style="white-space:pre-wrap;margin-top:5px;">' + escHtml(t.detail) + '</div></div>' : '')
+    + '<div style="border-top:1px dashed #bbb;padding-top:14px;"><b>ผลงานที่ส่ง</b>'
+    +   '<div style="white-space:pre-wrap;margin-top:6px;">' + (t.result ? escHtml(t.result) : '<span style="color:#999;">(ยังไม่ส่งผล)</span>') + '</div>'
+    +   (photos ? '<div style="margin-top:12px;">' + photos + '</div>' : '')
+    + '</div>'
+    + (t.review ? '<div style="border-top:1px dashed #bbb;margin-top:14px;padding-top:14px;color:#b00;"><b>หมายเหตุจากผู้ตรวจ</b><div style="white-space:pre-wrap;margin-top:5px;">' + escHtml(t.review) + '</div></div>' : '')
+  + '</div>';
+}
 
 async function mtSubmit(){
   if (!_mtSubmitId) return;
@@ -5973,7 +6035,7 @@ function tmgrCard(t){
   const photos = (t.resultPhotos || []).map(p => '<a href="'+fixDriveUrl(p)+'" target="_blank"><img src="'+fixDriveUrl(p)+'" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--bdr);" referrerpolicy="no-referrer"></a>').join('');
   const result = t.result ? '<div style="background:var(--surf2);border-radius:7px;padding:8px;margin:6px 0;font-size:13px;white-space:pre-wrap;">'+escHtml(t.result)+'</div>' : '';
   const review = t.review ? '<div style="font-size:12px;color:var(--mu);">📝 '+escHtml(t.review)+'</div>' : '';
-  let actions = '';
+  let actions = '<button class="btn btn-g btn-sm" onclick="openTaskDetail(\''+escAttr(t.taskId)+'\')">📄 ดู</button>';
   if (t.status === 'done') actions += '<button class="btn btn-p btn-sm" onclick="tmgrAccept(\''+escAttr(t.taskId)+'\')">✅ ผ่าน</button><button class="btn btn-g btn-sm" onclick="tmgrReject(\''+escAttr(t.taskId)+'\')">↩ ตีกลับ</button>';
   if (['accepted','cancelled'].indexOf(t.status) === -1)
     actions += '<button class="btn btn-g btn-sm" onclick="tmgrOpenForm(\'edit\',\''+escAttr(t.taskId)+'\')">✏️ แก้</button><button class="btn btn-g btn-sm" onclick="tmgrCancel(\''+escAttr(t.taskId)+'\')">🚫 ยกเลิก</button>';
