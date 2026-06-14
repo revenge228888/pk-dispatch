@@ -1116,6 +1116,7 @@ function enterApp(){
       document.getElementById('btnRefresh').style.display = '';
       document.getElementById('btnRefresh').onclick = initTech;
       initTech();
+      myTasksLoad();
     } else {
       document.getElementById('btnRefresh').style.display = 'none';
     }
@@ -1163,6 +1164,7 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="jobs" onclick="setTab('jobs',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">รายการงาน</span></button>
           <button class="sidebar-item" data-tab="assign" onclick="setTab('assign',this)"><span class="sidebar-ico">🚚</span><span class="sidebar-label">จัดทีม</span></button>
           <button class="sidebar-item" data-tab="outstanding" onclick="setTab('outstanding',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">ตามยอดคงค้าง</span></button>
+          <button class="sidebar-item" data-tab="mytasks" onclick="setTab('mytasks',this)"><span class="sidebar-ico">✅</span><span class="sidebar-label">งานของฉัน</span></button>
 
           <div class="sidebar-group">วัด & เสนอราคา</div>
           <button class="sidebar-item" data-tab="records" onclick="setTab('records',this)"><span class="sidebar-ico">📐</span><span class="sidebar-label">จดขนาด</span></button>
@@ -1464,6 +1466,9 @@ function renderOfficeShell(){
         </div>
         <div id="outList" class="section-pad"><div class="loading-row">กดรีเฟรชเพื่อโหลด</div></div>
       </div>
+
+      <!-- ✅ MY TASKS (งานของฉัน) — Feature #2 -->
+      <div id="tabMytasks" style="display:none;">${myTasksScreenHTML()}</div>
 
       <!-- RECORDS (📐 จดขนาด) -->
       <div id="tabRecords" style="display:none;">
@@ -3226,7 +3231,7 @@ async function expenseRejectConfirm(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -3246,6 +3251,7 @@ function setTab(t, btn){
   if (t === 'booking') initBookingTab();
   if (t === 'assign') assignInit();
   if (t === 'outstanding') outstandingInit();
+  if (t === 'mytasks') myTasksLoad();
   if (t === 'payroll') payrollInit();
   if (t === 'records') recordsInit();
   if (t === 'quotes') quotesInit();
@@ -4206,6 +4212,7 @@ function renderSalesStub(){
           <button class="sidebar-item on" data-tab="booking" onclick="setSalesTab('booking',this)"><span class="sidebar-ico">➕</span><span class="sidebar-label">ขอคิวติดตั้ง</span></button>
           <button class="sidebar-item" data-tab="measure" onclick="setSalesTab('measure',this)"><span class="sidebar-ico">📏</span><span class="sidebar-label">งานวัดของฉัน</span></button>
           <button class="sidebar-item" data-tab="my" onclick="setSalesTab('my',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">คิวของฉัน</span></button>
+          <button class="sidebar-item" data-tab="mytasks" onclick="setSalesTab('mytasks',this)"><span class="sidebar-ico">✅</span><span class="sidebar-label">งานของฉัน</span></button>
           <button class="sidebar-item" data-tab="records" onclick="setSalesTab('records',this)"><span class="sidebar-ico">📐</span><span class="sidebar-label">จดขนาด</span></button>
           <button class="sidebar-item" data-tab="quotes" onclick="setSalesTab('quotes',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">คำนวณราคา</span></button>
         </div>
@@ -4351,6 +4358,8 @@ function renderSalesStub(){
       </div>
 
       <!-- RECORDS (📐 จดขนาด) -->
+      <div id="sTabMytasks" style="display:none;">${myTasksScreenHTML()}</div>
+
       <div id="sTabRecords" style="display:none;">
         <div class="rec-toolbar">
           <div class="fg rec-search"><label class="fl">ค้นหา</label>
@@ -4433,7 +4442,7 @@ let _sSlotTimer = null;
 let _sEditingId = null;
 
 function setSalesTab(t, btn){
-  ['Booking','Measure','My','Records','Quotes'].forEach(x => {
+  ['Booking','Measure','My','Records','Quotes','Mytasks'].forEach(x => {
     const el = document.getElementById('sTab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('sTab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -4453,6 +4462,7 @@ function setSalesTab(t, btn){
   if (t === 'my') initSalesMy();
   if (t === 'records') recordsInit();
   if (t === 'quotes') quotesInit();
+  if (t === 'mytasks') myTasksLoad();
 }
 
 // ════════════════════════════════════════
@@ -4970,6 +4980,11 @@ function renderTechStub(){
         <button class="tab" onclick="techSetTab('done',this)">✅ เสร็จแล้ว <span id="tCntDone" class="t-count">0</span></button>
       </div>
       <div id="tJobsList" style="padding:12px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span>✅ งานที่ได้รับมอบหมาย</span></div>
+      ${myTasksScreenHTML()}
     </div>
 
     <!-- TECH: 📐 RECORDS CARD -->
@@ -5690,6 +5705,171 @@ async function outSettle(id){
     if (!r.ok){ toast('❌ ' + (r.error || 'ผิดพลาด')); return; }
     toast('✅ ยืนยันรับเงินแล้ว');
     outstandingLoad();
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
+// ════════════════════════════════════════
+//  ✅ MY TASKS — งานที่ได้รับมอบหมาย (Feature #2 · assignee ทุก role)
+//  ใช้ร่วมทั้ง office/sales/tech (มี view เดียวใน DOM ต่อ role → id ไม่ชน)
+// ════════════════════════════════════════
+let _myTasks = [];
+let _mtSubmitId = null;
+let _mtPhotos = [];
+
+function myTasksScreenHTML(){
+  return ''
+    + '<div class="section-pad">'
+    +   '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'
+    +     '<div id="myTasksSummary" style="font-size:13px;color:var(--mu);"></div>'
+    +     '<button class="btn btn-g btn-sm" onclick="myTasksLoad()">🔄 รีเฟรช</button>'
+    +   '</div>'
+    +   '<div id="myTasksList"><div class="loading-row">กำลังโหลด...</div></div>'
+    + '</div>'
+    + mtSubmitModalHTML();
+}
+
+function mtSubmitModalHTML(){
+  return ''
+  + '<div class="modal-bg" id="mtSubmitModal">'
+  +   '<div class="modal">'
+  +     '<div class="card-head">📝 ส่งผลงาน <span id="mtSubmitTitle" style="color:var(--acc);"></span>'
+  +       '<button onclick="mtCloseSubmit()" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button>'
+  +     '</div>'
+  +     '<div class="card-body">'
+  +       '<div class="fg" style="margin-bottom:12px;">'
+  +         '<label class="fl">รายละเอียดผลงาน (เขียนแบบรายงานได้)</label>'
+  +         '<textarea class="fi" id="mtResult" rows="8" placeholder="สรุปผลการทำงาน รายละเอียด ปัญหาที่เจอ ฯลฯ" style="resize:vertical;min-height:160px;"></textarea>'
+  +       '</div>'
+  +       '<div class="fg" style="margin-bottom:12px;">'
+  +         '<label class="fl">แนบรูป (สูงสุด 5 รูป · ถ้ามี)</label>'
+  +         '<input class="fi" id="mtPhoto" type="file" accept="image/*" multiple onchange="mtPhotoSelected()">'
+  +         '<div id="mtPhotoPreview" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;"></div>'
+  +       '</div>'
+  +       '<button class="btn btn-p" style="width:100%;justify-content:center;" onclick="mtSubmit()">💾 ส่งผลงาน</button>'
+  +     '</div>'
+  +   '</div>'
+  + '</div>';
+}
+
+async function myTasksLoad(){
+  const w = document.getElementById('myTasksList');
+  if (!w) return;
+  w.innerHTML = (typeof skelCards === 'function') ? skelCards(3) : '<div class="loading-row">กำลังโหลด...</div>';
+  try {
+    const r = await call({ action:'pk_taskListMine' });
+    if (!r.ok){ w.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
+    _myTasks = r.tasks || [];
+    myTasksRender();
+  } catch(e){ w.innerHTML = '<div class="loading-row">❌ เชื่อมต่อไม่ได้</div>'; }
+}
+
+function mtStatusBadge(s){
+  return {
+    pending:     '<span style="color:var(--mu)">⏳ รอเริ่ม</span>',
+    in_progress: '<span style="color:var(--blu)">🔧 กำลังทำ</span>',
+    done:        '<span style="color:#f59e0b">📤 รอตรวจ</span>',
+    accepted:    '<span style="color:var(--grn)">✅ ผ่านแล้ว</span>',
+    rejected:    '<span style="color:var(--rd)">↩ ตีกลับ</span>',
+    cancelled:   '<span style="color:var(--mu)">🚫 ยกเลิก</span>'
+  }[s] || escHtml(s);
+}
+
+function myTasksRender(){
+  const w = document.getElementById('myTasksList');
+  if (!w) return;
+  const active = _myTasks.filter(t => ['accepted','cancelled'].indexOf(t.status) === -1);
+  const sum = document.getElementById('myTasksSummary');
+  if (sum) sum.textContent = 'ต้องทำ ' + active.length + ' · ทั้งหมด ' + _myTasks.length;
+  if (!_myTasks.length){ w.innerHTML = '<div class="loading-row">🎉 ยังไม่มีงานที่ได้รับมอบหมาย</div>'; return; }
+  w.innerHTML = _myTasks.map(mtCard).join('');
+}
+
+function mtCard(t){
+  const pri = { 'สูง':'color:var(--rd);font-weight:700;', 'กลาง':'color:#f59e0b;', 'ต่ำ':'color:var(--mu);' }[t.priority] || '';
+  const due = t.dueDate ? '⏰ ส่ง ' + escHtml(t.dueDate) : '';
+  let actions = '';
+  if (t.status === 'pending')          actions = '<button class="btn btn-p btn-sm" onclick="mtStart(\'' + escAttr(t.taskId) + '\')">▶ เริ่มงาน</button>';
+  else if (t.status === 'in_progress') actions = '<button class="btn btn-p btn-sm" onclick="mtOpenSubmit(\'' + escAttr(t.taskId) + '\')">📤 ส่งผลงาน</button>';
+  else if (t.status === 'rejected')    actions = '<button class="btn btn-p btn-sm" onclick="mtOpenSubmit(\'' + escAttr(t.taskId) + '\')">↩ แก้แล้วส่งใหม่</button>';
+  const reject = (t.status === 'rejected' && t.review) ? '<div style="font-size:12px;color:var(--rd);margin-top:4px;">↩ ' + escHtml(t.review) + '</div>' : '';
+  return '<div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--bdr);border-radius:10px;">'
+    + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
+      + '<div style="font-weight:700;">' + escHtml(t.title) + '</div>'
+      + '<div style="font-size:12px;' + pri + '">' + escHtml(t.priority||'') + '</div>'
+    + '</div>'
+    + (t.detail ? '<div style="font-size:13px;color:var(--mu);margin:4px 0;white-space:pre-wrap;">' + escHtml(t.detail) + '</div>' : '')
+    + '<div style="font-size:12px;margin:6px 0;">' + mtStatusBadge(t.status) + (due ? ' · ' + due : '') + '</div>'
+    + reject
+    + (actions ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' + actions + '</div>' : '')
+  + '</div>';
+}
+
+function mtStart(id){
+  if (!confirm('เริ่มงานนี้?')) return;
+  showLoad('กำลังอัปเดต...');
+  call({ action:'pk_taskStart', id }).then(r => {
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast('▶ เริ่มงานแล้ว'); myTasksLoad();
+  }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
+}
+
+function mtOpenSubmit(id){
+  const t = _myTasks.find(x => String(x.taskId) === String(id));
+  if (!t) return;
+  _mtSubmitId = id; _mtPhotos = [];
+  document.getElementById('mtSubmitTitle').textContent = t.title;
+  document.getElementById('mtResult').value = (t.status === 'rejected') ? (t.result || '') : '';
+  document.getElementById('mtPhoto').value = '';
+  document.getElementById('mtPhotoPreview').innerHTML = '';
+  document.getElementById('mtSubmitModal').classList.add('on');
+}
+function mtCloseSubmit(){ document.getElementById('mtSubmitModal').classList.remove('on'); _mtSubmitId = null; }
+
+function mtPhotoSelected(){
+  const files = Array.from(document.getElementById('mtPhoto').files || []).slice(0,5);
+  _mtPhotos = [];
+  const pv = document.getElementById('mtPhotoPreview');
+  if (!files.length){ pv.innerHTML=''; return; }
+  pv.innerHTML = '<div style="font-size:12px;color:var(--mu);">กำลังประมวลผลรูป...</div>';
+  let done = 0;
+  files.forEach((file, idx) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width, h = img.height; const mx = 1280;
+        if (w > mx || h > mx){ const r = Math.min(mx/w, mx/h); w = Math.round(w*r); h = Math.round(h*r); }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        _mtPhotos[idx] = canvas.toDataURL('image/jpeg', 0.8);
+        if (++done === files.length) mtRenderPreview();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function mtRenderPreview(){
+  const valid = _mtPhotos.filter(Boolean);
+  document.getElementById('mtPhotoPreview').innerHTML = valid.map((src,i) =>
+    '<div style="position:relative;"><img src="'+src+'" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--bdr);"><button onclick="mtRemovePhoto('+i+')" style="position:absolute;top:-6px;right:-6px;background:var(--rd);color:#fff;border:none;width:20px;height:20px;border-radius:50%;cursor:pointer;font-size:13px;line-height:1;">×</button></div>'
+  ).join('');
+}
+function mtRemovePhoto(i){ _mtPhotos.splice(i,1); mtRenderPreview(); }
+
+async function mtSubmit(){
+  if (!_mtSubmitId) return;
+  const result = document.getElementById('mtResult').value.trim();
+  const photos = _mtPhotos.filter(Boolean);
+  if (!result && !photos.length){ toast('กรอกผลงานหรือแนบรูปอย่างน้อย 1 อย่าง'); return; }
+  showLoad(photos.length ? 'กำลังอัปโหลดรูปและส่ง...' : 'กำลังส่ง...');
+  try {
+    const r = await call({ action:'pk_taskSubmitResult', id:_mtSubmitId, result, resultPhotos: photos });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'ผิดพลาด')); return; }
+    toast('✅ ส่งผลงานแล้ว — รอตรวจรับ'); mtCloseSubmit(); myTasksLoad();
   } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
