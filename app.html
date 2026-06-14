@@ -1162,6 +1162,7 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="booking" onclick="setTab('booking',this)"><span class="sidebar-ico">➕</span><span class="sidebar-label">ลงคิวใหม่</span></button>
           <button class="sidebar-item" data-tab="jobs" onclick="setTab('jobs',this)"><span class="sidebar-ico">📋</span><span class="sidebar-label">รายการงาน</span></button>
           <button class="sidebar-item" data-tab="assign" onclick="setTab('assign',this)"><span class="sidebar-ico">🚚</span><span class="sidebar-label">จัดทีม</span></button>
+          <button class="sidebar-item" data-tab="outstanding" onclick="setTab('outstanding',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">ตามยอดคงค้าง</span></button>
 
           <div class="sidebar-group">วัด & เสนอราคา</div>
           <button class="sidebar-item" data-tab="records" onclick="setTab('records',this)"><span class="sidebar-ico">📐</span><span class="sidebar-label">จดขนาด</span></button>
@@ -1442,6 +1443,26 @@ function renderOfficeShell(){
           <span style="font-size:11px;color:var(--mu);align-self:center;">เว้นช่องทีม = ใช้ค่า default · จัดกลุ่มโซน + เรียงจุดแวะจาก depot</span>
         </div>
         <div id="asResult" class="section-pad"></div>
+      </div>
+
+      <!-- ★ OUTSTANDING (💰 ตามยอดคงค้าง) — Feature #1 -->
+      <div id="tabOutstanding" style="display:none;">
+        <div class="section-pad">
+          <div id="outSummary" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;"></div>
+          <div class="row-form" style="gap:8px;align-items:flex-end;">
+            <div class="fg" style="max-width:160px;"><label class="fl">ทีม</label><input class="fi" id="outTeam" type="text" placeholder="ทุกทีม"></div>
+            <div class="fg" style="max-width:170px;"><label class="fl">สถานะ</label>
+              <select class="fi" id="outStatus" onchange="outstandingRenderCached()">
+                <option value="">ทั้งหมด</option>
+                <option value="unpaid">⏳ ยังไม่เก็บ</option>
+                <option value="partial">½ เก็บบางส่วน</option>
+                <option value="collected">💵 เก็บครบ (รอยืนยัน)</option>
+              </select>
+            </div>
+            <button class="btn btn-g" onclick="outstandingLoad()">🔄 รีเฟรช</button>
+          </div>
+        </div>
+        <div id="outList" class="section-pad"><div class="loading-row">กดรีเฟรชเพื่อโหลด</div></div>
       </div>
 
       <!-- RECORDS (📐 จดขนาด) -->
@@ -3205,7 +3226,7 @@ async function expenseRejectConfirm(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -3224,6 +3245,7 @@ function setTab(t, btn){
   if (t === 'dash') loadDashboard();
   if (t === 'booking') initBookingTab();
   if (t === 'assign') assignInit();
+  if (t === 'outstanding') outstandingInit();
   if (t === 'payroll') payrollInit();
   if (t === 'records') recordsInit();
   if (t === 'quotes') quotesInit();
@@ -5589,6 +5611,86 @@ function techSetPay(s){
 function techSetPayMethod(m){
   _payMethod = m;
   ['cash','transfer','other'].forEach(k => _payHi(document.getElementById('tPayM_'+k), k === m));
+}
+
+// ════════════════════════════════════════
+//  💰 OUTSTANDING — ตามยอดคงค้าง (Feature #1 · office/manager)
+// ════════════════════════════════════════
+let _outJobs = [];
+let _outSummary = { totalOutstanding: 0, count: 0 };
+
+function outstandingInit(){ outstandingLoad(); }
+
+async function outstandingLoad(){
+  const w = document.getElementById('outList');
+  if (w) w.innerHTML = (typeof skelCards === 'function') ? skelCards(4) : '<div class="loading-row">กำลังโหลด...</div>';
+  const team = (document.getElementById('outTeam')?.value || '').trim();
+  try {
+    const r = await call({ action: 'pk_outstandingList', team });
+    if (!r.ok){ if (w) w.innerHTML = '<div class="loading-row">' + (r.error || 'โหลดไม่ได้') + '</div>'; return; }
+    _outJobs = r.jobs || [];
+    _outSummary = { totalOutstanding: r.totalOutstanding || 0, count: r.count || 0 };
+    outstandingRenderCached();
+  } catch(e){ if (w) w.innerHTML = '<div class="loading-row">❌ เชื่อมต่อไม่ได้</div>'; }
+}
+
+// render จาก cache (ใช้ตอนเปลี่ยน filter สถานะ ไม่ต้องโหลดใหม่)
+function outstandingRenderCached(){
+  const sum = document.getElementById('outSummary');
+  if (sum) sum.innerHTML =
+      '<div class="dstat"><div class="dstat-num" style="color:var(--rd)">฿' + fmt(_outSummary.totalOutstanding) + '</div><div class="dstat-lbl">ยอดค้างรวม</div></div>'
+    + '<div class="dstat"><div class="dstat-num">' + _outSummary.count + '</div><div class="dstat-lbl">ใบที่ค้าง</div></div>';
+  const sf = (document.getElementById('outStatus')?.value || '');
+  const jobs = sf ? _outJobs.filter(j => j.payStatus === sf) : _outJobs;
+  const w = document.getElementById('outList');
+  if (!w) return;
+  if (!jobs.length){ w.innerHTML = '<div class="loading-row">🎉 ไม่มียอดค้าง</div>'; return; }
+  w.innerHTML = jobs.map(outCard).join('');
+}
+
+function outCard(j){
+  const badge = {
+    unpaid:    '<span style="color:var(--rd)">⏳ ยังไม่เก็บ</span>',
+    partial:   '<span style="color:#f59e0b">½ เก็บบางส่วน</span>',
+    collected: '<span style="color:var(--grn)">💵 เก็บครบ (รอยืนยัน)</span>'
+  }[j.payStatus] || escHtml(j.payStatus);
+  const done = j.doneAt ? new Date(Number(j.doneAt)).toLocaleDateString('th-TH', { dateStyle: 'short' }) : '-';
+  return '<div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--bdr);border-radius:10px;">'
+    + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
+      + '<div style="min-width:0;">'
+        + '<div style="font-weight:700;">' + escHtml(j.name || '-') + '</div>'
+        + '<div style="font-size:12px;color:var(--mu);">' + escHtml(j.address || '') + '</div>'
+        + '<div style="font-size:12px;color:var(--mu);">🚚 ' + escHtml(j.team || '-') + ' · 👤 ' + escHtml(j.worker || '-') + ' · ⏱ ' + done + '</div>'
+      + '</div>'
+      + '<div style="text-align:right;white-space:nowrap;">'
+        + '<div style="font-family:var(--mono);font-size:12px;color:var(--mu);">ยอด ฿' + fmt(j.amount) + '</div>'
+        + '<div style="font-family:var(--mono);font-size:12px;color:var(--grn);">เก็บ ฿' + fmt(j.collected) + '</div>'
+        + '<div style="font-family:var(--mono);color:var(--rd);font-weight:700;">ค้าง ฿' + fmt(j.outstanding) + '</div>'
+      + '</div>'
+    + '</div>'
+    + '<div style="font-size:12px;margin:6px 0;">' + badge + (j.payNote ? ' · 📝 ' + escHtml(j.payNote) : '') + '</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+      + '<button class="btn btn-p btn-sm" onclick="outSettle(\'' + escAttr(j.id) + '\')">✅ ยืนยันรับเงิน</button>'
+    + '</div>'
+  + '</div>';
+}
+
+async function outSettle(id){
+  const j = _outJobs.find(x => String(x.id) === String(id));
+  if (!j) return;
+  const amtStr = prompt('ยืนยันรับเงิน — ยอดที่เก็บได้จริง (บาท)\nลูกค้า: ' + (j.name || '') + '\nยอดงาน ฿' + fmt(j.amount), String(j.collected || j.amount || 0));
+  if (amtStr === null) return;
+  const payCollected = Number(amtStr) || 0;
+  const payNote = prompt('หมายเหตุ (ถ้ามี)', j.payNote || '');
+  if (payNote === null) return;
+  showLoad('กำลังยืนยัน...');
+  try {
+    const r = await call({ action: 'pk_jobSettlePayment', id, payCollected, payNote });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error || 'ผิดพลาด')); return; }
+    toast('✅ ยืนยันรับเงินแล้ว');
+    outstandingLoad();
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
 // ════════════════════════════════════════
