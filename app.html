@@ -1201,6 +1201,23 @@ function renderOfficeShell(){
 
       <!-- DASHBOARD -->
       <div id="tabDash">
+        <!-- 6.3 ปฏิทินคิวงาน (เสริมด้านบน · สรุปทีมเดิมอยู่ล่าง) -->
+        <div class="section-pad" id="dashCalWrap">
+          <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin:2px 0 12px;">
+            <button class="btn btn-g btn-sm" onclick="dashCalPrev()">‹</button>
+            <span style="font-size:17px;font-weight:800;" id="dashCalTitle">ปฏิทินคิวงาน</span>
+            <button class="btn btn-g btn-sm" onclick="dashCalToday()">วันนี้</button>
+            <button class="btn btn-g btn-sm" onclick="dashCalNext()">›</button>
+          </div>
+          <div id="dashCalGrid"><div class="loading-row">กำลังโหลด...</div></div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin:10px 2px 0;">
+            <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--acc);"></i> รอรับงาน</span>
+            <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--blu);"></i> กำลังทำ</span>
+            <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--grn);"></i> จบงาน</span>
+            <span style="margin-left:auto;">★ = คะแนนรวมต่อวัน</span>
+          </div>
+          <div id="dashCalPanel" style="margin-top:16px;"></div>
+        </div>
         <div class="section-pad row-form">
           <div class="fg"><label class="fl">เลือกวันที่</label>
             <div class="date-wrap">
@@ -3310,7 +3327,7 @@ function setTab(t, btn){
   }
   // ปิด drawer บนมือถือ
   closeSidebarMobile();
-  if (t === 'dash') loadDashboard();
+  if (t === 'dash') { loadDashboard(); dashCalLoad(); }
   if (t === 'booking') initBookingTab();
   if (t === 'assign') assignInit();
   if (t === 'outstanding') outstandingInit();
@@ -6121,6 +6138,113 @@ function pkTodayStr_(){
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
+
+// ════════════════════════════════════════
+//  📅 6.3 DASHBOARD — ปฏิทินคิวงานติดตั้ง (office)
+// ════════════════════════════════════════
+// แยก "เขต" จากที่อยู่ (heuristic: เขต / อำเภอ / อ.)
+function pkExtractDistrict_(addr){
+  if (!addr) return '—';
+  const s = String(addr).replace(/https?:\/\/\S+/g,' ').replace(/\s+/g,' ');
+  let m = s.match(/เขต\s*([\u0E00-\u0E7Fa-zA-Z]+)/);  if (m) return 'เขต'+m[1];
+  m = s.match(/อำเภอ\s*([\u0E00-\u0E7Fa-zA-Z]+)/);     if (m) return 'อ.'+m[1];
+  m = s.match(/อ\.\s*([\u0E00-\u0E7Fa-zA-Z]+)/);       if (m) return 'อ.'+m[1];
+  return '—';
+}
+const PK_DASH_TH_M = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const PK_DASH_DOW = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+function pkDashTone_(st){ return st==='working' ? 'var(--blu)' : st==='done' ? 'var(--grn)' : 'var(--acc)'; }
+function pkDashSumScore_(js){ return js.reduce((s,j) => s + (Number(j.score)||0), 0); }
+function pkDashGroupTeam_(js){
+  const g = {}, order = [];
+  js.forEach(j => { const t = (j.team && String(j.team).trim()) ? String(j.team).trim() : '__none__'; if (!g[t]){ g[t]=[]; order.push(t); } g[t].push(j); });
+  order.sort((a,b) => a==='__none__' ? -1 : b==='__none__' ? 1 : String(a).localeCompare(b));   // ยังไม่จัด บนสุด
+  return { g:g, order:order };
+}
+
+let _dashCalJobs = [], _dashCalY = null, _dashCalM = null, _dashCalSel = '', _dashCalClicked = false, _dashCalLoading = false;
+async function dashCalLoad(){
+  if (!document.getElementById('dashCalGrid')) return;
+  if (_dashCalY === null){ const t = new Date(); _dashCalY = t.getFullYear(); _dashCalM = t.getMonth(); }
+  if (!_dashCalSel) _dashCalSel = pkTodayStr_();
+  await dashCalFetch();
+  dashCalRender();
+}
+async function dashCalFetch(){
+  const month = _dashCalY + '-' + String(_dashCalM+1).padStart(2,'0');
+  const grid = document.getElementById('dashCalGrid'); if (grid) grid.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  _dashCalLoading = true;
+  try { const r = await call({ action:'pk_installMonth', month:month }); _dashCalJobs = (r && r.ok) ? (r.jobs || []) : []; }
+  catch(e){ _dashCalJobs = []; }
+  _dashCalLoading = false;
+}
+function dashCalRender(){
+  const grid = document.getElementById('dashCalGrid'); if (!grid) return;
+  const today = pkTodayStr_();
+  const byDay = {}; _dashCalJobs.forEach(j => { if (j.date) (byDay[j.date]=byDay[j.date]||[]).push(j); });
+  document.getElementById('dashCalTitle').textContent = PK_DASH_TH_M[_dashCalM] + ' ' + (_dashCalY+543);
+  let html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">';
+  PK_DASH_DOW.forEach(d => html += '<div style="text-align:center;font-size:12px;color:var(--mu);padding:4px 0;font-weight:600;">'+d+'</div>');
+  const first = new Date(_dashCalY, _dashCalM, 1).getDay(), days = new Date(_dashCalY, _dashCalM+1, 0).getDate();
+  for (let i=0;i<first;i++) html += '<div></div>';
+  for (let d=1; d<=days; d++){
+    const ds = _dashCalY+'-'+String(_dashCalM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const js = byDay[ds] || [], dow = new Date(_dashCalY,_dashCalM,d).getDay(), wk = (dow===0||dow===6);
+    let st = 'min-height:64px;background:'+(wk?'#141a24':'var(--surf)')+';border:1px solid var(--bdr);border-radius:10px;padding:6px 7px;cursor:pointer;position:relative;';
+    if (ds===today) st += 'box-shadow:inset 0 0 0 2px var(--blu);';
+    if (ds===_dashCalSel) st += 'box-shadow:inset 0 0 0 2px var(--acc);background:#241f12;';
+    const cnt = js.length ? '<span style="position:absolute;top:5px;right:6px;font-size:10px;background:var(--acc);color:#1a1205;border-radius:9px;padding:1px 6px;font-weight:800;">'+js.length+'</span>' : '';
+    const sc  = js.length ? '<span style="position:absolute;top:24px;right:6px;font-size:10px;color:var(--acc);font-weight:700;">★'+pkDashSumScore_(js)+'</span>' : '';
+    const dots = js.slice(0,6).map(j => '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;margin:1px;background:'+pkDashTone_(j.status||j.sheetStatus)+';"></span>').join('');
+    html += '<div onclick="dashCalPick(\''+ds+'\')" style="'+st+'"><span style="font-size:13px;font-weight:700;">'+d+'</span>'+cnt+sc+'<div style="margin-top:22px;">'+dots+'</div></div>';
+  }
+  html += '</div>';
+  grid.innerHTML = html;
+  dashCalRenderPanel();
+}
+function dashCalRenderPanel(){
+  const p = document.getElementById('dashCalPanel'); if (!p) return;
+  const ds = _dashCalSel, today = pkTodayStr_();
+  const js = _dashCalJobs.filter(j => j.date === ds);
+  const full = _dashCalClicked;
+  const thd = (function(){ const x = ds.split('-'); return Number(x[2])+' '+PK_DASH_TH_M[Number(x[1])-1]+' '+(Number(x[0])+543); })();
+  let html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'
+    + '<div><div style="font-size:15px;font-weight:800;">📅 '+thd+(ds===today?' · วันนี้':'')+'</div>'
+    + '<div style="font-size:12px;color:var(--mu);">'+js.length+' งาน · <b style="color:var(--acc);">★ คะแนนรวม '+pkDashSumScore_(js)+'</b></div></div>'
+    + '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;'+(full?'background:#2a2410;color:var(--acc);':'background:#1d2740;color:var(--blu);')+'">'+(full?'รายละเอียดเต็ม':'มุมมองย่อ — กดวันเพื่อดูเต็ม')+'</span></div>';
+  if (!js.length){ p.innerHTML = html + '<div class="loading-row">ไม่มีงานในวันนี้</div>'; return; }
+  const grp = pkDashGroupTeam_(js);
+  grp.order.forEach(tm => {
+    const list = grp.g[tm], none = (tm==='__none__');
+    const col = none ? 'var(--rd)' : 'var(--blu)';
+    html += '<div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:.4px;margin:14px 0 8px;padding-left:8px;border-left:3px solid '+col+';color:'+col+';">'
+      + (none ? '⚠ ยังไม่จัดทีม' : '👷 '+escHtml(tm))
+      + ' <span style="color:var(--mu);font-weight:600;">· '+list.length+' งาน · ★'+pkDashSumScore_(list)+'</span></div>';
+    list.forEach(j => {
+      const badge = none ? ' <span style="font-size:10px;background:#3a2228;color:var(--rd);border:1px solid #54323a;border-radius:20px;padding:1px 8px;font-weight:800;">ยังไม่จัด</span>' : '';
+      if (full){
+        html += '<div style="background:var(--surf2);border:1px solid '+(none?'#54323a':'var(--bdr)')+';border-radius:10px;padding:12px 14px;margin-bottom:10px;">'
+          + '<div style="font-size:16px;font-weight:800;margin-bottom:6px;">'+escHtml(j.name||'-')+badge+'</div>'
+          + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:54px;">📍 ที่อยู่</span><span>'+escHtml(j.rawAddr||'-')+'</span></div>'
+          + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:54px;">🔧 รายการ</span><span>'+escHtml(j.job||'-')+'</span></div>'
+          + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);">'
+            + '<span style="color:var(--acc);font-weight:800;">★ คะแนน '+(Number(j.score)||0)+'</span>'
+            + '<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount||0)+'</span></div>'
+          + '</div>';
+      } else {
+        html += '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--bdr);font-size:14px;">'
+          + '<span style="font-weight:700;flex:1;min-width:0;">'+escHtml(j.name||'-')+badge+'</span>'
+          + '<span style="color:var(--mu);font-size:12px;">📍 '+escHtml(pkExtractDistrict_(j.rawAddr))+'</span>'
+          + '<span style="color:var(--acc);font-weight:700;font-size:13px;white-space:nowrap;">★ '+(Number(j.score)||0)+'</span></div>';
+      }
+    });
+  });
+  p.innerHTML = html;
+}
+function dashCalPick(ds){ _dashCalSel = ds; _dashCalClicked = true; dashCalRender(); const el=document.getElementById('dashCalPanel'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+async function dashCalPrev(){ _dashCalM--; if(_dashCalM<0){_dashCalM=11;_dashCalY--;} await dashCalFetch(); dashCalRender(); }
+async function dashCalNext(){ _dashCalM++; if(_dashCalM>11){_dashCalM=0;_dashCalY++;} await dashCalFetch(); dashCalRender(); }
+async function dashCalToday(){ const t=new Date(); _dashCalY=t.getFullYear(); _dashCalM=t.getMonth(); _dashCalSel=pkTodayStr_(); _dashCalClicked=false; await dashCalFetch(); dashCalRender(); }
 function pkCutoff7_(today){
   const d = new Date(today + 'T00:00:00'); d.setDate(d.getDate()+7);
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
