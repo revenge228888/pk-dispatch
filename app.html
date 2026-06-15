@@ -5783,11 +5783,21 @@ let _mtPhotos = [];
 function myTasksScreenHTML(){
   return ''
     + '<div class="section-pad">'
-    +   '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'
-    +     '<div id="myTasksSummary" style="font-size:13px;color:var(--mu);"></div>'
-    +     '<button class="btn btn-g btn-sm" onclick="myTasksLoad()">🔄 รีเฟรช</button>'
+    +   '<div class="tabs" style="margin-bottom:10px;">'
+    +     '<button class="tab on" id="myTabList" onclick="myTasksSetSubtab(\'list\')">📋 รายการ</button>'
+    +     '<button class="tab" id="myTabCal" onclick="myTasksSetSubtab(\'cal\')">📅 ปฏิทิน</button>'
     +   '</div>'
-    +   '<div id="myTasksList"><div class="loading-row">กำลังโหลด...</div></div>'
+    +   '<div id="myTasksListWrap">'
+    +     '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'
+    +       '<div id="myTasksSummary" style="font-size:13px;color:var(--mu);"></div>'
+    +       '<button class="btn btn-g btn-sm" onclick="myTasksLoad()">🔄 รีเฟรช</button>'
+    +     '</div>'
+    +     '<div id="myTasksList"><div class="loading-row">กำลังโหลด...</div></div>'
+    +   '</div>'
+    +   '<div id="myCalWrap" style="display:none;">'
+    +     '<div id="myCalGrid"><div class="loading-row">กำลังโหลด...</div></div>'
+    +     '<div id="myCalAgenda"></div>'
+    +   '</div>'
     + '</div>'
     + mtSubmitModalHTML();
 }
@@ -5846,9 +5856,39 @@ function myTasksRender(){
   const active = _myTasks.filter(t => ['accepted','cancelled'].indexOf(t.status) === -1);
   const sum = document.getElementById('myTasksSummary');
   if (sum) sum.textContent = 'ต้องทำ ' + active.length + ' · ทั้งหมด ' + _myTasks.length;
-  if (!_myTasks.length){ w.innerHTML = '<div class="loading-row">🎉 ยังไม่มีงานที่ได้รับมอบหมาย</div>'; return; }
-  w.innerHTML = _myTasks.map(mtCard).join('');
+  if (!_myTasks.length){ w.innerHTML = '<div class="loading-row">🎉 ยังไม่มีงานที่ได้รับมอบหมาย</div>'; }
+  else w.innerHTML = _myTasks.map(mtCard).join('');
+  if (document.getElementById('myCalGrid')) myTasksCalRender();   // ปฏิทินใช้ _myTasks ชุดเดียวกัน
 }
+
+// ── assignee calendar (จอ งานของฉัน) — state/ID แยกจาก manager กันชนตอน mount พร้อมกัน ──
+let _myCalY = null, _myCalM = null, _myCalSel = '', _myCalHist = false;
+function myTasksSetSubtab(which){
+  const isList = which === 'list';
+  document.getElementById('myTasksListWrap').style.display = isList ? '' : 'none';
+  document.getElementById('myCalWrap').style.display = isList ? 'none' : '';
+  document.getElementById('myTabList').classList.toggle('on', isList);
+  document.getElementById('myTabCal').classList.toggle('on', !isList);
+  if (!isList) myTasksCalRender();
+}
+function myTasksCalRender(){
+  const grid = document.getElementById('myCalGrid'); if (!grid) return;
+  if (_myCalY === null){ const t = new Date(); _myCalY = t.getFullYear(); _myCalM = t.getMonth(); }
+  if (!_myCalSel) _myCalSel = pkTodayStr_();
+  const today = pkTodayStr_();
+  const byDay = {}; (_myTasks||[]).forEach(t => { if (t.dueDate && pkTaskActive_(t)) (byDay[t.dueDate]=byDay[t.dueDate]||[]).push(t); });
+  grid.innerHTML = pkRenderCalendar({ year:_myCalY, month:_myCalM, byDay:byDay, today:today, selected:_myCalSel,
+    onDayClickFn:'myTasksCalSelectDay', onPrevFn:'myTasksCalPrev', onNextFn:'myTasksCalNext', onTodayFn:'myTasksCalToday' });
+  const ag = document.getElementById('myCalAgenda');
+  if (ag) ag.innerHTML = pkRenderAgenda(_myTasks||[], {
+    today:today, cutoff:pkCutoff7_(today), selected:_myCalSel, cardFn:mtCard, showHist:_myCalHist,
+    histBtnFn:'myTasksCalToggleHist', secPrefix:'myAg-' });
+}
+function myTasksCalSelectDay(ds){ _myCalSel = ds; myTasksCalRender(); const el=document.getElementById('myAg-'+ds); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+function myTasksCalToggleHist(){ _myCalHist = !_myCalHist; myTasksCalRender(); }
+function myTasksCalPrev(){ _myCalM--; if(_myCalM<0){_myCalM=11;_myCalY--;} myTasksCalRender(); }
+function myTasksCalNext(){ _myCalM++; if(_myCalM>11){_myCalM=0;_myCalY++;} myTasksCalRender(); }
+function myTasksCalToday(){ const t=new Date(); _myCalY=t.getFullYear(); _myCalM=t.getMonth(); _myCalSel=pkTodayStr_(); myTasksCalRender(); }
 
 function mtCard(t){
   const pri = { 'สูง':'color:var(--rd);font-weight:700;', 'กลาง':'color:#f59e0b;', 'ต่ำ':'color:var(--mu);' }[t.priority] || '';
@@ -6071,89 +6111,142 @@ function tmgrCard(t){
 }
 
 // ════════════════════════════════════════
-//  📅 ปฏิทินกำหนดส่ง (6.1) — แกน dueDate · manager view เห็นทุกงาน
-//  pkRenderCalendar = component กลาง (เผื่อ 6.3 reuse): เดือนเดียว + marker + คลิกวัน
+//  📅 ปฏิทิน + agenda งานที่ต้องทำ — component กลาง ใช้ทั้ง manager (tmgr) และ assignee (my)
+//  agenda: เลยกำหนด + ภายใน 7 วัน + ไม่กำหนดวัน · เกิน 7 วันเห็นแค่จุดบนปฏิทิน · ปุ่มดูงานเสร็จย้อนหลัง
 // ════════════════════════════════════════
-let _calTasks = [];
-let _calYear = null, _calMonth = null;   // month 0-11
-let _calSelected = '';
-
 function pkTodayStr_(){
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
+function pkCutoff7_(today){
+  const d = new Date(today + 'T00:00:00'); d.setDate(d.getDate()+7);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function pkTaskActive_(t){ return ['accepted','cancelled'].indexOf(t.status) === -1; }
+function pkTaskTone_(t, ds, today){
+  if (t.status === 'accepted') return 'grn';
+  if (t.status === 'cancelled') return 'mu';
+  if (ds && ds < today) return 'rd';
+  if (t.status === 'done') return 'blu';
+  if (t.status === 'rejected') return 'rd';
+  return 'acc';
+}
+function pkToneColor_(tn){ return {rd:'var(--rd)',acc:'var(--acc)',blu:'var(--blu)',grn:'var(--grn)',mu:'var(--mu)'}[tn] || 'var(--mu)'; }
+const PK_TH_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const PK_DOW = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+function pkThDate_(ds){
+  const d = new Date(ds + 'T00:00:00');
+  const full = {'อา':'อาทิตย์','จ':'จันทร์','อ':'อังคาร','พ':'พุธ','พฤ':'พฤหัสบดี','ศ':'ศุกร์','ส':'เสาร์'}[PK_DOW[d.getDay()]];
+  return 'วัน' + full + ' ' + d.getDate() + ' ' + PK_TH_MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+}
 
-// opts: { year, month(0-11), counts:{'YYYY-MM-DD':n}, today, selected, onDayClickFn, onPrevFn, onNextFn }
+// ปฏิทินเดือนเดียว (stateless) — byDay = {date:[tasks active]} · callback names เป็น string
 function pkRenderCalendar(opts){
-  const TH_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
-  const DOW = ['อา','จ','อ','พ','พฤ','ศ','ส'];
-  const y = opts.year, m = opts.month;
-  const counts = opts.counts || {};
+  const y = opts.year, m = opts.month, byDay = opts.byDay || {}, today = opts.today;
   const pad = n => String(n).padStart(2,'0');
-  const startDow = new Date(y, m, 1).getDay();          // 0=อา
-  const daysInMonth = new Date(y, m+1, 0).getDate();
-
-  let head = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
-    + '<button class="btn btn-g btn-sm" onclick="'+opts.onPrevFn+'()">‹</button>'
-    + '<div style="font-weight:700;font-size:15px;">'+TH_MONTHS[m]+' '+y+'</div>'
-    + '<button class="btn btn-g btn-sm" onclick="'+opts.onNextFn+'()">›</button>'
-    + '</div>';
-  let dow = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px;">'
-    + DOW.map(d => '<div style="text-align:center;font-size:11px;color:var(--mu);font-weight:600;">'+d+'</div>').join('')
-    + '</div>';
+  const startDow = new Date(y, m, 1).getDay();
+  const days = new Date(y, m+1, 0).getDate();
+  let head = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;">'
+    + '<button class="btn btn-g btn-sm" style="border-radius:50%;width:32px;" onclick="'+opts.onPrevFn+'()">‹</button>'
+    + '<div style="display:flex;align-items:center;gap:10px;"><div style="font-weight:700;font-size:16px;">'+PK_TH_MONTHS[m]+' '+y+'</div>'
+    + '<button class="btn btn-g btn-sm" onclick="'+opts.onTodayFn+'()">วันนี้</button></div>'
+    + '<button class="btn btn-g btn-sm" style="border-radius:50%;width:32px;" onclick="'+opts.onNextFn+'()">›</button></div>';
+  let dow = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:5px;">'
+    + PK_DOW.map((d,i) => '<div style="text-align:center;font-size:11px;font-weight:700;color:'+((i===0||i===6)?'#8190a8':'var(--mu)')+';">'+d+'</div>').join('') + '</div>';
   let cells = '';
   for (let i=0;i<startDow;i++) cells += '<div></div>';
-  for (let d=1; d<=daysInMonth; d++){
+  for (let d=1; d<=days; d++){
     const ds = y+'-'+pad(m+1)+'-'+pad(d);
-    const n = counts[ds] || 0;
-    const isToday = (ds === opts.today), isSel = (ds === opts.selected);
-    const border = isSel ? '2px solid var(--acc)' : (isToday ? '1px solid var(--blu)' : '1px solid var(--bdr)');
-    const marker = n ? '<div style="margin-top:2px;font-size:10px;color:var(--acc);font-weight:700;">●'+n+'</div>' : '';
-    cells += '<div onclick="'+opts.onDayClickFn+'(\''+ds+'\')" style="cursor:pointer;min-height:46px;border:'+border+';border-radius:8px;padding:4px;background:'+(isSel?'var(--surf2)':'var(--surf)')+';">'
-      + '<div style="font-size:12px;color:var(--tx);">'+d+'</div>'+marker+'</div>';
+    const list = byDay[ds] || [];
+    const dw = new Date(y,m,d).getDay();
+    const isToday = ds === today, isSel = ds === opts.selected;
+    let bg = (dw===0||dw===6) ? '#1a2231' : 'var(--surf2)';
+    let border = '1px solid var(--bdr)', extra = '', dcol = 'var(--tx)';
+    if (isToday){ border = '1px solid var(--blu)'; extra = 'box-shadow:inset 0 0 0 1px var(--blu);'; dcol = 'var(--blu)'; }
+    if (isSel){ bg = 'var(--acc)'; border = '1px solid var(--acc)'; extra=''; dcol = '#111a25'; }
+    let dots = '';
+    list.slice(0,4).forEach(t => { dots += '<span style="width:7px;height:7px;border-radius:50%;display:inline-block;background:'+pkToneColor_(pkTaskTone_(t,ds,today))+';"></span>'; });
+    if (list.length>4) dots += '<span style="font-size:9px;">+'+(list.length-4)+'</span>';
+    const cnt = list.length ? '<div style="position:absolute;right:6px;top:5px;font-size:10px;font-weight:800;color:'+(isSel?'#5a3d00':'var(--mu)')+';">'+list.length+'</div>' : '';
+    cells += '<div onclick="'+opts.onDayClickFn+'(\''+ds+'\')" style="position:relative;min-height:58px;border:'+border+';'+extra+'border-radius:10px;padding:6px 5px;cursor:pointer;background:'+bg+';">'
+      + '<div style="font-size:13px;font-weight:600;color:'+dcol+';">'+d+'</div>'
+      + (dots?'<div style="display:flex;gap:3px;flex-wrap:wrap;position:absolute;left:5px;bottom:6px;">'+dots+'</div>':'') + cnt + '</div>';
   }
-  let grid = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">'+cells+'</div>';
-  return head + dow + grid;
+  return head + dow + '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;">'+cells+'</div>';
 }
 
+function pkAgHeader_(left, right, kind){
+  const sty = {
+    rd:'background:#2a1416;color:var(--rd);border:1px solid #4a1d20;',
+    acc:'background:#2a2210;color:var(--acc);border:1px solid #4a3a16;',
+    up:'background:var(--surf2);color:var(--tx);border:1px solid var(--bdr);',
+    none:'background:var(--surf2);color:var(--mu);border:1px solid var(--bdr);',
+    done:'background:#15241a;color:var(--grn);border:1px solid #1e3a28;'
+  }[kind] || '';
+  return '<div style="font-weight:700;font-size:13px;padding:7px 11px;border-radius:8px;margin:14px 0 8px;display:flex;justify-content:space-between;align-items:center;gap:8px;'+sty+'"><span>'+left+'</span><span style="font-size:11px;font-weight:600;opacity:.85;">'+right+'</span></div>';
+}
+
+// agenda (stateless) — tasks=ทั้งหมดของจอนั้น · cardFn(t)->html · histBtnFn=ชื่อฟังก์ชัน toggle
+function pkRenderAgenda(tasks, opts){
+  const today = opts.today, cutoff = opts.cutoff, cardFn = opts.cardFn, sel = opts.selected;
+  const active = (tasks||[]).filter(pkTaskActive_);
+  const ag = active.filter(t => !t.dueDate || t.dueDate <= cutoff);
+  const dated = ag.filter(t => t.dueDate), undated = ag.filter(t => !t.dueDate);
+  const hidden = active.filter(t => t.dueDate && t.dueDate > cutoff);
+  const hist = (tasks||[]).filter(t => !pkTaskActive_(t));
+  const groups = {}; dated.forEach(t => { (groups[t.dueDate]=groups[t.dueDate]||[]).push(t); });
+  const dates = Object.keys(groups).sort();
+  let html = '<div style="font-weight:700;font-size:14px;margin:2px 0 6px;">🔔 งานที่ต้องทำ · คั่นตามวันกำหนดส่ง</div>';
+  if (!dates.length && !undated.length) html += '<div class="loading-row">🎉 ไม่มีงานค้างใน 7 วันนี้</div>';
+  dates.forEach(ds => {
+    const kind = ds<today ? 'rd' : (ds===today ? 'acc' : 'up');
+    const tag = ds<today ? ' · เลยกำหนด' : (ds===today ? ' · วันนี้' : '');
+    html += '<div id="'+opts.secPrefix+ds+'"'+(ds===sel?' style="outline:2px solid var(--acc);outline-offset:2px;border-radius:10px;"':'')+'>'
+      + pkAgHeader_(pkThDate_(ds), groups[ds].length+' งาน'+tag, kind) + groups[ds].map(cardFn).join('') + '</div>';
+  });
+  if (undated.length) html += pkAgHeader_('🗓 ไม่กำหนดวันส่ง', undated.length+' งาน','none') + undated.map(cardFn).join('');
+  if (hidden.length) html += '<div style="font-size:12px;color:var(--mu);background:var(--surf2);border:1px dashed var(--bdr);border-radius:8px;padding:9px 11px;margin:8px 0;">📅 มีอีก '+hidden.length+' งานกำหนดส่งเกิน 7 วัน — ดูที่ปฏิทินด้านบน</div>';
+  html += '<button class="btn btn-g" style="width:100%;margin-top:14px;justify-content:center;" onclick="'+opts.histBtnFn+'()">'+(opts.showHist?'▲ ซ่อนงานที่เสร็จแล้ว':'📁 ดูงานที่เสร็จแล้ว/ย้อนหลัง ('+hist.length+')')+'</button>';
+  if (opts.showHist){
+    if (!hist.length) html += '<div class="loading-row">ยังไม่มีงานที่เสร็จ</div>';
+    else {
+      const hg = {}; hist.forEach(t => { const k = t.dueDate||'none'; (hg[k]=hg[k]||[]).push(t); });
+      Object.keys(hg).sort().reverse().forEach(k => {
+        html += pkAgHeader_(k==='none'?'🗓 ไม่กำหนดวัน':pkThDate_(k), hg[k].length+' งาน','done') + hg[k].map(cardFn).join('');
+      });
+    }
+  }
+  return html;
+}
+
+// ── manager calendar (จอ มอบหมายงาน) ──
+let _calTasks = [], _calY = null, _calM = null, _calSel = '', _calHist = false;
 async function taskMgrLoadCalendar(){
   if (!document.getElementById('tmgrCalWrap')) return;
-  if (_calYear === null){ const t = new Date(); _calYear = t.getFullYear(); _calMonth = t.getMonth(); }
-  if (!_calSelected) _calSelected = pkTodayStr_();
+  if (_calY === null){ const t = new Date(); _calY = t.getFullYear(); _calM = t.getMonth(); }
+  if (!_calSel) _calSel = pkTodayStr_();
   const grid = document.getElementById('tmgrCalGrid');
   if (grid) grid.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
-  try {
-    const r = await call({ action:'pk_taskListAll', assignee:'', status:'' });   // โหลดทุกงาน ไม่ผูก filter จอรายการ
-    _calTasks = (r && r.ok) ? (r.tasks || []) : [];
-  } catch(e){ _calTasks = []; }
-  _allTasks = _calTasks;   // ให้ปุ่มใน tmgrCard (ดู/ผ่าน/ตีกลับ/แก้) หา task เจอ
+  try { const r = await call({ action:'pk_taskListAll', assignee:'', status:'' }); _calTasks = (r && r.ok) ? (r.tasks || []) : []; }
+  catch(e){ _calTasks = []; }
+  _allTasks = _calTasks;   // ให้ปุ่มใน tmgrCard หา task เจอ
   taskMgrCalRender();
 }
-
 function taskMgrCalRender(){
-  const grid = document.getElementById('tmgrCalGrid');
-  if (!grid) return;
-  const counts = {};
-  _calTasks.forEach(t => { if (t.dueDate) counts[t.dueDate] = (counts[t.dueDate]||0)+1; });
-  grid.innerHTML = pkRenderCalendar({
-    year:_calYear, month:_calMonth, counts:counts,
-    today: pkTodayStr_(), selected:_calSelected,
-    onDayClickFn:'taskMgrCalSelectDay', onPrevFn:'taskMgrCalPrev', onNextFn:'taskMgrCalNext'
-  });
-  taskMgrCalRenderDay();
+  const grid = document.getElementById('tmgrCalGrid'); if (!grid) return;
+  const today = pkTodayStr_();
+  const byDay = {}; _calTasks.forEach(t => { if (t.dueDate && pkTaskActive_(t)) (byDay[t.dueDate]=byDay[t.dueDate]||[]).push(t); });
+  grid.innerHTML = pkRenderCalendar({ year:_calY, month:_calM, byDay:byDay, today:today, selected:_calSel,
+    onDayClickFn:'taskMgrCalSelectDay', onPrevFn:'taskMgrCalPrev', onNextFn:'taskMgrCalNext', onTodayFn:'taskMgrCalToday' });
+  document.getElementById('tmgrCalDayTasks').innerHTML = pkRenderAgenda(_calTasks, {
+    today:today, cutoff:pkCutoff7_(today), selected:_calSel, cardFn:tmgrCard, showHist:_calHist,
+    histBtnFn:'taskMgrCalToggleHist', secPrefix:'tmgrAg-' });
 }
-
-function taskMgrCalRenderDay(){
-  const box = document.getElementById('tmgrCalDayTasks');
-  if (!box) return;
-  const list = _calTasks.filter(t => t.dueDate === _calSelected);
-  box.innerHTML = '<div style="font-weight:700;margin:12px 0 8px;">📅 กำหนดส่ง '+escHtml(_calSelected)+' ('+list.length+')</div>'
-    + (list.length ? list.map(tmgrCard).join('') : '<div class="loading-row">ไม่มีงานกำหนดส่งวันนี้</div>');
-}
-
-function taskMgrCalSelectDay(ds){ _calSelected = ds; taskMgrCalRender(); }
-function taskMgrCalPrev(){ _calMonth--; if (_calMonth<0){ _calMonth=11; _calYear--; } taskMgrCalRender(); }
-function taskMgrCalNext(){ _calMonth++; if (_calMonth>11){ _calMonth=0; _calYear++; } taskMgrCalRender(); }
+function taskMgrCalSelectDay(ds){ _calSel = ds; taskMgrCalRender(); const el=document.getElementById('tmgrAg-'+ds); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+function taskMgrCalToggleHist(){ _calHist = !_calHist; taskMgrCalRender(); }
+function taskMgrCalPrev(){ _calM--; if(_calM<0){_calM=11;_calY--;} taskMgrCalRender(); }
+function taskMgrCalNext(){ _calM++; if(_calM>11){_calM=0;_calY++;} taskMgrCalRender(); }
+function taskMgrCalToday(){ const t=new Date(); _calY=t.getFullYear(); _calM=t.getMonth(); _calSel=pkTodayStr_(); taskMgrCalRender(); }
 
 function tmgrOpenForm(mode, id){
   _tmgrFormMode = mode; _tmgrEditId = id || null;
