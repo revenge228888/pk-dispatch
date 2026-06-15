@@ -6170,10 +6170,23 @@ async function dashCalLoad(){
   await dashCalFetch();
   dashCalRender();
 }
+let USE_SHEETS_INSTALL = true;   // ON: ปฏิทินคิวงานใช้ /install-month (Sheets API) · fallback GAS อัตโนมัติ
 async function dashCalFetch(){
   const month = _dashCalY + '-' + String(_dashCalM+1).padStart(2,'0');
   const grid = document.getElementById('dashCalGrid'); if (grid) grid.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
   _dashCalLoading = true;
+  if (USE_SHEETS_INSTALL && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/install-month'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ month, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.jobs)) { _dashCalJobs = data.jobs; _dashCalLoading = false; return; }
+      console.warn('[dashCalFetch] /install-month ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e){ console.warn('[dashCalFetch] /install-month error → fallback GAS:', e.message); }
+  }
   try { const r = await call({ action:'pk_installMonth', month:month }); _dashCalJobs = (r && r.ok) ? (r.jobs || []) : []; }
   catch(e){ _dashCalJobs = []; }
   _dashCalLoading = false;
