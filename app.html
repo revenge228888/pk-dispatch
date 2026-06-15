@@ -6231,8 +6231,25 @@ function pkRenderDayDetail(tasks, ds, opts){
   html += list.length ? list.map(opts.cardFn).join('') : '<div class="loading-row">ไม่มีงานในวันนี้</div>';
   return html;
 }
+
+// ปุ่ม + รายการงานที่เสร็จแล้ว/ย้อนหลัง (accepted/cancelled) จัดกลุ่มตามวัน ใหม่→เก่า · opts:{ showHist, toggleFn, cardFn }
+function pkRenderHistory_(tasks, opts){
+  const hist = (tasks||[]).filter(t => !pkTaskActive_(t));
+  let html = '<button class="btn btn-g" style="width:100%;margin-top:14px;justify-content:center;" onclick="'+opts.toggleFn+'()">'
+    + (opts.showHist ? '▲ ซ่อนงานที่เสร็จแล้ว' : '📁 ดูงานที่เสร็จแล้ว/ย้อนหลัง ('+hist.length+')') + '</button>';
+  if (opts.showHist){
+    if (!hist.length) html += '<div class="loading-row">ยังไม่มีงานที่เสร็จ</div>';
+    else {
+      const hg = {}; hist.forEach(t => { const k = t.dueDate||'none'; (hg[k]=hg[k]||[]).push(t); });
+      Object.keys(hg).sort().reverse().forEach(k => {
+        html += pkAgHeader_(k==='none'?'🗓 ไม่กำหนดวัน':pkThDate_(k), hg[k].length+' งาน','done') + hg[k].map(opts.cardFn).join('');
+      });
+    }
+  }
+  return html;
+}
 // ── manager calendar = ภาพรวมงานที่มอบหมาย (ปฏิทินทุกสถานะ + กดวันดูงานวันนั้น · ไม่มี agenda 7 วัน) ──
-let _calTasks = [], _calY = null, _calM = null, _calSel = '';
+let _calTasks = [], _calY = null, _calM = null, _calSel = '', _calHist = false;
 async function taskMgrLoadCalendar(){
   if (!document.getElementById('tmgrCalWrap')) return;
   if (_calY === null){ const t = new Date(); _calY = t.getFullYear(); _calM = t.getMonth(); }
@@ -6251,9 +6268,11 @@ function taskMgrCalRender(){
   grid.innerHTML = pkRenderCalendar({ year:_calY, month:_calM, byDay:byDay, today:today, selected:_calSel,
     onDayClickFn:'taskMgrCalSelectDay', onPrevFn:'taskMgrCalPrev', onNextFn:'taskMgrCalNext', onTodayFn:'taskMgrCalToday' });
   const box = document.getElementById('tmgrCalDayTasks');
-  if (box) box.innerHTML = pkRenderDayDetail(_calTasks, _calSel, { cardFn:tmgrCard, backFn:'' });   // ภาพรวม: โชว์งานของวันที่เลือก ทุกสถานะ
+  if (box) box.innerHTML = pkRenderDayDetail(_calTasks, _calSel, { cardFn:tmgrCard, backFn:'' })   // ภาพรวม: งานของวันที่เลือก ทุกสถานะ
+    + pkRenderHistory_(_calTasks, { showHist:_calHist, toggleFn:'taskMgrCalToggleHist', cardFn:tmgrCard });   // + ดูย้อนหลัง
 }
 function taskMgrCalSelectDay(ds){ _calSel = ds; taskMgrCalRender(); const b=document.getElementById('tmgrCalDayTasks'); if(b) b.scrollIntoView({behavior:'smooth',block:'start'}); }
+function taskMgrCalToggleHist(){ _calHist = !_calHist; taskMgrCalRender(); }
 function taskMgrCalPrev(){ _calM--; if(_calM<0){_calM=11;_calY--;} taskMgrCalRender(); }
 function taskMgrCalNext(){ _calM++; if(_calM>11){_calM=0;_calY++;} taskMgrCalRender(); }
 function taskMgrCalToday(){ const t=new Date(); _calY=t.getFullYear(); _calM=t.getMonth(); _calSel=pkTodayStr_(); taskMgrCalRender(); }
