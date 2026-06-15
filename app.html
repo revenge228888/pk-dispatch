@@ -6103,7 +6103,8 @@ function tmgrCard(t){
       + '<div style="font-weight:700;">'+escHtml(t.title)+' <span style="font-family:var(--mono);font-size:11px;color:var(--mu);">'+escHtml(t.taskId)+'</span></div>'
       + '<div style="font-size:12px;">'+mtStatusBadge(t.status)+'</div>'
     + '</div>'
-    + '<div style="font-size:12px;color:var(--mu);margin:4px 0;">👤 '+escHtml(t.assignedToName||t.assignedTo)+(due?' · '+due:'')+(t.priority?' · '+escHtml(t.priority):'')+'</div>'
+    + '<div style="font-size:15px;font-weight:700;color:var(--tx);margin:5px 0 2px;">👤 '+escHtml(t.assignedToName||t.assignedTo)+'</div>'
+    + ((due||t.priority) ? '<div style="font-size:12px;color:var(--mu);margin-bottom:4px;">'+[due, (t.priority?escHtml(t.priority):'')].filter(Boolean).join(' · ')+'</div>' : '')
     + (t.detail ? '<div style="font-size:13px;margin:4px 0;white-space:pre-wrap;">'+escHtml(t.detail)+'</div>' : '')
     + result
     + (photos ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0;">'+photos+'</div>' : '')
