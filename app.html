@@ -1986,7 +1986,7 @@ async function reloadAll(){
     fillTeamDropdowns();
     renderAccess();
     document.getElementById('syncTxt').textContent = 'อัปเดต ' + new Date().toLocaleTimeString('th-TH',{timeStyle:'short'});
-    if (document.getElementById('tabDash') && document.getElementById('tabDash').style.display !== 'none') loadDashboard();
+    if (document.getElementById('tabDash') && document.getElementById('tabDash').style.display !== 'none') { loadDashboard(); dashCalLoad(); }
   } catch(e) { document.getElementById('syncTxt').textContent = '❌ โหลดไม่ได้'; }
 }
 
