@@ -5862,7 +5862,7 @@ function myTasksRender(){
 }
 
 // ── assignee calendar (จอ งานของฉัน) — state/ID แยกจาก manager กันชนตอน mount พร้อมกัน ──
-let _myCalY = null, _myCalM = null, _myCalSel = '', _myCalHist = false;
+let _myCalY = null, _myCalM = null, _myCalSel = '', _myCalHist = false, _myCalView = 'agenda';
 function myTasksSetSubtab(which){
   const isList = which === 'list';
   document.getElementById('myTasksListWrap').style.display = isList ? '' : 'none';
@@ -5874,21 +5874,23 @@ function myTasksSetSubtab(which){
 function myTasksCalRender(){
   const grid = document.getElementById('myCalGrid'); if (!grid) return;
   if (_myCalY === null){ const t = new Date(); _myCalY = t.getFullYear(); _myCalM = t.getMonth(); }
-  if (!_myCalSel) _myCalSel = pkTodayStr_();
   const today = pkTodayStr_();
-  const byDay = {}; (_myTasks||[]).forEach(t => { if (t.dueDate && pkTaskActive_(t)) (byDay[t.dueDate]=byDay[t.dueDate]||[]).push(t); });
+  const byDay = {}; (_myTasks||[]).forEach(t => { if (t.dueDate) (byDay[t.dueDate]=byDay[t.dueDate]||[]).push(t); });   // ทุกสถานะ
   grid.innerHTML = pkRenderCalendar({ year:_myCalY, month:_myCalM, byDay:byDay, today:today, selected:_myCalSel,
     onDayClickFn:'myTasksCalSelectDay', onPrevFn:'myTasksCalPrev', onNextFn:'myTasksCalNext', onTodayFn:'myTasksCalToday' });
-  const ag = document.getElementById('myCalAgenda');
-  if (ag) ag.innerHTML = pkRenderAgenda(_myTasks||[], {
-    today:today, cutoff:pkCutoff7_(today), selected:_myCalSel, cardFn:mtCard, showHist:_myCalHist,
-    histBtnFn:'myTasksCalToggleHist', secPrefix:'myAg-' });
+  const ag = document.getElementById('myCalAgenda'); if (!ag) return;
+  if (_myCalView === 'day')
+    ag.innerHTML = pkRenderDayDetail(_myTasks||[], _myCalSel, { cardFn:mtCard, backFn:'myTasksCalToAgenda' });
+  else
+    ag.innerHTML = pkRenderAgenda(_myTasks||[], { today:today, cutoff:pkCutoff7_(today), selected:_myCalSel,
+      cardFn:mtCard, showHist:_myCalHist, histBtnFn:'myTasksCalToggleHist', secPrefix:'myAg-' });
 }
-function myTasksCalSelectDay(ds){ _myCalSel = ds; myTasksCalRender(); const el=document.getElementById('myAg-'+ds); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+function myTasksCalSelectDay(ds){ _myCalSel = ds; _myCalView = 'day'; myTasksCalRender(); const b=document.getElementById('myCalAgenda'); if(b) b.scrollIntoView({behavior:'smooth',block:'start'}); }
+function myTasksCalToAgenda(){ _myCalView = 'agenda'; myTasksCalRender(); }
 function myTasksCalToggleHist(){ _myCalHist = !_myCalHist; myTasksCalRender(); }
 function myTasksCalPrev(){ _myCalM--; if(_myCalM<0){_myCalM=11;_myCalY--;} myTasksCalRender(); }
 function myTasksCalNext(){ _myCalM++; if(_myCalM>11){_myCalM=0;_myCalY++;} myTasksCalRender(); }
-function myTasksCalToday(){ const t=new Date(); _myCalY=t.getFullYear(); _myCalM=t.getMonth(); _myCalSel=pkTodayStr_(); myTasksCalRender(); }
+function myTasksCalToday(){ const t=new Date(); _myCalY=t.getFullYear(); _myCalM=t.getMonth(); _myCalSel=pkTodayStr_(); _myCalView='agenda'; myTasksCalRender(); }
 
 function mtCard(t){
   const pri = { 'สูง':'color:var(--rd);font-weight:700;', 'กลาง':'color:#f59e0b;', 'ต่ำ':'color:var(--mu);' }[t.priority] || '';
@@ -6219,12 +6221,20 @@ function pkRenderAgenda(tasks, opts){
   return html;
 }
 
-// ── manager calendar (จอ มอบหมายงาน) ──
-let _calTasks = [], _calY = null, _calM = null, _calSel = '', _calHist = false;
+// แสดงงานของวันที่กดบนปฏิทิน — ทุกสถานะ (ไม่จำกัด 7 วัน) · opts:{ cardFn, backFn }
+function pkRenderDayDetail(tasks, ds, opts){
+  const today = pkTodayStr_();
+  const list = (tasks||[]).filter(t => t.dueDate === ds);
+  const kind = ds<today ? 'rd' : (ds===today ? 'acc' : 'up');
+  let html = '<button class="btn btn-g" style="margin:2px 0 10px;" onclick="'+opts.backFn+'()">← กลับ งานที่ต้องทำ</button>';
+  html += pkAgHeader_('📅 '+pkThDate_(ds), list.length+' งาน', kind);
+  html += list.length ? list.map(opts.cardFn).join('') : '<div class="loading-row">ไม่มีงานในวันนี้</div>';
+  return html;
+}
+let _calTasks = [], _calY = null, _calM = null, _calSel = '', _calHist = false, _calView = 'agenda';
 async function taskMgrLoadCalendar(){
   if (!document.getElementById('tmgrCalWrap')) return;
   if (_calY === null){ const t = new Date(); _calY = t.getFullYear(); _calM = t.getMonth(); }
-  if (!_calSel) _calSel = pkTodayStr_();
   const grid = document.getElementById('tmgrCalGrid');
   if (grid) grid.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
   try { const r = await call({ action:'pk_taskListAll', assignee:'', status:'' }); _calTasks = (r && r.ok) ? (r.tasks || []) : []; }
@@ -6235,18 +6245,22 @@ async function taskMgrLoadCalendar(){
 function taskMgrCalRender(){
   const grid = document.getElementById('tmgrCalGrid'); if (!grid) return;
   const today = pkTodayStr_();
-  const byDay = {}; _calTasks.forEach(t => { if (t.dueDate && pkTaskActive_(t)) (byDay[t.dueDate]=byDay[t.dueDate]||[]).push(t); });
+  const byDay = {}; _calTasks.forEach(t => { if (t.dueDate) (byDay[t.dueDate]=byDay[t.dueDate]||[]).push(t); });   // ทุกสถานะ
   grid.innerHTML = pkRenderCalendar({ year:_calY, month:_calM, byDay:byDay, today:today, selected:_calSel,
     onDayClickFn:'taskMgrCalSelectDay', onPrevFn:'taskMgrCalPrev', onNextFn:'taskMgrCalNext', onTodayFn:'taskMgrCalToday' });
-  document.getElementById('tmgrCalDayTasks').innerHTML = pkRenderAgenda(_calTasks, {
-    today:today, cutoff:pkCutoff7_(today), selected:_calSel, cardFn:tmgrCard, showHist:_calHist,
-    histBtnFn:'taskMgrCalToggleHist', secPrefix:'tmgrAg-' });
+  const box = document.getElementById('tmgrCalDayTasks');
+  if (_calView === 'day')
+    box.innerHTML = pkRenderDayDetail(_calTasks, _calSel, { cardFn:tmgrCard, backFn:'taskMgrCalToAgenda' });
+  else
+    box.innerHTML = pkRenderAgenda(_calTasks, { today:today, cutoff:pkCutoff7_(today), selected:_calSel,
+      cardFn:tmgrCard, showHist:_calHist, histBtnFn:'taskMgrCalToggleHist', secPrefix:'tmgrAg-' });
 }
-function taskMgrCalSelectDay(ds){ _calSel = ds; taskMgrCalRender(); const el=document.getElementById('tmgrAg-'+ds); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+function taskMgrCalSelectDay(ds){ _calSel = ds; _calView = 'day'; taskMgrCalRender(); const b=document.getElementById('tmgrCalDayTasks'); if(b) b.scrollIntoView({behavior:'smooth',block:'start'}); }
+function taskMgrCalToAgenda(){ _calView = 'agenda'; taskMgrCalRender(); }
 function taskMgrCalToggleHist(){ _calHist = !_calHist; taskMgrCalRender(); }
 function taskMgrCalPrev(){ _calM--; if(_calM<0){_calM=11;_calY--;} taskMgrCalRender(); }
 function taskMgrCalNext(){ _calM++; if(_calM>11){_calM=0;_calY++;} taskMgrCalRender(); }
-function taskMgrCalToday(){ const t=new Date(); _calY=t.getFullYear(); _calM=t.getMonth(); _calSel=pkTodayStr_(); taskMgrCalRender(); }
+function taskMgrCalToday(){ const t=new Date(); _calY=t.getFullYear(); _calM=t.getMonth(); _calSel=pkTodayStr_(); _calView='agenda'; taskMgrCalRender(); }
 
 function tmgrOpenForm(mode, id){
   _tmgrFormMode = mode; _tmgrEditId = id || null;
