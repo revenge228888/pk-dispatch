@@ -1172,7 +1172,8 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="quotes" onclick="setTab('quotes',this)"><span class="sidebar-ico">🧮</span><span class="sidebar-label">คำนวณราคา</span></button>
           ${CURRENT_USER.role === 'manager' ? `
           <div class="sidebar-group">ผลิต</div>
-          <button class="sidebar-item" data-tab="production" onclick="setTab('production',this)"><span class="sidebar-ico">🏭</span><span class="sidebar-label">ใบผลิต</span></button>` : ''}
+          <button class="sidebar-item" data-tab="production" onclick="setTab('production',this)"><span class="sidebar-ico">🏭</span><span class="sidebar-label">ใบผลิต</span></button>
+          <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>` : ''}
 
           <div class="sidebar-group">การเงิน / เบิกจ่าย</div>
           <button class="sidebar-item" data-tab="expensesubmit" onclick="setTab('expensesubmit',this)"><span class="sidebar-ico">💸</span><span class="sidebar-label">ตั้งเบิก</span></button>
@@ -1276,6 +1277,22 @@ function renderOfficeShell(){
             <button class="btn btn-g btn-sm" onclick="pkpLoadList()">โหลด</button>
           </div>
           <div id="pkpListWrap"><div class="loading-row">กำลังโหลด...</div></div>
+        </div>
+      </div>
+
+      <!-- PROD TRACK (ติดตามงานผลิต) -->
+      <div id="tabProdtrack" style="display:none;">
+        <div class="section-pad">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+            <div style="font-weight:800;font-size:16px;">📈 ติดตามงานผลิต</div>
+            <button class="btn btn-g btn-sm" onclick="ptLoad()">↻ รีเฟรช</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+            <button class="btn btn-g" id="ptTabKanban" onclick="ptSetView('kanban')">🗂 Kanban</button>
+            <button class="btn btn-g" id="ptTabTable" onclick="ptSetView('table')">📊 ตาราง</button>
+            <button class="btn btn-g" id="ptTabCal" onclick="ptSetView('cal')">📅 ปฏิทิน</button>
+          </div>
+          <div id="ptBody"><div class="loading-row">กำลังโหลด...</div></div>
         </div>
       </div>
 
@@ -3344,6 +3361,7 @@ function setTab(t, btn){
   if (t === 'timelog') timelogInit();
   if (t === 'summary') summaryInit();
   if (t === 'production') pkpInit();
+  if (t === 'prodtrack') ptLoad();
 }
 
 // ── Sidebar toggle ──
@@ -6398,6 +6416,183 @@ function pkRenderHistory_(tasks, opts){
   }
   return html;
 }
+// ════════════════════════════════════════
+//  📈 ติดตามงานผลิต (P-TRACK) — Kanban / ตาราง / ปฏิทิน
+// ════════════════════════════════════════
+var PT_STEPS = ['รอจัดอุปกรณ์','จัดอุปกรณ์แล้ว','รอราง/จ่ายงานผลิต','กำลังผลิต','ผลิตเสร็จแล้ว'];
+var PT_COLOR = {'รอจัดอุปกรณ์':['#222a38','#9fb0c9','#33415a'],'จัดอุปกรณ์แล้ว':['#221b33','#bf5af2','#3d2d54'],'รอราง/จ่ายงานผลิต':['#2a2410','#f5a623','#5a4a1e'],'กำลังผลิต':['#1d2740','#4a9eff','#27406b'],'ผลิตเสร็จแล้ว':['#11331d','#34c759','#1d5233']};
+var PT_TH_M=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+var PT_TH_MF=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+var PT_DOW=['อา','จ','อ','พ','พฤ','ศ','ส'];
+let _ptJobs = [], _ptView = 'kanban', _ptShowDone = false, _ptCY = null, _ptCM = null, _ptCSel = '', _ptBusy = false;
+let USE_SHEETS_PRODTRACK = true;
+
+function ptThd(ds){ if(!ds) return '-'; var p=String(ds).split('-'); if(p.length<3) return ds; return Number(p[2])+' '+PT_TH_M[Number(p[1])-1]+' '+(Number(p[0])+543); }
+function ptDb(a,b){ return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000); }
+function ptNextMonday(ts){ var d=new Date(ts+'T00:00:00'); var a=(8-d.getDay())%7; d.setDate(d.getDate()+a); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function ptTotSets(j){ return (j.sets||[]).reduce(function(s,x){return s+(Number(x.n)||0);},0); }
+function ptIsSpecial(j){ return (j.sets||[]).some(function(x){return x.c&&x.c!=='อบขาว'&&x.c!=='ดำ';}) || ((!j.sets||!j.sets.length) && !!j.specialColors); }
+function ptSetSummary(j){
+  var sets=j.sets||[];
+  if(!sets.length) return '<span>'+(j.itemCount||0)+' ชุด'+(j.specialColors?' · ⚠'+escHtml(j.specialColors):'')+'</span>';
+  var parts=sets.map(function(x){var sp=(x.c!=='อบขาว'&&x.c!=='ดำ');return (sp?'⚠':'')+escHtml(x.c)+' ×'+x.n;});
+  return '<span style="color:'+(ptIsSpecial(j)?'var(--acc)':'var(--tx)')+'">'+parts.join(' · ')+'</span> <span style="color:var(--mu);font-size:12px;">· รวม '+ptTotSets(j)+' ชุด</span>';
+}
+function ptRail(j){
+  if(!ptIsSpecial(j)) return {cls:'grn',txt:'🟢 พร้อม'};
+  if(j.hasRail) return {cls:'grn',txt:'🟢 มีรางแล้ว'};
+  if(j.rush) return {cls:'grn',txt:'🟢 ด่วน'};
+  var today=pkTodayStr_(), nm=ptNextMonday(today);
+  if(j.installDate && ptDb(today,j.installDate)<=ptDb(today,nm)) return {cls:'rd',txt:'🔴 สั่งด่วน'};
+  return {cls:'acc',txt:'🟡 รอราง '+ptThd(nm)};
+}
+function ptRailBadge(j){ var r=ptRail(j); var c=r.cls==='grn'?['#11331d','var(--grn)','#1d5233']:r.cls==='rd'?['#3a2228','var(--rd)','#54323a']:['#2a2410','var(--acc)','#5a4a1e']; return '<span style="font-size:11px;font-weight:700;border-radius:20px;padding:3px 9px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+'">'+r.txt+'</span>'; }
+function ptPbadge(s){ var c=PT_COLOR[s]||PT_COLOR['รอจัดอุปกรณ์']; return '<span style="font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+'">'+escHtml(s)+'</span>'; }
+function ptDueTxt(j){ if(!j.installDate) return '<span style="color:var(--mu)">ไม่กำหนด</span>'; var n=ptDb(pkTodayStr_(),j.installDate); return n<0?'<span style="color:var(--rd);font-weight:800">เลย '+(-n)+'ว</span>':n===0?'<span style="color:var(--rd);font-weight:800">วันนี้</span>':(n<=14?'<span style="color:var(--acc);font-weight:700">อีก '+n+'ว</span>':'อีก '+n+'ว'); }
+function ptNotes(j){ return (j.noteEquip?'<div style="font-size:12px;background:#2a2410;border-left:3px solid var(--acc);border-radius:5px;padding:5px 9px;margin:4px 0;color:#ffe6b0;">🔧 '+escHtml(j.noteEquip)+'</div>':'')+(j.noteGeneral?'<div style="font-size:12px;background:#13203a;border-left:3px solid var(--blu);border-radius:5px;padding:5px 9px;margin:4px 0;color:#bcd6ff;">📌 '+escHtml(j.noteGeneral)+'</div>':''); }
+
+async function ptLoad(){
+  if(!document.getElementById('ptBody')) return;
+  document.getElementById('ptBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>';
+  await ptFetch();
+  ptSetView(_ptView);
+}
+async function ptFetch(){
+  if(USE_SHEETS_PRODTRACK && CURRENT_USER){
+    try{
+      var ctrl=new AbortController(); var to=setTimeout(function(){ctrl.abort();},8000);
+      var r=await fetch(API.replace(/\/api$/,'/prod-track'),{method:'POST',redirect:'follow',signal:ctrl.signal,
+        headers:{'Content-Type':'application/json','X-PK-Secret':API_SECRET},
+        body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
+      clearTimeout(to); var data=await r.json();
+      if(data&&data.ok&&Array.isArray(data.jobs)){ _ptJobs=data.jobs; return; }
+      console.warn('[ptFetch] /prod-track ไม่ ok → fallback GAS:', data&&data.error);
+    }catch(e){ console.warn('[ptFetch] /prod-track error → fallback GAS:', e&&e.message); }
+  }
+  try{ var g=await call({action:'pk_prodTrackList'}); _ptJobs=(g&&g.ok)?(g.jobs||[]):[]; if(!(g&&g.ok))console.warn('[ptFetch] GAS:',g&&g.error); }
+  catch(e){ _ptJobs=[]; console.warn('[ptFetch] GAS error:',e&&e.message); }
+}
+function ptSetView(v){
+  _ptView=v;
+  ['kanban','table','cal'].forEach(function(x){ var b=document.getElementById('ptTab'+x.charAt(0).toUpperCase()+x.slice(1)); if(b) b.classList.toggle('btn-p',v===x); });
+  if(v==='table') ptRenderTable(); else if(v==='cal') ptRenderCal(); else ptRenderKanban();
+}
+function ptDone(){ return _ptJobs.map(function(j,i){return i;}).filter(function(i){return _ptJobs[i].prodStatus==='ผลิตเสร็จแล้ว';}); }
+function ptByInstall(a,b){ var x=_ptJobs[a].installDate||'9999',y=_ptJobs[b].installDate||'9999'; return x<y?-1:x>y?1:0; }
+function ptByWO(a,b){ return _ptJobs[a].woId<_ptJobs[b].woId?-1:1; }
+
+async function ptSet(woId, patch){
+  if(_ptBusy) return; _ptBusy=true;
+  try{ var r=await call(Object.assign({action:'pk_prodSetTrack',woId:woId},patch));
+    if(!(r&&r.ok)){ toast((r&&r.error)||'อัปเดตไม่สำเร็จ'); }
+    else { var j=_ptJobs.find(function(x){return x.woId===woId;}); if(j) Object.assign(j,patch); }
+  }catch(e){ toast('ผิดพลาด: '+e.message); }
+  finally{ _ptBusy=false; ptSetView(_ptView); }
+}
+function ptIdx(woId){ return _ptJobs.findIndex(function(x){return x.woId===woId;}); }
+function ptAdv(woId){ var j=_ptJobs[ptIdx(woId)]; var k=PT_STEPS.indexOf(j.prodStatus); if(k>=PT_STEPS.length-1) return;
+  var next=PT_STEPS[k+1];
+  if(next==='ผลิตเสร็จแล้ว'){ var d=prompt('วันที่ผลิตเสร็จ (YYYY-MM-DD):', pkTodayStr_()); if(d===null) return; ptSet(woId,{prodStatus:next,doneDate:d}); }
+  else ptSet(woId,{prodStatus:next});
+}
+function ptBack(woId){ var j=_ptJobs[ptIdx(woId)]; var k=PT_STEPS.indexOf(j.prodStatus); if(k<=0) return; ptSet(woId,{prodStatus:PT_STEPS[k-1]}); }
+function ptToggleRail(woId){ var j=_ptJobs[ptIdx(woId)]; ptSet(woId,{hasRail:!j.hasRail}); }
+function ptToggleRush(woId){ var j=_ptJobs[ptIdx(woId)]; ptSet(woId,{rush:!j.rush}); }
+function ptEditEquip(woId){ var j=_ptJobs[ptIdx(woId)]; var v=prompt('🔧 อุปกรณ์เสริม:', j.noteEquip||''); if(v!==null) ptSet(woId,{noteEquip:v}); }
+function ptEditGen(woId){ var j=_ptJobs[ptIdx(woId)]; var v=prompt('📌 หมายเหตุทั่วไป:', j.noteGeneral||''); if(v!==null) ptSet(woId,{noteGeneral:v}); }
+function ptToggleDone(){ _ptShowDone=!_ptShowDone; ptSetView(_ptView); }
+
+function ptActBtns(j){
+  var k=PT_STEPS.indexOf(j.prodStatus), h='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">';
+  if(k>0) h+='<button class="btn btn-g btn-sm" onclick="ptBack(\''+j.woId+'\')">◀</button>';
+  if(k<PT_STEPS.length-1) h+='<button class="btn btn-g btn-sm" onclick="ptAdv(\''+j.woId+'\')">▶ '+PT_STEPS[k+1]+'</button>';
+  if(ptIsSpecial(j)){
+    h+='<button class="btn btn-g btn-sm'+(j.hasRail?' btn-p':'')+'" onclick="ptToggleRail(\''+j.woId+'\')">'+(j.hasRail?'✓ มีราง':'มีราง')+'</button>';
+    h+='<button class="btn btn-g btn-sm'+(j.rush?' btn-p':'')+'" onclick="ptToggleRush(\''+j.woId+'\')">'+(j.rush?'✓ ด่วน':'ด่วน')+'</button>';
+  }
+  h+='<button class="btn btn-g btn-sm" onclick="ptEditEquip(\''+j.woId+'\')">🔧</button>';
+  h+='<button class="btn btn-g btn-sm" onclick="ptEditGen(\''+j.woId+'\')">📌</button>';
+  h+='</div>';
+  return h;
+}
+function ptRenderKanban(){
+  var byS={}; PT_STEPS.forEach(function(s){byS[s]=[];});
+  _ptJobs.forEach(function(j,i){ if(byS[j.prodStatus]) byS[j.prodStatus].push(i); else byS[PT_STEPS[0]].push(i); });
+  PT_STEPS.forEach(function(s){ byS[s].sort(ptByInstall); });
+  var h='<div style="display:grid;grid-template-columns:repeat(5,minmax(230px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px;">';
+  PT_STEPS.forEach(function(s){ var c=PT_COLOR[s];
+    h+='<div style="background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:9px;min-height:120px;">';
+    h+='<div style="font-size:13px;font-weight:800;text-align:center;padding:7px;border-radius:7px;margin-bottom:9px;background:'+c[0]+';color:'+c[1]+'">'+s+' ('+byS[s].length+')</div>';
+    byS[s].forEach(function(i){ var j=_ptJobs[i];
+      h+='<div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:9px;padding:11px 12px;margin-bottom:9px;">';
+      h+='<div style="font-size:15px;font-weight:800;">'+escHtml(j.customerName||'-')+'</div>';
+      h+='<div style="font-family:monospace;font-size:11px;color:var(--mu);margin:1px 0 5px;">'+escHtml(j.woId)+'</div>';
+      h+='<div style="font-size:13px;margin:4px 0;">'+ptSetSummary(j)+'</div>';
+      h+='<div style="font-size:12px;color:var(--mu);margin:3px 0;">📅 ติดตั้ง '+ptThd(j.installDate)+' · '+ptDueTxt(j)+'</div>';
+      if(s!=='ผลิตเสร็จแล้ว') h+='<div style="margin:5px 0;">'+ptRailBadge(j)+'</div>';
+      else if(j.doneDate) h+='<div style="font-size:12px;color:var(--mu);margin:3px 0;">✅ เสร็จ '+ptThd(j.doneDate)+'</div>';
+      h+=ptNotes(j)+ptActBtns(j)+'</div>';
+    });
+    h+='</div>';
+  });
+  h+='</div>';
+  document.getElementById('ptBody').innerHTML=h;
+}
+function ptRenderTable(){
+  var all=_ptJobs.map(function(j,i){return i;}).filter(function(i){return _ptJobs[i].prodStatus!=='ผลิตเสร็จแล้ว';}).sort(ptByWO);
+  var done=ptDone();
+  function row(i){ var j=_ptJobs[i];
+    return '<tr style="border-bottom:1px solid var(--bdr);">'
+      +'<td style="padding:9px 8px;vertical-align:top;"><span style="font-family:monospace;font-size:12px;color:var(--mu)">'+escHtml(j.woId)+'</span></td>'
+      +'<td style="padding:9px 8px;vertical-align:top;font-weight:800;">'+escHtml(j.customerName||'-')+'</td>'
+      +'<td style="padding:9px 8px;vertical-align:top;">'+ptPbadge(j.prodStatus)+(j.prodStatus!=='ผลิตเสร็จแล้ว'?'<div style="margin-top:4px;">'+ptRailBadge(j)+'</div>':(j.doneDate?'<div style="font-size:11px;color:var(--mu);margin-top:3px;">เสร็จ '+ptThd(j.doneDate)+'</div>':''))+'</td>'
+      +'<td style="padding:9px 8px;vertical-align:top;"><div style="font-size:13px;">'+ptSetSummary(j)+'</div><div style="font-size:11px;color:var(--mu);">📅 '+ptThd(j.installDate)+' · '+ptDueTxt(j)+'</div></td>'
+      +'<td style="padding:9px 8px;vertical-align:top;">'+(ptNotes(j)||'<span style="font-size:11px;color:var(--mu)">—</span>')+'</td>'
+      +'<td style="padding:9px 8px;vertical-align:top;">'+ptActBtns(j)+'</td></tr>';
+  }
+  var h='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="color:var(--mu);font-size:11px;">'
+    +'<th style="padding:8px;text-align:left;">WO</th><th style="padding:8px;text-align:left;">ชื่อ</th><th style="padding:8px;text-align:left;">สถานะ</th><th style="padding:8px;text-align:left;">สรุปชุด-สี / ติดตั้ง</th><th style="padding:8px;text-align:left;">หมายเหตุ</th><th style="padding:8px;text-align:left;">จัดการ</th></tr></thead><tbody>'
+    +(all.length?all.map(row).join(''):'<tr><td colspan="6" style="padding:18px;text-align:center;color:var(--mu);">ไม่มีงานค้างผลิต</td></tr>')+'</tbody></table></div>';
+  h+='<button class="btn btn-g" style="margin-top:14px;width:100%;justify-content:center;" onclick="ptToggleDone()">'+(_ptShowDone?'▲ ซ่อนงานที่เสร็จแล้ว':'📁 ดูงานที่เสร็จแล้ว ('+done.length+')')+'</button>';
+  if(_ptShowDone) h+='<div style="overflow-x:auto;margin-top:10px;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><tbody>'+(done.length?done.sort(ptByWO).map(row).join(''):'<tr><td style="padding:14px;color:var(--mu);">—</td></tr>')+'</tbody></table></div>';
+  document.getElementById('ptBody').innerHTML=h;
+}
+function ptRenderCal(){
+  if(_ptCY===null){ var t=new Date(); _ptCY=t.getFullYear(); _ptCM=t.getMonth(); }
+  if(!_ptCSel) _ptCSel=pkTodayStr_();
+  var bd={}; _ptJobs.forEach(function(j){ if(j.installDate) (bd[j.installDate]=bd[j.installDate]||[]).push(j); });
+  var h='<div style="display:flex;align-items:center;justify-content:center;gap:14px;margin:2px 0 12px;">'
+    +'<button class="btn btn-g btn-sm" onclick="ptCalPrev()">‹</button><span style="font-size:17px;font-weight:800;">'+PT_TH_MF[_ptCM]+' '+(_ptCY+543)+'</span>'
+    +'<button class="btn btn-g btn-sm" onclick="ptCalToday()">วันนี้</button><button class="btn btn-g btn-sm" onclick="ptCalNext()">›</button></div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">';
+  PT_DOW.forEach(function(d){ h+='<div style="text-align:center;font-size:12px;color:var(--mu);padding:4px 0;font-weight:600;">'+d+'</div>'; });
+  var first=new Date(_ptCY,_ptCM,1).getDay(), days=new Date(_ptCY,_ptCM+1,0).getDate(), today=pkTodayStr_();
+  for(var i=0;i<first;i++) h+='<div></div>';
+  for(var d=1;d<=days;d++){ var ds=_ptCY+'-'+String(_ptCM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); var js=bd[ds]||[];
+    var st='min-height:58px;background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:6px;cursor:pointer;position:relative;';
+    if(ds===today) st+='box-shadow:inset 0 0 0 2px var(--blu);'; if(ds===_ptCSel) st+='box-shadow:inset 0 0 0 2px var(--acc);background:#241f12;';
+    var cnt=js.length?'<span style="position:absolute;top:5px;right:6px;font-size:10px;background:var(--acc);color:#1a1205;border-radius:9px;padding:1px 6px;font-weight:800;">'+js.length+'</span>':'';
+    var dots=js.slice(0,6).map(function(j){ var c=(PT_COLOR[j.prodStatus]||PT_COLOR[PT_STEPS[0]])[1]; return '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;margin:1px;background:'+c+';"></span>'; }).join('');
+    h+='<div onclick="ptCalPick(\''+ds+'\')" style="'+st+'"><span style="font-size:13px;font-weight:700;">'+d+'</span>'+cnt+'<div style="margin-top:18px;">'+dots+'</div></div>';
+  }
+  h+='</div>';
+  var list=_ptJobs.map(function(j,i){return i;}).filter(function(i){return _ptJobs[i].installDate===_ptCSel;}).sort(ptByInstall);
+  h+='<div style="font-size:13px;font-weight:800;color:var(--mu);margin:16px 0 8px;">📅 '+ptThd(_ptCSel)+' · '+list.length+' งาน</div>';
+  if(list.length) list.forEach(function(i){ var j=_ptJobs[i];
+    h+='<div style="background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:11px 13px;margin-bottom:9px;">'
+      +'<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;"><span style="font-weight:800;font-size:15px;">'+escHtml(j.customerName||'-')+'</span><span style="font-family:monospace;font-size:11px;color:var(--mu);">'+escHtml(j.woId)+'</span></div>'
+      +'<div style="font-size:13px;margin:4px 0;">'+ptSetSummary(j)+'</div>'
+      +'<div style="margin:5px 0;">'+ptPbadge(j.prodStatus)+' '+(j.prodStatus!=='ผลิตเสร็จแล้ว'?ptRailBadge(j):'')+'</div>'
+      +ptNotes(j)+ptActBtns(j)+'</div>';
+  });
+  else h+='<div style="color:var(--mu);font-size:13px;">ไม่มีงานติดตั้งวันนี้</div>';
+  document.getElementById('ptBody').innerHTML=h;
+}
+function ptCalPrev(){ _ptCM--; if(_ptCM<0){_ptCM=11;_ptCY--;} ptRenderCal(); }
+function ptCalNext(){ _ptCM++; if(_ptCM>11){_ptCM=0;_ptCY++;} ptRenderCal(); }
+function ptCalToday(){ var t=new Date(); _ptCY=t.getFullYear(); _ptCM=t.getMonth(); _ptCSel=pkTodayStr_(); ptRenderCal(); }
+function ptCalPick(ds){ _ptCSel=ds; ptRenderCal(); }
+
 // ── manager calendar = ภาพรวมงานที่มอบหมาย (ปฏิทินทุกสถานะ + กดวันดูงานวันนั้น · ไม่มี agenda 7 วัน) ──
 let _calTasks = [], _calY = null, _calM = null, _calSel = '', _calHist = false;
 async function taskMgrLoadCalendar(){
