@@ -6491,13 +6491,37 @@ function ptDone(){ return _ptJobs.map(function(j,i){return i;}).filter(function(
 function ptByInstall(a,b){ var x=_ptJobs[a].installDate||'9999',y=_ptJobs[b].installDate||'9999'; return x<y?-1:x>y?1:0; }
 function ptByWO(a,b){ return _ptJobs[a].woId<_ptJobs[b].woId?-1:1; }
 
-async function ptSet(woId, patch){
-  if(_ptBusy) return; _ptBusy=true;
-  try{ var r=await call(Object.assign({action:'pk_prodSetTrack',woId:woId},patch));
-    if(!(r&&r.ok)){ toast((r&&r.error)||'อัปเดตไม่สำเร็จ'); }
-    else { var j=_ptJobs.find(function(x){return x.woId===woId;}); if(j) Object.assign(j,patch); }
-  }catch(e){ toast('ผิดพลาด: '+e.message); }
-  finally{ _ptBusy=false; ptSetView(_ptView); }
+// optimistic: อัปเดตจอทันที → เซฟเบื้องหลัง → ถ้าพลาดย้อนคืน (รู้สึกเร็ว ไม่ต้องรอ GAS)
+function ptSet(woId, patch){
+  var j=_ptJobs.find(function(x){return x.woId===woId;}); if(!j) return;
+  var prev={}; Object.keys(patch).forEach(function(k){ prev[k]=j[k]; });
+  Object.assign(j, patch); ptSetView(_ptView);
+  call(Object.assign({action:'pk_prodSetTrack',woId:woId},patch)).then(function(r){
+    if(!(r&&r.ok)){ Object.assign(j,prev); ptSetView(_ptView); toast((r&&r.error)||'บันทึกไม่สำเร็จ'); }
+  }).catch(function(e){ Object.assign(j,prev); ptSetView(_ptView); toast('บันทึกไม่สำเร็จ: '+(e&&e.message||e)); });
+}
+// ── เลือกหลายงาน + จบทีเดียว ──
+let _ptSel = {};
+function ptSelCount(){ return Object.keys(_ptSel).length; }
+function ptToggleSel(woId){ if(_ptSel[woId]) delete _ptSel[woId]; else _ptSel[woId]=true; ptSetView(_ptView); }
+function ptClearSel(){ _ptSel={}; ptSetView(_ptView); }
+function ptChk(j){ return '<input type="checkbox" onclick="ptToggleSel(\''+j.woId+'\')" '+(_ptSel[j.woId]?'checked':'')+' style="width:17px;height:17px;cursor:pointer;vertical-align:middle;">'; }
+function ptSelBar(){ var n=ptSelCount(); if(!n) return '';
+  return '<div style="position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surf2);border:1px solid var(--acc);border-radius:10px;padding:9px 13px;margin-bottom:12px;">'
+    +'<span style="font-weight:800;">เลือก '+n+' งาน</span>'
+    +'<button class="btn btn-p btn-sm" onclick="ptBatchDone()">✅ จบงานที่เลือก</button>'
+    +'<button class="btn btn-g btn-sm" onclick="ptClearSel()">ยกเลิก</button></div>';
+}
+function ptBatchDone(){
+  var ids=Object.keys(_ptSel); if(!ids.length) return;
+  var d=prompt('วันที่ผลิตเสร็จ (YYYY-MM-DD) — ใช้กับ '+ids.length+' งาน:', pkTodayStr_()); if(d===null) return;
+  var snap={};
+  ids.forEach(function(id){ var j=_ptJobs.find(function(x){return x.woId===id;}); if(j){ snap[id]={prodStatus:j.prodStatus,doneDate:j.doneDate}; j.prodStatus='ผลิตเสร็จแล้ว'; j.doneDate=d; } });
+  _ptSel={}; ptSetView(_ptView);
+  call({action:'pk_prodBatchSetTrack',woIds:ids,prodStatus:'ผลิตเสร็จแล้ว',doneDate:d}).then(function(r){
+    if(r&&r.ok){ toast('จบงานแล้ว '+(r.count||ids.length)+' งาน'); }
+    else { ids.forEach(function(id){ var j=_ptJobs.find(function(x){return x.woId===id;}); if(j&&snap[id]) Object.assign(j,snap[id]); }); ptSetView(_ptView); toast((r&&r.error)||'บันทึกไม่สำเร็จ'); }
+  }).catch(function(e){ ids.forEach(function(id){ var j=_ptJobs.find(function(x){return x.woId===id;}); if(j&&snap[id]) Object.assign(j,snap[id]); }); ptSetView(_ptView); toast('บันทึกไม่สำเร็จ: '+(e&&e.message||e)); });
 }
 function ptIdx(woId){ return _ptJobs.findIndex(function(x){return x.woId===woId;}); }
 function ptAdv(woId){ var j=_ptJobs[ptIdx(woId)]; var k=PT_STEPS.indexOf(j.prodStatus); if(k>=PT_STEPS.length-1) return;
@@ -6535,7 +6559,7 @@ function ptRenderKanban(){
     h+='<div style="font-size:13px;font-weight:800;text-align:center;padding:7px;border-radius:7px;margin-bottom:9px;background:'+c[0]+';color:'+c[1]+'">'+s+' ('+byS[s].length+')</div>';
     byS[s].forEach(function(i){ var j=_ptJobs[i];
       h+='<div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:9px;padding:11px 12px;margin-bottom:9px;">';
-      h+='<div style="font-size:15px;font-weight:800;">'+escHtml(j.customerName||'-')+'</div>';
+      h+='<div style="display:flex;align-items:center;gap:7px;">'+(s!=='ผลิตเสร็จแล้ว'?ptChk(j):'')+'<span style="font-size:15px;font-weight:800;">'+escHtml(j.customerName||'-')+'</span></div>';
       h+='<div style="font-family:monospace;font-size:11px;color:var(--mu);margin:1px 0 5px;">'+escHtml(j.woId)+'</div>';
       h+='<div style="font-size:13px;margin:4px 0;">'+ptSetSummary(j)+'</div>';
       h+='<div style="font-size:12px;color:var(--mu);margin:3px 0;">📅 ติดตั้ง '+ptThd(j.installDate)+' · '+ptDueTxt(j)+'</div>';
@@ -6546,13 +6570,14 @@ function ptRenderKanban(){
     h+='</div>';
   });
   h+='</div>';
-  document.getElementById('ptBody').innerHTML=h;
+  document.getElementById('ptBody').innerHTML=ptSelBar()+h;
 }
 function ptRenderTable(){
   var all=_ptJobs.map(function(j,i){return i;}).filter(function(i){return _ptJobs[i].prodStatus!=='ผลิตเสร็จแล้ว' && ptPass(_ptJobs[i]);}).sort(ptByWO);
   var done=ptDone().filter(function(i){return ptPass(_ptJobs[i]);});
   function row(i){ var j=_ptJobs[i];
     return '<tr style="border-bottom:1px solid var(--bdr);">'
+      +'<td style="padding:9px 4px;vertical-align:top;text-align:center;">'+(j.prodStatus!=='ผลิตเสร็จแล้ว'?ptChk(j):'')+'</td>'
       +'<td style="padding:9px 8px;vertical-align:top;"><span style="font-family:monospace;font-size:12px;color:var(--mu)">'+escHtml(j.woId)+'</span></td>'
       +'<td style="padding:9px 8px;vertical-align:top;font-weight:800;">'+escHtml(j.customerName||'-')+'</td>'
       +'<td style="padding:9px 8px;vertical-align:top;">'+ptPbadge(j.prodStatus)+(j.prodStatus!=='ผลิตเสร็จแล้ว'?'<div style="margin-top:4px;">'+ptRailBadge(j)+'</div>':(j.doneDate?'<div style="font-size:11px;color:var(--mu);margin-top:3px;">เสร็จ '+ptThd(j.doneDate)+'</div>':''))+'</td>'
@@ -6561,11 +6586,11 @@ function ptRenderTable(){
       +'<td style="padding:9px 8px;vertical-align:top;">'+ptActBtns(j)+'</td></tr>';
   }
   var h='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="color:var(--mu);font-size:11px;">'
-    +'<th style="padding:8px;text-align:left;">WO</th><th style="padding:8px;text-align:left;">ชื่อ</th><th style="padding:8px;text-align:left;">สถานะ</th><th style="padding:8px;text-align:left;">สรุปชุด-สี / ติดตั้ง</th><th style="padding:8px;text-align:left;">หมายเหตุ</th><th style="padding:8px;text-align:left;">จัดการ</th></tr></thead><tbody>'
-    +(all.length?all.map(row).join(''):'<tr><td colspan="6" style="padding:18px;text-align:center;color:var(--mu);">ไม่มีงานค้างผลิต</td></tr>')+'</tbody></table></div>';
+    +'<th style="width:28px;"></th><th style="padding:8px;text-align:left;">WO</th><th style="padding:8px;text-align:left;">ชื่อ</th><th style="padding:8px;text-align:left;">สถานะ</th><th style="padding:8px;text-align:left;">สรุปชุด-สี / ติดตั้ง</th><th style="padding:8px;text-align:left;">หมายเหตุ</th><th style="padding:8px;text-align:left;">จัดการ</th></tr></thead><tbody>'
+    +(all.length?all.map(row).join(''):'<tr><td colspan="7" style="padding:18px;text-align:center;color:var(--mu);">ไม่มีงานค้างผลิต</td></tr>')+'</tbody></table></div>';
   h+='<button class="btn btn-g" style="margin-top:14px;width:100%;justify-content:center;" onclick="ptToggleDone()">'+(_ptShowDone?'▲ ซ่อนงานที่เสร็จแล้ว':'📁 ดูงานที่เสร็จแล้ว ('+done.length+')')+'</button>';
   if(_ptShowDone) h+='<div style="overflow-x:auto;margin-top:10px;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><tbody>'+(done.length?done.sort(ptByWO).map(row).join(''):'<tr><td style="padding:14px;color:var(--mu);">—</td></tr>')+'</tbody></table></div>';
-  document.getElementById('ptBody').innerHTML=h;
+  document.getElementById('ptBody').innerHTML=ptSelBar()+h;
 }
 function ptRenderCal(){
   if(_ptCY===null){ var t=new Date(); _ptCY=t.getFullYear(); _ptCM=t.getMonth(); }
@@ -6596,7 +6621,7 @@ function ptRenderCal(){
       +ptNotes(j)+ptActBtns(j)+'</div>';
   });
   else h+='<div style="color:var(--mu);font-size:13px;">ไม่มีงานติดตั้งวันนี้</div>';
-  document.getElementById('ptBody').innerHTML=h;
+  document.getElementById('ptBody').innerHTML=ptSelBar()+h;
 }
 function ptCalPrev(){ _ptCM--; if(_ptCM<0){_ptCM=11;_ptCY--;} ptRenderCal(); }
 function ptCalNext(){ _ptCM++; if(_ptCM>11){_ptCM=0;_ptCY++;} ptRenderCal(); }
