@@ -1173,7 +1173,9 @@ function renderOfficeShell(){
           ${CURRENT_USER.role === 'manager' ? `
           <div class="sidebar-group">ผลิต</div>
           <button class="sidebar-item" data-tab="production" onclick="setTab('production',this)"><span class="sidebar-ico">🏭</span><span class="sidebar-label">ใบผลิต</span></button>
-          <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>` : ''}
+          <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>` : (CURRENT_USER.role === 'office' ? `
+          <div class="sidebar-group">ผลิต</div>
+          <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>` : '')}
 
           <div class="sidebar-group">การเงิน / เบิกจ่าย</div>
           <button class="sidebar-item" data-tab="expensesubmit" onclick="setTab('expensesubmit',this)"><span class="sidebar-ico">💸</span><span class="sidebar-label">ตั้งเบิก</span></button>
