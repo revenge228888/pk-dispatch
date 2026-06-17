@@ -1174,10 +1174,12 @@ function renderOfficeShell(){
           <div class="sidebar-group">ผลิต</div>
           <button class="sidebar-item" data-tab="production" onclick="setTab('production',this)"><span class="sidebar-ico">🏭</span><span class="sidebar-label">ใบผลิต</span></button>
           <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>
-          <button class="sidebar-item" data-tab="railstock" onclick="setTab('railstock',this)"><span class="sidebar-ico">📦</span><span class="sidebar-label">คลังราง</span></button>` : (CURRENT_USER.role === 'office' ? `
+          <button class="sidebar-item" data-tab="railstock" onclick="setTab('railstock',this)"><span class="sidebar-ico">📦</span><span class="sidebar-label">คลังราง</span></button>
+          <button class="sidebar-item" data-tab="costedit" onclick="setTab('costedit',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">แก้ไขทุน</span></button>` : (CURRENT_USER.role === 'office' ? `
           <div class="sidebar-group">ผลิต</div>
           <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>
-          <button class="sidebar-item" data-tab="railstock" onclick="setTab('railstock',this)"><span class="sidebar-ico">📦</span><span class="sidebar-label">คลังราง</span></button>` : '')}
+          <button class="sidebar-item" data-tab="railstock" onclick="setTab('railstock',this)"><span class="sidebar-ico">📦</span><span class="sidebar-label">คลังราง</span></button>
+          <button class="sidebar-item" data-tab="costedit" onclick="setTab('costedit',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">แก้ไขทุน</span></button>` : '')}
 
           <div class="sidebar-group">การเงิน / เบิกจ่าย</div>
           <button class="sidebar-item" data-tab="expensesubmit" onclick="setTab('expensesubmit',this)"><span class="sidebar-ico">💸</span><span class="sidebar-label">ตั้งเบิก</span></button>
@@ -1281,6 +1283,22 @@ function renderOfficeShell(){
             <button class="btn btn-g btn-sm" onclick="pkpLoadList()">โหลด</button>
           </div>
           <div id="pkpListWrap"><div class="loading-row">กำลังโหลด...</div></div>
+        </div>
+      </div>
+
+      <!-- COST EDIT (แก้ไขทุน) -->
+      <div id="tabCostedit" style="display:none;">
+        <div class="section-pad">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+            <div style="font-weight:800;font-size:16px;">💰 แก้ไขทุน (ราคาต้นทุน)</div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-p btn-sm" onclick="ceAdd()">+ เพิ่มรายการ</button>
+              <button class="btn btn-g btn-sm" onclick="ceLoad()">↻</button>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--mu);margin-bottom:10px;">ราคา/หน่วยใช้ = ราคาซื้อ ÷ จำนวนต่อหน่วยซื้อ · แก้แล้วกด 💾 ทีละแถว</div>
+          <input id="ceSearchInput" class="fi" style="margin-bottom:12px;" oninput="ceRender()" placeholder="🔍 ค้นหา ชื่อ / สี">
+          <div id="ceBody"><div class="loading-row">กำลังโหลด...</div></div>
         </div>
       </div>
 
@@ -3383,6 +3401,7 @@ function setTab(t, btn){
   if (t === 'production') pkpInit();
   if (t === 'prodtrack') ptLoad();
   if (t === 'railstock') rsLoad();
+  if (t === 'costedit') ceLoad();
 }
 
 // ── Sidebar toggle ──
@@ -6706,6 +6725,64 @@ function ptUseRail(woId, color){
   call({action:'pk_railStockUse',color:color,qty:q,woId:woId}).then(function(r){ if(!(r&&r.ok)){ _railMap[color]=have; if(s)s.qty+=q; toast((r&&r.error)||'หักสต็อกไม่สำเร็จ'); } });
   call({action:'pk_prodSetTrack',woId:woId,hasRail:true}).catch(function(){});
 }
+
+// ════════════════════════════════════════
+//  💰 แก้ไขทุน — แก้/เพิ่มแถวในชีต "ราคาต้นทุน"
+// ════════════════════════════════════════
+let _cePrices=[];
+async function ceFetch(){
+  if(CURRENT_USER){
+    try{ var ctrl=new AbortController(); var to=setTimeout(function(){ctrl.abort();},8000);
+      var r=await fetch(API.replace(/\/api$/,'/cost-prices'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json','X-PK-Secret':API_SECRET},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
+      clearTimeout(to); var data=await r.json();
+      if(data&&data.ok&&Array.isArray(data.prices)){ _cePrices=data.prices; return; }
+      console.warn('[cost] /cost-prices ไม่ ok → fallback GAS:', data&&data.error);
+    }catch(e){ console.warn('[cost] /cost-prices error → fallback GAS:', e&&e.message); }
+  }
+  try{ var g=await call({action:'pk_costListPrices'}); _cePrices=(g&&g.ok)?(g.prices||[]):[]; if(!(g&&g.ok))console.warn('[cost] GAS:',g&&g.error); }catch(e){ _cePrices=[]; }
+}
+async function ceLoad(){ if(!document.getElementById('ceBody'))return; document.getElementById('ceBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; await ceFetch(); ceRender(); }
+function ceUnit(p){ var d=Number(p.divisor)||1; if(d<=0)d=1; return Math.round((Number(p.buyPrice)||0)/d*10000)/10000; }
+function ceRender(){
+  if(!document.getElementById('ceBody'))return;
+  var q=((document.getElementById('ceSearchInput')||{}).value||'').trim().toLowerCase();
+  var inp=function(i,f,v,w,type){ return '<input id="ce_'+f+'_'+i+'" class="fi" style="width:'+w+';padding:5px 7px;font-size:12px;" '+(type?'type="'+type+'" ':'')+'value="'+String(v==null?'':v).replace(/"/g,'&quot;')+'">'; };
+  var rows='';
+  _cePrices.forEach(function(p,i){
+    if(q){ var hay=((p.name||'')+' '+(p.color||'')).toLowerCase(); if(hay.indexOf(q)<0) return; }
+    rows+='<tr style="border-bottom:1px solid var(--bdr);">'
+      +'<td style="padding:6px 4px;">'+inp(i,'name',p.name,'120px')+'</td>'
+      +'<td style="padding:6px 4px;">'+inp(i,'color',p.color,'80px')+'</td>'
+      +'<td style="padding:6px 4px;">'+inp(i,'buyPrice',p.buyPrice,'80px','number')+'</td>'
+      +'<td style="padding:6px 4px;">'+inp(i,'buyUnit',p.buyUnit,'70px')+'</td>'
+      +'<td style="padding:6px 4px;">'+inp(i,'divisor',p.divisor,'70px','number')+'</td>'
+      +'<td style="padding:6px 4px;">'+inp(i,'useUnit',p.useUnit,'70px')+'</td>'
+      +'<td style="padding:6px 4px;text-align:right;color:var(--mu);font-size:12px;white-space:nowrap;">'+(p._row?'฿'+ceUnit(p):'<span style="color:var(--acc)">ใหม่</span>')+'</td>'
+      +'<td style="padding:6px 4px;white-space:nowrap;"><button class="btn btn-p btn-sm" onclick="ceSave('+i+')">💾</button> <button class="btn btn-g btn-sm" onclick="ceDelete('+i+')">🗑</button></td></tr>';
+  });
+  var h='<div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:12px;min-width:100%;"><thead><tr style="color:var(--mu);font-size:11px;text-align:left;">'
+    +'<th style="padding:6px 4px;">ชื่อ</th><th style="padding:6px 4px;">สี</th><th style="padding:6px 4px;">ราคาซื้อ</th><th style="padding:6px 4px;">หน่วยซื้อ</th><th style="padding:6px 4px;">จำนวน/หน่วย</th><th style="padding:6px 4px;">หน่วยใช้</th><th style="padding:6px 4px;text-align:right;">ราคา/หน่วย</th><th></th></tr></thead><tbody>'
+    +(rows||'<tr><td colspan="8" style="padding:16px;text-align:center;color:var(--mu);">ไม่พบรายการ</td></tr>')+'</tbody></table></div>';
+  document.getElementById('ceBody').innerHTML=h;
+}
+function ceCollect(i){
+  var g=function(f){ return (document.getElementById('ce_'+f+'_'+i)||{}).value; };
+  return { name:(g('name')||'').trim(), color:(g('color')||'').trim(), buyPrice:Number(g('buyPrice'))||0, buyUnit:(g('buyUnit')||'').trim(), divisor:Number(g('divisor'))||1, useUnit:(g('useUnit')||'').trim() };
+}
+function ceSave(i){
+  var p=_cePrices[i]; if(!p)return; var v=ceCollect(i);
+  if(!v.name){ toast('ต้องมีชื่อ'); return; }
+  Object.assign(p,v);
+  if(p._row){ call(Object.assign({action:'pk_costSetRow',row:p._row},v)).then(function(r){ if(r&&r.ok){ toast('บันทึกแล้ว'); ceRender(); } else toast((r&&r.error)||'บันทึกไม่สำเร็จ'); }); }
+  else { call(Object.assign({action:'pk_costAddRow'},v)).then(function(r){ if(r&&r.ok){ p._row=r.row; toast('เพิ่มแล้ว'); ceRender(); } else toast((r&&r.error)||'เพิ่มไม่สำเร็จ'); }); }
+}
+function ceDelete(i){
+  var p=_cePrices[i]; if(!p)return;
+  if(!confirm('ลบ "'+(p.name||'')+(p.color?(' ['+p.color+']'):'')+'" ?')) return;
+  if(p._row){ call({action:'pk_costDeleteRow',row:p._row}).then(function(r){ if(!(r&&r.ok)) toast((r&&r.error)||'ลบไม่สำเร็จ'); }); }
+  _cePrices.splice(i,1); ceRender();
+}
+function ceAdd(){ _cePrices.unshift({_row:null,name:'',color:'',buyPrice:0,buyUnit:'',divisor:1,useUnit:''}); var si=document.getElementById('ceSearchInput'); if(si)si.value=''; ceRender(); }
 
 // ── manager calendar = ภาพรวมงานที่มอบหมาย (ปฏิทินทุกสถานะ + กดวันดูงานวันนั้น · ไม่มี agenda 7 วัน) ──
 let _calTasks = [], _calY = null, _calM = null, _calSel = '', _calHist = false;
