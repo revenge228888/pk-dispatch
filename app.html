@@ -1173,9 +1173,11 @@ function renderOfficeShell(){
           ${CURRENT_USER.role === 'manager' ? `
           <div class="sidebar-group">ผลิต</div>
           <button class="sidebar-item" data-tab="production" onclick="setTab('production',this)"><span class="sidebar-ico">🏭</span><span class="sidebar-label">ใบผลิต</span></button>
-          <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>` : (CURRENT_USER.role === 'office' ? `
+          <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>
+          <button class="sidebar-item" data-tab="railstock" onclick="setTab('railstock',this)"><span class="sidebar-ico">📦</span><span class="sidebar-label">คลังราง</span></button>` : (CURRENT_USER.role === 'office' ? `
           <div class="sidebar-group">ผลิต</div>
-          <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>` : '')}
+          <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>
+          <button class="sidebar-item" data-tab="railstock" onclick="setTab('railstock',this)"><span class="sidebar-ico">📦</span><span class="sidebar-label">คลังราง</span></button>` : '')}
 
           <div class="sidebar-group">การเงิน / เบิกจ่าย</div>
           <button class="sidebar-item" data-tab="expensesubmit" onclick="setTab('expensesubmit',this)"><span class="sidebar-ico">💸</span><span class="sidebar-label">ตั้งเบิก</span></button>
@@ -1279,6 +1281,21 @@ function renderOfficeShell(){
             <button class="btn btn-g btn-sm" onclick="pkpLoadList()">โหลด</button>
           </div>
           <div id="pkpListWrap"><div class="loading-row">กำลังโหลด...</div></div>
+        </div>
+      </div>
+
+      <!-- RAIL STOCK (คลังราง) -->
+      <div id="tabRailstock" style="display:none;">
+        <div class="section-pad">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+            <div style="font-weight:800;font-size:16px;">📦 คลังราง</div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-p btn-sm" onclick="rsReceive()">+ รับเข้า</button>
+              <button class="btn btn-g btn-sm" onclick="rsLoad()">↻</button>
+            </div>
+          </div>
+          <input id="rsSearchInput" class="fi" style="margin-bottom:12px;" oninput="rsRender()" placeholder="🔍 ค้นหาสี">
+          <div id="rsBody"><div class="loading-row">กำลังโหลด...</div></div>
         </div>
       </div>
 
@@ -3365,6 +3382,7 @@ function setTab(t, btn){
   if (t === 'summary') summaryInit();
   if (t === 'production') pkpInit();
   if (t === 'prodtrack') ptLoad();
+  if (t === 'railstock') rsLoad();
 }
 
 // ── Sidebar toggle ──
@@ -6464,7 +6482,7 @@ function ptNotes(j){ return (j.noteEquip?'<div style="font-size:12px;background:
 async function ptLoad(){
   if(!document.getElementById('ptBody')) return;
   document.getElementById('ptBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>';
-  await ptFetch();
+  await Promise.all([ptFetch(), railStockFetch()]);
   ptSetView(_ptView);
 }
 async function ptFetch(){
@@ -6565,7 +6583,7 @@ function ptRenderKanban(){
       h+='<div style="font-size:12px;color:var(--mu);margin:3px 0;">📅 ติดตั้ง '+ptThd(j.installDate)+' · '+ptDueTxt(j)+'</div>';
       if(s!=='ผลิตเสร็จแล้ว') h+='<div style="margin:5px 0;">'+ptRailBadge(j)+'</div>';
       else if(j.doneDate) h+='<div style="font-size:12px;color:var(--mu);margin:3px 0;">✅ เสร็จ '+ptThd(j.doneDate)+'</div>';
-      h+=ptNotes(j)+ptActBtns(j)+'</div>';
+      h+=ptRailStockAlert(j)+ptNotes(j)+ptActBtns(j)+'</div>';
     });
     h+='</div>';
   });
@@ -6582,7 +6600,7 @@ function ptRenderTable(){
       +'<td style="padding:9px 8px;vertical-align:top;font-weight:800;">'+escHtml(j.customerName||'-')+'</td>'
       +'<td style="padding:9px 8px;vertical-align:top;">'+ptPbadge(j.prodStatus)+(j.prodStatus!=='ผลิตเสร็จแล้ว'?'<div style="margin-top:4px;">'+ptRailBadge(j)+'</div>':(j.doneDate?'<div style="font-size:11px;color:var(--mu);margin-top:3px;">เสร็จ '+ptThd(j.doneDate)+'</div>':''))+'</td>'
       +'<td style="padding:9px 8px;vertical-align:top;"><div style="font-size:13px;">'+ptSetSummary(j)+'</div><div style="font-size:11px;color:var(--mu);">📅 '+ptThd(j.installDate)+' · '+ptDueTxt(j)+'</div></td>'
-      +'<td style="padding:9px 8px;vertical-align:top;">'+(ptNotes(j)||'<span style="font-size:11px;color:var(--mu)">—</span>')+'</td>'
+      +'<td style="padding:9px 8px;vertical-align:top;">'+((ptNotes(j)+ptRailStockAlert(j))||'<span style="font-size:11px;color:var(--mu)">—</span>')+'</td>'
       +'<td style="padding:9px 8px;vertical-align:top;">'+ptActBtns(j)+'</td></tr>';
   }
   var h='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="color:var(--mu);font-size:11px;">'
@@ -6618,7 +6636,7 @@ function ptRenderCal(){
       +'<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;"><span style="font-weight:800;font-size:15px;">'+escHtml(j.customerName||'-')+'</span><span style="font-family:monospace;font-size:11px;color:var(--mu);">'+escHtml(j.woId)+'</span></div>'
       +'<div style="font-size:13px;margin:4px 0;">'+ptSetSummary(j)+'</div>'
       +'<div style="margin:5px 0;">'+ptPbadge(j.prodStatus)+' '+(j.prodStatus!=='ผลิตเสร็จแล้ว'?ptRailBadge(j):'')+'</div>'
-      +ptNotes(j)+ptActBtns(j)+'</div>';
+      +ptRailStockAlert(j)+ptNotes(j)+ptActBtns(j)+'</div>';
   });
   else h+='<div style="color:var(--mu);font-size:13px;">ไม่มีงานติดตั้งวันนี้</div>';
   document.getElementById('ptBody').innerHTML=ptSelBar()+h;
@@ -6627,6 +6645,67 @@ function ptCalPrev(){ _ptCM--; if(_ptCM<0){_ptCM=11;_ptCY--;} ptRenderCal(); }
 function ptCalNext(){ _ptCM++; if(_ptCM>11){_ptCM=0;_ptCY++;} ptRenderCal(); }
 function ptCalToday(){ var t=new Date(); _ptCY=t.getFullYear(); _ptCM=t.getMonth(); _ptCSel=pkTodayStr_(); ptRenderCal(); }
 function ptCalPick(ds){ _ptCSel=ds; ptRenderCal(); }
+
+// ════════════════════════════════════════
+//  📦 คลังราง — จอจัดการ + ตัวเชื่อมกับจอติดตามงานผลิต
+// ════════════════════════════════════════
+let _railStock=[], _railMap={};
+function railMapBuild(){ _railMap={}; _railStock.forEach(function(s){ _railMap[s.color]=s.qty; }); }
+async function railStockFetch(){
+  if(CURRENT_USER){
+    try{ var ctrl=new AbortController(); var to=setTimeout(function(){ctrl.abort();},8000);
+      var r=await fetch(API.replace(/\/api$/,'/rail-stock'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json','X-PK-Secret':API_SECRET},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
+      clearTimeout(to); var data=await r.json();
+      if(data&&data.ok&&Array.isArray(data.items)){ _railStock=data.items; railMapBuild(); return; }
+      console.warn('[railStock] /rail-stock ไม่ ok → fallback GAS:', data&&data.error);
+    }catch(e){ console.warn('[railStock] /rail-stock error → fallback GAS:', e&&e.message); }
+  }
+  try{ var g=await call({action:'pk_railStockList'}); _railStock=(g&&g.ok)?(g.items||[]):[]; railMapBuild(); if(!(g&&g.ok))console.warn('[railStock] GAS:',g&&g.error); }
+  catch(e){ _railStock=[]; railMapBuild(); }
+}
+async function rsLoad(){ if(!document.getElementById('rsBody'))return; document.getElementById('rsBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; await railStockFetch(); rsRender(); }
+function rsRender(){
+  if(!document.getElementById('rsBody'))return;
+  var q=((document.getElementById('rsSearchInput')||{}).value||'').trim().toLowerCase();
+  var list=_railStock.filter(function(s){ return !q || s.color.toLowerCase().indexOf(q)>=0; }).slice().sort(function(a,b){return a.color<b.color?-1:1;});
+  var h='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:14px;"><thead><tr style="color:var(--mu);font-size:11px;"><th style="padding:8px;text-align:left;">สีราง</th><th style="padding:8px;text-align:right;">คงเหลือ (เส้น)</th><th style="padding:8px;"></th></tr></thead><tbody>';
+  h+= list.length? list.map(function(s){ var low=s.qty<=0;
+    return '<tr style="border-bottom:1px solid var(--bdr);"><td style="padding:10px 8px;font-weight:700;">'+escHtml(s.color)+'</td>'
+      +'<td style="padding:10px 8px;text-align:right;font-weight:800;color:'+(low?'var(--rd)':'var(--tx)')+';">'+s.qty+'</td>'
+      +'<td style="padding:10px 8px;text-align:right;white-space:nowrap;"><button class="btn btn-g btn-sm" onclick="rsReceiveColor(\''+escHtml(s.color)+'\')">+ รับเข้า</button> <button class="btn btn-g btn-sm" onclick="rsSet(\''+escHtml(s.color)+'\')">แก้ยอด</button></td></tr>';
+  }).join('') : '<tr><td colspan="3" style="padding:18px;text-align:center;color:var(--mu);">ยังไม่มีข้อมูลคลังราง — กด "+ รับเข้า"</td></tr>';
+  h+='</tbody></table></div>';
+  document.getElementById('rsBody').innerHTML=h;
+}
+function rsReceive(){ var c=prompt('รับเข้า — สีราง:'); if(c===null)return; c=c.trim(); if(!c)return; rsReceiveColor(c); }
+function rsReceiveColor(color){
+  var q=prompt('รับเข้าราง "'+color+'" กี่เส้น?','1'); if(q===null)return; q=Number(q); if(!(q>0)){ toast('จำนวนไม่ถูกต้อง'); return; }
+  var s=_railStock.find(function(x){return x.color===color;}); if(s) s.qty+=q; else { s={color:color,qty:q}; _railStock.push(s); } railMapBuild(); rsRender();
+  call({action:'pk_railStockReceive',color:color,qty:q}).then(function(r){ if(!(r&&r.ok)){ s.qty-=q; railMapBuild(); rsRender(); toast((r&&r.error)||'รับเข้าไม่สำเร็จ'); } else if(typeof r.qty==='number'){ s.qty=r.qty; railMapBuild(); rsRender(); } }).catch(function(e){ s.qty-=q; railMapBuild(); rsRender(); toast('รับเข้าไม่สำเร็จ: '+(e&&e.message||e)); });
+}
+function rsSet(color){
+  var s=_railStock.find(function(x){return x.color===color;}), cur=s?s.qty:0;
+  var q=prompt('แก้ยอดราง "'+color+'" เป็นกี่เส้น?',String(cur)); if(q===null)return; q=Number(q); if(!isFinite(q)){ toast('จำนวนไม่ถูกต้อง'); return; }
+  var prev=cur; if(s)s.qty=q; else {s={color:color,qty:q};_railStock.push(s);} railMapBuild(); rsRender();
+  call({action:'pk_railStockSet',color:color,qty:q}).then(function(r){ if(!(r&&r.ok)){ s.qty=prev; railMapBuild(); rsRender(); toast((r&&r.error)||'แก้ยอดไม่สำเร็จ'); } }).catch(function(e){ s.qty=prev; railMapBuild(); rsRender(); toast('แก้ยอดไม่สำเร็จ: '+(e&&e.message||e)); });
+}
+function ptJobSpecialColors(j){ return (j.sets||[]).map(function(s){return s.c;}).filter(function(c){return c&&c!=='อบขาว'&&c!=='ดำ';}); }
+function ptRailStockAlert(j){
+  if(j.hasRail || j.rush || !ptIsSpecial(j) || j.prodStatus==='ผลิตเสร็จแล้ว') return '';
+  var out=''; ptJobSpecialColors(j).forEach(function(c){ var n=_railMap[c]||0; if(n>0){
+    out+='<div style="font-size:12px;background:#11331d;border:1px solid #1d5233;border-radius:7px;padding:6px 9px;margin:5px 0;color:#9be8b4;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">📦 มีราง'+escHtml(c)+'ในคลัง ('+n+') — ไปเช็ค <button class="btn btn-p btn-sm" onclick="ptUseRail(\''+j.woId+'\',\''+escHtml(c)+'\')">ใช้ราง</button></div>';
+  }});
+  return out;
+}
+function ptUseRail(woId, color){
+  var j=_ptJobs[ptIdx(woId)]; if(!j) return;
+  var def=ptTotSets(j)||1, have=_railMap[color]||0;
+  var q=prompt('ใช้รางสี '+color+' กี่เส้น? (คลังมี '+have+')',String(def)); if(q===null)return; q=Number(q); if(!(q>0)){ toast('จำนวนไม่ถูกต้อง'); return; }
+  _railMap[color]=have-q; var s=_railStock.find(function(x){return x.color===color;}); if(s)s.qty-=q;
+  j.hasRail=true; ptSetView(_ptView);
+  call({action:'pk_railStockUse',color:color,qty:q,woId:woId}).then(function(r){ if(!(r&&r.ok)){ _railMap[color]=have; if(s)s.qty+=q; toast((r&&r.error)||'หักสต็อกไม่สำเร็จ'); } });
+  call({action:'pk_prodSetTrack',woId:woId,hasRail:true}).catch(function(){});
+}
 
 // ── manager calendar = ภาพรวมงานที่มอบหมาย (ปฏิทินทุกสถานะ + กดวันดูงานวันนั้น · ไม่มี agenda 7 วัน) ──
 let _calTasks = [], _calY = null, _calM = null, _calSel = '', _calHist = false;
