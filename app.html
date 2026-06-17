@@ -6547,9 +6547,21 @@ function ptSet(woId, patch){
   var j=_ptJobs.find(function(x){return x.woId===woId;}); if(!j) return;
   var prev={}; Object.keys(patch).forEach(function(k){ prev[k]=j[k]; });
   Object.assign(j, patch); ptSetView(_ptView);
+  if(patch.prodStatus==='จัดอุปกรณ์แล้ว') ptIssueEquip(woId);
   call(Object.assign({action:'pk_prodSetTrack',woId:woId},patch)).then(function(r){
     if(!(r&&r.ok)){ Object.assign(j,prev); ptSetView(_ptView); toast((r&&r.error)||'บันทึกไม่สำเร็จ'); }
   }).catch(function(e){ Object.assign(j,prev); ptSetView(_ptView); toast('บันทึกไม่สำเร็จ: '+(e&&e.message||e)); });
+}
+function ptIssueEquip(woId){
+  call({action:'pk_equipIssueForWO',woId:woId}).then(function(r){
+    if(!r||!r.ok){ toast((r&&r.error)||'หักอุปกรณ์ไม่สำเร็จ'); return; }
+    if(r.already) return;                       // หักไปแล้ว — เงียบ
+    if(r.issued===0){ toast('ℹ️ ใบนี้ยังไม่มีข้อมูลอุปกรณ์ — เปิดใบผลิตแล้วกดบันทึกใหม่'); return; }
+    var msg='✅ หักอุปกรณ์ออกจากคลังแล้ว ('+r.issued+' รายการ)';
+    if(r.warnings&&r.warnings.length) msg+=' · ⚠ สต็อกติดลบ: '+r.warnings.join(', ');
+    toast(msg);
+    if(typeof _equipStock!=='undefined'){ try{ equipStockFetch().then(function(){ if(document.getElementById('esBody')) esRender(); }); }catch(e){} }
+  }).catch(function(e){ toast('หักอุปกรณ์ไม่สำเร็จ: '+(e&&e.message||e)); });
 }
 // ── เลือกหลายงาน + จบทีเดียว ──
 let _ptSel = {};
@@ -9731,8 +9743,22 @@ function pkpValidate(b){
 }
 
 // ── บันทึก (create / update) ──
+// แปลง eq → ลิสต์ SKU นับชิ้น (สำหรับหักสต็อกอัตโนมัติ) · ตรงกับ mapping ใบเบิก · ไม่รวมของนับความยาว
+function pkpEquipNeed_(eq){
+  var W=eq.wheel||[], J=eq.joint||[];
+  var L=[
+    ['ล้อรางธรรมดา-ซ้าย','ขาว',W[0]],['ล้อรางธรรมดา-ขวา','ขาว',W[1]],['ล้อรางเตี้ย-ซ้าย','ขาว',W[2]],['ล้อรางเตี้ย-ขวา','ขาว',W[3]],
+    ['ล้อรางธรรมดา-ซ้าย','ดำ',W[4]],['ล้อรางธรรมดา-ขวา','ดำ',W[5]],['ล้อรางเตี้ย-ซ้าย','ดำ',W[6]],['ล้อรางเตี้ย-ขวา','ดำ',W[7]],
+    ['ตัวดึงเชือก','',eq.ropePull],['ตัวดึงสลิง','',eq.slingPull],
+    ['ข้อต่อรางธรรมดา','ขาว',J[0]],['ข้อต่อรางเตี้ย-ซ้าย','ขาว',J[1]],['ข้อต่อรางเตี้ย-ขวา','ขาว',J[2]],
+    ['ข้อต่อรางธรรมดา','ดำ',J[3]],['ข้อต่อรางเตี้ย-ซ้าย','ดำ',J[4]],['ข้อต่อรางเตี้ย-ขวา','ดำ',J[5]],
+    ['แผ่นแยกกลาง','',eq.plate],['ตาไก่ทอง','',eq.eyelet]
+  ];
+  return L.filter(function(x){return (Number(x[2])||0)>0;}).map(function(x){return {name:x[0],color:x[1],qty:Number(x[2])||0};});
+}
 async function pkpSave(){
   var b=pkpBody(); if(_pkpCostResult) b.costSnapshot=_pkpCostResult; var err=pkpValidate(b);
+  try{ b.equipNeed = JSON.stringify(pkpEquipNeed_(pkpRequisition(pkpItems, b.mainColorAlu||'').eq)); }catch(e){ b.equipNeed='[]'; }
   if(err){ toast('⚠️ '+err); return; }
   var sv=document.getElementById('pkpSaveBtn'); if(sv){sv.disabled=true;sv.textContent='กำลังบันทึก...';}
   try{
