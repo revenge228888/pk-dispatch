@@ -1223,6 +1223,7 @@ function renderOfficeShell(){
             <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--acc);"></i> รอรับงาน</span>
             <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--blu);"></i> กำลังทำ</span>
             <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--grn);"></i> จบงาน</span>
+            <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--rd);"></i> ต่องาน</span>
             <span style="margin-left:auto;">★ = คะแนนรวมต่อวัน</span>
           </div>
           <div id="dashCalPanel" style="margin-top:16px;"></div>
@@ -6225,7 +6226,7 @@ function pkExtractDistrict_(addr){
 }
 const PK_DASH_TH_M = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
 const PK_DASH_DOW = ['อา','จ','อ','พ','พฤ','ศ','ส'];
-function pkDashTone_(st){ return st==='working' ? 'var(--blu)' : st==='continue' ? '#ff9f43' : st==='done' ? 'var(--grn)' : 'var(--acc)'; }
+function pkDashTone_(st){ return st==='working' ? 'var(--blu)' : st==='continue' ? 'var(--rd)' : st==='done' ? 'var(--grn)' : 'var(--acc)'; }
 function pkDashSumScore_(js){ return js.reduce((s,j) => s + (Number(j.score)||0), 0); }
 function pkDashGroupTeam_(js){
   const g = {}, order = [];
@@ -6296,11 +6297,6 @@ function dashCalRender(){
     html += '<div onclick="dashCalPick(\''+ds+'\')" style="'+st+'"><span style="font-size:13px;font-weight:700;">'+d+'</span>'+cnt+sc+'<div style="margin-top:22px;">'+dots+'</div></div>';
   }
   html += '</div>';
-  html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--mu);">'
-    +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--acc);margin-right:4px;"></span>รอ</span>'
-    +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--blu);margin-right:4px;"></span>กำลังทำ</span>'
-    +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--grn);margin-right:4px;"></span>เสร็จ</span>'
-    +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff9f43;margin-right:4px;"></span>ต่องาน</span></div>';
   grid.innerHTML = html;
   dashCalRenderPanel();
 }
@@ -6324,7 +6320,7 @@ function dashCalRenderPanel(){
       + ' <span style="color:var(--mu);font-weight:600;">· '+list.length+' งาน · ★'+pkDashSumScore_(list)+'</span></div>';
     list.forEach(j => {
       const badge = none ? ' <span style="font-size:10px;background:#3a2228;color:var(--rd);border:1px solid #54323a;border-radius:20px;padding:1px 8px;font-weight:800;">ยังไม่จัด</span>' : '';
-      const contBadge = (j.status==='continue') ? ' <span style="font-size:10px;background:#3a2a14;color:#ff9f43;border:1px solid #5a4420;border-radius:20px;padding:1px 8px;font-weight:800;">➡ ต่องาน</span>' : '';
+      const contBadge = (j.status==='continue') ? ' <span style="font-size:10px;background:#3a2228;color:var(--rd);border:1px solid #54323a;border-radius:20px;padding:1px 8px;font-weight:800;">➡ ต่องาน</span>' : '';
       if (full){
         html += '<div style="background:var(--surf2);border:1px solid '+(none?'#54323a':'var(--bdr)')+';border-radius:10px;padding:12px 14px;margin-bottom:10px;">'
           + '<div style="font-size:16px;font-weight:800;margin-bottom:6px;">'+escHtml(j.name||'-')+badge+contBadge+'</div>'
