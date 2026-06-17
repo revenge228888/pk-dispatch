@@ -6778,6 +6778,7 @@ async function equipStockFetch(){
   }
   if(!got){ try{ var g=await call({action:'pk_equipStockList'}); _equipStock=(g&&g.ok)?(g.items||[]):[]; }catch(e){ _equipStock=[]; } }
 }
+function equipBaseOf_(name){ name=String(name||'').trim(); for(var i=0;i<PK_EQUIP_NAMES.length;i++){ var b=PK_EQUIP_NAMES[i]; if(name===b || name.indexOf(b)===0) return b; } return null; }
 async function equipCatalogFetch(){
   var prices=[];
   if(CURRENT_USER){
@@ -6787,8 +6788,17 @@ async function equipCatalogFetch(){
     }catch(e){}
   }
   if(!prices.length){ try{ var g=await call({action:'pk_costListPrices'}); if(g&&g.ok) prices=g.prices||[]; }catch(e){} }
+  // จัดกลุ่มตามฐาน → ซ่อนแถวคิดราคา (ชื่อฐานเป๊ะ + ไม่มีสี) เมื่อมีตัวแยก/สีย่อย
+  var byBase={};
+  prices.forEach(function(p){ var nm=String(p.name||'').trim(); var b=equipBaseOf_(nm); if(!b)return; (byBase[b]||(byBase[b]=[])).push({name:nm, color:String(p.color||'').trim(), base:b}); });
   var seen={}, cat=[];
-  prices.forEach(function(p){ if(PK_EQUIP_NAMES.indexOf(p.name)<0) return; var c=String(p.color||'').trim(); var k=p.name+'|'+c; if(seen[k])return; seen[k]=1; cat.push({name:p.name, color:c}); });
+  Object.keys(byBase).forEach(function(b){
+    var rows=byBase[b], hasChild=rows.some(function(r){ return !(r.name===b && r.color===''); });
+    rows.forEach(function(r){
+      if(hasChild && r.name===b && r.color==='') return;   // ซ่อนแถวคิดราคา (เก็บไว้ในชีตเพื่อคำนวณต้นทุน แต่ไม่นับสต็อก)
+      var k=r.name+'|'+r.color; if(seen[k])return; seen[k]=1; cat.push(r);
+    });
+  });
   _equipCatalog=cat;
 }
 async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); }
@@ -6796,19 +6806,21 @@ function esRender(){
   if(!document.getElementById('esBody'))return;
   var q=((document.getElementById('esSearchInput')||{}).value||'').trim().toLowerCase();
   var combos=_equipCatalog.slice();
-  _equipStock.forEach(function(s){ if(!combos.find(function(x){return x.name===s.name&&x.color===s.color;})) combos.push({name:s.name,color:s.color}); });
-  var byName={}, order=[];
-  combos.forEach(function(x){ if(q && (x.name+' '+x.color).toLowerCase().indexOf(q)<0) return; if(!byName[x.name]){byName[x.name]=[];order.push(x.name);} byName[x.name].push(x); });
+  _equipStock.forEach(function(s){ if(!combos.find(function(x){return x.name===s.name&&x.color===s.color;})) combos.push({name:s.name,color:s.color,base:equipBaseOf_(s.name)||s.name}); });
+  var byBase={}, order=[];
+  combos.forEach(function(x){ var b=x.base||equipBaseOf_(x.name)||x.name; if(q && (x.name+' '+x.color).toLowerCase().indexOf(q)<0) return; if(!byBase[b]){byBase[b]=[];order.push(b);} byBase[b].push(x); });
   order.sort(function(a,b){ var ia=PK_EQUIP_NAMES.indexOf(a), ib=PK_EQUIP_NAMES.indexOf(b); if(ia<0)ia=999; if(ib<0)ib=999; return ia-ib || (a<b?-1:1); });
   var h='';
   if(!order.length){ h='<div style="padding:18px;text-align:center;color:var(--mu);">ไม่พบรายการอุปกรณ์ — เพิ่มในชีตราคาต้นทุน</div>'; }
-  order.forEach(function(name){
-    var tot=byName[name].reduce(function(s,x){return s+equipQty(x.name,x.color);},0);
-    h+='<div style="margin:14px 0 6px;font-weight:800;font-size:14px;">🔩 '+escHtml(name)+' <span style="color:var(--mu);font-size:12px;font-weight:600;">· รวม '+tot+'</span></div>';
-    byName[name].sort(function(a,b){return (a.color||'')<(b.color||'')?-1:1;});
+  order.forEach(function(base){
+    var tot=byBase[base].reduce(function(s,x){return s+equipQty(x.name,x.color);},0);
+    h+='<div style="margin:14px 0 6px;font-weight:800;font-size:14px;">🔩 '+escHtml(base)+' <span style="color:var(--mu);font-size:12px;font-weight:600;">· รวม '+tot+'</span></div>';
+    byBase[base].sort(function(a,b){ return (a.name+a.color)<(b.name+b.color)?-1:1; });
     h+='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><tbody>';
-    byName[name].forEach(function(x){ var qn=equipQty(x.name,x.color), low=qn<=0;
-      h+='<tr style="border-bottom:1px solid var(--bdr);"><td style="padding:9px 8px;">'+(x.color?escHtml(x.color):'<span style="color:var(--mu);">— ไม่ระบุสี</span>')+'</td>'
+    byBase[base].forEach(function(x){ var qn=equipQty(x.name,x.color), low=qn<=0;
+      var suffix=(x.name.indexOf(base)===0)?x.name.slice(base.length).replace(/^[-\s]+/,''):x.name;
+      var lbl = (suffix&&x.color)?(suffix+' · '+x.color) : (suffix||x.color||'<span style="color:var(--mu);">— ไม่ระบุสี</span>');
+      h+='<tr style="border-bottom:1px solid var(--bdr);"><td style="padding:9px 8px;">'+(/[<]/.test(lbl)?lbl:escHtml(lbl))+'</td>'
         +'<td style="padding:9px 8px;text-align:right;font-weight:800;color:'+(low?'var(--rd)':'var(--tx)')+';">'+qn+'</td>'
         +'<td style="padding:9px 8px;text-align:right;white-space:nowrap;">'
         +'<button class="btn btn-g btn-sm" onclick="esReceive(\''+escHtml(x.name)+'\',\''+escHtml(x.color)+'\')">+ รับเข้า</button> '
