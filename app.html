@@ -1175,10 +1175,12 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="production" onclick="setTab('production',this)"><span class="sidebar-ico">🏭</span><span class="sidebar-label">ใบผลิต</span></button>
           <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>
           <button class="sidebar-item" data-tab="railstock" onclick="setTab('railstock',this)"><span class="sidebar-ico">📦</span><span class="sidebar-label">คลังราง</span></button>
+          <button class="sidebar-item" data-tab="equipstock" onclick="setTab('equipstock',this)"><span class="sidebar-ico">🔩</span><span class="sidebar-label">คลังอุปกรณ์</span></button>
           <button class="sidebar-item" data-tab="costedit" onclick="setTab('costedit',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">แก้ไขทุน</span></button>` : (CURRENT_USER.role === 'office' ? `
           <div class="sidebar-group">ผลิต</div>
           <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>
           <button class="sidebar-item" data-tab="railstock" onclick="setTab('railstock',this)"><span class="sidebar-ico">📦</span><span class="sidebar-label">คลังราง</span></button>
+          <button class="sidebar-item" data-tab="equipstock" onclick="setTab('equipstock',this)"><span class="sidebar-ico">🔩</span><span class="sidebar-label">คลังอุปกรณ์</span></button>
           <button class="sidebar-item" data-tab="costedit" onclick="setTab('costedit',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">แก้ไขทุน</span></button>` : '')}
 
           <div class="sidebar-group">การเงิน / เบิกจ่าย</div>
@@ -1286,6 +1288,19 @@ function renderOfficeShell(){
         </div>
       </div>
 
+      <!-- EQUIP STOCK (คลังอุปกรณ์) -->
+      <div id="tabEquipstock" style="display:none;">
+        <div class="section-pad">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+            <div style="font-weight:800;font-size:16px;">🔩 คลังอุปกรณ์</div>
+            <button class="btn btn-g btn-sm" onclick="esLoad()">↻ รีเฟรช</button>
+          </div>
+          <div style="font-size:12px;color:var(--mu);margin-bottom:10px;">รายการดึงจากชีตราคาต้นทุน · ล้อ/ข้อต่อ แยกสี ขาว/ดำ · เพิ่มสีได้ที่เมนูแก้ไขทุน · หักเอง (เฟสถัดไปจะหักอัตโนมัติตามใบเบิก)</div>
+          <input id="esSearchInput" class="fi" style="margin-bottom:12px;" oninput="esRender()" placeholder="🔍 ค้นหา ชื่อ / สี">
+          <div id="esBody"><div class="loading-row">กำลังโหลด...</div></div>
+        </div>
+      </div>
+
       <!-- COST EDIT (แก้ไขทุน) -->
       <div id="tabCostedit" style="display:none;">
         <div class="section-pad">
@@ -1307,11 +1322,9 @@ function renderOfficeShell(){
         <div class="section-pad">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
             <div style="font-weight:800;font-size:16px;">📦 คลังราง</div>
-            <div style="display:flex;gap:8px;">
-              <button class="btn btn-p btn-sm" onclick="rsReceive()">+ รับเข้า</button>
-              <button class="btn btn-g btn-sm" onclick="rsLoad()">↻</button>
-            </div>
+            <button class="btn btn-g btn-sm" onclick="rsLoad()">↻ รีเฟรช</button>
           </div>
+          <div style="font-size:12px;color:var(--mu);margin-bottom:10px;">รายการดึงจากชีตราคาต้นทุน (รางมือจับ/รางข้าง/รางบน-ล่าง/รางเตี้ย) · นับเป็นเส้น ต่อชนิด×สี · หักเอง</div>
           <input id="rsSearchInput" class="fi" style="margin-bottom:12px;" oninput="rsRender()" placeholder="🔍 ค้นหาสี">
           <div id="rsBody"><div class="loading-row">กำลังโหลด...</div></div>
         </div>
@@ -3366,7 +3379,7 @@ async function expenseRejectConfirm(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Prodtrack','Railstock','Costedit'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Prodtrack','Railstock','Costedit','Equipstock'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -3401,6 +3414,7 @@ function setTab(t, btn){
   if (t === 'production') pkpInit();
   if (t === 'prodtrack') ptLoad();
   if (t === 'railstock') rsLoad();
+  if (t === 'equipstock') esLoad();
   if (t === 'costedit') ceLoad();
 }
 
@@ -6666,65 +6680,156 @@ function ptCalToday(){ var t=new Date(); _ptCY=t.getFullYear(); _ptCM=t.getMonth
 function ptCalPick(ds){ _ptCSel=ds; ptRenderCal(); }
 
 // ════════════════════════════════════════
-//  📦 คลังราง — จอจัดการ + ตัวเชื่อมกับจอติดตามงานผลิต
+//  📦 คลังราง — (ชนิดราง × สี) · catalog ดึงจากชีตราคาต้นทุน
 // ════════════════════════════════════════
-let _railStock=[], _railMap={};
-function railMapBuild(){ _railMap={}; _railStock.forEach(function(s){ _railMap[s.color]=s.qty; }); }
+var PK_RAIL_TYPES = ['รางมือจับ','รางข้าง','รางบน-ล่าง','รางเตี้ย'];
+let _railStock=[], _railMap={}, _railCatalog=[];
+function railMapBuild(){ _railMap={}; _railStock.forEach(function(s){ _railMap[s.color]=(_railMap[s.color]||0)+s.qty; }); }   // สี → รวมทุกชนิด (ใช้เตือนในจอติดตาม)
+function railQty(t,c){ var f=_railStock.find(function(s){return s.railType===t&&s.color===c;}); return f?f.qty:0; }
 async function railStockFetch(){
+  var got=false;
   if(CURRENT_USER){
     try{ var ctrl=new AbortController(); var to=setTimeout(function(){ctrl.abort();},8000);
       var r=await fetch(API.replace(/\/api$/,'/rail-stock'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json','X-PK-Secret':API_SECRET},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
       clearTimeout(to); var data=await r.json();
-      if(data&&data.ok&&Array.isArray(data.items)){ _railStock=data.items; railMapBuild(); return; }
-      console.warn('[railStock] /rail-stock ไม่ ok → fallback GAS:', data&&data.error);
-    }catch(e){ console.warn('[railStock] /rail-stock error → fallback GAS:', e&&e.message); }
+      if(data&&data.ok&&Array.isArray(data.items)){ _railStock=data.items; got=true; }
+    }catch(e){ console.warn('[railStock] /rail-stock → fallback:', e&&e.message); }
   }
-  try{ var g=await call({action:'pk_railStockList'}); _railStock=(g&&g.ok)?(g.items||[]):[]; railMapBuild(); if(!(g&&g.ok))console.warn('[railStock] GAS:',g&&g.error); }
-  catch(e){ _railStock=[]; railMapBuild(); }
+  if(!got){ try{ var g=await call({action:'pk_railStockList'}); _railStock=(g&&g.ok)?(g.items||[]):[]; }catch(e){ _railStock=[]; } }
+  railMapBuild();
 }
-async function rsLoad(){ if(!document.getElementById('rsBody'))return; document.getElementById('rsBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; await railStockFetch(); rsRender(); }
+async function railCatalogFetch(){   // ดึงรายการรางจากชีตราคาต้นทุน → (ชนิด,สี) ไม่ซ้ำ
+  var prices=[];
+  if(CURRENT_USER){
+    try{ var ctrl=new AbortController(); var to=setTimeout(function(){ctrl.abort();},8000);
+      var r=await fetch(API.replace(/\/api$/,'/cost-prices'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json','X-PK-Secret':API_SECRET},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
+      clearTimeout(to); var data=await r.json(); if(data&&data.ok&&Array.isArray(data.prices)) prices=data.prices;
+    }catch(e){}
+  }
+  if(!prices.length){ try{ var g=await call({action:'pk_costListPrices'}); if(g&&g.ok) prices=g.prices||[]; }catch(e){} }
+  var seen={}, cat=[];
+  prices.forEach(function(p){ if(PK_RAIL_TYPES.indexOf(p.name)<0) return; var c=String(p.color||'').trim(); if(!c) return; var k=p.name+'|'+c; if(seen[k])return; seen[k]=1; cat.push({railType:p.name, color:c}); });
+  _railCatalog=cat;
+}
+async function rsLoad(){ if(!document.getElementById('rsBody'))return; document.getElementById('rsBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; await Promise.all([railStockFetch(), railCatalogFetch()]); rsRender(); }
 function rsRender(){
   if(!document.getElementById('rsBody'))return;
   var q=((document.getElementById('rsSearchInput')||{}).value||'').trim().toLowerCase();
-  var list=_railStock.filter(function(s){ return !q || s.color.toLowerCase().indexOf(q)>=0; }).slice().sort(function(a,b){return a.color<b.color?-1:1;});
-  var h='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:14px;"><thead><tr style="color:var(--mu);font-size:11px;"><th style="padding:8px;text-align:left;">สีราง</th><th style="padding:8px;text-align:right;">คงเหลือ (เส้น)</th><th style="padding:8px;"></th></tr></thead><tbody>';
-  h+= list.length? list.map(function(s){ var low=s.qty<=0;
-    return '<tr style="border-bottom:1px solid var(--bdr);"><td style="padding:10px 8px;font-weight:700;">'+escHtml(s.color)+'</td>'
-      +'<td style="padding:10px 8px;text-align:right;font-weight:800;color:'+(low?'var(--rd)':'var(--tx)')+';">'+s.qty+'</td>'
-      +'<td style="padding:10px 8px;text-align:right;white-space:nowrap;"><button class="btn btn-g btn-sm" onclick="rsReceiveColor(\''+escHtml(s.color)+'\')">+ รับเข้า</button> <button class="btn btn-g btn-sm" onclick="rsSet(\''+escHtml(s.color)+'\')">แก้ยอด</button></td></tr>';
-  }).join('') : '<tr><td colspan="3" style="padding:18px;text-align:center;color:var(--mu);">ยังไม่มีข้อมูลคลังราง — กด "+ รับเข้า"</td></tr>';
-  h+='</tbody></table></div>';
+  var combos=_railCatalog.slice();
+  _railStock.forEach(function(s){ if(!combos.find(function(x){return x.railType===s.railType&&x.color===s.color;})) combos.push({railType:s.railType,color:s.color}); });
+  var byColor={}, colorOrder=[];
+  combos.forEach(function(x){ if(q && (x.color+' '+x.railType).toLowerCase().indexOf(q)<0) return; if(!byColor[x.color]){byColor[x.color]=[];colorOrder.push(x.color);} byColor[x.color].push(x); });
+  colorOrder.sort();
+  var h='';
+  if(!colorOrder.length){ h='<div style="padding:18px;text-align:center;color:var(--mu);">ไม่พบรายการราง — เพิ่มในชีตราคาต้นทุน (ชื่อ = รางมือจับ/รางข้าง/รางบน-ล่าง/รางเตี้ย + ใส่สี)</div>'; }
+  colorOrder.forEach(function(color){
+    var tot=byColor[color].reduce(function(s,x){return s+railQty(x.railType,x.color);},0);
+    h+='<div style="margin:14px 0 6px;font-weight:800;font-size:14px;">🎨 '+escHtml(color)+' <span style="color:var(--mu);font-size:12px;font-weight:600;">· รวม '+tot+' เส้น</span></div>';
+    byColor[color].sort(function(a,b){return PK_RAIL_TYPES.indexOf(a.railType)-PK_RAIL_TYPES.indexOf(b.railType);});
+    h+='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><tbody>';
+    byColor[color].forEach(function(x){ var qn=railQty(x.railType,x.color), low=qn<=0;
+      h+='<tr style="border-bottom:1px solid var(--bdr);"><td style="padding:9px 8px;">'+escHtml(x.railType)+'</td>'
+        +'<td style="padding:9px 8px;text-align:right;font-weight:800;color:'+(low?'var(--rd)':'var(--tx)')+';">'+qn+' เส้น</td>'
+        +'<td style="padding:9px 8px;text-align:right;white-space:nowrap;">'
+        +'<button class="btn btn-g btn-sm" onclick="rsReceive(\''+escHtml(x.railType)+'\',\''+escHtml(x.color)+'\')">+ รับเข้า</button> '
+        +'<button class="btn btn-g btn-sm" onclick="rsUse(\''+escHtml(x.railType)+'\',\''+escHtml(x.color)+'\')">− หัก</button> '
+        +'<button class="btn btn-g btn-sm" onclick="rsSet(\''+escHtml(x.railType)+'\',\''+escHtml(x.color)+'\')">แก้ยอด</button></td></tr>';
+    });
+    h+='</tbody></table></div>';
+  });
   document.getElementById('rsBody').innerHTML=h;
 }
-function rsReceive(){ var c=prompt('รับเข้า — สีราง:'); if(c===null)return; c=c.trim(); if(!c)return; rsReceiveColor(c); }
-function rsReceiveColor(color){
-  var q=prompt('รับเข้าราง "'+color+'" กี่เส้น?','1'); if(q===null)return; q=Number(q); if(!(q>0)){ toast('จำนวนไม่ถูกต้อง'); return; }
-  var s=_railStock.find(function(x){return x.color===color;}); if(s) s.qty+=q; else { s={color:color,qty:q}; _railStock.push(s); } railMapBuild(); rsRender();
-  call({action:'pk_railStockReceive',color:color,qty:q}).then(function(r){ if(!(r&&r.ok)){ s.qty-=q; railMapBuild(); rsRender(); toast((r&&r.error)||'รับเข้าไม่สำเร็จ'); } else if(typeof r.qty==='number'){ s.qty=r.qty; railMapBuild(); rsRender(); } }).catch(function(e){ s.qty-=q; railMapBuild(); rsRender(); toast('รับเข้าไม่สำเร็จ: '+(e&&e.message||e)); });
+function rsApply(railType,color,mode){
+  var s=_railStock.find(function(x){return x.railType===railType&&x.color===color;}), cur=s?s.qty:0, q, action, nn;
+  if(mode==='receive'){ q=prompt('รับเข้า '+railType+' ['+color+'] กี่เส้น?','1'); if(q===null)return; q=Number(q); if(!(q>0)){toast('จำนวนไม่ถูกต้อง');return;} nn=cur+q; action='pk_railStockReceive'; }
+  else if(mode==='use'){ q=prompt('หัก '+railType+' ['+color+'] กี่เส้น? (มี '+cur+')','1'); if(q===null)return; q=Number(q); if(!(q>0)){toast('จำนวนไม่ถูกต้อง');return;} nn=cur-q; action='pk_railStockUse'; }
+  else { q=prompt('แก้ยอด '+railType+' ['+color+'] เป็นกี่เส้น?',String(cur)); if(q===null)return; q=Number(q); if(!isFinite(q)){toast('จำนวนไม่ถูกต้อง');return;} nn=q; action='pk_railStockSet'; }
+  if(s)s.qty=nn; else { s={railType:railType,color:color,qty:nn}; _railStock.push(s); } railMapBuild(); rsRender();
+  call({action:action,railType:railType,color:color,qty:(mode==='set'?nn:q)}).then(function(r){ if(r&&r.ok){ if(typeof r.qty==='number'){s.qty=r.qty; railMapBuild(); rsRender();} } else { s.qty=cur; railMapBuild(); rsRender(); toast((r&&r.error)||'บันทึกไม่สำเร็จ'); } }).catch(function(e){ s.qty=cur; railMapBuild(); rsRender(); toast('บันทึกไม่สำเร็จ: '+(e&&e.message||e)); });
 }
-function rsSet(color){
-  var s=_railStock.find(function(x){return x.color===color;}), cur=s?s.qty:0;
-  var q=prompt('แก้ยอดราง "'+color+'" เป็นกี่เส้น?',String(cur)); if(q===null)return; q=Number(q); if(!isFinite(q)){ toast('จำนวนไม่ถูกต้อง'); return; }
-  var prev=cur; if(s)s.qty=q; else {s={color:color,qty:q};_railStock.push(s);} railMapBuild(); rsRender();
-  call({action:'pk_railStockSet',color:color,qty:q}).then(function(r){ if(!(r&&r.ok)){ s.qty=prev; railMapBuild(); rsRender(); toast((r&&r.error)||'แก้ยอดไม่สำเร็จ'); } }).catch(function(e){ s.qty=prev; railMapBuild(); rsRender(); toast('แก้ยอดไม่สำเร็จ: '+(e&&e.message||e)); });
-}
+function rsReceive(t,c){ rsApply(t,c,'receive'); }
+function rsUse(t,c){ rsApply(t,c,'use'); }
+function rsSet(t,c){ rsApply(t,c,'set'); }
+// ── tie-in จอติดตามงานผลิต: เตือนระดับสี (รวมทุกชนิด) · ปุ่มแค่ mark ว่าได้รางแล้ว (หักจริงในจอคลังราง) ──
 function ptJobSpecialColors(j){ return (j.sets||[]).map(function(s){return s.c;}).filter(function(c){return c&&c!=='อบขาว'&&c!=='ดำ';}); }
 function ptRailStockAlert(j){
   if(j.hasRail || j.rush || !ptIsSpecial(j) || j.prodStatus==='ผลิตเสร็จแล้ว') return '';
   var out=''; ptJobSpecialColors(j).forEach(function(c){ var n=_railMap[c]||0; if(n>0){
-    out+='<div style="font-size:12px;background:#11331d;border:1px solid #1d5233;border-radius:7px;padding:6px 9px;margin:5px 0;color:#9be8b4;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">📦 มีราง'+escHtml(c)+'ในคลัง ('+n+') — ไปเช็ค <button class="btn btn-p btn-sm" onclick="ptUseRail(\''+j.woId+'\',\''+escHtml(c)+'\')">ใช้ราง</button></div>';
+    out+='<div style="font-size:12px;background:#11331d;border:1px solid #1d5233;border-radius:7px;padding:6px 9px;margin:5px 0;color:#9be8b4;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">📦 มีรางสี'+escHtml(c)+'ในคลัง ('+n+' เส้น) — ไปเช็ค <button class="btn btn-p btn-sm" onclick="ptMarkRail(\''+j.woId+'\')">✓ ได้รางแล้ว</button></div>';
   }});
   return out;
 }
-function ptUseRail(woId, color){
-  var j=_ptJobs[ptIdx(woId)]; if(!j) return;
-  var def=ptTotSets(j)||1, have=_railMap[color]||0;
-  var q=prompt('ใช้รางสี '+color+' กี่เส้น? (คลังมี '+have+')',String(def)); if(q===null)return; q=Number(q); if(!(q>0)){ toast('จำนวนไม่ถูกต้อง'); return; }
-  _railMap[color]=have-q; var s=_railStock.find(function(x){return x.color===color;}); if(s)s.qty-=q;
-  j.hasRail=true; ptSetView(_ptView);
-  call({action:'pk_railStockUse',color:color,qty:q,woId:woId}).then(function(r){ if(!(r&&r.ok)){ _railMap[color]=have; if(s)s.qty+=q; toast((r&&r.error)||'หักสต็อกไม่สำเร็จ'); } });
-  call({action:'pk_prodSetTrack',woId:woId,hasRail:true}).catch(function(){});
+function ptMarkRail(woId){ ptSet(woId,{hasRail:true}); }
+
+// ════════════════════════════════════════
+//  🔩 คลังอุปกรณ์ — (ชื่อ × สี) · catalog จากชีตราคาต้นทุน
+// ════════════════════════════════════════
+var PK_EQUIP_NAMES = ['ล้อรางธรรมดา','ล้อรางเตี้ย','ข้อต่อรางธรรมดา','ข้อต่อรางเตี้ย','ตัวดึงเชือก','ตัวดึงสลิง','ตาไก่ทอง','แผ่นแยกกลาง','เชือก','แม่เหล็ก','PVC','สลิง'];
+let _equipStock=[], _equipCatalog=[];
+function equipQty(n,c){ var f=_equipStock.find(function(s){return s.name===n&&s.color===c;}); return f?f.qty:0; }
+async function equipStockFetch(){
+  var got=false;
+  if(CURRENT_USER){
+    try{ var ctrl=new AbortController(); var to=setTimeout(function(){ctrl.abort();},8000);
+      var r=await fetch(API.replace(/\/api$/,'/equip-stock'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json','X-PK-Secret':API_SECRET},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
+      clearTimeout(to); var data=await r.json();
+      if(data&&data.ok&&Array.isArray(data.items)){ _equipStock=data.items; got=true; }
+    }catch(e){ console.warn('[equip] /equip-stock → fallback:', e&&e.message); }
+  }
+  if(!got){ try{ var g=await call({action:'pk_equipStockList'}); _equipStock=(g&&g.ok)?(g.items||[]):[]; }catch(e){ _equipStock=[]; } }
 }
+async function equipCatalogFetch(){
+  var prices=[];
+  if(CURRENT_USER){
+    try{ var ctrl=new AbortController(); var to=setTimeout(function(){ctrl.abort();},8000);
+      var r=await fetch(API.replace(/\/api$/,'/cost-prices'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json','X-PK-Secret':API_SECRET},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
+      clearTimeout(to); var data=await r.json(); if(data&&data.ok&&Array.isArray(data.prices)) prices=data.prices;
+    }catch(e){}
+  }
+  if(!prices.length){ try{ var g=await call({action:'pk_costListPrices'}); if(g&&g.ok) prices=g.prices||[]; }catch(e){} }
+  var seen={}, cat=[];
+  prices.forEach(function(p){ if(PK_EQUIP_NAMES.indexOf(p.name)<0) return; var c=String(p.color||'').trim(); var k=p.name+'|'+c; if(seen[k])return; seen[k]=1; cat.push({name:p.name, color:c}); });
+  _equipCatalog=cat;
+}
+async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); }
+function esRender(){
+  if(!document.getElementById('esBody'))return;
+  var q=((document.getElementById('esSearchInput')||{}).value||'').trim().toLowerCase();
+  var combos=_equipCatalog.slice();
+  _equipStock.forEach(function(s){ if(!combos.find(function(x){return x.name===s.name&&x.color===s.color;})) combos.push({name:s.name,color:s.color}); });
+  var byName={}, order=[];
+  combos.forEach(function(x){ if(q && (x.name+' '+x.color).toLowerCase().indexOf(q)<0) return; if(!byName[x.name]){byName[x.name]=[];order.push(x.name);} byName[x.name].push(x); });
+  order.sort(function(a,b){ var ia=PK_EQUIP_NAMES.indexOf(a), ib=PK_EQUIP_NAMES.indexOf(b); if(ia<0)ia=999; if(ib<0)ib=999; return ia-ib || (a<b?-1:1); });
+  var h='';
+  if(!order.length){ h='<div style="padding:18px;text-align:center;color:var(--mu);">ไม่พบรายการอุปกรณ์ — เพิ่มในชีตราคาต้นทุน</div>'; }
+  order.forEach(function(name){
+    var tot=byName[name].reduce(function(s,x){return s+equipQty(x.name,x.color);},0);
+    h+='<div style="margin:14px 0 6px;font-weight:800;font-size:14px;">🔩 '+escHtml(name)+' <span style="color:var(--mu);font-size:12px;font-weight:600;">· รวม '+tot+'</span></div>';
+    byName[name].sort(function(a,b){return (a.color||'')<(b.color||'')?-1:1;});
+    h+='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><tbody>';
+    byName[name].forEach(function(x){ var qn=equipQty(x.name,x.color), low=qn<=0;
+      h+='<tr style="border-bottom:1px solid var(--bdr);"><td style="padding:9px 8px;">'+(x.color?escHtml(x.color):'<span style="color:var(--mu);">— ไม่ระบุสี</span>')+'</td>'
+        +'<td style="padding:9px 8px;text-align:right;font-weight:800;color:'+(low?'var(--rd)':'var(--tx)')+';">'+qn+'</td>'
+        +'<td style="padding:9px 8px;text-align:right;white-space:nowrap;">'
+        +'<button class="btn btn-g btn-sm" onclick="esReceive(\''+escHtml(x.name)+'\',\''+escHtml(x.color)+'\')">+ รับเข้า</button> '
+        +'<button class="btn btn-g btn-sm" onclick="esUse(\''+escHtml(x.name)+'\',\''+escHtml(x.color)+'\')">− หัก</button> '
+        +'<button class="btn btn-g btn-sm" onclick="esSet(\''+escHtml(x.name)+'\',\''+escHtml(x.color)+'\')">แก้ยอด</button></td></tr>';
+    });
+    h+='</tbody></table></div>';
+  });
+  document.getElementById('esBody').innerHTML=h;
+}
+function esApply(name,color,mode){
+  var s=_equipStock.find(function(x){return x.name===name&&x.color===color;}), cur=s?s.qty:0, q, action, nn, cl=color?(' ['+color+']'):'';
+  if(mode==='receive'){ q=prompt('รับเข้า '+name+cl+' กี่ชิ้น?','1'); if(q===null)return; q=Number(q); if(!(q>0)){toast('จำนวนไม่ถูกต้อง');return;} nn=cur+q; action='pk_equipStockReceive'; }
+  else if(mode==='use'){ q=prompt('หัก '+name+cl+' กี่ชิ้น? (มี '+cur+')','1'); if(q===null)return; q=Number(q); if(!(q>0)){toast('จำนวนไม่ถูกต้อง');return;} nn=cur-q; action='pk_equipStockUse'; }
+  else { q=prompt('แก้ยอด '+name+cl+' เป็นกี่ชิ้น?',String(cur)); if(q===null)return; q=Number(q); if(!isFinite(q)){toast('จำนวนไม่ถูกต้อง');return;} nn=q; action='pk_equipStockSet'; }
+  if(s)s.qty=nn; else { s={name:name,color:color,qty:nn}; _equipStock.push(s); } esRender();
+  call({action:action,name:name,color:color,qty:(mode==='set'?nn:q)}).then(function(r){ if(r&&r.ok){ if(typeof r.qty==='number'){s.qty=r.qty; esRender();} } else { s.qty=cur; esRender(); toast((r&&r.error)||'บันทึกไม่สำเร็จ'); } }).catch(function(e){ s.qty=cur; esRender(); toast('บันทึกไม่สำเร็จ: '+(e&&e.message||e)); });
+}
+function esReceive(n,c){ esApply(n,c,'receive'); }
+function esUse(n,c){ esApply(n,c,'use'); }
+function esSet(n,c){ esApply(n,c,'set'); }
 
 // ════════════════════════════════════════
 //  💰 แก้ไขทุน — แก้/เพิ่มแถวในชีต "ราคาต้นทุน"
