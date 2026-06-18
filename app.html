@@ -1176,7 +1176,8 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>
           <button class="sidebar-item" data-tab="railstock" onclick="setTab('railstock',this)"><span class="sidebar-ico">📦</span><span class="sidebar-label">คลังราง</span></button>
           <button class="sidebar-item" data-tab="equipstock" onclick="setTab('equipstock',this)"><span class="sidebar-ico">🔩</span><span class="sidebar-label">คลังอุปกรณ์</span></button>
-          <button class="sidebar-item" data-tab="costedit" onclick="setTab('costedit',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">แก้ไขทุน</span></button>` : (CURRENT_USER.role === 'office' ? `
+          <button class="sidebar-item" data-tab="costedit" onclick="setTab('costedit',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">แก้ไขทุน</span></button>
+          <button class="sidebar-item" data-tab="quoteprice" onclick="setTab('quoteprice',this)"><span class="sidebar-ico">🏷️</span><span class="sidebar-label">แก้ราคาขาย</span></button>` : (CURRENT_USER.role === 'office' ? `
           <div class="sidebar-group">ผลิต</div>
           <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>
           <button class="sidebar-item" data-tab="railstock" onclick="setTab('railstock',this)"><span class="sidebar-ico">📦</span><span class="sidebar-label">คลังราง</span></button>
@@ -1315,6 +1316,21 @@ function renderOfficeShell(){
           <div style="font-size:12px;color:var(--mu);margin-bottom:10px;">ราคา/หน่วยใช้ = ราคาซื้อ ÷ จำนวนต่อหน่วยซื้อ · แก้แล้วกด 💾 ทีละแถว</div>
           <input id="ceSearchInput" class="fi" style="margin-bottom:12px;" oninput="ceRender()" placeholder="🔍 ค้นหา ชื่อ / สี">
           <div id="ceBody"><div class="loading-row">กำลังโหลด...</div></div>
+        </div>
+      </div>
+
+      <!-- QUOTE PRICE EDIT (แก้ราคาขาย) — manager -->
+      <div id="tabQuoteprice" style="display:none;">
+        <div class="section-pad">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+            <div style="font-weight:800;font-size:16px;">🏷️ แก้ราคาขาย (ใบเสนอราคา)</div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-p btn-sm" id="qpSaveBtn" onclick="qpSaveAll()" disabled>💾 บันทึก</button>
+              <button class="btn btn-g btn-sm" onclick="qpLoad()">↻</button>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--mu);margin-bottom:12px;">ราคา/ตร.ม. ของมุ้งจีบ แยกตาม ประเภทราคา × กลุ่มสี × แบบงาน · <b style="color:var(--acc)">แก้แล้วมีผลกับใบใหม่เท่านั้น — ใบเก่าตรึงราคาไว้แล้ว (snapshot)</b></div>
+          <div id="qpBody"><div class="loading-row">กำลังโหลด...</div></div>
         </div>
       </div>
 
@@ -3380,7 +3396,7 @@ async function expenseRejectConfirm(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Prodtrack','Railstock','Costedit','Equipstock'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -3417,6 +3433,7 @@ function setTab(t, btn){
   if (t === 'railstock') rsLoad();
   if (t === 'equipstock') esLoad();
   if (t === 'costedit') ceLoad();
+  if (t === 'quoteprice') qpLoad();
 }
 
 // ── Sidebar toggle ──
@@ -6914,6 +6931,79 @@ function ceDelete(i){
   _cePrices.splice(i,1); ceRender();
 }
 function ceAdd(){ _cePrices.unshift({_row:null,name:'',color:'',buyPrice:0,buyUnit:'',divisor:1,useUnit:''}); var si=document.getElementById('ceSearchInput'); if(si)si.value=''; ceRender(); }
+
+// ════════════════════════════════════════
+//  🏷️ แก้ราคาขาย (PK_QuotePrice) — manager · ราคาใหม่มีผลกับใบใหม่เท่านั้น (snapshot กันใบเก่า)
+// ════════════════════════════════════════
+let _qpRows = [];
+let _qpDirty = {};
+const QP_PT_ORDER = ['HOME', 'PB', 'TOOK_DEE', 'WHOLESALE', 'WHOLESALE_INSTALL'];
+const QP_PT_LABEL = { HOME: 'HOME (ปลีก+ติดตั้ง)', PB: 'PB', TOOK_DEE: 'ถูกดี', WHOLESALE: 'ส่ง (ไม่ติดตั้ง)', WHOLESALE_INSTALL: 'ส่ง + ติดตั้ง' };
+const QP_GROUPS = ['g1', 'g2', 'g3'];
+const QP_GROUP_LABEL = { g1: 'กลุ่ม 1 · อบขาว/ดำ/NA', g2: 'กลุ่ม 2 · น้ำตาล/เทาซาฮาร่า', g3: 'กลุ่ม 3 · ลายไม้สัก' };
+const QP_KEYS = ['single', 'split', 'free'];
+
+async function qpLoad() {
+  if (!document.getElementById('qpBody')) return;
+  document.getElementById('qpBody').innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  _qpDirty = {};
+  try {
+    var g = await call({ action: 'pk_quotePriceList' });
+    _qpRows = (g && g.ok) ? (g.rows || []) : [];
+    if (!(g && g.ok)) toast((g && g.error) || 'โหลดราคาไม่ได้');
+  } catch (e) { _qpRows = []; toast('โหลดราคาไม่ได้'); }
+  qpRender();
+}
+function qpFind(pt, grp, k) { return _qpRows.find(function (r) { return r.priceType === pt && r.group === grp && r.key === k; }); }
+function qpDirtyCount() { return Object.keys(_qpDirty).length; }
+function qpSyncBtn() {
+  var b = document.getElementById('qpSaveBtn'); if (!b) return;
+  var c = qpDirtyCount();
+  b.textContent = '💾 บันทึก' + (c ? (' (' + c + ')') : '');
+  b.disabled = !c;
+}
+function qpOnChange(row, val) { var n = Number(val); if (!(n >= 0)) return; _qpDirty[row] = n; qpSyncBtn(); }
+function qpRender() {
+  if (!document.getElementById('qpBody')) return;
+  var cards = '';
+  QP_PT_ORDER.forEach(function (pt) {
+    if (!_qpRows.some(function (r) { return r.priceType === pt; })) return;
+    var body = '';
+    QP_GROUPS.forEach(function (grp) {
+      var cells = '<td style="padding:6px 8px;color:var(--mu);font-size:12px;white-space:nowrap;">' + (QP_GROUP_LABEL[grp] || grp) + '</td>';
+      QP_KEYS.forEach(function (k) {
+        var r = qpFind(pt, grp, k);
+        if (!r) { cells += '<td style="padding:6px 8px;color:var(--mu);text-align:right;">—</td>'; return; }
+        cells += '<td style="padding:6px 8px;"><input class="fi" type="number" min="0" style="width:92px;padding:5px 7px;font-size:13px;text-align:right;" value="' + r.rate + '" onchange="qpOnChange(' + r._row + ',this.value)"></td>';
+      });
+      body += '<tr style="border-bottom:1px solid var(--bdr);">' + cells + '</tr>';
+    });
+    cards += '<div style="background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:12px 14px;margin-bottom:14px;">'
+      + '<div style="font-weight:700;font-size:14px;color:var(--acc);margin-bottom:8px;">' + (QP_PT_LABEL[pt] || pt) + '</div>'
+      + '<div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:13px;min-width:100%;">'
+      + '<thead><tr style="color:var(--mu);font-size:11px;text-align:left;"><th style="padding:6px 8px;">กลุ่มสี</th><th style="padding:6px 8px;text-align:right;">เดี่ยว</th><th style="padding:6px 8px;text-align:right;">แยกกลาง</th><th style="padding:6px 8px;text-align:right;">อิสระ / 4 มือจับ</th></tr></thead>'
+      + '<tbody>' + body + '</tbody></table></div></div>';
+  });
+  document.getElementById('qpBody').innerHTML = cards || '<div style="padding:16px;text-align:center;color:var(--mu);">ยังไม่มีข้อมูลราคา — รัน pkQuote_seedAndShow() ใน Apps Script ก่อน</div>';
+  qpSyncBtn();
+}
+async function qpSaveAll() {
+  var rows = Object.keys(_qpDirty);
+  if (!rows.length) { toast('ไม่มีการแก้ไข'); return; }
+  var b = document.getElementById('qpSaveBtn'); if (b) b.disabled = true;
+  var ok = 0, fail = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var row = Number(rows[i]); var rate = _qpDirty[rows[i]];
+    try {
+      var r = await call({ action: 'pk_quotePriceSet', row: row, rate: rate });
+      if (r && r.ok) { ok++; var rr = _qpRows.find(function (x) { return x._row === row; }); if (rr) rr.rate = rate; }
+      else fail++;
+    } catch (e) { fail++; }
+  }
+  toast('บันทึก ' + ok + ' รายการ' + (fail ? (' · ล้มเหลว ' + fail) : ''));
+  _qpDirty = {};
+  qpRender();
+}
 
 // ── manager calendar = ภาพรวมงานที่มอบหมาย (ปฏิทินทุกสถานะ + กดวันดูงานวันนั้น · ไม่มี agenda 7 วัน) ──
 let _calTasks = [], _calY = null, _calM = null, _calSel = '', _calHist = false;
