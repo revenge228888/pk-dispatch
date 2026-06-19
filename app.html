@@ -8079,6 +8079,7 @@ const PRICE_TYPE_LABELS = {
 let _quotes = [];
 let _quoteSearchTimer = null;
 let _quoteMetadata = null;   // cache จาก backend (price table, colors, types)
+let _quoteHeaders = [];   // เทมเพลตหัวใบเสนอราคา
 
 function quotesInit(){
   const s = document.getElementById('quoSearch');
@@ -8108,6 +8109,21 @@ async function quoteLoadMetadata(){
       };
     }
   } catch(e) {}
+}
+
+async function quoteLoadHeaders(){
+  try { const g = await call({ action: 'pk_quoteHeaderList' }); _quoteHeaders = (g && g.ok) ? (g.rows || []) : []; }
+  catch (e) { _quoteHeaders = []; }
+}
+function quoteSelHeaderId(dc){
+  dc = dc || {};
+  if (dc.headerId) return dc.headerId;
+  const d = _quoteHeaders.find(function(x){ return x.isDefault; });
+  return d ? d.templateId : (_quoteHeaders[0] ? _quoteHeaders[0].templateId : '');
+}
+function quoteHeaderFor(doc){
+  const id = quoteSelHeaderId(doc);
+  return _quoteHeaders.find(function(x){ return x.templateId === id; }) || _quoteHeaders.find(function(x){ return x.isDefault; }) || _quoteHeaders[0] || null;
 }
 
 async function quotesLoad(useCache){
@@ -8226,6 +8242,7 @@ function quoteDefaultDoc(){
 }
 
 async function quoteEnsureMetadata(){
+  await quoteLoadHeaders();
   if (_quoteMetadata) return true;
   await quoteLoadMetadata();
   if (!_quoteMetadata) { toast('โหลด metadata ไม่ได้'); return false; }
@@ -8533,6 +8550,12 @@ function quoteRenderForm(){
 
     <div class="quom-section">
       <div class="quom-section-head">เอกสารใบเสนอราคา</div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label class="fl">📄 หัวเอกสาร</label>
+        <select class="fi" onchange="quoteOnDocChange('headerId',this.value)" ${ro?'disabled':''}>
+          ${_quoteHeaders.length ? _quoteHeaders.map(x => `<option value="${escAttr(x.templateId)}"${quoteSelHeaderId(dc)===x.templateId?' selected':''}>${escAttr(x.name||x.companyName||x.templateId)}</option>`).join('') : `<option value="">(ค่าเริ่มต้น)</option>`}
+        </select>
+      </div>
       <div class="row-form" style="margin-bottom:10px;">
         <div class="fg" style="flex:1;min-width:140px;">
           <label class="fl">📄 เลขที่ใบเสนอราคา</label>
@@ -9088,11 +9111,17 @@ function quoteFmtDate(s){
 function quoteA4Header(customer, dateStr, doc){
   const priceLabel = PRICE_TYPE_LABELS[_quoForm.priceType] || _quoForm.priceType;
   const dateShow = doc.quoteDate ? quoteFmtDate(doc.quoteDate) : dateStr;
+  const hd = quoteHeaderFor(doc) || { companyName: '', addressLines: '', contact: '', taxId: '' };
+  const addrHtml = hd.addressLines ? `<div style="font-size:11px;color:#555;margin-top:3px;white-space:pre-wrap;">${escHtml(hd.addressLines)}</div>` : `<div style="font-size:11px;color:#666;margin-top:2px;">มุ้งจีบ · มุ้งลวด · กระจกอลูมิเนียม</div>`;
+  const contactHtml = hd.contact ? `<div style="font-size:11px;color:#555;margin-top:2px;">📞 ${escAttr(hd.contact)}</div>` : '';
+  const taxHtml = hd.taxId ? `<div style="font-size:11px;color:#555;">เลขผู้เสียภาษี ${escAttr(hd.taxId)}</div>` : '';
   return `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e6fb8;padding-bottom:10px;margin-bottom:12px;">
       <div>
-        <div style="font-size:20px;font-weight:800;color:#1e3a5f;">บริษัท มุ้งจีบพีเค จำกัด</div>
-        <div style="font-size:11px;color:#666;margin-top:2px;">มุ้งจีบ · มุ้งลวด · กระจกอลูมิเนียม</div>
+        <div style="font-size:20px;font-weight:800;color:#1e3a5f;">${escAttr(hd.companyName)||'บริษัท มุ้งจีบพีเค จำกัด'}</div>
+        ${addrHtml}
+        ${contactHtml}
+        ${taxHtml}
       </div>
       <div style="text-align:right;">
         <div style="font-size:22px;font-weight:800;color:#1e6fb8;letter-spacing:1px;">ใบเสนอราคา</div>
