@@ -8512,12 +8512,45 @@ function quoteRenderForm(){
     </div>
   `;
 
-  // Grand total
+  // Grand total + ตัวเลือกเอกสาร & สรุปยอด
   const grand = quoteCalcAll();
+  const sm = quoteCalcSummary(dc, grand);
+  const dep = dc.deposit || {};
   html += `
-    <div class="quom-grand-total">
-      <div class="quom-grand-label">💰 ยอดรวมทั้งหมด</div>
-      <div class="quom-grand-amt" id="quomGrandTotal">฿${fmt(grand)}</div>
+    <div class="quom-section">
+      <div class="quom-section-head">ตัวเลือกเอกสาร & ภาษี</div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" ${dc.vat&&dc.vat.on?'checked':''} onchange="quoteSetDoc('vat.on',this.checked)" ${ro?'disabled':''}>
+        เพิ่ม VAT
+        ${dc.vat&&dc.vat.on?`<input class="fi" type="number" style="width:64px;margin-left:auto;text-align:right;" value="${(dc.vat&&dc.vat.rate)??7}" oninput="quoteSetDocNum('vat.rate',this.value)" ${ro?'readonly':''}> %`:''}
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" ${dc.wht&&dc.wht.on?'checked':''} onchange="quoteSetDoc('wht.on',this.checked)" ${ro?'disabled':''}>
+        หัก ณ ที่จ่าย
+        ${dc.wht&&dc.wht.on?`<input class="fi" type="number" style="width:64px;margin-left:auto;text-align:right;" value="${(dc.wht&&dc.wht.rate)??3}" oninput="quoteSetDocNum('wht.rate',this.value)" ${ro?'readonly':''}> %`:''}
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" ${dep.on?'checked':''} onchange="quoteSetDoc('deposit.on',this.checked)" ${ro?'disabled':''}>
+        มัดจำ
+        ${dep.on?`
+          <select class="fi" style="width:auto;margin-left:auto;" onchange="quoteSetDoc('deposit.mode',this.value)" ${ro?'disabled':''}>
+            <option value="percent"${dep.mode!=='amount'?' selected':''}>%</option>
+            <option value="amount"${dep.mode==='amount'?' selected':''}>บาท</option>
+          </select>
+          <input class="fi" type="number" style="width:84px;text-align:right;" value="${dep.value??50}" oninput="quoteSetDocNum('deposit.value',this.value)" ${ro?'readonly':''}>
+        `:''}
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" ${dc.showSize===false?'':'checked'} onchange="quoteSetDoc('showSize',this.checked)" ${ro?'disabled':''}>
+        แสดงขนาด (กว้าง×สูง) ในเอกสาร
+      </label>
+      <div class="fg">
+        <label class="fl">📋 เงื่อนไข / หมายเหตุท้ายเอกสาร</label>
+        <textarea class="fi" rows="3" placeholder="เช่น ราคารวมติดตั้ง · รับประกัน 1 ปี · มัดจำ 50% ก่อนเริ่มงาน" oninput="quoteOnDocChange('terms',this.value)" ${ro?'readonly':''}>${escHtml(dc.terms||'')}</textarea>
+      </div>
+    </div>
+    <div class="quom-grand-total" style="flex-direction:column;align-items:stretch;gap:4px;">
+      <div id="quomSummary">${quoteSummaryHtml(sm)}</div>
     </div>
   `;
 
@@ -8645,6 +8678,50 @@ function quoteOnDocChange(field, val){
   if (!_quoForm.doc) _quoForm.doc = {};
   _quoForm.doc[field] = val;
   _quoForm.dirty = true;
+}
+
+function quoteCalcSummary(dc, subtotal){
+  dc = dc || {};
+  const vatOn = !!(dc.vat && dc.vat.on), whtOn = !!(dc.wht && dc.wht.on), depOn = !!(dc.deposit && dc.deposit.on);
+  const vatRate = Number(dc.vat && dc.vat.rate) || 0;
+  const whtRate = Number(dc.wht && dc.wht.rate) || 0;
+  const vat = vatOn ? Math.round(subtotal * vatRate / 100) : 0;
+  const wht = whtOn ? Math.round(subtotal * whtRate / 100) : 0;
+  const net = subtotal + vat - wht;
+  const depMode = (dc.deposit && dc.deposit.mode === 'amount') ? 'amount' : 'percent';
+  const depValue = Number(dc.deposit && dc.deposit.value) || 0;
+  let deposit = 0;
+  if (depOn) deposit = depMode === 'amount' ? depValue : Math.round(net * depValue / 100);
+  const remaining = net - deposit;
+  return { subtotal, vatOn, vat, vatRate, whtOn, wht, whtRate, net, depOn, depMode, depValue, deposit, remaining };
+}
+function quoteSummaryHtml(sm){
+  const row = (label, val, color, mono) => `<div style="display:flex;justify-content:space-between;font-size:13px;color:${color||'var(--mu)'};padding:2px 0;"><span>${label}</span><span style="font-family:var(--mono);">${val}</span></div>`;
+  let h = row('ยอดรวมรายการ', '฿' + fmt(sm.subtotal));
+  if (sm.vatOn) h += row('+ VAT ' + sm.vatRate + '%', '฿' + fmt(sm.vat));
+  if (sm.whtOn) h += row('− หัก ณ ที่จ่าย ' + sm.whtRate + '%', '−฿' + fmt(sm.wht), 'var(--rd)');
+  h += `<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--bdr);margin-top:4px;padding-top:6px;"><span class="quom-grand-label">💰 ยอดสุทธิ</span><span class="quom-grand-amt" id="quomGrandTotal">฿${fmt(sm.net)}</span></div>`;
+  if (sm.depOn){
+    h += row('มัดจำ' + (sm.depMode === 'percent' ? ' ' + sm.depValue + '%' : ''), '฿' + fmt(sm.deposit), 'var(--blu)');
+    h += row('คงเหลือ', '฿' + fmt(sm.remaining));
+  }
+  return h;
+}
+function quoteSetDoc(path, val){
+  if (!_quoForm.doc) _quoForm.doc = {};
+  const p = path.split('.'); let o = _quoForm.doc;
+  for (let i = 0; i < p.length - 1; i++){ if (!o[p[i]] || typeof o[p[i]] !== 'object') o[p[i]] = {}; o = o[p[i]]; }
+  o[p[p.length - 1]] = val;
+  _quoForm.dirty = true;
+  quoteRenderForm();
+}
+function quoteSetDocNum(path, val){
+  if (!_quoForm.doc) _quoForm.doc = {};
+  const p = path.split('.'); let o = _quoForm.doc;
+  for (let i = 0; i < p.length - 1; i++){ if (!o[p[i]] || typeof o[p[i]] !== 'object') o[p[i]] = {}; o = o[p[i]]; }
+  o[p[p.length - 1]] = (val === '' ? '' : Number(val));
+  _quoForm.dirty = true;
+  quoteUpdateGrandTotal();
 }
 
 function quoteOnPriceTypeChange(){
@@ -8781,10 +8858,11 @@ function quoteUpdateEntryCalc(idx){
 }
 
 function quoteUpdateGrandTotal(){
-  let grand = _quoForm.entries.reduce((s,e) => s + (e._calc?.total||0), 0);
-  (_quoForm.additionalFees || []).forEach(f => { grand += Number(f.amount) || 0; });
-  const el = document.getElementById('quomGrandTotal');
-  if (el) el.textContent = '฿' + fmt(grand);
+  let subtotal = _quoForm.entries.reduce((s,e) => s + (e._calc?.total||0), 0);
+  (_quoForm.additionalFees || []).forEach(f => { subtotal += Number(f.amount) || 0; });
+  const sm = quoteCalcSummary(_quoForm.doc||{}, subtotal);
+  const sumEl = document.getElementById('quomSummary');
+  if (sumEl) sumEl.innerHTML = quoteSummaryHtml(sm);
 }
 
 function quoteRerenderEntriesOnly(){
