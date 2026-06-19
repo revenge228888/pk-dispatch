@@ -597,7 +597,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
   <div class="quom-wrap">
     <div class="quom-head">
       <div class="quom-title" id="quomTitle">💰 คำนวณราคา</div>
-      <button class="hbtn" id="quomExportBtn" onclick="quoteExportImg()" style="display:none;" title="Export PNG A4">🖼️</button>
+      <button class="hbtn" id="quomExportBtn" onclick="quoteExportImg()" style="display:none;" title="Export PNG A4">🖼️</button><button class="hbtn" id="quomExportPdfBtn" onclick="quoteExportPdf()" style="display:none;" title="Export PDF">PDF</button>
       <button class="hbtn danger" onclick="quoteCloseModal()">×</button>
     </div>
     <div class="quom-body" id="quomBody"></div>
@@ -8290,7 +8290,7 @@ async function quoteOpenNew(prefill){
     document.getElementById('quomTitle').textContent = '💰 คำนวณราคา — สร้างใหม่';
     document.getElementById('quomSaveBar').style.display = 'flex';
     document.getElementById('quomSaveBtn').textContent = '💾 บันทึก';
-    document.getElementById('quomExportBtn').style.display = 'none';
+    document.getElementById('quomExportBtn').style.display = 'none'; { const _pb = document.getElementById('quomExportPdfBtn'); if (_pb) _pb.style.display = 'none'; }
     quoteRenderForm();
     quoteOpenModal();
     quoteStartAutosave();
@@ -8328,7 +8328,7 @@ async function quoteOpenView(id){
     };
     document.getElementById('quomTitle').textContent = '💰 ดู Quote — ' + id;
     document.getElementById('quomSaveBar').style.display = 'none';
-    document.getElementById('quomExportBtn').style.display = '';
+    document.getElementById('quomExportBtn').style.display = ''; { const _pb = document.getElementById('quomExportPdfBtn'); if (_pb) _pb.style.display = ''; }
     quoteRenderForm();
     quoteOpenModal();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
@@ -8372,7 +8372,7 @@ async function quoteOpenEdit(id){
     document.getElementById('quomTitle').textContent = '💰 แก้ไข — ' + id;
     document.getElementById('quomSaveBar').style.display = 'flex';
     document.getElementById('quomSaveBtn').textContent = '💾 อัปเดต';
-    document.getElementById('quomExportBtn').style.display = '';
+    document.getElementById('quomExportBtn').style.display = ''; { const _pb = document.getElementById('quomExportPdfBtn'); if (_pb) _pb.style.display = ''; }
     quoteRenderForm();
     quoteOpenModal();
     quoteStartAutosave();
@@ -9222,29 +9222,37 @@ function renderQuoteA4Entry(e, showSize){
   }).join('');
 }
 
-async function quoteExportImg(){
-  if (typeof html2canvas === 'undefined') { toast('❌ html2canvas ยังไม่โหลด'); return; }
-  if (!_quoteMetadata) { toast('โหลด metadata ก่อน'); return; }
+function quoteEnsureJsPdf(){
+  return new Promise(function(resolve, reject){
+    if (window.jspdf && window.jspdf.jsPDF) return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.onload = function(){ (window.jspdf && window.jspdf.jsPDF) ? resolve() : reject(new Error('jsPDF โหลดไม่สมบูรณ์')); };
+    s.onerror = function(){ reject(new Error('โหลด jsPDF ไม่ได้ (เน็ต?)')); };
+    document.head.appendChild(s);
+  });
+}
+
+// แบ่งหน้าตามความสูงจริง — ใช้ร่วมกันทั้ง PNG และ PDF
+async function _quotePaginate(){
+  if (typeof html2canvas === 'undefined') { toast('❌ html2canvas ยังไม่โหลด'); return null; }
+  if (!_quoteMetadata) { toast('โหลด metadata ก่อน'); return null; }
   const customer = _quoForm.customer || { name:'', phone:'' };
   const entries = (_quoForm.entries || []).filter(e => !e.isEmpty).map(e => { e._calc = quoteCalcEntry(e); return e; });
-  if (!entries.length) { toast('ไม่มีรายการให้ export'); return; }
+  if (!entries.length) { toast('ไม่มีรายการให้ export'); return null; }
   const fees = (_quoForm.additionalFees || []).filter(f => Number(f.amount) > 0);
   const doc = _quoForm.doc || {};
   const showSize = doc.showSize !== false;
   let subtotal = entries.reduce((s,e) => s + (e._calc?.total||0), 0);
   fees.forEach(f => { subtotal += Number(f.amount) || 0; });
   const summary = quoteCalcSummary(doc, subtotal);
-
   const now = new Date();
   const dateStr = now.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' });
   const fileDate = now.toISOString().split('T')[0];
   const safeName = (customer.name||'noname').replace(/[^\w\u0E00-\u0E7F]+/g, '_').slice(0, 40);
-
   let host = document.getElementById('a4QuoExportHost');
   if (!host) { host = document.createElement('div'); host.id='a4QuoExportHost'; host.className='a4-export-host'; document.body.appendChild(host); }
-
   showLoad('กำลังคำนวณหน้า...');
-  // ── วัดความสูงจริงของแต่ละส่วน ──
   entries.forEach((e,i) => { e._eidx = i; });
   const measRows = entries.map(e => renderQuoteA4Entry(e, showSize)).join('');
   host.innerHTML = `<div class="a4-page" style="height:auto;">
@@ -9257,15 +9265,9 @@ async function quoteExportImg(){
   const Hthead = (host.querySelector('thead') || {}).offsetHeight || 30;
   const Htail = (document.getElementById('measTail') || {}).offsetHeight || 0;
   const entH = {};
-  host.querySelectorAll('#measBody tr').forEach(tr => {
-    const k = tr.getAttribute('data-eidx') || '0';
-    entH[k] = (entH[k] || 0) + tr.offsetHeight;
-  });
-
+  host.querySelectorAll('#measBody tr').forEach(tr => { const k = tr.getAttribute('data-eidx') || '0'; entH[k] = (entH[k] || 0) + tr.offsetHeight; });
   const PAGE_H = 1123, PAD = 40, FOOT = 34;
   const avail = PAGE_H - 2*PAD - Hhead - Hthead - FOOT;
-
-  // ── pack ตามความสูง (ไม่แยกรายการข้ามหน้า) ──
   const pages = []; let cur = [], curH = 0;
   entries.forEach((e,i) => {
     const hh = entH[String(i)] || 40;
@@ -9274,10 +9276,13 @@ async function quoteExportImg(){
   });
   if (cur.length) pages.push({ rows: cur, h: curH });
   if (!pages.length) pages.push({ rows: [], h: 0 });
-  // summary บนหน้าสุดท้าย — ถ้าพื้นที่ไม่พอ ดันเป็นหน้าใหม่
   if (Htail > 0 && (pages[pages.length-1].h + Htail) > avail) pages.push({ rows: [], h: 0 });
+  return { host, pages, totalPages: pages.length, customer, doc, summary, fees, dateStr, fileDate, safeName };
+}
 
-  const totalPages = pages.length;
+async function quoteExportImg(){
+  const ctx = await _quotePaginate(); if (!ctx) return;
+  const { host, pages, totalPages, customer, doc, summary, fees, dateStr, fileDate, safeName } = ctx;
   showLoad(`กำลังสร้างรูป ${totalPages} หน้า...`);
   try {
     for (let p = 0; p < totalPages; p++){
@@ -9292,11 +9297,33 @@ async function quoteExportImg(){
       await new Promise(r => setTimeout(r, 350));
     }
     host.innerHTML = ''; hideLoad();
-    toast(`✅ Export เสร็จ ${totalPages} หน้า`);
-  } catch(err){
-    hideLoad(); toast('❌ Export ผิดพลาด: ' + err.message); host.innerHTML = '';
-  }
-  entries.forEach(e => { delete e._eidx; });
+    toast(`✅ Export PNG เสร็จ ${totalPages} หน้า`);
+  } catch(err){ hideLoad(); toast('❌ Export ผิดพลาด: ' + err.message); host.innerHTML = ''; }
+  (_quoForm.entries||[]).forEach(e => { delete e._eidx; });
+}
+
+async function quoteExportPdf(){
+  const ctx = await _quotePaginate(); if (!ctx) return;
+  const { host, pages, totalPages, customer, doc, summary, fees, dateStr, fileDate, safeName } = ctx;
+  showLoad('กำลังโหลดตัวสร้าง PDF...');
+  try {
+    await quoteEnsureJsPdf();
+    const pdf = new window.jspdf.jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+    for (let p = 0; p < totalPages; p++){
+      const isLast = p === totalPages - 1;
+      host.innerHTML = renderQuoteA4Page(pages[p].rows, p+1, totalPages, customer, dateStr, doc, isLast ? fees : null, isLast ? summary : null);
+      await new Promise(r => setTimeout(r, 150));
+      showLoad(`กำลังสร้าง PDF หน้า ${p+1}/${totalPages}...`);
+      const canvas = await html2canvas(host.querySelector('.a4-page'), { backgroundColor:'#ffffff', scale:2, logging:false, useCORS:true });
+      const img = canvas.toDataURL('image/jpeg', 0.92);
+      if (p > 0) pdf.addPage();
+      pdf.addImage(img, 'JPEG', 0, 0, 210, 297);
+    }
+    pdf.save(`ใบเสนอราคา_${safeName}_${fileDate}.pdf`);
+    host.innerHTML = ''; hideLoad();
+    toast(`✅ Export PDF เสร็จ ${totalPages} หน้า`);
+  } catch(err){ hideLoad(); toast('❌ Export PDF ผิดพลาด: ' + err.message); host.innerHTML = ''; }
+  (_quoForm.entries||[]).forEach(e => { delete e._eidx; });
 }
 
 // ── Delete / Restore (ใช้กับ quote list card) ──
