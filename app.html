@@ -6374,10 +6374,10 @@ function dashCalRender(){
   for (let d=1; d<=days; d++){
     const ds = _dashCalY+'-'+String(_dashCalM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
     const js = byDay[ds] || [], dow = new Date(_dashCalY,_dashCalM,d).getDay(), wk = (dow===0||dow===6);
-    let st = 'min-height:64px;background:'+(wk?'#141a24':'var(--surf)')+';border:1px solid var(--bdr);border-radius:10px;padding:6px 7px;cursor:pointer;position:relative;';
+    let st = 'min-height:64px;background:'+(wk?'rgba(181,101,63,.08)':'var(--surf)')+';border:1px solid var(--bdr);border-radius:10px;padding:6px 7px;cursor:pointer;position:relative;';
     if (ds===today) st += 'box-shadow:inset 0 0 0 2px var(--blu);';
-    if (ds===_dashCalSel) st += 'box-shadow:inset 0 0 0 2px var(--acc);background:#241f12;';
-    const cnt = js.length ? '<span style="position:absolute;top:5px;right:6px;font-size:10px;background:var(--acc);color:#1a1205;border-radius:9px;padding:1px 6px;font-weight:800;">'+js.length+'</span>' : '';
+    if (ds===_dashCalSel) st += 'box-shadow:inset 0 0 0 2px var(--acc);background:rgba(181,101,63,.14);';
+    const cnt = js.length ? '<span style="position:absolute;top:5px;right:6px;font-size:10px;background:var(--acc);color:#fff;border-radius:9px;padding:1px 6px;font-weight:800;">'+js.length+'</span>' : '';
     const sc  = js.length ? '<span style="position:absolute;top:24px;right:6px;font-size:10px;color:var(--acc);font-weight:700;">★'+pkDashSumScore_(js)+'</span>' : '';
     const dots = js.slice(0,6).map(j => '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;margin:1px;background:'+pkDashTone_(j.status||j.sheetStatus)+';"></span>').join('');
     html += '<div onclick="dashCalPick(\''+ds+'\')" style="'+st+'"><span style="font-size:13px;font-weight:700;">'+d+'</span>'+cnt+sc+'<div style="margin-top:22px;">'+dots+'</div></div>';
@@ -6756,8 +6756,8 @@ function ptRenderCal(){
   for(var i=0;i<first;i++) h+='<div></div>';
   for(var d=1;d<=days;d++){ var ds=_ptCY+'-'+String(_ptCM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); var js=bd[ds]||[];
     var st='min-height:58px;background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:6px;cursor:pointer;position:relative;';
-    if(ds===today) st+='box-shadow:inset 0 0 0 2px var(--blu);'; if(ds===_ptCSel) st+='box-shadow:inset 0 0 0 2px var(--acc);background:#241f12;';
-    var cnt=js.length?'<span style="position:absolute;top:5px;right:6px;font-size:10px;background:var(--acc);color:#1a1205;border-radius:9px;padding:1px 6px;font-weight:800;">'+js.length+'</span>':'';
+    if(ds===today) st+='box-shadow:inset 0 0 0 2px var(--blu);'; if(ds===_ptCSel) st+='box-shadow:inset 0 0 0 2px var(--acc);background:rgba(181,101,63,.14);';
+    var cnt=js.length?'<span style="position:absolute;top:5px;right:6px;font-size:10px;background:var(--acc);color:#fff;border-radius:9px;padding:1px 6px;font-weight:800;">'+js.length+'</span>':'';
     var dots=js.slice(0,6).map(function(j){ var c=(PT_COLOR[j.prodStatus]||PT_COLOR[PT_STEPS[0]])[1]; return '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;margin:1px;background:'+c+';"></span>'; }).join('');
     h+='<div onclick="ptCalPick(\''+ds+'\')" style="'+st+'"><span style="font-size:13px;font-weight:700;">'+d+'</span>'+cnt+'<div style="margin-top:18px;">'+dots+'</div></div>';
   }
