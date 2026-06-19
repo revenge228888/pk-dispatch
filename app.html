@@ -8309,7 +8309,7 @@ function quoteCalcEntry(entry){
     const up = Number(entry.unitPrice) || 0;
     const mq = Number(entry.qty) || 1;
     const mt = Math.round(up * mq);
-    return { total: mt, breakdown: mt ? [{ typeId:'manual', label: entry.customType || 'รายการ', price: mt, note: fmt(up) + '/ชุด × ' + mq }] : [] };
+    return { total: mt, breakdown: mt ? [{ typeId:'manual', label: entry.customType || 'รายการ', price: mt, note: fmt(up) + '/ชุด × ' + mq, unit:'ชุด', uqty: mq, rate: up }] : [] };
   }
   const w = Number(entry.width) || 0;
   const h = Number(entry.height) || 0;
@@ -8330,6 +8330,7 @@ function quoteCalcEntry(entry){
 
     let p = 0;
     let note = '';
+    let unit = '', uqty = 0, urate = 0;
     if (t.calc === 'area') {
       const tbl = _quoteMetadata.priceTable[_quoForm.priceType] && _quoteMetadata.priceTable[_quoForm.priceType][group];
       const ratePerSqm = tbl ? tbl[t.priceKey] : null;
@@ -8339,6 +8340,7 @@ function quoteCalcEntry(entry){
       if (area < minArea) area = minArea;
       p = ratePerSqm * area * qty;
       note = ratePerSqm + '/ตร.ม.';
+      unit = 'ตร.ม.'; uqty = area * qty; urate = ratePerSqm;
     } else if (t.calc === 'area_h4') {
       // h4 ใช้สูตรพิเศษ: rate_free × area × qty + (area<6 ? 2000×qty : 0)
       const tbl = _quoteMetadata.priceTable[_quoForm.priceType] && _quoteMetadata.priceTable[_quoForm.priceType][group];
@@ -8351,19 +8353,22 @@ function quoteCalcEntry(entry){
       const extra = (area < PK_H4_THRESHOLD_SQM_CLIENT) ? (PK_H4_EXTRA_CLIENT * qty) : 0;
       p = basePrice + extra;
       note = ratePerSqm + '/ตร.ม.' + (extra ? ' +2,000×' + qty : ' (≥ 6 ตร.ม.)');
+      unit = 'ตร.ม.'; uqty = area * qty; urate = ratePerSqm;
     } else if (t.calc === 'perimeter') {
       const perim = (w + h) * 2 / 100;
       const rate = t.priceKey === 'slide' ? slidePrice : openPrice;
       p = rate * perim * qty;
       note = rate + '/ม.';
+      unit = 'ม.'; uqty = perim * qty; urate = rate;
     } else if (t.calc === 'perimeter_split') {
       const perim = ((w/2) + h) * 2 * 2 / 100;
       const rate = t.priceKey === 'slide' ? slidePrice : openPrice;
       p = rate * perim * qty;
       note = rate + '/ม.';
+      unit = 'ม.'; uqty = perim * qty; urate = rate;
     }
 
-    breakdown.push({ typeId, label: t.label, price: Math.round(p), note });
+    breakdown.push({ typeId, label: t.label, price: Math.round(p), note, unit, uqty: Math.round(uqty * 100) / 100, rate: urate });
     total += p;
   });
 
@@ -9106,7 +9111,8 @@ function renderQuoteA4Page(entriesInPage, pageNum, totalPages, customer, dateStr
           <th style="padding:7px 6px;text-align:left;">ตำแหน่ง</th>
           <th style="padding:7px 6px;text-align:left;">รายการ</th>
           ${showSize?`<th style="padding:7px 6px;white-space:nowrap;">ขนาด (ซม.)</th>`:''}
-          <th style="padding:7px 6px;white-space:nowrap;">จำนวน</th>
+          <th style="padding:7px 6px;white-space:nowrap;">ปริมาณ</th>
+          <th style="padding:7px 6px;text-align:right;white-space:nowrap;">ราคา/หน่วย</th>
           <th style="padding:7px 6px;text-align:right;white-space:nowrap;">รวม (บาท)</th>
         </tr>
       </thead>
@@ -9160,31 +9166,26 @@ function renderQuoteA4Page(entriesInPage, pageNum, totalPages, customer, dateStr
 }
 
 function renderQuoteA4Entry(e, showSize){
-  const qty = e.qty || 1;
   const bd = (e._calc && e._calc.breakdown) || [];
   const colorObj = e.colorId ? _quoteMetadata.colors.find(c => c.id === e.colorId) : null;
   const colorLbl = colorObj ? colorObj.label : 'สีหลัก';
-  const isManual = e.kind === 'manual';
-
-  const itemLabel = isManual
-    ? (escAttr(e.customType) || '(รายการ)')
-    : (bd.length ? bd.map(b => escAttr(b.label)).join(' + ') : '(ไม่ระบุรูปแบบ)');
-
-  const detail = bd.map(b => `${escAttr(b.note||'')}${b.note?' · ':''}฿${fmt(b.price)}`).filter(Boolean).join('  |  ');
-  const sub = `<div style="font-size:10px;color:#888;margin-top:2px;">🎨 ${escAttr(colorLbl)}${detail?' · '+detail:''}${e.note?(' · 📝 '+escAttr(e.note)):''}</div>`;
-
-  const sizeStr = isManual ? '—' : ((e.width!=null?e.width:'-') + ' × ' + (e.height!=null?e.height:'-'));
-  const qtyStr = qty + ' ชุด';
-
-  return `
-    <tr style="border-bottom:1px solid #dde3ea;">
-      <td style="padding:6px 4px;text-align:center;color:#1e6fb8;font-weight:700;font-family:'IBM Plex Mono',monospace;">${e.no}</td>
-      <td style="padding:6px 6px;vertical-align:top;">${escAttr(e.location)||'-'}</td>
-      <td style="padding:6px 6px;vertical-align:top;"><div style="font-weight:600;color:#1e3a5f;">${itemLabel}</div>${sub}</td>
-      ${showSize?`<td style="padding:6px 6px;text-align:center;vertical-align:top;white-space:nowrap;">${sizeStr}</td>`:''}
-      <td style="padding:6px 6px;text-align:center;vertical-align:top;white-space:nowrap;">${qtyStr}</td>
-      <td style="padding:6px 6px;text-align:right;vertical-align:top;font-weight:700;color:#1e6f3a;font-family:'IBM Plex Mono',monospace;white-space:nowrap;">฿${fmt(e._calc?.total||0)}</td>
-    </tr>`;
+  const sizeStr = (e.kind === 'manual') ? '—' : ((e.width != null ? e.width : '-') + ' × ' + (e.height != null ? e.height : '-'));
+  const lines = bd.length ? bd : [{ label: (e.kind === 'manual' ? (e.customType || '(รายการ)') : '(ไม่ระบุรูปแบบ)'), uqty: 0, unit: '', rate: 0, price: (e._calc && e._calc.total) || 0 }];
+  const td = 'padding:6px 6px;vertical-align:top;border-bottom:1px solid #dde3ea;';
+  return lines.map((b, i) => {
+    const first = i === 0;
+    const qtyCell = b.uqty ? (b.uqty + ' ' + (b.unit || '')) : (b.unit ? ('— ' + b.unit) : '—');
+    const rateCell = b.rate ? fmt(b.rate) : '—';
+    return '<tr>' +
+      `<td style="${td}text-align:center;color:#1e6fb8;font-weight:700;font-family:'IBM Plex Mono',monospace;">${first ? e.no : ''}</td>` +
+      `<td style="${td}">${first ? (escAttr(e.location) || '-') : ''}</td>` +
+      `<td style="${td}"><div style="font-weight:600;color:#1e3a5f;">${escAttr(b.label)}</div>${first ? `<div style="font-size:10px;color:#888;margin-top:1px;">🎨 ${escAttr(colorLbl)}${e.note ? (' · 📝 ' + escAttr(e.note)) : ''}</div>` : ''}</td>` +
+      (showSize ? `<td style="${td}text-align:center;white-space:nowrap;">${first ? sizeStr : ''}</td>` : '') +
+      `<td style="${td}text-align:center;white-space:nowrap;">${qtyCell}</td>` +
+      `<td style="${td}text-align:right;white-space:nowrap;font-family:'IBM Plex Mono',monospace;">${rateCell}</td>` +
+      `<td style="${td}text-align:right;font-weight:700;color:#1e6f3a;font-family:'IBM Plex Mono',monospace;white-space:nowrap;">฿${fmt(b.price)}</td>` +
+      '</tr>';
+  }).join('');
 }
 
 // ── Delete / Restore (ใช้กับ quote list card) ──
