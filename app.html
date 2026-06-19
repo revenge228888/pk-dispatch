@@ -8164,7 +8164,7 @@ async function quoteOpenNew(prefill){
       linkedRecordId: prefill.linkedRecordId || '',
       entries: (prefill.entries && prefill.entries.length) ? prefill.entries : [ quoteEmptyEntry(1) ],
       additionalFees: prefill.additionalFees || [],
-      doc: prefill.doc || quoteDefaultDoc(),
+      doc: prefill.doc ? quoteMergeDoc(prefill.doc) : quoteDefaultDoc(),
       recentJobs: [], draftKey: 'pk_quote_draft_new',
       draftTimer: null, lastSavedAt: null, dirty: false
     };
@@ -8218,7 +8218,7 @@ async function quoteOpenView(id){
       linkedRecordId: q.linkedRecordId || '',
       entries: (q.entries && q.entries.length) ? q.entries : [ quoteEmptyEntry(1) ],
       additionalFees: q.additionalFees || [],
-      doc: q.doc || {},
+      doc: quoteMergeDoc(q.doc),
       recentJobs: [], draftKey: null,
       draftTimer: null, lastSavedAt: null, dirty: false
     };
@@ -8253,7 +8253,7 @@ async function quoteOpenEdit(id){
       linkedRecordId: q.linkedRecordId || '',
       entries: (q.entries && q.entries.length) ? q.entries : [ quoteEmptyEntry(1) ],
       additionalFees: q.additionalFees || [],
-      doc: q.doc || {},
+      doc: quoteMergeDoc(q.doc),
       recentJobs: [], draftKey: 'pk_quote_draft_' + id,
       draftTimer: null, lastSavedAt: null, dirty: false
     };
@@ -8520,17 +8520,17 @@ function quoteRenderForm(){
     <div class="quom-section">
       <div class="quom-section-head">ตัวเลือกเอกสาร & ภาษี</div>
       <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;cursor:pointer;">
-        <input type="checkbox" ${dc.vat&&dc.vat.on?'checked':''} onchange="quoteSetDoc('vat.on',this.checked)" ${ro?'disabled':''}>
+        <input type="checkbox" ${dc.vat&&dc.vat.on?'checked':''} onchange="quoteToggleTax('vat',this.checked)" ${ro?'disabled':''}>
         เพิ่ม VAT
         ${dc.vat&&dc.vat.on?`<input class="fi" type="number" style="width:64px;margin-left:auto;text-align:right;" value="${(dc.vat&&dc.vat.rate)??7}" oninput="quoteSetDocNum('vat.rate',this.value)" ${ro?'readonly':''}> %`:''}
       </label>
       <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;cursor:pointer;">
-        <input type="checkbox" ${dc.wht&&dc.wht.on?'checked':''} onchange="quoteSetDoc('wht.on',this.checked)" ${ro?'disabled':''}>
+        <input type="checkbox" ${dc.wht&&dc.wht.on?'checked':''} onchange="quoteToggleTax('wht',this.checked)" ${ro?'disabled':''}>
         หัก ณ ที่จ่าย
         ${dc.wht&&dc.wht.on?`<input class="fi" type="number" style="width:64px;margin-left:auto;text-align:right;" value="${(dc.wht&&dc.wht.rate)??3}" oninput="quoteSetDocNum('wht.rate',this.value)" ${ro?'readonly':''}> %`:''}
       </label>
       <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;cursor:pointer;">
-        <input type="checkbox" ${dep.on?'checked':''} onchange="quoteSetDoc('deposit.on',this.checked)" ${ro?'disabled':''}>
+        <input type="checkbox" ${dep.on?'checked':''} onchange="quoteToggleTax('deposit',this.checked)" ${ro?'disabled':''}>
         มัดจำ
         ${dep.on?`
           <select class="fi" style="width:auto;margin-left:auto;" onchange="quoteSetDoc('deposit.mode',this.value)" ${ro?'disabled':''}>
@@ -8722,6 +8722,25 @@ function quoteSetDocNum(path, val){
   o[p[p.length - 1]] = (val === '' ? '' : Number(val));
   _quoForm.dirty = true;
   quoteUpdateGrandTotal();
+}
+
+function quoteToggleTax(which, on){
+  if (!_quoForm.doc) _quoForm.doc = {};
+  const d = _quoForm.doc;
+  if (which === 'vat'){ d.vat = d.vat || {}; d.vat.on = on; if (on && !(Number(d.vat.rate) > 0)) d.vat.rate = 7; }
+  else if (which === 'wht'){ d.wht = d.wht || {}; d.wht.on = on; if (on && !(Number(d.wht.rate) > 0)) d.wht.rate = 3; }
+  else if (which === 'deposit'){ d.deposit = d.deposit || {}; d.deposit.on = on; if (!d.deposit.mode) d.deposit.mode = 'percent'; if (on && !(Number(d.deposit.value) > 0)) d.deposit.value = 50; }
+  _quoForm.dirty = true;
+  quoteRenderForm();
+}
+function quoteMergeDoc(src){
+  const d = quoteDefaultDoc();
+  src = src || {};
+  for (const k in src){
+    if (src[k] && typeof src[k] === 'object' && !Array.isArray(src[k])) d[k] = Object.assign({}, d[k] || {}, src[k]);
+    else d[k] = src[k];
+  }
+  return d;
 }
 
 function quoteOnPriceTypeChange(){
