@@ -70,8 +70,11 @@ select.fi{cursor:pointer;}
 
 /* ── SIDEBAR LAYOUT ── */
 .app-shell{display:flex;min-height:100vh;position:relative;}
-.sidebar{background:var(--surf);-webkit-backdrop-filter:blur(16px) saturate(1.2);backdrop-filter:blur(16px) saturate(1.2);border-right:1px solid var(--bdr);display:flex;flex-direction:column;width:56px;transition:width .2s ease;flex-shrink:0;position:sticky;top:0;height:100vh;z-index:50;}
-.sidebar.expanded{width:220px;}
+.sidebar{background:var(--surf);-webkit-backdrop-filter:blur(16px) saturate(1.2);backdrop-filter:blur(16px) saturate(1.2);display:flex;flex-direction:column;width:0;overflow:hidden;transition:width .2s ease;flex-shrink:0;position:sticky;top:0;height:100vh;z-index:50;}
+.sidebar.expanded{width:220px;border-right:1px solid var(--bdr);}
+.sidebar-reopen{position:fixed;top:14px;left:14px;z-index:60;display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:11px;background:var(--surf2);border:1px solid var(--bdr);color:var(--tx);font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(120,96,72,.18);transition:all .15s;}
+.sidebar-reopen:hover{border-color:var(--acc);color:var(--acc);}
+.sidebar.expanded ~ .sidebar-reopen{display:none;}
 .sidebar-top{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--bdr);min-height:56px;box-sizing:border-box;}
 .sidebar-toggle{background:none;border:none;color:var(--tx);font-size:20px;cursor:pointer;padding:0;line-height:1;flex-shrink:0;width:24px;text-align:center;}
 .sidebar-brand{font-size:15px;font-weight:700;color:var(--acc);white-space:nowrap;overflow:hidden;opacity:0;transition:opacity .2s;}
@@ -135,6 +138,7 @@ select.fi{cursor:pointer;}
   .sidebar-backdrop.on{display:block;}
   .content-area{width:100%;}
   .mobile-topbar{display:flex !important;}
+  .sidebar-reopen{display:none!important;}
 }
 .mobile-topbar{display:none;align-items:center;gap:12px;padding:12px 16px;background:var(--surf);border-bottom:1px solid var(--bdr);position:sticky;top:0;z-index:40;}
 .mobile-topbar button{background:none;border:none;color:var(--tx);font-size:22px;cursor:pointer;}
@@ -1206,6 +1210,7 @@ function renderOfficeShell(){
           <button class="sidebar-item" onclick="logout()"><span class="sidebar-ico">🚪</span><span class="sidebar-label">ออกจากระบบ</span></button>
         </div>
       </nav>
+      <button class="sidebar-reopen" onclick="toggleSidebar()" title="เปิดเมนู">☰</button>
 
       <div class="content-area">
         <div class="mobile-topbar">
@@ -3538,7 +3543,7 @@ function restoreSidebarState(){
   const sb = document.getElementById('officeSidebar') || document.getElementById('salesSidebar');
   if (!sb) return;
   try {
-    if (localStorage.getItem('pk_sidebar_expanded') === '1') sb.classList.add('expanded');
+    if (localStorage.getItem('pk_sidebar_expanded') !== '0') sb.classList.add('expanded');
   } catch(e){}
 }
 
@@ -4461,6 +4466,7 @@ function renderSalesStub(){
           <button class="sidebar-item" onclick="logout()"><span class="sidebar-ico">🚪</span><span class="sidebar-label">ออกจากระบบ</span></button>
         </div>
       </nav>
+      <button class="sidebar-reopen" onclick="toggleSidebar()" title="เปิดเมนู">☰</button>
 
       <div class="content-area">
         <div class="mobile-topbar">
