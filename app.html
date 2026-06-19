@@ -8105,6 +8105,7 @@ let _quoForm = {
   linkedRecordId: '',
   entries: [],
   additionalFees: [],
+  doc: {},
   recentJobs: [],
   draftKey: null,
   draftTimer: null,
@@ -8120,6 +8121,20 @@ function quoteEmptyEntry(no){
     colorId: '',          // '' = use mainColor
     types: [], note: '',
     kind: 'auto', customType: '', unitPrice: null
+  };
+}
+
+function quoteDefaultDoc(){
+  const d = new Date();
+  const iso = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  return {
+    quoteNo: '', quoteDate: iso, validUntil: '',
+    installAddress: '',
+    showSize: true,
+    vat: { on:false, rate:7 },
+    wht: { on:false, rate:3 },
+    deposit: { on:false, mode:'percent', value:50 },
+    terms: ''
   };
 }
 
@@ -8149,6 +8164,7 @@ async function quoteOpenNew(prefill){
       linkedRecordId: prefill.linkedRecordId || '',
       entries: (prefill.entries && prefill.entries.length) ? prefill.entries : [ quoteEmptyEntry(1) ],
       additionalFees: prefill.additionalFees || [],
+      doc: prefill.doc || quoteDefaultDoc(),
       recentJobs: [], draftKey: 'pk_quote_draft_new',
       draftTimer: null, lastSavedAt: null, dirty: false
     };
@@ -8202,6 +8218,7 @@ async function quoteOpenView(id){
       linkedRecordId: q.linkedRecordId || '',
       entries: (q.entries && q.entries.length) ? q.entries : [ quoteEmptyEntry(1) ],
       additionalFees: q.additionalFees || [],
+      doc: q.doc || {},
       recentJobs: [], draftKey: null,
       draftTimer: null, lastSavedAt: null, dirty: false
     };
@@ -8236,6 +8253,7 @@ async function quoteOpenEdit(id){
       linkedRecordId: q.linkedRecordId || '',
       entries: (q.entries && q.entries.length) ? q.entries : [ quoteEmptyEntry(1) ],
       additionalFees: q.additionalFees || [],
+      doc: q.doc || {},
       recentJobs: [], draftKey: 'pk_quote_draft_' + id,
       draftTimer: null, lastSavedAt: null, dirty: false
     };
@@ -8397,6 +8415,7 @@ function quoteRenderForm(){
   }).join('');
 
   const c = _quoForm.customer || { name:'', phone:'' };
+  const dc = _quoForm.doc || {};
 
   let html = `
     <div class="quom-section">
@@ -8418,6 +8437,28 @@ function quoteRenderForm(){
         <label class="fl">📐 ผูกกับ Record</label>
         <input class="fi" type="text" value="${_quoForm.linkedRecordId}" readonly style="opacity:.7;">
       </div>` : ''}
+    </div>
+
+    <div class="quom-section">
+      <div class="quom-section-head">เอกสารใบเสนอราคา</div>
+      <div class="row-form" style="margin-bottom:10px;">
+        <div class="fg" style="flex:1;min-width:140px;">
+          <label class="fl">📄 เลขที่ใบเสนอราคา</label>
+          <input class="fi" type="text" placeholder="เช่น QT-2606-0001" value="${escAttr(dc.quoteNo||'')}" oninput="quoteOnDocChange('quoteNo',this.value)" ${ro?'readonly':''}>
+        </div>
+        <div class="fg" style="flex:1;min-width:120px;">
+          <label class="fl">📅 วันที่</label>
+          <input class="fi" type="date" value="${escAttr(dc.quoteDate||'')}" oninput="quoteOnDocChange('quoteDate',this.value)" ${ro?'readonly':''}>
+        </div>
+        <div class="fg" style="flex:1;min-width:120px;">
+          <label class="fl">⏳ ยืนราคาถึง</label>
+          <input class="fi" type="date" value="${escAttr(dc.validUntil||'')}" oninput="quoteOnDocChange('validUntil',this.value)" ${ro?'readonly':''}>
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">📍 ที่อยู่ติดตั้ง (ถ้ามี)</label>
+        <textarea class="fi" rows="2" placeholder="ที่อยู่หน้างาน" oninput="quoteOnDocChange('installAddress',this.value)" ${ro?'readonly':''}>${escHtml(dc.installAddress||'')}</textarea>
+      </div>
     </div>
 
     <div class="quom-section">
@@ -8597,6 +8638,12 @@ function quoteOnChange(){
   _quoForm.customer.name = document.getElementById('quomCustName').value;
   _quoForm.customer.phone = document.getElementById('quomCustPhone').value;
   _quoForm.linkedJobId = document.getElementById('quomLinkedJob').value;
+  _quoForm.dirty = true;
+}
+
+function quoteOnDocChange(field, val){
+  if (!_quoForm.doc) _quoForm.doc = {};
+  _quoForm.doc[field] = val;
   _quoForm.dirty = true;
 }
 
@@ -8816,7 +8863,8 @@ async function quoteSubmit(){
     linkedJobId: _quoForm.linkedJobId,
     linkedRecordId: _quoForm.linkedRecordId,
     entries,
-    additionalFees: _quoForm.additionalFees || []
+    additionalFees: _quoForm.additionalFees || [],
+    doc: _quoForm.doc || {}
   };
 
   showLoad(_quoForm.mode === 'edit' ? 'กำลังอัปเดต...' : 'กำลังบันทึก...');
