@@ -8112,12 +8112,14 @@ let _quoForm = {
   dirty: false
 };
 
+const QUO_MANUAL_SUGGEST = ['มุ้งจีบ','มุ้งบานเลื่อน','มุ้งบานเปิด','มุ้งบานเฟี้ยม','มุ้งม้วน','มุ้งพับ','กระจกอลูมิเนียม','ประตูอลูมิเนียม','หน้าต่างอลูมิเนียม','เหล็กดัด','ค่าติดตั้ง','ค่าบริการ'];
 function quoteEmptyEntry(no){
   return {
     no, isEmpty: true, location: '',
     width: null, height: null, qty: null,
     colorId: '',          // '' = use mainColor
-    types: [], note: ''
+    types: [], note: '',
+    kind: 'auto', customType: '', unitPrice: null
   };
 }
 
@@ -8285,6 +8287,12 @@ const PK_H4_THRESHOLD_SQM_CLIENT = 6;
 
 function quoteCalcEntry(entry){
   if (!_quoteMetadata) return { total:0, breakdown:[] };
+  if (entry.kind === 'manual') {
+    const up = Number(entry.unitPrice) || 0;
+    const mq = Number(entry.qty) || 1;
+    const mt = Math.round(up * mq);
+    return { total: mt, breakdown: mt ? [{ typeId:'manual', label: entry.customType || 'รายการ', price: mt, note: fmt(up) + '/ชุด × ' + mq }] : [] };
+  }
   const w = Number(entry.width) || 0;
   const h = Number(entry.height) || 0;
   const qty = Number(entry.qty) || 1;
@@ -8478,6 +8486,7 @@ function quoteRenderForm(){
 
 function quoteRenderEntry(e, idx, ro){
   const num = idx + 1;
+  const isManual = e.kind === 'manual';
   const colorOptions = ['<option value="">▼ ใช้สีหลัก</option>']
     .concat((_quoteMetadata?.colors||[]).map(c => {
       const sel = c.id === e.colorId ? ' selected' : '';
@@ -8547,8 +8556,24 @@ function quoteRenderEntry(e, idx, ro){
         <select class="fi" onchange="quoteOnEntryChange(${idx},'colorId',this.value)">${colorOptions.join('')}</select>
       </div>
       <div style="margin-bottom:8px;">
-        <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">ประเภทมุ้ง (ติ๊กได้หลายอย่าง)</div>
-        <div class="quom-types-grid">${typesHtml}</div>
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <button type="button" style="flex:1;padding:7px;border-radius:8px;border:1px solid var(--bdr);background:${!isManual?'var(--acc)':'transparent'};color:${!isManual?'#11151c':'var(--mu)'};font-weight:700;font-size:12px;cursor:pointer;" onclick="quoteSetEntryKind(${idx},'auto')">📐 คำนวณอัตโนมัติ</button>
+          <button type="button" style="flex:1;padding:7px;border-radius:8px;border:1px solid var(--bdr);background:${isManual?'var(--acc)':'transparent'};color:${isManual?'#11151c':'var(--mu)'};font-weight:700;font-size:12px;cursor:pointer;" onclick="quoteSetEntryKind(${idx},'manual')">✏️ พิมพ์ราคาเอง (ชุด)</button>
+        </div>
+        ${isManual ? `
+          <div class="fg" style="margin-bottom:8px;">
+            <label class="fl">📝 รูปแบบ</label>
+            <input class="fi" list="quomSug${idx}" type="text" placeholder="เช่น มุ้งบานเลื่อน, กระจกอลูมิเนียม" value="${escAttr(e.customType||'')}" oninput="quoteOnEntryChange(${idx},'customType',this.value)">
+            <datalist id="quomSug${idx}">${QUO_MANUAL_SUGGEST.map(s => `<option value="${escAttr(s)}">`).join('')}</datalist>
+          </div>
+          <div class="fg" style="margin-bottom:8px;">
+            <label class="fl">💵 ราคา/ชุด (บาท)</label>
+            <input class="fi" type="number" inputmode="decimal" placeholder="0" value="${e.unitPrice??''}" oninput="quoteOnEntryChange(${idx},'unitPrice',this.value===''?null:parseFloat(this.value))">
+          </div>
+        ` : `
+          <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">ประเภทมุ้ง (ติ๊กได้หลายอย่าง)</div>
+          <div class="quom-types-grid">${typesHtml}</div>
+        `}
       </div>
       <div class="fg" style="margin-bottom:10px;">
         <label class="fl">📝 หมายเหตุ</label>
@@ -8601,8 +8626,7 @@ function quoteOnEntryChange(idx, field, val){
   if (!_quoForm.entries[idx]) return;
   _quoForm.entries[idx][field] = val;
   const e = _quoForm.entries[idx];
-  e.isEmpty = !e.location && !e.width && !e.height && !e.qty && !e.note
-              && (!e.types || !e.types.length);
+  e.isEmpty = quoteEntryIsEmpty(e);
   _quoForm.dirty = true;
   // re-calc แค่ entry นี้
   e._calc = e.isEmpty ? { total:0, breakdown:[] } : quoteCalcEntry(e);
@@ -8624,6 +8648,21 @@ function quoteToggleType(idx, typeId, el){
   else e.types.splice(i, 1);
   el.parentElement.classList.toggle('checked', i === -1);
   quoteOnEntryChange(idx, 'types', e.types);
+}
+
+function quoteEntryIsEmpty(e){
+  if (e.kind === 'manual') return !e.customType && !e.unitPrice && !e.location && !e.note && !e.qty;
+  return !e.location && !e.width && !e.height && !e.qty && !e.note && (!e.types || !e.types.length);
+}
+function quoteSetEntryKind(idx, kind){
+  const e = _quoForm.entries[idx];
+  if (!e) return;
+  e.kind = kind;
+  if (kind === 'manual') e.types = [];
+  e.isEmpty = quoteEntryIsEmpty(e);
+  e._calc = e.isEmpty ? { total:0, breakdown:[] } : quoteCalcEntry(e);
+  _quoForm.dirty = true;
+  quoteRerenderEntriesOnly();
 }
 
 function quoteAddEntry(){
