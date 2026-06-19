@@ -252,6 +252,10 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 
 /* ── Records (📐 จดขนาด) ── */
 .rec-toolbar{display:flex;gap:8px;align-items:center;padding:12px 16px;flex-wrap:wrap;border-bottom:1px solid var(--bdr);}
+.quo-subtabs{display:flex;gap:6px;padding:10px 16px 0;flex-wrap:wrap;}
+.quo-subtab{appearance:none;border:1px solid var(--bdr);background:var(--surf2);color:var(--mu);font-family:var(--sans);font-size:13px;font-weight:600;padding:7px 18px;border-radius:9px 9px 0 0;cursor:pointer;transition:all .15s;}
+.quo-subtab:hover{color:var(--tx);}
+.quo-subtab.on{background:var(--acc);color:#fff;border-color:var(--acc);}
 .rec-search{flex:1;min-width:160px;}
 .rec-list{padding:12px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;}
 .rec-card{background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:12px 14px;transition:all .15s;}
@@ -1677,12 +1681,16 @@ function renderOfficeShell(){
 
       <!-- QUOTES (💰 คำนวณราคา) -->
       <div id="tabQuotes" style="display:none;">
+        <div class="quo-subtabs" id="quoSubtabs">
+          <button class="quo-subtab on" data-cat="calc" onclick="quoteSetCat('calc')">คำนวณราคา</button>
+          <button class="quo-subtab" data-cat="quote" onclick="quoteSetCat('quote')">ใบเสนอราคา</button>
+        </div>
         <div class="rec-toolbar">
           <div class="fg rec-search"><label class="fl">ค้นหา</label>
             <input class="fi" id="quoSearch" type="text" placeholder="ลูกค้า / เบอร์ / ID / Job">
           </div>
           <button class="btn btn-g" onclick="quotesLoad()">🔄 รีเฟรช</button>
-          <button class="btn btn-p" onclick="quoteOpenNew()">+ คำนวณใหม่</button>
+          <button class="btn btn-p" id="quoNewBtn" onclick="quoteNewClick()">+ คำนวณใหม่</button>
           ${isOfficeLevel() ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;">
             <input type="checkbox" id="quoShowDeleted" onchange="quotesLoad()"> รวมที่ถูกลบ
           </label>` : ''}
@@ -4620,12 +4628,16 @@ function renderSalesStub(){
 
       <!-- QUOTES (💰 คำนวณราคา) -->
       <div id="sTabQuotes" style="display:none;">
+        <div class="quo-subtabs" id="quoSubtabs">
+          <button class="quo-subtab on" data-cat="calc" onclick="quoteSetCat('calc')">คำนวณราคา</button>
+          <button class="quo-subtab" data-cat="quote" onclick="quoteSetCat('quote')">ใบเสนอราคา</button>
+        </div>
         <div class="rec-toolbar">
           <div class="fg rec-search"><label class="fl">ค้นหา</label>
             <input class="fi" id="quoSearch" type="text" placeholder="ลูกค้า / เบอร์ / ID / Job">
           </div>
           <button class="btn btn-g" onclick="quotesLoad()">🔄 รีเฟรช</button>
-          <button class="btn btn-p" onclick="quoteOpenNew()">+ คำนวณใหม่</button>
+          <button class="btn btn-p" id="quoNewBtn" onclick="quoteNewClick()">+ คำนวณใหม่</button>
         </div>
         <div id="quoList" class="rec-list"><div class="loading-row" style="grid-column:1/-1;">กดรีเฟรชเพื่อโหลด quotes</div></div>
       </div>
@@ -8136,6 +8148,7 @@ const PRICE_TYPE_LABELS = {
 };
 
 let _quotes = [];
+let _quoteCat = 'calc';   // 'calc' | 'quote'
 let _quoteSearchTimer = null;
 let _quoteMetadata = null;   // cache จาก backend (price table, colors, types)
 let _quoteHeaders = [];   // เทมเพลตหัวใบเสนอราคา
@@ -8193,7 +8206,7 @@ async function quotesLoad(useCache){
   const showDeletedEl = document.getElementById('quoShowDeleted');
   const includeDeleted = showDeletedEl ? showDeletedEl.checked : false;
   try {
-    const r = await getQuoteListFast({ search, includeDeleted, limit: 200 },
+    const r = await getQuoteListFast({ search, includeDeleted, limit: 200, category: _quoteCat },
                          { cache: true, bypassCache: !useCache });
     if (!r.ok) { w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
     _quotes = r.quotes || [];
@@ -8201,10 +8214,34 @@ async function quotesLoad(useCache){
   } catch(e) { w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">เชื่อมต่อไม่ได้</div>'; }
 }
 
+function quoteSetCat(cat){
+  if (_quoteCat === cat) return;
+  _quoteCat = cat;
+  document.querySelectorAll('#quoSubtabs .quo-subtab').forEach(b => b.classList.toggle('on', b.dataset.cat === cat));
+  const nb = document.getElementById('quoNewBtn');
+  if (nb) nb.textContent = (cat === 'quote') ? '+ ทำใบเสนอราคาใหม่' : '+ คำนวณใหม่';
+  quotesLoad(false);
+}
+function quoteNewClick(){
+  if (_quoteCat === 'quote') quoteOpenNew({ autoNo:true });
+  else quoteOpenNew();
+}
+async function quoteRunNo(id){
+  if (!confirm('รันเลขใบเสนอราคาให้ใบนี้?\nจะย้ายเข้าหมวด "ใบเสนอราคา"')) return;
+  showLoad('กำลังรันเลข...');
+  try {
+    const r = await call({ action:'pk_quoteRunNo', id });
+    hideLoad();
+    if (r && r.ok) { toast('🏷 ได้เลข ' + r.quoteNo); clearCache(['pk_quoteList']); quotesLoad(false); }
+    else toast('❌ ' + ((r && r.error) || 'รันเลขไม่ได้'));
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+
 function quotesRender(){
   const w = document.getElementById('quoList');
   if (!_quotes.length) {
-    w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">ไม่มี quotes<br><small style="color:var(--mu);">กด "+ คำนวณใหม่" เพื่อเริ่ม</small></div>';
+    const _emptyMsg = (_quoteCat === 'quote') ? 'ยังไม่มีใบเสนอราคา<br><small style="color:var(--mu);">ใบที่รันเลขแล้วจะแสดงที่นี่ · กด "+ ทำใบเสนอราคาใหม่"</small>' : 'ไม่มีรายการคำนวณ<br><small style="color:var(--mu);">กด "+ คำนวณใหม่" เพื่อเริ่ม</small>';
+    w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">' + _emptyMsg + '</div>';
     return;
   }
   const isOffice = isOfficeLevel();
@@ -8216,7 +8253,7 @@ function quotesRender(){
     return `
       <div class="rec-card ${isDel?'deleted':''}">
         <div class="rec-head">
-          <div class="rec-id">${q.id}</div>
+          <div class="rec-id">${q.quoteNo ? `<span style="color:var(--acc);font-weight:700;">🧾 ${q.quoteNo}</span>` : q.id}</div>
           <div class="rec-when">${updatedDate}</div>
         </div>
         <div class="rec-cust">👤 ${q.customerName || '(ไม่มีชื่อ)'}</div>
@@ -8236,6 +8273,7 @@ function quotesRender(){
         ${isOffice && q.createdBy !== CURRENT_USER.username ? `<div style="font-size:11px;color:var(--mu);margin-bottom:6px;">โดย ${q.createdBy}</div>` : ''}
         <div class="rec-btns">
           <button class="btn btn-g" onclick="quoteOpenView('${q.id}')">👁 ดู</button>
+          ${(!q.quoteNo && canEdit) ? `<button class="btn" style="background:var(--acc);color:#fff;" onclick="quoteRunNo('${q.id}')">🏷 รันเลข</button>` : ''}
           ${canEdit ? `<button class="btn btn-p" onclick="quoteOpenEdit('${q.id}')">✏️ แก้</button>` : ''}
           ${canEdit ? `<button class="btn btn-d" onclick="quoteDelete('${q.id}')">🗑 ลบ</button>` : ''}
           ${isDel && isOffice ? `<button class="btn btn-g" onclick="quoteRestore('${q.id}')">↩ กู้คืน</button>` : ''}
@@ -8329,7 +8367,8 @@ async function quoteOpenNew(prefill){
       additionalFees: prefill.additionalFees || [],
       doc: prefill.doc ? quoteMergeDoc(prefill.doc) : quoteDefaultDoc(),
       recentJobs: [], draftKey: 'pk_quote_draft_new',
-      draftTimer: null, lastSavedAt: null, dirty: false
+      draftTimer: null, lastSavedAt: null, dirty: false,
+      autoNo: !!prefill.autoNo
     };
     await quoteLoadRecentJobs();
     // ถาม recover draft (ถ้าไม่มี prefill)
@@ -8346,7 +8385,7 @@ async function quoteOpenNew(prefill){
         showLoad('กำลังเตรียมฟอร์ม...');
       }
     }
-    document.getElementById('quomTitle').textContent = '💰 คำนวณราคา — สร้างใหม่';
+    document.getElementById('quomTitle').textContent = _quoForm.autoNo ? '🧾 ใบเสนอราคา — สร้างใหม่ (รันเลขอัตโนมัติ)' : '💰 คำนวณราคา — สร้างใหม่';
     document.getElementById('quomSaveBar').style.display = 'flex';
     document.getElementById('quomSaveBtn').textContent = '💾 บันทึก';
     document.getElementById('quomExportBtn').style.display = 'none'; { const _pb = document.getElementById('quomExportPdfBtn'); if (_pb) _pb.style.display = 'none'; }
@@ -9135,7 +9174,8 @@ async function quoteSubmit(){
     linkedRecordId: _quoForm.linkedRecordId,
     entries,
     additionalFees: _quoForm.additionalFees || [],
-    doc: _quoForm.doc || {}
+    doc: _quoForm.doc || {},
+    runNo: !!_quoForm.autoNo
   };
 
   showLoad(_quoForm.mode === 'edit' ? 'กำลังอัปเดต...' : 'กำลังบันทึก...');
@@ -9148,7 +9188,7 @@ async function quoteSubmit(){
     }
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
-    toast(_quoForm.mode === 'edit' ? '✅ อัปเดตแล้ว · ฿' + fmt(r.totalAmount||0) : '✅ บันทึกแล้ว · ฿' + fmt(r.totalAmount||0));
+    toast(_quoForm.mode === 'edit' ? '✅ อัปเดตแล้ว · ฿' + fmt(r.totalAmount||0) : ('✅ บันทึกแล้ว' + (r.quoteNo ? ' · เลข ' + r.quoteNo : '') + ' · ฿' + fmt(r.totalAmount||0)));
     clearCache(['pk_quoteList','pk_getJobs']);
     if (_quoForm.draftKey) localStorage.removeItem(_quoForm.draftKey);
     _quoForm.dirty = false;
