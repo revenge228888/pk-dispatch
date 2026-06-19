@@ -8991,77 +8991,6 @@ async function quoteSubmit(){
 }
 
 // ── Quote Export PNG A4 (D4) ──
-const QUO_A4_ENTRIES_PER_PAGE = 8;
-
-async function quoteExportImg(){
-  if (typeof html2canvas === 'undefined') {
-    toast('❌ html2canvas ยังไม่โหลด'); return;
-  }
-  if (!_quoteMetadata) { toast('โหลด metadata ก่อน'); return; }
-  const customer = _quoForm.customer || { name:'', phone:'' };
-  // ใช้ entries ที่ไม่ว่าง + recalc ให้แน่ใจ
-  const entries = (_quoForm.entries || []).filter(e => !e.isEmpty).map(e => {
-    e._calc = quoteCalcEntry(e);
-    return e;
-  });
-  if (!entries.length) { toast('ไม่มีรายการให้ export'); return; }
-  const fees = (_quoForm.additionalFees || []).filter(f => Number(f.amount) > 0);
-
-  // คำนวณ subtotal + summary (VAT/หัก/มัดจำ)
-  let subtotal = entries.reduce((s,e) => s + (e._calc?.total||0), 0);
-  fees.forEach(f => { subtotal += Number(f.amount) || 0; });
-  const _doc = _quoForm.doc || {};
-  const _summary = quoteCalcSummary(_doc, subtotal);
-
-  // แบ่งหน้า — fees + grand อยู่หน้าสุดท้ายเท่านั้น
-  const pages = [];
-  for (let i = 0; i < entries.length; i += QUO_A4_ENTRIES_PER_PAGE) {
-    pages.push(entries.slice(i, i + QUO_A4_ENTRIES_PER_PAGE));
-  }
-  if (!pages.length) pages.push([]);
-
-  showLoad(`กำลังสร้างรูป ${pages.length} หน้า...`);
-
-  let host = document.getElementById('a4QuoExportHost');
-  if (!host) {
-    host = document.createElement('div');
-    host.id = 'a4QuoExportHost';
-    host.className = 'a4-export-host';
-    document.body.appendChild(host);
-  }
-
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' });
-  const fileDate = now.toISOString().split('T')[0];
-  const safeName = (customer.name||'noname').replace(/[^\w\u0E00-\u0E7F]+/g, '_').slice(0, 40);
-
-  try {
-    for (let p = 0; p < pages.length; p++) {
-      const isLast = p === pages.length - 1;
-      host.innerHTML = renderQuoteA4Page(pages[p], p+1, pages.length, customer, dateStr, _doc, isLast ? fees : null, isLast ? _summary : null);
-      await new Promise(r => setTimeout(r, 200));
-      const canvas = await html2canvas(host.querySelector('.a4-page'), {
-        backgroundColor: '#ffffff', scale: 2, logging: false, useCORS: true
-      });
-      const dataUrl = canvas.toDataURL('image/png');
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = `ใบเสนอราคา_${safeName}_${fileDate}_หน้า${p+1}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      await new Promise(r => setTimeout(r, 400));
-    }
-    host.innerHTML = '';
-    hideLoad();
-    toast(`✅ Export เสร็จ ${pages.length} หน้า`);
-  } catch(e) {
-    hideLoad();
-    toast('❌ Export ผิดพลาด: ' + e.message);
-    host.innerHTML = '';
-  }
-}
-
 function quoteFmtDate(s){
   if (!s) return '-';
   const p = String(s).split('-');
@@ -9069,13 +8998,10 @@ function quoteFmtDate(s){
   return s;
 }
 
-function renderQuoteA4Page(entriesInPage, pageNum, totalPages, customer, dateStr, doc, fees, summary){
-  doc = doc || {};
+function quoteA4Header(customer, dateStr, doc){
   const priceLabel = PRICE_TYPE_LABELS[_quoForm.priceType] || _quoForm.priceType;
-  const showSize = doc.showSize !== false;
   const dateShow = doc.quoteDate ? quoteFmtDate(doc.quoteDate) : dateStr;
-
-  const letterhead = `
+  return `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e6fb8;padding-bottom:10px;margin-bottom:12px;">
       <div>
         <div style="font-size:20px;font-weight:800;color:#1e3a5f;">บริษัท มุ้งจีบพีเค จำกัด</div>
@@ -9085,9 +9011,7 @@ function renderQuoteA4Page(entriesInPage, pageNum, totalPages, customer, dateStr
         <div style="font-size:22px;font-weight:800;color:#1e6fb8;letter-spacing:1px;">ใบเสนอราคา</div>
         <div style="font-size:10px;color:#999;letter-spacing:2px;">QUOTATION</div>
       </div>
-    </div>`;
-
-  const info = `
+    </div>
     <div style="display:flex;justify-content:space-between;gap:20px;font-size:12px;margin-bottom:12px;">
       <div style="flex:1;line-height:1.7;">
         <div><b style="color:#1e3a5f;">ลูกค้า:</b> ${escAttr(customer.name)||'-'}</div>
@@ -9101,67 +9025,60 @@ function renderQuoteA4Page(entriesInPage, pageNum, totalPages, customer, dateStr
         <div><b style="color:#1e3a5f;">ประเภทราคา:</b> ${priceLabel}</div>
       </div>
     </div>`;
+}
 
-  const rows = entriesInPage.map((e, i) => renderQuoteA4Entry(e, showSize)).join('');
-  const table = `
-    <table style="width:100%;border-collapse:collapse;font-size:12px;">
-      <thead>
-        <tr style="background:#1e6fb8;color:#fff;font-size:11px;">
-          <th style="padding:7px 4px;width:26px;">ลำดับ</th>
-          <th style="padding:7px 6px;text-align:left;">ตำแหน่ง</th>
-          <th style="padding:7px 6px;text-align:left;">รายการ</th>
-          ${showSize?`<th style="padding:7px 6px;white-space:nowrap;">ขนาด (ซม.)</th>`:''}
-          <th style="padding:7px 6px;white-space:nowrap;">ปริมาณ</th>
-          <th style="padding:7px 6px;text-align:right;white-space:nowrap;">ราคา/หน่วย</th>
-          <th style="padding:7px 6px;text-align:right;white-space:nowrap;">รวม (บาท)</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+function quoteA4Thead(showSize){
+  return `<thead><tr style="background:#1e6fb8;color:#fff;font-size:11px;">
+      <th style="padding:7px 4px;width:26px;">ลำดับ</th>
+      <th style="padding:7px 6px;text-align:left;">ตำแหน่ง</th>
+      <th style="padding:7px 6px;text-align:left;">รายการ</th>
+      ${showSize?`<th style="padding:7px 6px;white-space:nowrap;">ขนาด (ซม.)</th>`:''}
+      <th style="padding:7px 6px;white-space:nowrap;">ปริมาณ</th>
+      <th style="padding:7px 6px;text-align:right;white-space:nowrap;">ราคา/หน่วย</th>
+      <th style="padding:7px 6px;text-align:right;white-space:nowrap;">รวม (บาท)</th>
+    </tr></thead>`;
+}
 
-  let tail = '';
-  if (summary){
-    let feesHtml = '';
-    if (fees && fees.length){
-      feesHtml = `<div style="margin-top:10px;font-size:12px;">` +
-        fees.map(f => `<div style="display:flex;justify-content:space-between;padding:2px 0;color:#856404;"><span>🔧 ${escAttr(f.label)||'(ค่าใช้จ่าย)'}</span><span>฿${fmt(f.amount)}</span></div>`).join('') +
-        `</div>`;
-    }
-    const sumRow = (lbl, val, color, big) =>
-      `<div style="display:flex;justify-content:space-between;padding:${big?'6px':'3px'} 0;${big?'border-top:2px solid #1e6fb8;font-weight:800;font-size:15px;color:#1e6f3a;':'font-size:13px;color:'+(color||'#333')+';'}"><span>${lbl}</span><span style="font-family:'IBM Plex Mono',monospace;">${val}</span></div>`;
-    let s = sumRow('ยอดรวมรายการ', '฿'+fmt(summary.subtotal));
-    if (summary.vatOn) s += sumRow('+ VAT ' + summary.vatRate + '%', '฿'+fmt(summary.vat));
-    if (summary.whtOn) s += sumRow('− หัก ณ ที่จ่าย ' + summary.whtRate + '%', '−฿'+fmt(summary.wht), '#c0392b');
-    s += sumRow('ยอดสุทธิ', '฿'+fmt(summary.net), null, true);
-    if (summary.depOn){
-      s += sumRow('มัดจำ' + (summary.depMode==='percent'?(' '+summary.depValue+'%'):''), '฿'+fmt(summary.deposit), '#1e6fb8');
-      s += sumRow('คงเหลือ', '฿'+fmt(summary.remaining), '#555');
-    }
-    const terms = doc.terms ? `<div style="margin-top:14px;font-size:11px;color:#444;border-top:1px dashed #bbb;padding-top:8px;"><b style="color:#1e3a5f;">เงื่อนไข / หมายเหตุ</b><div style="white-space:pre-wrap;margin-top:3px;">${escHtml(doc.terms)}</div></div>` : '';
-    const sign = `
-      <div style="margin-top:26px;display:flex;justify-content:space-around;text-align:center;font-size:12px;color:#333;">
-        <div><div style="border-top:1px solid #333;width:150px;margin:26px auto 4px;"></div>ผู้เสนอราคา</div>
-        <div><div style="border-top:1px solid #333;width:150px;margin:26px auto 4px;"></div>ผู้อนุมัติ / ลูกค้า</div>
-      </div>`;
-    tail = `
-      ${feesHtml}
-      <div style="margin-top:12px;display:flex;justify-content:flex-end;">
-        <div style="width:320px;">${s}</div>
-      </div>
-      ${terms}
-      ${sign}`;
+function quoteA4Tail(doc, fees, summary){
+  if (!summary) return '';
+  let feesHtml = '';
+  if (fees && fees.length){
+    feesHtml = `<div style="margin-top:10px;font-size:12px;">` +
+      fees.map(f => `<div style="display:flex;justify-content:space-between;padding:2px 0;color:#856404;"><span>🔧 ${escAttr(f.label)||'(ค่าใช้จ่าย)'}</span><span>฿${fmt(f.amount)}</span></div>`).join('') + `</div>`;
   }
+  const sumRow = (lbl, val, color, big) =>
+    `<div style="display:flex;justify-content:space-between;padding:${big?'6px':'3px'} 0;${big?'border-top:2px solid #1e6fb8;font-weight:800;font-size:15px;color:#1e6f3a;':'font-size:13px;color:'+(color||'#333')+';'}"><span>${lbl}</span><span style="font-family:'IBM Plex Mono',monospace;">${val}</span></div>`;
+  let s = sumRow('ยอดรวมรายการ', '฿'+fmt(summary.subtotal));
+  if (summary.vatOn) s += sumRow('+ VAT ' + summary.vatRate + '%', '฿'+fmt(summary.vat));
+  if (summary.whtOn) s += sumRow('− หัก ณ ที่จ่าย ' + summary.whtRate + '%', '−฿'+fmt(summary.wht), '#c0392b');
+  s += sumRow('ยอดสุทธิ', '฿'+fmt(summary.net), null, true);
+  if (summary.depOn){
+    s += sumRow('มัดจำ' + (summary.depMode==='percent'?(' '+summary.depValue+'%'):''), '฿'+fmt(summary.deposit), '#1e6fb8');
+    s += sumRow('คงเหลือ', '฿'+fmt(summary.remaining), '#555');
+  }
+  const terms = doc.terms ? `<div style="margin-top:14px;font-size:11px;color:#444;border-top:1px dashed #bbb;padding-top:8px;"><b style="color:#1e3a5f;">เงื่อนไข / หมายเหตุ</b><div style="white-space:pre-wrap;margin-top:3px;">${escHtml(doc.terms)}</div></div>` : '';
+  const sign = `<div style="margin-top:26px;display:flex;justify-content:space-around;text-align:center;font-size:12px;color:#333;">
+      <div><div style="border-top:1px solid #333;width:150px;margin:26px auto 4px;"></div>ผู้เสนอราคา</div>
+      <div><div style="border-top:1px solid #333;width:150px;margin:26px auto 4px;"></div>ผู้อนุมัติ / ลูกค้า</div>
+    </div>`;
+  return `${feesHtml}
+    <div style="margin-top:12px;display:flex;justify-content:flex-end;"><div style="width:320px;">${s}</div></div>
+    ${terms}${sign}`;
+}
 
+function renderQuoteA4Page(entriesInPage, pageNum, totalPages, customer, dateStr, doc, fees, summary){
+  doc = doc || {};
+  const showSize = doc.showSize !== false;
+  const rows = entriesInPage.map(e => renderQuoteA4Entry(e, showSize)).join('');
   return `
     <div class="a4-page">
-      ${letterhead}
-      ${info}
-      ${table}
-      ${tail}
-      <div class="a4-footer">
-        <span>${escAttr(_quoForm.id || '')}</span>
-        <span>หน้า ${pageNum} / ${totalPages}</span>
-      </div>
+      ${quoteA4Header(customer, dateStr, doc)}
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        ${quoteA4Thead(showSize)}
+        <tbody>${rows}</tbody>
+      </table>
+      ${quoteA4Tail(doc, fees, summary)}
+      <div class="a4-footer"><span>${escAttr(_quoForm.id || '')}</span><span>หน้า ${pageNum} / ${totalPages}</span></div>
     </div>`;
 }
 
@@ -9172,11 +9089,12 @@ function renderQuoteA4Entry(e, showSize){
   const sizeStr = (e.kind === 'manual') ? '—' : ((e.width != null ? e.width : '-') + ' × ' + (e.height != null ? e.height : '-'));
   const lines = bd.length ? bd : [{ label: (e.kind === 'manual' ? (e.customType || '(รายการ)') : '(ไม่ระบุรูปแบบ)'), uqty: 0, unit: '', rate: 0, price: (e._calc && e._calc.total) || 0 }];
   const td = 'padding:6px 6px;vertical-align:top;border-bottom:1px solid #dde3ea;';
+  const eidx = (e._eidx != null ? e._eidx : '');
   return lines.map((b, i) => {
     const first = i === 0;
     const qtyCell = b.uqty ? (b.uqty + ' ' + (b.unit || '')) : (b.unit ? ('— ' + b.unit) : '—');
     const rateCell = b.rate ? fmt(b.rate) : '—';
-    return '<tr>' +
+    return `<tr data-eidx="${eidx}">` +
       `<td style="${td}text-align:center;color:#1e6fb8;font-weight:700;font-family:'IBM Plex Mono',monospace;">${first ? e.no : ''}</td>` +
       `<td style="${td}">${first ? (escAttr(e.location) || '-') : ''}</td>` +
       `<td style="${td}"><div style="font-weight:600;color:#1e3a5f;">${escAttr(b.label)}</div>${first ? `<div style="font-size:10px;color:#888;margin-top:1px;">🎨 ${escAttr(colorLbl)}${e.note ? (' · 📝 ' + escAttr(e.note)) : ''}</div>` : ''}</td>` +
@@ -9184,8 +9102,85 @@ function renderQuoteA4Entry(e, showSize){
       `<td style="${td}text-align:center;white-space:nowrap;">${qtyCell}</td>` +
       `<td style="${td}text-align:right;white-space:nowrap;font-family:'IBM Plex Mono',monospace;">${rateCell}</td>` +
       `<td style="${td}text-align:right;font-weight:700;color:#1e6f3a;font-family:'IBM Plex Mono',monospace;white-space:nowrap;">฿${fmt(b.price)}</td>` +
-      '</tr>';
+      `</tr>`;
   }).join('');
+}
+
+async function quoteExportImg(){
+  if (typeof html2canvas === 'undefined') { toast('❌ html2canvas ยังไม่โหลด'); return; }
+  if (!_quoteMetadata) { toast('โหลด metadata ก่อน'); return; }
+  const customer = _quoForm.customer || { name:'', phone:'' };
+  const entries = (_quoForm.entries || []).filter(e => !e.isEmpty).map(e => { e._calc = quoteCalcEntry(e); return e; });
+  if (!entries.length) { toast('ไม่มีรายการให้ export'); return; }
+  const fees = (_quoForm.additionalFees || []).filter(f => Number(f.amount) > 0);
+  const doc = _quoForm.doc || {};
+  const showSize = doc.showSize !== false;
+  let subtotal = entries.reduce((s,e) => s + (e._calc?.total||0), 0);
+  fees.forEach(f => { subtotal += Number(f.amount) || 0; });
+  const summary = quoteCalcSummary(doc, subtotal);
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' });
+  const fileDate = now.toISOString().split('T')[0];
+  const safeName = (customer.name||'noname').replace(/[^\w\u0E00-\u0E7F]+/g, '_').slice(0, 40);
+
+  let host = document.getElementById('a4QuoExportHost');
+  if (!host) { host = document.createElement('div'); host.id='a4QuoExportHost'; host.className='a4-export-host'; document.body.appendChild(host); }
+
+  showLoad('กำลังคำนวณหน้า...');
+  // ── วัดความสูงจริงของแต่ละส่วน ──
+  entries.forEach((e,i) => { e._eidx = i; });
+  const measRows = entries.map(e => renderQuoteA4Entry(e, showSize)).join('');
+  host.innerHTML = `<div class="a4-page" style="height:auto;">
+      <div id="measHead">${quoteA4Header(customer, dateStr, doc)}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">${quoteA4Thead(showSize)}<tbody id="measBody">${measRows}</tbody></table>
+      <div id="measTail">${quoteA4Tail(doc, fees, summary)}</div>
+    </div>`;
+  await new Promise(r => setTimeout(r, 80));
+  const Hhead = (document.getElementById('measHead') || {}).offsetHeight || 180;
+  const Hthead = (host.querySelector('thead') || {}).offsetHeight || 30;
+  const Htail = (document.getElementById('measTail') || {}).offsetHeight || 0;
+  const entH = {};
+  host.querySelectorAll('#measBody tr').forEach(tr => {
+    const k = tr.getAttribute('data-eidx') || '0';
+    entH[k] = (entH[k] || 0) + tr.offsetHeight;
+  });
+
+  const PAGE_H = 1123, PAD = 40, FOOT = 34;
+  const avail = PAGE_H - 2*PAD - Hhead - Hthead - FOOT;
+
+  // ── pack ตามความสูง (ไม่แยกรายการข้ามหน้า) ──
+  const pages = []; let cur = [], curH = 0;
+  entries.forEach((e,i) => {
+    const hh = entH[String(i)] || 40;
+    if (cur.length && (curH + hh) > avail){ pages.push({ rows: cur, h: curH }); cur = []; curH = 0; }
+    cur.push(e); curH += hh;
+  });
+  if (cur.length) pages.push({ rows: cur, h: curH });
+  if (!pages.length) pages.push({ rows: [], h: 0 });
+  // summary บนหน้าสุดท้าย — ถ้าพื้นที่ไม่พอ ดันเป็นหน้าใหม่
+  if (Htail > 0 && (pages[pages.length-1].h + Htail) > avail) pages.push({ rows: [], h: 0 });
+
+  const totalPages = pages.length;
+  showLoad(`กำลังสร้างรูป ${totalPages} หน้า...`);
+  try {
+    for (let p = 0; p < totalPages; p++){
+      const isLast = p === totalPages - 1;
+      host.innerHTML = renderQuoteA4Page(pages[p].rows, p+1, totalPages, customer, dateStr, doc, isLast ? fees : null, isLast ? summary : null);
+      await new Promise(r => setTimeout(r, 150));
+      const canvas = await html2canvas(host.querySelector('.a4-page'), { backgroundColor:'#ffffff', scale:2, logging:false, useCORS:true });
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = `ใบเสนอราคา_${safeName}_${fileDate}_หน้า${p+1}.png`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      await new Promise(r => setTimeout(r, 350));
+    }
+    host.innerHTML = ''; hideLoad();
+    toast(`✅ Export เสร็จ ${totalPages} หน้า`);
+  } catch(err){
+    hideLoad(); toast('❌ Export ผิดพลาด: ' + err.message); host.innerHTML = '';
+  }
+  entries.forEach(e => { delete e._eidx; });
 }
 
 // ── Delete / Restore (ใช้กับ quote list card) ──
