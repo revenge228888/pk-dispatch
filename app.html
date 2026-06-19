@@ -1177,7 +1177,8 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="railstock" onclick="setTab('railstock',this)"><span class="sidebar-ico">📦</span><span class="sidebar-label">คลังราง</span></button>
           <button class="sidebar-item" data-tab="equipstock" onclick="setTab('equipstock',this)"><span class="sidebar-ico">🔩</span><span class="sidebar-label">คลังอุปกรณ์</span></button>
           <button class="sidebar-item" data-tab="costedit" onclick="setTab('costedit',this)"><span class="sidebar-ico">💰</span><span class="sidebar-label">แก้ไขทุน</span></button>
-          <button class="sidebar-item" data-tab="quoteprice" onclick="setTab('quoteprice',this)"><span class="sidebar-ico">🏷️</span><span class="sidebar-label">แก้ราคาขาย</span></button>` : (CURRENT_USER.role === 'office' ? `
+          <button class="sidebar-item" data-tab="quoteprice" onclick="setTab('quoteprice',this)"><span class="sidebar-ico">🏷️</span><span class="sidebar-label">แก้ราคาขาย</span></button>
+          <button class="sidebar-item" data-tab="quoteheader" onclick="setTab('quoteheader',this)"><span class="sidebar-ico">📄</span><span class="sidebar-label">หัวใบเสนอราคา</span></button>` : (CURRENT_USER.role === 'office' ? `
           <div class="sidebar-group">ผลิต</div>
           <button class="sidebar-item" data-tab="prodtrack" onclick="setTab('prodtrack',this)"><span class="sidebar-ico">📈</span><span class="sidebar-label">ติดตามงานผลิต</span></button>
           <button class="sidebar-item" data-tab="railstock" onclick="setTab('railstock',this)"><span class="sidebar-ico">📦</span><span class="sidebar-label">คลังราง</span></button>
@@ -1331,6 +1332,21 @@ function renderOfficeShell(){
           </div>
           <div style="font-size:12px;color:var(--mu);margin-bottom:12px;">ราคา/ตร.ม. ของมุ้งจีบ แยกตาม ประเภทราคา × กลุ่มสี × แบบงาน · <b style="color:var(--acc)">แก้แล้วมีผลกับใบใหม่เท่านั้น — ใบเก่าตรึงราคาไว้แล้ว (snapshot)</b></div>
           <div id="qpBody"><div class="loading-row">กำลังโหลด...</div></div>
+        </div>
+      </div>
+
+      <!-- QUOTE HEADER TEMPLATES (หัวใบเสนอราคา) — manager -->
+      <div id="tabQuoteheader" style="display:none;">
+        <div class="section-pad">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+            <div style="font-weight:800;font-size:16px;">📄 หัวใบเสนอราคา</div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-p btn-sm" onclick="qhAddNew()">➕ เพิ่ม</button>
+              <button class="btn btn-g btn-sm" onclick="qhLoad()">↻</button>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--mu);margin-bottom:12px;">เทมเพลตหัวกระดาษสำหรับใบเสนอราคา · เลือกใช้ต่อใบในหน้าคำนวณราคา · ★ = ค่าเริ่มต้น</div>
+          <div id="qhBody"><div class="loading-row">กำลังโหลด...</div></div>
         </div>
       </div>
 
@@ -3396,7 +3412,7 @@ async function expenseRejectConfirm(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -3434,6 +3450,7 @@ function setTab(t, btn){
   if (t === 'equipstock') esLoad();
   if (t === 'costedit') ceLoad();
   if (t === 'quoteprice') qpLoad();
+  if (t === 'quoteheader') qhLoad();
 }
 
 // ── Sidebar toggle ──
@@ -7003,6 +7020,76 @@ async function qpSaveAll() {
   toast('บันทึก ' + ok + ' รายการ' + (fail ? (' · ล้มเหลว ' + fail) : ''));
   _qpDirty = {};
   qpRender();
+}
+
+// ════════════════════════════════════════
+//  📄 หัวใบเสนอราคา (PK_QuoteHeader) — manager · หลายเทมเพลต เลือกใช้ต่อใบ
+// ════════════════════════════════════════
+let _qhRows = [];
+async function qhLoad(){
+  if (!document.getElementById('qhBody')) return;
+  document.getElementById('qhBody').innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  try {
+    var g = await call({ action: 'pk_quoteHeaderList' });
+    _qhRows = (g && g.ok) ? (g.rows || []) : [];
+    if (!(g && g.ok)) toast((g && g.error) || 'โหลดไม่ได้');
+  } catch (e) { _qhRows = []; toast('โหลดไม่ได้'); }
+  qhRender();
+}
+function qhField(i, field, val){ if (_qhRows[i]) _qhRows[i][field] = val; }
+function qhAddNew(){
+  _qhRows.push({ templateId: 'h_' + Date.now(), name: 'เทมเพลตใหม่', companyName: '', addressLines: '', contact: '', taxId: '', isDefault: 0, _new: true });
+  qhRender();
+}
+function qhInput(label, val, i, field){
+  return '<div class="fg" style="margin-bottom:8px;"><label class="fl">' + label + '</label><input class="fi" value="' + escAttr(val || '') + '" oninput="qhField(' + i + ',\'' + field + '\',this.value)"></div>';
+}
+function qhArea(label, val, i, field){
+  return '<div class="fg" style="margin-bottom:8px;"><label class="fl">' + label + '</label><textarea class="fi" rows="2" oninput="qhField(' + i + ',\'' + field + '\',this.value)">' + escHtml(val || '') + '</textarea></div>';
+}
+function qhRender(){
+  if (!document.getElementById('qhBody')) return;
+  if (!_qhRows.length){ document.getElementById('qhBody').innerHTML = '<div style="padding:16px;text-align:center;color:var(--mu);">ยังไม่มีเทมเพลต — กด ➕ เพิ่ม</div>'; return; }
+  var html = _qhRows.map(function (r, i){
+    return '<div style="background:var(--surf);border:1px solid ' + (r.isDefault ? 'var(--acc)' : 'var(--bdr)') + ';border-radius:12px;padding:14px;margin-bottom:12px;">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">'
+        + '<input class="fi" style="flex:1;font-weight:700;" value="' + escAttr(r.name || '') + '" placeholder="ชื่อเทมเพลต" oninput="qhField(' + i + ',\'name\',this.value)">'
+        + (r.isDefault ? '<span style="font-size:11px;color:var(--acc);font-weight:700;white-space:nowrap;">★ ค่าเริ่มต้น</span>' : '<button class="btn btn-sm" onclick="qhSetDefault(' + i + ')">ตั้งเริ่มต้น</button>')
+      + '</div>'
+      + qhInput('ชื่อบริษัท', r.companyName, i, 'companyName')
+      + qhArea('ที่อยู่', r.addressLines, i, 'addressLines')
+      + qhInput('เบอร์ / Line', r.contact, i, 'contact')
+      + qhInput('เลขผู้เสียภาษี', r.taxId, i, 'taxId')
+      + '<div style="display:flex;gap:8px;margin-top:10px;">'
+        + '<button class="btn btn-p btn-sm" onclick="qhSave(' + i + ')">💾 บันทึก</button>'
+        + '<button class="btn btn-sm" style="color:var(--rd);border-color:var(--rd);" onclick="qhDelete(' + i + ')">🗑 ลบ</button>'
+      + '</div>'
+    + '</div>';
+  }).join('');
+  document.getElementById('qhBody').innerHTML = html;
+}
+async function qhSave(i){
+  var r = _qhRows[i]; if (!r) return;
+  try {
+    var res = await call({ action: 'pk_quoteHeaderSet', templateId: r.templateId, name: r.name, companyName: r.companyName, addressLines: r.addressLines, contact: r.contact, taxId: r.taxId, isDefault: r.isDefault ? 1 : 0 });
+    if (res && res.ok){ toast('บันทึกแล้ว'); qhLoad(); } else toast((res && res.error) || 'บันทึกไม่ได้');
+  } catch (e) { toast('บันทึกไม่ได้'); }
+}
+async function qhSetDefault(i){
+  var r = _qhRows[i]; if (!r) return;
+  try {
+    var res = await call({ action: 'pk_quoteHeaderSet', templateId: r.templateId, name: r.name, companyName: r.companyName, addressLines: r.addressLines, contact: r.contact, taxId: r.taxId, isDefault: 1 });
+    if (res && res.ok){ toast('ตั้งเป็นค่าเริ่มต้นแล้ว'); qhLoad(); } else toast((res && res.error) || 'ตั้งไม่ได้');
+  } catch (e) { toast('ตั้งไม่ได้'); }
+}
+async function qhDelete(i){
+  var r = _qhRows[i]; if (!r) return;
+  if (r._new){ _qhRows.splice(i, 1); qhRender(); return; }
+  if (!confirm('ลบเทมเพลต "' + (r.name || r.templateId) + '"?')) return;
+  try {
+    var res = await call({ action: 'pk_quoteHeaderDelete', templateId: r.templateId });
+    if (res && res.ok){ toast('ลบแล้ว'); qhLoad(); } else toast((res && res.error) || 'ลบไม่ได้');
+  } catch (e) { toast('ลบไม่ได้'); }
 }
 
 // ── manager calendar = ภาพรวมงานที่มอบหมาย (ปฏิทินทุกสถานะ + กดวันดูงานวันนั้น · ไม่มี agenda 7 วัน) ──
