@@ -20,6 +20,9 @@ body{background:radial-gradient(70vw 60vh at 8% -10%, rgba(208,138,99,.20), tran
 
 /* HEADER */
 header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;height:54px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.hdr-menu-btn{display:none;background:none;border:1px solid var(--bdr);color:var(--tx);font-size:18px;width:34px;height:34px;border-radius:9px;cursor:pointer;align-items:center;justify-content:center;line-height:1;flex-shrink:0;transition:all .15s;}
+.hdr-menu-btn:hover{border-color:var(--acc);color:var(--acc);}
+body.nav-hidden .hdr-menu-btn{display:inline-flex;}
 .logo{font-family:var(--mono);font-size:14px;color:var(--acc);letter-spacing:3px;}
 .logo span{color:var(--tx);}
 .logo small{color:var(--mu);font-size:11px;margin-left:8px;letter-spacing:1px;}
@@ -72,9 +75,6 @@ select.fi{cursor:pointer;}
 .app-shell{display:flex;min-height:100vh;position:relative;}
 .sidebar{background:var(--surf);-webkit-backdrop-filter:blur(16px) saturate(1.2);backdrop-filter:blur(16px) saturate(1.2);display:flex;flex-direction:column;width:0;overflow:hidden;transition:width .2s ease;flex-shrink:0;position:sticky;top:0;height:100vh;z-index:50;}
 .sidebar.expanded{width:220px;border-right:1px solid var(--bdr);}
-.sidebar-reopen{position:fixed;top:14px;left:14px;z-index:60;display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:11px;background:var(--surf2);border:1px solid var(--bdr);color:var(--tx);font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(120,96,72,.18);transition:all .15s;}
-.sidebar-reopen:hover{border-color:var(--acc);color:var(--acc);}
-.sidebar.expanded ~ .sidebar-reopen{display:none;}
 .sidebar-top{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--bdr);min-height:56px;box-sizing:border-box;}
 .sidebar-toggle{background:none;border:none;color:var(--tx);font-size:20px;cursor:pointer;padding:0;line-height:1;flex-shrink:0;width:24px;text-align:center;}
 .sidebar-brand{font-size:15px;font-weight:700;color:var(--acc);white-space:nowrap;overflow:hidden;opacity:0;transition:opacity .2s;}
@@ -138,7 +138,7 @@ select.fi{cursor:pointer;}
   .sidebar-backdrop.on{display:block;}
   .content-area{width:100%;}
   .mobile-topbar{display:flex !important;}
-  .sidebar-reopen{display:none!important;}
+  body.nav-hidden .hdr-menu-btn{display:none!important;}
 }
 .mobile-topbar{display:none;align-items:center;gap:12px;padding:12px 16px;background:var(--surf);border-bottom:1px solid var(--bdr);position:sticky;top:0;z-index:40;}
 .mobile-topbar button{background:none;border:none;color:var(--tx);font-size:22px;cursor:pointer;}
@@ -441,16 +441,16 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
     </div>
     <button class="login-btn" id="lgBtn" onclick="doLogin()">เข้าสู่ระบบ</button>
     <div class="login-err" id="lgErr"></div>
-    <div class="login-foot">
-      หากเข้าใช้ครั้งแรก ใช้ <b>admin / admin</b>
-    </div>
   </div>
 </div>
 
 <!-- MAIN APP -->
 <div id="mainApp" style="display:none;">
   <header>
+    <div style="display:flex;align-items:center;gap:10px;">
+    <button class="hdr-menu-btn" onclick="toggleSidebar()" title="เปิด/ซ่อนเมนู">☰</button>
     <div class="logo">PK <span>DISPATCH</span> <small id="hdrRoleLabel"></small></div>
+    </div>
     <div class="hbtns">
       <span id="syncTxt" style="font-size:11px;color:rgba(255,255,255,.4);"></span>
       <div class="user-chip">
@@ -1210,7 +1210,6 @@ function renderOfficeShell(){
           <button class="sidebar-item" onclick="logout()"><span class="sidebar-ico">🚪</span><span class="sidebar-label">ออกจากระบบ</span></button>
         </div>
       </nav>
-      <button class="sidebar-reopen" onclick="toggleSidebar()" title="เปิดเมนู">☰</button>
 
       <div class="content-area">
         <div class="mobile-topbar">
@@ -3520,6 +3519,7 @@ function toggleSidebar(){
     document.getElementById('sidebarBackdrop').classList.toggle('on', sb.classList.contains('expanded'));
   } else {
     const expanded = sb.classList.toggle('expanded');
+    document.body.classList.toggle('nav-hidden', !expanded);
     try { localStorage.setItem('pk_sidebar_expanded', expanded ? '1' : '0'); } catch(e){}
   }
 }
@@ -3545,6 +3545,7 @@ function restoreSidebarState(){
   try {
     if (localStorage.getItem('pk_sidebar_expanded') !== '0') sb.classList.add('expanded');
   } catch(e){}
+  document.body.classList.toggle('nav-hidden', !sb.classList.contains('expanded'));
 }
 
 // ════════════════════════════════════════
@@ -4466,7 +4467,6 @@ function renderSalesStub(){
           <button class="sidebar-item" onclick="logout()"><span class="sidebar-ico">🚪</span><span class="sidebar-label">ออกจากระบบ</span></button>
         </div>
       </nav>
-      <button class="sidebar-reopen" onclick="toggleSidebar()" title="เปิดเมนู">☰</button>
 
       <div class="content-area">
         <div class="mobile-topbar">
