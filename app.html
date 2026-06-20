@@ -627,6 +627,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
   <div class="quom-wrap">
     <div class="quom-head">
       <div class="quom-title" id="pomTitle">🧾 ใบสั่งซื้อ</div>
+      <button class="hbtn" id="pomExportImgBtn" onclick="poExportImg()" style="display:none;" title="Export PNG A4">🖼️</button><button class="hbtn" id="pomExportPdfBtn" onclick="poExportPdf()" style="display:none;" title="Export PDF">PDF</button>
       <button class="hbtn danger" onclick="poCloseModal()">×</button>
     </div>
     <div class="quom-body" id="pomBody"></div>
@@ -9574,7 +9575,7 @@ async function getPOGetFast(id){
 
 // ── tab init / suppliers ──
 async function poInit(){
-  if (!_poInited) { _poInited = true; await poFetchSuppliers(); await poFetchCatalog(); }
+  if (!_poInited) { _poInited = true; await poFetchSuppliers(); await poFetchCatalog(); await poFetchHeader(); }
   poLoad();
 }
 async function poFetchSuppliers(){
@@ -9616,6 +9617,132 @@ function poOnItemPick(i, val){
   poRenderItems();
   const tv=document.getElementById('poTotalVal'); if(tv) tv.textContent = fmt(poTotal());
 }
+// ── S4: พิมพ์/PDF ใบ PO (ลอกกลไก quote: html2canvas + jsPDF · หัวบริษัท reuse PK_QuoteHeader) ──
+let _poHeader = null;
+async function poFetchHeader(){
+  let rows = [];
+  try { const g = await call({ action:'pk_quoteHeaderList' }); rows = (g&&g.ok)?(g.rows||[]):[]; } catch(e){ rows = []; }
+  const def = rows.find(r => r.isDefault) || rows[0] || null;
+  _poHeader = def ? { companyName:String(def.companyName||''), addressLines:String(def.addressLines||''), contact:String(def.contact||''), taxId:String(def.taxId||'') }
+                  : { companyName:'', addressLines:'', contact:'', taxId:'' };
+}
+function poFmtDate(s){
+  if (!s) return '';
+  try { const d = new Date(s); if (isNaN(d)) return String(s); return d.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+  catch(e){ return String(s); }
+}
+function poBuildA4(){
+  if (typeof html2canvas === 'undefined') { toast('❌ html2canvas ยังไม่โหลด — รีเฟรชหน้า'); return null; }
+  const f = _poForm; if (!f) return null;
+  const items = (f.items||[]).filter(it => (it.desc||'').trim());
+  if (!items.length) { toast('ไม่มีรายการให้ export'); return null; }
+  const hd = _poHeader || { companyName:'', addressLines:'', contact:'', taxId:'' };
+  const today = new Date().toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const dateShow = f.doc.date ? poFmtDate(f.doc.date) : today;
+  let total = 0; items.forEach(it => { total += (Number(it.qty)||0)*(Number(it.unitPrice)||0); });
+
+  const addrHtml = hd.addressLines
+    ? '<div style="font-size:11px;color:#555;margin-top:3px;white-space:pre-wrap;">'+escHtml(hd.addressLines)+'</div>'
+    : '<div style="font-size:11px;color:#666;margin-top:2px;">มุ้งจีบ · มุ้งลวด · กระจกอลูมิเนียม</div>';
+  const contactHtml = hd.contact ? '<div style="font-size:11px;color:#555;margin-top:2px;">📞 '+escHtml(hd.contact)+'</div>' : '';
+  const taxHtml = hd.taxId ? '<div style="font-size:11px;color:#555;">เลขผู้เสียภาษี '+escHtml(hd.taxId)+'</div>' : '';
+
+  const rows = items.map((it,i) => {
+    const line = (Number(it.qty)||0)*(Number(it.unitPrice)||0);
+    return '<tr>'
+      + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:center;">'+(i+1)+'</td>'
+      + '<td style="border:1px solid #ccc;padding:6px 8px;">'+escHtml(it.desc)+'</td>'
+      + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:right;">'+fmt(Number(it.qty)||0)+'</td>'
+      + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:center;">'+escHtml(it.unit||'')+'</td>'
+      + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:right;">'+fmt(Number(it.unitPrice)||0)+'</td>'
+      + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:right;">'+fmt(line)+'</td>'
+      + '</tr>';
+  }).join('');
+
+  const html = '<div class="a4-page" style="height:auto;padding:40px;background:#fff;color:#222;font-family:\'Anuphan\',sans-serif;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e6fb8;padding-bottom:10px;margin-bottom:12px;">'
+    +   '<div><div style="font-size:20px;font-weight:800;color:#1e3a5f;">'+(escHtml(hd.companyName)||'บริษัท มุ้งจีบพีเค จำกัด')+'</div>'+addrHtml+contactHtml+taxHtml+'</div>'
+    +   '<div style="text-align:right;"><div style="font-size:22px;font-weight:800;color:#1e6fb8;letter-spacing:1px;">ใบสั่งซื้อ</div>'
+    +     '<div style="font-size:10px;color:#999;letter-spacing:2px;">PURCHASE ORDER</div></div>'
+    + '</div>'
+    + '<div style="display:flex;justify-content:space-between;gap:20px;font-size:12px;margin-bottom:12px;">'
+    +   '<div style="flex:1;line-height:1.7;">'
+    +     '<div><b style="color:#1e3a5f;">ผู้ขาย (ซัพพลายเออร์):</b> '+(escHtml(f.supplier.name)||'-')+'</div>'
+    +     '<div><b style="color:#1e3a5f;">โทร:</b> '+(escHtml(f.supplier.phone)||'-')+'</div>'
+    +   '</div>'
+    +   '<div style="text-align:right;line-height:1.7;">'
+    +     '<div><b style="color:#1e3a5f;">เลขที่:</b> '+(escHtml(f.poNo)||'(ร่าง)')+'</div>'
+    +     '<div><b style="color:#1e3a5f;">วันที่:</b> '+dateShow+'</div>'
+    +     (f.doc.dueDate ? '<div><b style="color:#1e3a5f;">กำหนดส่ง:</b> '+poFmtDate(f.doc.dueDate)+'</div>' : '')
+    +   '</div>'
+    + '</div>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+    +   '<thead><tr style="background:#1e6fb8;color:#fff;">'
+    +     '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:36px;">#</th>'
+    +     '<th style="border:1px solid #1e6fb8;padding:6px 8px;text-align:left;">รายการ</th>'
+    +     '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:70px;">จำนวน</th>'
+    +     '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:60px;">หน่วย</th>'
+    +     '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:90px;">ราคา/หน่วย</th>'
+    +     '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:100px;">รวม</th>'
+    +   '</tr></thead><tbody>'+rows+'</tbody>'
+    +   '<tfoot><tr><td colspan="5" style="border:1px solid #ccc;padding:8px;text-align:right;font-weight:700;">ยอดรวมทั้งสิ้น</td>'
+    +     '<td style="border:1px solid #ccc;padding:8px;text-align:right;font-weight:800;color:#1e6fb8;">฿'+fmt(total)+'</td></tr></tfoot>'
+    + '</table>'
+    + (f.doc.terms ? '<div style="font-size:12px;margin-top:12px;"><b style="color:#1e3a5f;">เงื่อนไข:</b> '+escHtml(f.doc.terms)+'</div>' : '')
+    + (f.note ? '<div style="font-size:12px;margin-top:6px;white-space:pre-wrap;"><b style="color:#1e3a5f;">หมายเหตุ:</b> '+escHtml(f.note)+'</div>' : '')
+    + '<div style="display:flex;justify-content:space-between;margin-top:50px;font-size:12px;text-align:center;">'
+    +   '<div style="flex:1;">__________________________<br>ผู้สั่งซื้อ</div>'
+    +   '<div style="flex:1;">__________________________<br>ผู้อนุมัติ</div>'
+    + '</div>'
+    + '</div>';
+
+  let host = document.getElementById('poA4Host');
+  if (!host) { host = document.createElement('div'); host.id='poA4Host'; host.className='a4-export-host'; document.body.appendChild(host); }
+  host.innerHTML = html;
+  const safe = (f.poNo || f.supplier.name || 'PO').replace(/[^\w\u0E00-\u0E7F]+/g,'_').slice(0,40);
+  const fileDate = new Date().toISOString().split('T')[0];
+  return { host, fileName: 'ใบสั่งซื้อ_'+safe+'_'+fileDate };
+}
+async function poExportImg(){
+  const ctx = poBuildA4(); if (!ctx) return;
+  showLoad('กำลังสร้างรูป...');
+  try {
+    await new Promise(r => setTimeout(r,120));
+    const canvas = await html2canvas(ctx.host.querySelector('.a4-page'), { backgroundColor:'#ffffff', scale:2, logging:false, useCORS:true });
+    const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = ctx.fileName+'.png';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    ctx.host.innerHTML=''; hideLoad(); toast('✅ Export PNG เสร็จ');
+  } catch(err){ hideLoad(); toast('❌ Export PNG: '+err.message); ctx.host.innerHTML=''; }
+}
+async function poExportPdf(){
+  const ctx = poBuildA4(); if (!ctx) return;
+  showLoad('กำลังโหลดตัวสร้าง PDF...');
+  try {
+    await quoteEnsureJsPdf();
+    await new Promise(r => setTimeout(r,120));
+    const canvas = await html2canvas(ctx.host.querySelector('.a4-page'), { backgroundColor:'#ffffff', scale:2, logging:false, useCORS:true });
+    const pdf = new window.jspdf.jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+    const pw=210, ph=297;
+    const fullH = canvas.height * (pw/canvas.width);
+    if (fullH <= ph + 1) {
+      pdf.addImage(canvas.toDataURL('image/jpeg',0.92),'JPEG',0,0,pw,fullH);
+    } else {
+      const pageCanvasH = Math.floor(canvas.width * (ph/pw)); // px ต่อหน้า
+      let y=0, first=true;
+      while (y < canvas.height) {
+        const sliceH = Math.min(pageCanvasH, canvas.height - y);
+        const c2 = document.createElement('canvas'); c2.width = canvas.width; c2.height = sliceH;
+        c2.getContext('2d').drawImage(canvas, 0, y, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        if (!first) pdf.addPage(); first=false;
+        pdf.addImage(c2.toDataURL('image/jpeg',0.92),'JPEG',0,0,pw, sliceH*(pw/canvas.width));
+        y += sliceH;
+      }
+    }
+    pdf.save(ctx.fileName+'.pdf');
+    ctx.host.innerHTML=''; hideLoad(); toast('✅ Export PDF เสร็จ');
+  } catch(err){ hideLoad(); toast('❌ Export PDF: '+err.message); ctx.host.innerHTML=''; }
+}
+
 function poSetCat(cat){
   if (_poCat === cat) return;
   _poCat = cat;
@@ -9709,6 +9836,7 @@ function poRenderModal(){
   const f = _poForm; const ro = (f.mode==='view');
   const titleMap = { new:'🧾 ใบสั่งซื้อ — สร้างใหม่', edit:'✏️ แก้ใบสั่งซื้อ', view:'👁 ดูใบสั่งซื้อ' };
   document.getElementById('pomTitle').textContent = titleMap[f.mode] || '🧾 ใบสั่งซื้อ';
+  { const _se=!!f.id, _ei=document.getElementById('pomExportImgBtn'), _ep=document.getElementById('pomExportPdfBtn'); if(_ei)_ei.style.display=_se?'':'none'; if(_ep)_ep.style.display=_se?'':'none'; }
   const dis = ro ? 'disabled' : '';
   const statusOpts = PO_STATUS_ORDER.map(s => '<option value="'+s+'"'+(s===f.status?' selected':'')+'>'+PO_STATUS_LABELS[s]+'</option>').join('');
   const poNoLine = f.poNo
