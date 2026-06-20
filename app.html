@@ -9736,7 +9736,7 @@ async function poSubmitReceive(){
   if(btn){ btn.disabled=false; btn.textContent='✅ ยืนยันรับของ'; }
   if (r && r.ok){
     toast(r.stockWriteEnabled ? ('รับของแล้ว · ปรับ stock '+(r.appliedCount||0)+' รายการ') : '✓ บันทึกจำนวนรับแล้ว · stock ยังไม่เขียน (flag ปิด)');
-    if (r.errors && r.errors.length) toast('⚠️ บางรายการเขียน stock ไม่ได้: '+r.errors.map(e=>e.desc).join(', '));
+    if (r.errors && r.errors.length) toast('⚠️ รับของ+เปลี่ยนสถานะแล้ว แต่ stock บางตัวไม่อัปเดต (ไปปรับเอง): '+r.errors.map(e=>e.desc+(e.error?(' — '+e.error):'')).join(' · '));
     poCloseReceive();
     await poOpenLoaded(id, mode==='view'?'view':'edit'); // refresh ใบ
     poLoad();
