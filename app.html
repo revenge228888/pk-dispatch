@@ -10054,11 +10054,12 @@ function poRemoveItem(i){ _poForm.items.splice(i,1); if(!_poForm.items.length) _
 // ── สถานะ: ถ้าใบบันทึกแล้ว เปลี่ยนทันที (แยกจากบันทึก) · ใบใหม่ = เก็บไว้ตอน create ──
 async function poOnStatusChange(val){
   if (!PO_STATUS_ORDER.includes(val)) return;
-  if (_poForm.id) {
+  _poForm.status = val;                              // อัปเดต local เสมอ (เซฟตอนกดบันทึกในโหมดแก้/สร้าง)
+  if (_poForm.id && _poForm.mode === 'view') {       // โหมดดู (ไม่มีปุ่มบันทึก) → เปลี่ยนทันที
     const r = await call({ action:'pk_poSetStatus', id:_poForm.id, status:val });
-    if (r && r.ok) { _poForm.status = val; toast('เปลี่ยนสถานะเป็น "'+PO_STATUS_LABELS[val]+'"'); poLoad(); }
+    if (r && r.ok) { toast('เปลี่ยนสถานะเป็น "'+PO_STATUS_LABELS[val]+'"'); poLoad(); }
     else { toast('เปลี่ยนสถานะไม่สำเร็จ: '+((r&&r.error)||'?')); const sel=document.getElementById('poStatusSel'); if(sel) sel.value=_poForm.status; }
-  } else { _poForm.status = val; }
+  }
 }
 
 // ── save (create/update) ──
@@ -10068,6 +10069,7 @@ async function poSubmit(){
   const items = (f.items||[]).filter(it => (it.desc||'').trim());
   if (!items.length) { toast('ต้องมีอย่างน้อย 1 รายการ'); return; }
   const btn = document.getElementById('poSaveBtn'); if (btn){ btn.disabled=true; btn.textContent='⏳ กำลังบันทึก...'; }
+  const _ss = document.getElementById('poStatusSel'); if (_ss && PO_STATUS_ORDER.includes(_ss.value)) f.status = _ss.value; // อ่านสถานะจาก dropdown ตรงๆ
   const payload = {
     supplier: { name:f.supplier.name.trim(), phone:(f.supplier.phone||'').trim() },
     items: items.map(it => ({ desc:it.desc.trim(), qty:Number(it.qty)||0, unit:(it.unit||'').trim(), unitPrice:Number(it.unitPrice)||0, receivedQty:Number(it.receivedQty)||0, catalogRef:(it.catalogRef||'').trim(), stockType:it.stockType||'', stockName:(it.stockName||'').trim(), stockColor:(it.stockColor||'').trim() })),
