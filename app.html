@@ -1714,6 +1714,7 @@ function renderOfficeShell(){
 
       <div id="tabPo" style="display:none;">
         <datalist id="poSupplierList"></datalist>
+        <datalist id="poItemCatalog"></datalist>
         <div class="quo-subtabs" id="poSubtabs">
           <button class="quo-subtab on" data-cat="draft" onclick="poSetCat('draft')">ร่าง (ยังไม่ออกเลข)</button>
           <button class="quo-subtab" data-cat="po" onclick="poSetCat('po')">ใบสั่งซื้อ (ออกเลขแล้ว)</button>
@@ -9535,6 +9536,7 @@ const PO_STATUS_ORDER = ['draft','sent','partial','received'];
 let _poCat = 'draft';          // 'draft' | 'po'
 let _poSuppliers = [];
 let _poInited = false;
+let _poCatalog = [];
 let _poForm = null;            // { mode:'new'|'edit'|'view', id, supplier:{name,phone}, items:[], note, doc:{date,dueDate,terms}, status, poNo }
 
 // ── worker-first list (fallback GAS) ──
@@ -9572,7 +9574,7 @@ async function getPOGetFast(id){
 
 // ── tab init / suppliers ──
 async function poInit(){
-  if (!_poInited) { _poInited = true; await poFetchSuppliers(); }
+  if (!_poInited) { _poInited = true; await poFetchSuppliers(); await poFetchCatalog(); }
   poLoad();
 }
 async function poFetchSuppliers(){
@@ -9580,6 +9582,39 @@ async function poFetchSuppliers(){
   catch(e){ _poSuppliers = []; }
   const dl = document.getElementById('poSupplierList');
   if (dl) dl.innerHTML = _poSuppliers.map(s => '<option value="'+escHtml(s.name)+'">'+escHtml(s.phone||'')+'</option>').join('');
+}
+// ── catalog (ชีตราคาต้นทุน) → datalist รวมราง+อุปกรณ์ · เลือกแล้วเติมหน่วย+ราคา (แก้ได้ · ไม่เขียนกลับชีต) ──
+async function poFetchCatalog(){
+  let prices = [];
+  if (CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/cost-prices'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.prices)) prices = data.prices;
+    } catch(e){ console.warn('[poFetchCatalog] /cost-prices error → fallback GAS:', e.message); }
+  }
+  if (!prices.length) { try { const g = await call({ action:'pk_costListPrices' }); prices = (g&&g.ok)?(g.prices||[]):[]; } catch(e){ prices=[]; } }
+  _poCatalog = prices.map(p => {
+    const name = String(p.name||'').trim(); const color = String(p.color||'').trim();
+    const label = color ? (name+' ('+color+')') : name;
+    return { label, name, color, unit:String(p.buyUnit||'').trim(), price:Number(p.buyPrice)||0 };
+  }).filter(x => x.label);
+  const dl = document.getElementById('poItemCatalog');
+  if (dl) dl.innerHTML = _poCatalog.map(c => '<option value="'+escHtml(c.label)+'">'+(c.price?('฿'+fmt(c.price)+(c.unit?(' /'+escHtml(c.unit)):'')):'')+'</option>').join('');
+}
+// เลือกจาก catalog → เติมหน่วย+ราคา + ตั้ง catalogRef (พิมพ์อิสระ = ไม่ match = ล้าง catalogRef)
+function poOnItemPick(i, val){
+  const c = _poCatalog.find(x => x.label === val);
+  if (!c) { _poForm.items[i].catalogRef = ''; _poForm.items[i].desc = val; return; }
+  const it = _poForm.items[i];
+  it.desc = c.label; it.unit = c.unit; it.unitPrice = c.price;
+  it.catalogRef = c.name + (c.color ? ('|'+c.color) : '');
+  poRenderItems();
+  const tv=document.getElementById('poTotalVal'); if(tv) tv.textContent = fmt(poTotal());
 }
 function poSetCat(cat){
   if (_poCat === cat) return;
@@ -9724,7 +9759,7 @@ function poRenderItems(){
   wrap.innerHTML = (_poForm.items||[]).map((it,i) => ''
     + '<div class="row-form" style="gap:6px;flex-wrap:wrap;align-items:flex-end;border-bottom:1px dashed var(--bdr);padding:6px 0;">'
     +   '<div class="fg" style="flex:1;min-width:160px;"><label class="fl">รายการ</label>'
-    +     '<input class="fi" '+dis+' value="'+escHtml(it.desc)+'" placeholder="ชื่อสินค้า/วัสดุ" oninput="poOnItem('+i+',\'desc\',this.value)"></div>'
+    +     '<input class="fi" '+dis+' value="'+escHtml(it.desc)+'" list="poItemCatalog" placeholder="พิมพ์/เลือกจาก catalog" oninput="poOnItem('+i+',\'desc\',this.value)" onchange="poOnItemPick('+i+',this.value)"></div>'
     +   '<div class="fg" style="width:70px;"><label class="fl">จำนวน</label>'
     +     '<input class="fi" type="number" step="0.01" '+dis+' value="'+(it.qty||0)+'" oninput="poOnItem('+i+',\'qty\',this.value)"></div>'
     +   '<div class="fg" style="width:70px;"><label class="fl">หน่วย</label>'
