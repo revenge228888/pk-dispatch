@@ -9786,7 +9786,7 @@ function poRenderMgmt(){
     + '</div>'
     + '<div style="font-weight:700;color:var(--blu);margin:16px 0 4px;">📦 Stock map ('+_poMgmtStock.length+')</div>'
     + '<div style="font-size:11px;color:var(--mu);margin-bottom:6px;">วัสดุ → เข้าคลังไหนตอนรับของ (ไม่นับ = ไม่แตะ stock)</div>'
-    + '<button class="btn btn-g" style="margin-bottom:8px;" onclick="poMgmtSeed()">🔄 ดึงราง+อุปกรณ์ทั้งหมดเข้า map</button>'
+    + '<button class="btn btn-g" style="margin-bottom:8px;" onclick="poMgmtSeedCatalog()">🔄 สร้าง map ใหม่จาก catalog (ล้างของเก่า)</button>'
     + (stockRows || '<div style="color:var(--mu);font-size:12px;">ยังไม่มี</div>')
     + '<div class="row-form" style="gap:6px;align-items:flex-end;margin-top:6px;">'
     +   '<div class="fg" style="flex:1;"><label class="fl">+ ชื่อวัสดุ</label><input class="fi" id="mkNewName" placeholder="ชื่อวัสดุ"></div>'
@@ -9801,6 +9801,14 @@ async function poMgmtSeed(){
   const r=await call({ action:'pk_poStockMapSeed' });
   if(r&&r.ok){ toast('✅ ราง '+r.rail+' · อุปกรณ์ '+r.equip+' (ใหม่ '+r.added+' · อัปเดต '+r.updated+')'); await poMgmtLoad(); poFetchStockMap(); }
   else { toast('ไม่สำเร็จ: '+((r&&r.error)||'?')); }
+}
+async function poMgmtSeedCatalog(){
+  if(!confirm('ล้าง Stock map เก่าทั้งหมด แล้วสร้างใหม่จาก catalog?\n\n• ชื่อมีคำว่า "ราง" → เข้าคลังราง อัตโนมัติ\n• ที่เหลือเว้นว่าง (ไปตั้งอุปกรณ์/ปิดเองได้)\n• ไม่แตะยอด stock จริง')) return;
+  const btn = (typeof event!=='undefined' && event) ? event.target : null;
+  if(btn){ btn.disabled=true; btn.textContent='⏳ กำลังสร้าง...'; }
+  const r=await call({ action:'pk_poStockMapSeedCatalog' });
+  if(r&&r.ok){ toast('✅ สร้าง map ใหม่ '+r.total+' รายการ (ราง '+r.rail+' · เว้นว่าง '+r.blank+')'); await poMgmtLoad(); poFetchStockMap(); }
+  else { toast('ไม่สำเร็จ: '+((r&&r.error)||'?')); if(btn){ btn.disabled=false; btn.textContent='🔄 สร้าง map ใหม่จาก catalog (ล้างของเก่า)'; } }
 }
 async function poMgmtSupSave(i){
   const s=_poMgmtSup[i];
