@@ -9617,7 +9617,7 @@ function poOnItemPick(i, val){
   poRenderItems();
   const tv=document.getElementById('poTotalVal'); if(tv) tv.textContent = fmt(poTotal());
 }
-// ── S4: พิมพ์/PDF ใบ PO (ลอกกลไก quote: html2canvas + jsPDF · หัวบริษัท reuse PK_QuoteHeader) ──
+// ── S4: พิมพ์/PDF ใบ PO — แบ่งหน้าตามแถว (วัดความสูงจริง · render หน้าละ .a4-page ขนาดคงที่ เหมือน quote) ──
 let _poHeader = null;
 async function poFetchHeader(){
   let rows = [];
@@ -9631,36 +9631,17 @@ function poFmtDate(s){
   try { const d = new Date(s); if (isNaN(d)) return String(s); return d.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'numeric'}); }
   catch(e){ return String(s); }
 }
-function poBuildA4(){
-  if (typeof html2canvas === 'undefined') { toast('❌ html2canvas ยังไม่โหลด — รีเฟรชหน้า'); return null; }
-  const f = _poForm; if (!f) return null;
-  const items = (f.items||[]).filter(it => (it.desc||'').trim());
-  if (!items.length) { toast('ไม่มีรายการให้ export'); return null; }
-  const hd = _poHeader || { companyName:'', addressLines:'', contact:'', taxId:'' };
+function poItemsTotal(items){ let t=0; (items||[]).forEach(it=>{ t += (Number(it.qty)||0)*(Number(it.unitPrice)||0); }); return Math.round(t*100)/100; }
+
+function _poA4Header(f, hd){
   const today = new Date().toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'numeric'});
   const dateShow = f.doc.date ? poFmtDate(f.doc.date) : today;
-  let total = 0; items.forEach(it => { total += (Number(it.qty)||0)*(Number(it.unitPrice)||0); });
-
   const addrHtml = hd.addressLines
     ? '<div style="font-size:11px;color:#555;margin-top:3px;white-space:pre-wrap;">'+escHtml(hd.addressLines)+'</div>'
     : '<div style="font-size:11px;color:#666;margin-top:2px;">มุ้งจีบ · มุ้งลวด · กระจกอลูมิเนียม</div>';
   const contactHtml = hd.contact ? '<div style="font-size:11px;color:#555;margin-top:2px;">📞 '+escHtml(hd.contact)+'</div>' : '';
   const taxHtml = hd.taxId ? '<div style="font-size:11px;color:#555;">เลขผู้เสียภาษี '+escHtml(hd.taxId)+'</div>' : '';
-
-  const rows = items.map((it,i) => {
-    const line = (Number(it.qty)||0)*(Number(it.unitPrice)||0);
-    return '<tr>'
-      + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:center;">'+(i+1)+'</td>'
-      + '<td style="border:1px solid #ccc;padding:6px 8px;">'+escHtml(it.desc)+'</td>'
-      + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:right;">'+fmt(Number(it.qty)||0)+'</td>'
-      + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:center;">'+escHtml(it.unit||'')+'</td>'
-      + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:right;">'+fmt(Number(it.unitPrice)||0)+'</td>'
-      + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:right;">'+fmt(line)+'</td>'
-      + '</tr>';
-  }).join('');
-
-  const html = '<div class="a4-page" style="height:auto;padding:40px;background:#fff;color:#222;font-family:\'Anuphan\',sans-serif;">'
-    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e6fb8;padding-bottom:10px;margin-bottom:12px;">'
+  return '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e6fb8;padding-bottom:10px;margin-bottom:12px;">'
     +   '<div><div style="font-size:20px;font-weight:800;color:#1e3a5f;">'+(escHtml(hd.companyName)||'บริษัท มุ้งจีบพีเค จำกัด')+'</div>'+addrHtml+contactHtml+taxHtml+'</div>'
     +   '<div style="text-align:right;"><div style="font-size:22px;font-weight:800;color:#1e6fb8;letter-spacing:1px;">ใบสั่งซื้อ</div>'
     +     '<div style="font-size:10px;color:#999;letter-spacing:2px;">PURCHASE ORDER</div></div>'
@@ -9675,71 +9656,140 @@ function poBuildA4(){
     +     '<div><b style="color:#1e3a5f;">วันที่:</b> '+dateShow+'</div>'
     +     (f.doc.dueDate ? '<div><b style="color:#1e3a5f;">กำหนดส่ง:</b> '+poFmtDate(f.doc.dueDate)+'</div>' : '')
     +   '</div>'
+    + '</div>';
+}
+function _poA4Thead(){
+  return '<thead><tr style="background:#1e6fb8;color:#fff;">'
+    + '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:36px;">#</th>'
+    + '<th style="border:1px solid #1e6fb8;padding:6px 8px;text-align:left;">รายการ</th>'
+    + '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:70px;">จำนวน</th>'
+    + '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:60px;">หน่วย</th>'
+    + '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:90px;">ราคา/หน่วย</th>'
+    + '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:100px;">รวม</th>'
+    + '</tr></thead>';
+}
+function _poA4Row(it, i){
+  const line = (Number(it.qty)||0)*(Number(it.unitPrice)||0);
+  return '<tr data-i="'+i+'">'
+    + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:center;">'+(i+1)+'</td>'
+    + '<td style="border:1px solid #ccc;padding:6px 8px;">'+escHtml(it.desc)+'</td>'
+    + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:right;">'+fmt(Number(it.qty)||0)+'</td>'
+    + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:center;">'+escHtml(it.unit||'')+'</td>'
+    + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:right;">'+fmt(Number(it.unitPrice)||0)+'</td>'
+    + '<td style="border:1px solid #ccc;padding:6px 8px;text-align:right;">'+fmt(line)+'</td>'
+    + '</tr>';
+}
+function _poA4Tail(f, total){
+  return '<div style="margin-top:10px;display:flex;justify-content:flex-end;">'
+    +   '<div style="min-width:240px;border:2px solid #1e6fb8;border-radius:6px;padding:8px 12px;display:flex;justify-content:space-between;font-size:13px;">'
+    +     '<b style="color:#1e3a5f;">ยอดรวมทั้งสิ้น</b><b style="color:#1e6fb8;">฿'+fmt(total)+'</b></div>'
     + '</div>'
-    + '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
-    +   '<thead><tr style="background:#1e6fb8;color:#fff;">'
-    +     '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:36px;">#</th>'
-    +     '<th style="border:1px solid #1e6fb8;padding:6px 8px;text-align:left;">รายการ</th>'
-    +     '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:70px;">จำนวน</th>'
-    +     '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:60px;">หน่วย</th>'
-    +     '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:90px;">ราคา/หน่วย</th>'
-    +     '<th style="border:1px solid #1e6fb8;padding:6px 8px;width:100px;">รวม</th>'
-    +   '</tr></thead><tbody>'+rows+'</tbody>'
-    +   '<tfoot><tr><td colspan="5" style="border:1px solid #ccc;padding:8px;text-align:right;font-weight:700;">ยอดรวมทั้งสิ้น</td>'
-    +     '<td style="border:1px solid #ccc;padding:8px;text-align:right;font-weight:800;color:#1e6fb8;">฿'+fmt(total)+'</td></tr></tfoot>'
-    + '</table>'
     + (f.doc.terms ? '<div style="font-size:12px;margin-top:12px;"><b style="color:#1e3a5f;">เงื่อนไข:</b> '+escHtml(f.doc.terms)+'</div>' : '')
     + (f.note ? '<div style="font-size:12px;margin-top:6px;white-space:pre-wrap;"><b style="color:#1e3a5f;">หมายเหตุ:</b> '+escHtml(f.note)+'</div>' : '')
-    + '<div style="display:flex;justify-content:space-between;margin-top:50px;font-size:12px;text-align:center;">'
+    + '<div style="display:flex;justify-content:space-between;margin-top:30px;font-size:12px;text-align:center;">'
     +   '<div style="flex:1;">__________________________<br>ผู้สั่งซื้อ</div>'
     +   '<div style="flex:1;">__________________________<br>ผู้อนุมัติ</div>'
-    + '</div>'
     + '</div>';
+}
+
+// วัดความสูงจริง → pack แถวเข้าหน้า
+async function poPaginate(){
+  if (typeof html2canvas === 'undefined') { toast('❌ html2canvas ยังไม่โหลด — รีเฟรชหน้า'); return null; }
+  const f = _poForm; if (!f) return null;
+  const items = (f.items||[]).filter(it => (it.desc||'').trim());
+  if (!items.length) { toast('ไม่มีรายการให้ export'); return null; }
+  const hd = _poHeader || { companyName:'', addressLines:'', contact:'', taxId:'' };
+  const total = poItemsTotal(items);
+  const headerHtml = _poA4Header(f, hd);
+  const theadHtml = _poA4Thead();
+  const rowHtmls = items.map((it,i) => _poA4Row(it,i));
+  const tailHtml = _poA4Tail(f, total);
 
   let host = document.getElementById('poA4Host');
   if (!host) { host = document.createElement('div'); host.id='poA4Host'; host.className='a4-export-host'; document.body.appendChild(host); }
-  host.innerHTML = html;
+  showLoad('กำลังคำนวณหน้า...');
+  // หน้า measuring (height auto) — วัดความสูง
+  host.innerHTML = '<div class="a4-page" style="height:auto;">'
+    + '<div id="poMH">'+headerHtml+'</div>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:12px;">'+theadHtml+'<tbody id="poMB">'+rowHtmls.join('')+'</tbody></table>'
+    + '<div id="poMT">'+tailHtml+'</div></div>';
+  await new Promise(r => setTimeout(r, 180));
+  const Hhead = (document.getElementById('poMH')||{}).offsetHeight || 160;
+  const Hthead = (host.querySelector('thead')||{}).offsetHeight || 30;
+  const Htail = (document.getElementById('poMT')||{}).offsetHeight || 0;
+  const rowH = {}; host.querySelectorAll('#poMB tr').forEach(tr => { rowH[tr.getAttribute('data-i')||'0'] = tr.offsetHeight; });
+
+  const PAGE_H = 1123, PADV = 40, FOOT = 28, BOTTOM = 70; // BOTTOM = เผื่อ space ด้านล่างทุกหน้า
+  const avail = PAGE_H - 2*PADV - Hhead - Hthead - FOOT - BOTTOM;
+  const rh = (i) => rowH[String(i)] || 40;
+  const pages = []; let cur = [], curH = 0;
+  items.forEach((it,i) => {
+    const h = rh(i);
+    if (cur.length && (curH + h) > avail) { pages.push(cur); cur = []; curH = 0; }
+    cur.push(i); curH += h;
+  });
+  if (cur.length) pages.push(cur);
+  if (!pages.length) pages.push([]);
+  // กันช่องเซ็นลอยเดี่ยว: ถ้าหน้าสุดท้าย rows+tail ไม่พอ → ย้ายแถวท้ายไปอยู่กับ tail หน้าใหม่
+  if (Htail > 0) {
+    let guard = 0;
+    while (guard++ < 2000) {
+      const last = pages[pages.length - 1];
+      const h = last.reduce((s,i) => s + rh(i), 0);
+      if (h + Htail <= avail) break;           // tail พอดีแล้ว
+      if (last.length <= 1) { pages.push([]); break; } // ย้ายไม่ได้แล้ว → tail หน้าใหม่
+      pages.push([ last.pop() ]);              // ดึงแถวท้ายไปหน้าใหม่ (จะไปรวมกับ tail)
+    }
+  }
+
   const safe = (f.poNo || f.supplier.name || 'PO').replace(/[^\w\u0E00-\u0E7F]+/g,'_').slice(0,40);
   const fileDate = new Date().toISOString().split('T')[0];
-  return { host, fileName: 'ใบสั่งซื้อ_'+safe+'_'+fileDate };
+  return { host, pages, total, rowHtmls, headerHtml, theadHtml, tailHtml, fileName: 'ใบสั่งซื้อ_'+safe+'_'+fileDate };
 }
+// render 1 หน้า = .a4-page ขนาดคงที่ (794×1123) → html2canvas จับเต็มหน้าพอดี
+function _poRenderPage(ctx, pageIdx){
+  const isLast = pageIdx === ctx.pages.length - 1;
+  const rowsHtml = ctx.pages[pageIdx].map(i => ctx.rowHtmls[i]).join('');
+  return '<div class="a4-page">'
+    + ctx.headerHtml
+    + '<table style="width:100%;border-collapse:collapse;font-size:12px;">'+ctx.theadHtml+'<tbody>'+rowsHtml+'</tbody></table>'
+    + (isLast ? ctx.tailHtml : '')
+    + '<div style="margin-top:auto;text-align:center;font-size:10px;color:#999;padding-top:8px;">หน้า '+(pageIdx+1)+'/'+ctx.pages.length+'</div>'
+    + '</div>';
+}
+
 async function poExportImg(){
-  const ctx = poBuildA4(); if (!ctx) return;
-  showLoad('กำลังสร้างรูป...');
+  const ctx = await poPaginate(); if (!ctx) return;
+  showLoad('กำลังสร้างรูป '+ctx.pages.length+' หน้า...');
   try {
-    await new Promise(r => setTimeout(r,120));
-    const canvas = await html2canvas(ctx.host.querySelector('.a4-page'), { backgroundColor:'#ffffff', scale:2, logging:false, useCORS:true });
-    const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = ctx.fileName+'.png';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    ctx.host.innerHTML=''; hideLoad(); toast('✅ Export PNG เสร็จ');
+    for (let p=0; p<ctx.pages.length; p++){
+      ctx.host.innerHTML = _poRenderPage(ctx, p);
+      await new Promise(r => setTimeout(r, 180));
+      const canvas = await html2canvas(ctx.host.querySelector('.a4-page'), { backgroundColor:'#ffffff', scale:2, logging:false, useCORS:true });
+      const a = document.createElement('a'); a.href = canvas.toDataURL('image/png');
+      a.download = ctx.fileName + (ctx.pages.length>1 ? ('_หน้า'+(p+1)) : '') + '.png';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      await new Promise(r => setTimeout(r, 300));
+    }
+    ctx.host.innerHTML=''; hideLoad(); toast('✅ Export PNG เสร็จ '+ctx.pages.length+' หน้า');
   } catch(err){ hideLoad(); toast('❌ Export PNG: '+err.message); ctx.host.innerHTML=''; }
 }
 async function poExportPdf(){
-  const ctx = poBuildA4(); if (!ctx) return;
+  const ctx = await poPaginate(); if (!ctx) return;
   showLoad('กำลังโหลดตัวสร้าง PDF...');
   try {
     await quoteEnsureJsPdf();
-    await new Promise(r => setTimeout(r,120));
-    const canvas = await html2canvas(ctx.host.querySelector('.a4-page'), { backgroundColor:'#ffffff', scale:2, logging:false, useCORS:true });
     const pdf = new window.jspdf.jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
-    const pw=210, ph=297;
-    const fullH = canvas.height * (pw/canvas.width);
-    if (fullH <= ph + 1) {
-      pdf.addImage(canvas.toDataURL('image/jpeg',0.92),'JPEG',0,0,pw,fullH);
-    } else {
-      const pageCanvasH = Math.floor(canvas.width * (ph/pw)); // px ต่อหน้า
-      let y=0, first=true;
-      while (y < canvas.height) {
-        const sliceH = Math.min(pageCanvasH, canvas.height - y);
-        const c2 = document.createElement('canvas'); c2.width = canvas.width; c2.height = sliceH;
-        c2.getContext('2d').drawImage(canvas, 0, y, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-        if (!first) pdf.addPage(); first=false;
-        pdf.addImage(c2.toDataURL('image/jpeg',0.92),'JPEG',0,0,pw, sliceH*(pw/canvas.width));
-        y += sliceH;
-      }
+    for (let p=0; p<ctx.pages.length; p++){
+      ctx.host.innerHTML = _poRenderPage(ctx, p);
+      await new Promise(r => setTimeout(r, 180));
+      showLoad('กำลังสร้าง PDF หน้า '+(p+1)+'/'+ctx.pages.length+'...');
+      const canvas = await html2canvas(ctx.host.querySelector('.a4-page'), { backgroundColor:'#ffffff', scale:2, logging:false, useCORS:true });
+      if (p > 0) pdf.addPage();
+      pdf.addImage(canvas.toDataURL('image/jpeg',0.92), 'JPEG', 0, 0, 210, 297);
     }
     pdf.save(ctx.fileName+'.pdf');
-    ctx.host.innerHTML=''; hideLoad(); toast('✅ Export PDF เสร็จ');
+    ctx.host.innerHTML=''; hideLoad(); toast('✅ Export PDF เสร็จ '+ctx.pages.length+' หน้า');
   } catch(err){ hideLoad(); toast('❌ Export PDF: '+err.message); ctx.host.innerHTML=''; }
 }
 
