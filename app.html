@@ -622,6 +622,18 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
     </div>
   </div>
 </div>
+<!-- 🧾 PO FORM MODAL (S3a) -->
+<div class="quom-bg" id="pomModal">
+  <div class="quom-wrap">
+    <div class="quom-head">
+      <div class="quom-title" id="pomTitle">🧾 ใบสั่งซื้อ</div>
+      <button class="hbtn danger" onclick="poCloseModal()">×</button>
+    </div>
+    <div class="quom-body" id="pomBody"></div>
+    <div class="quom-save-bar" id="pomSaveBar"></div>
+  </div>
+</div>
+
 
 <div class="loading" id="loading"><div class="spinner"></div><span id="loadMsg">กำลังโหลด...</span></div>
 <div class="toast" id="toast"></div>
@@ -1198,6 +1210,8 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="equipstock" onclick="setTab('equipstock',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></span><span class="sidebar-label">คลังอุปกรณ์</span></button>
           <button class="sidebar-item" data-tab="costedit" onclick="setTab('costedit',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9v6M18 9v6"/></svg></span><span class="sidebar-label">แก้ไขทุน</span></button>` : '')}
 
+          <div class="sidebar-group">จัดซื้อ</div>
+          <button class="sidebar-item" data-tab="po" onclick="setTab('po',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M5 4h14l-1 8H6z"/><path d="M6 12l-2 6h16"/><circle cx="9" cy="20" r="1.4"/><circle cx="16" cy="20" r="1.4"/></svg></span><span class="sidebar-label">ใบสั่งซื้อ (PO)</span></button>
           <div class="sidebar-group">การเงิน / เบิกจ่าย</div>
           <button class="sidebar-item" data-tab="expensesubmit" onclick="setTab('expensesubmit',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M12 20V5M5 12l7-7 7 7"/></svg></span><span class="sidebar-label">ตั้งเบิก</span></button>
           <button class="sidebar-item" data-tab="expensemy" onclick="setTab('expensemy',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M8 8h8M8 12h8"/></svg></span><span class="sidebar-label">เบิกของฉัน</span><span id="expMyBadge" class="exp-badge"></span></button>
@@ -1696,6 +1710,25 @@ function renderOfficeShell(){
           </label>` : ''}
         </div>
         <div id="quoList" class="rec-list"><div class="loading-row" style="grid-column:1/-1;">กดรีเฟรชเพื่อโหลด quotes</div></div>
+      </div>
+
+      <div id="tabPo" style="display:none;">
+        <datalist id="poSupplierList"></datalist>
+        <div class="quo-subtabs" id="poSubtabs">
+          <button class="quo-subtab on" data-cat="draft" onclick="poSetCat('draft')">ร่าง (ยังไม่ออกเลข)</button>
+          <button class="quo-subtab" data-cat="po" onclick="poSetCat('po')">ใบสั่งซื้อ (ออกเลขแล้ว)</button>
+        </div>
+        <div class="rec-toolbar">
+          <div class="fg rec-search"><label class="fl">ค้นหา</label>
+            <input class="fi" id="poSearch" type="text" placeholder="ซัพพลายเออร์ / เบอร์ / ID / เลข PO">
+          </div>
+          <button class="btn btn-g" onclick="poLoad()">🔄 รีเฟรช</button>
+          <button class="btn btn-p" id="poNewBtn" onclick="poOpenNew()">+ สร้างใบสั่งซื้อ</button>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;">
+            <input type="checkbox" id="poShowDeleted" onchange="poLoad()"> รวมที่ถูกลบ
+          </label>
+        </div>
+        <div id="poList" class="rec-list"><div class="loading-row" style="grid-column:1/-1;">กดรีเฟรชเพื่อโหลด</div></div>
       </div>
 
       <!-- SALES REPORT (manager only) -->
@@ -3476,7 +3509,7 @@ function initSidebarGroups(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -3500,6 +3533,7 @@ function setTab(t, btn){
   if (t === 'mytasks') myTasksLoad();
   if (t === 'taskmgr') taskMgrInit();
   if (t === 'payroll') payrollInit();
+  if (t === 'po') poInit();
   if (t === 'records') recordsInit();
   if (t === 'quotes') quotesInit();
   if (t === 'salesreport') salesReportInit();
@@ -9488,6 +9522,280 @@ const fmt = n => Number(n).toLocaleString('th-TH',{minimumFractionDigits:0,maxim
 const fmtD = d => { if(!d)return'-'; const p=d.split('-'); return`${p[2]}/${p[1]}/${p[0]}`; };
 function showLoad(msg){ document.getElementById('loadMsg').textContent = msg||'กำลังโหลด...'; document.getElementById('loading').classList.add('on'); }
 function hideLoad(){ document.getElementById('loading').classList.remove('on'); }
+
+// ════════════════════════════════════════
+//  🧾 PO / ใบสั่งซื้อ (S3a) — frontend module
+//  office/manager เท่านั้น · สินค้าพิมพ์อิสระ (catalog picker = S3b)
+//  ปุ่มรันเลข แยกจากปุ่มเปลี่ยนสถานะ (คนละปุ่ม)
+// ════════════════════════════════════════
+let USE_SHEETS_PO = true;
+let USE_SHEETS_PO_GET = true;
+const PO_STATUS_LABELS = { draft:'ร่าง', sent:'ส่งแล้ว', partial:'รับบางส่วน', received:'รับครบ/ปิด' };
+const PO_STATUS_ORDER = ['draft','sent','partial','received'];
+let _poCat = 'draft';          // 'draft' | 'po'
+let _poSuppliers = [];
+let _poInited = false;
+let _poForm = null;            // { mode:'new'|'edit'|'view', id, supplier:{name,phone}, items:[], note, doc:{date,dueDate,terms}, status, poNo }
+
+// ── worker-first list (fallback GAS) ──
+async function getPOListFast(opts){
+  opts = opts || {};
+  if (USE_SHEETS_PO && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/po-list'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.pos)) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getPOListFast] ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e){ console.warn('[getPOListFast] error → fallback GAS:', e.message); }
+  }
+  const g = await call({ action:'pk_poList', ...opts }); _markJobSource('gas'); return g;
+}
+async function getPOGetFast(id){
+  if (USE_SHEETS_PO_GET && CURRENT_USER && id) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/po-get'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        body: JSON.stringify({ id, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && data.po) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getPOGetFast] ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e){ console.warn('[getPOGetFast] error → fallback GAS:', e.message); }
+  }
+  const g = await call({ action:'pk_poGet', id:id }); _markJobSource('gas'); return g;
+}
+
+// ── tab init / suppliers ──
+async function poInit(){
+  if (!_poInited) { _poInited = true; await poFetchSuppliers(); }
+  poLoad();
+}
+async function poFetchSuppliers(){
+  try { const r = await call({ action:'pk_poSupplierList' }); _poSuppliers = (r&&r.ok)?(r.suppliers||[]):[]; }
+  catch(e){ _poSuppliers = []; }
+  const dl = document.getElementById('poSupplierList');
+  if (dl) dl.innerHTML = _poSuppliers.map(s => '<option value="'+escHtml(s.name)+'">'+escHtml(s.phone||'')+'</option>').join('');
+}
+function poSetCat(cat){
+  if (_poCat === cat) return;
+  _poCat = cat;
+  document.querySelectorAll('#poSubtabs .quo-subtab').forEach(b => b.classList.toggle('on', b.getAttribute('data-cat')===cat));
+  poLoad();
+}
+
+// ── list ──
+async function poLoad(){
+  const w = document.getElementById('poList'); if (!w) return;
+  w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div>';
+  const search = (document.getElementById('poSearch')||{}).value || '';
+  const includeDeleted = !!(document.getElementById('poShowDeleted')||{}).checked;
+  const r = await getPOListFast({ search, includeDeleted, limit:200, category:_poCat });
+  if (!r || !r.ok) { w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;color:var(--red);">โหลดไม่สำเร็จ: '+escHtml((r&&r.error)||'?')+'</div>'; return; }
+  poRender(r.pos || []);
+}
+function poRender(list){
+  const w = document.getElementById('poList'); if (!w) return;
+  if (!list.length){
+    const m = (_poCat==='po') ? 'ยังไม่มีใบสั่งซื้อที่ออกเลข<br><small style="color:var(--mu);">ใบที่รันเลขแล้วจะแสดงที่นี่</small>'
+                              : 'ยังไม่มีใบร่าง<br><small style="color:var(--mu);">กด "+ สร้างใบสั่งซื้อ" เพื่อเริ่ม</small>';
+    w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">'+m+'</div>'; return;
+  }
+  const isOffice = isOfficeLevel();
+  w.innerHTML = list.map(p => {
+    const isDel = !!p.deletedAt;
+    const updatedDate = new Date(p.updatedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'});
+    const st = PO_STATUS_LABELS[p.status]||p.status;
+    return ''
+    + '<div class="rec-card '+(isDel?'deleted':'')+'">'
+    +   '<div class="rec-head">'
+    +     '<div class="rec-id">'+(p.poNo ? '<span style="color:var(--acc);font-weight:700;">🧾 '+escHtml(p.poNo)+'</span>' : '<span style="color:var(--mu);">(ร่าง) '+escHtml(p.id)+'</span>')+'</div>'
+    +     '<div class="rec-when">'+updatedDate+'</div>'
+    +   '</div>'
+    +   '<div class="rec-cust">🏭 '+escHtml(p.supplierName||'(ไม่มีชื่อ)')+'</div>'
+    +   '<div class="rec-meta">'
+    +     (p.supplierPhone ? '<span>📞 '+escHtml(p.supplierPhone)+'</span>' : '')
+    +     '<span>📦 <b>'+(p.itemCount||0)+'</b> รายการ</span>'
+    +     '<span style="color:var(--blu);">📌 '+st+'</span>'
+    +   '</div>'
+    +   '<div style="background:rgba(52,199,89,.08);border:1px solid rgba(52,199,89,.3);border-radius:6px;padding:6px 10px;margin-bottom:8px;text-align:center;">'
+    +     '<div style="font-size:10px;color:var(--mu);">ยอดรวม</div>'
+    +     '<div style="font-size:18px;font-weight:700;color:var(--grn);font-family:var(--mono);">฿'+fmt(p.totalAmount||0)+'</div>'
+    +   '</div>'
+    +   (isOffice && p.createdBy !== CURRENT_USER.username ? '<div style="font-size:11px;color:var(--mu);margin-bottom:6px;">โดย '+escHtml(p.createdBy)+'</div>' : '')
+    +   '<div class="rec-btns">'
+    +     '<button class="btn btn-g" onclick="poOpenView(\''+p.id+'\')">👁 ดู</button>'
+    +     (!isDel ? '<button class="btn btn-p" onclick="poOpenEdit(\''+p.id+'\')">✏️ แก้</button>' : '')
+    +     (!isDel && !p.poNo ? '<button class="btn" style="background:var(--acc);color:#fff;" onclick="poRunNo(\''+p.id+'\')">🏷 รันเลข</button>' : '')
+    +     (!isDel ? '<button class="btn btn-d" onclick="poDelete(\''+p.id+'\')">🗑 ลบ</button>' : '')
+    +     (isDel ? '<button class="btn btn-g" onclick="poRestore(\''+p.id+'\')">↩ กู้คืน</button>' : '')
+    +   '</div>'
+    + '</div>';
+  }).join('');
+}
+
+// ── modal open ──
+function poBlankItem(){ return { desc:'', qty:1, unit:'', unitPrice:0, total:0, receivedQty:0, catalogRef:'' }; }
+function poOpenNew(){
+  _poForm = { mode:'new', id:'', supplier:{name:'',phone:''}, items:[poBlankItem()], note:'', doc:{date:'',dueDate:'',terms:''}, status:'draft', poNo:'' };
+  poRenderModal();
+  document.getElementById('pomModal').classList.add('on');
+}
+async function poOpenView(id){ await poOpenLoaded(id, 'view'); }
+async function poOpenEdit(id){ await poOpenLoaded(id, 'edit'); }
+async function poOpenLoaded(id, mode){
+  const r = await getPOGetFast(id);
+  if (!r || !r.ok) { toast('เปิดไม่ได้: '+((r&&r.error)||'?')); return; }
+  const po = r.po || {};
+  _poForm = {
+    mode, id: po.id || id,
+    supplier: { name:(po.supplier&&po.supplier.name)||'', phone:(po.supplier&&po.supplier.phone)||'' },
+    items: (Array.isArray(po.items)&&po.items.length ? po.items.map(it => ({
+      desc:it.desc||'', qty:Number(it.qty)||0, unit:it.unit||'', unitPrice:Number(it.unitPrice)||0,
+      total:Number(it.total)||0, receivedQty:Number(it.receivedQty)||0, catalogRef:it.catalogRef||''
+    })) : [poBlankItem()]),
+    note: po.note||'',
+    doc: { date:(po.doc&&po.doc.date)||'', dueDate:(po.doc&&po.doc.dueDate)||'', terms:(po.doc&&po.doc.terms)||'' },
+    status: po.status||'draft',
+    poNo: (po.doc&&po.doc.poNo)||po.poNo||''
+  };
+  poRenderModal();
+  document.getElementById('pomModal').classList.add('on');
+}
+function poCloseModal(){ document.getElementById('pomModal').classList.remove('on'); _poForm = null; }
+
+function poTotal(){ let t=0; (_poForm.items||[]).forEach(it=>{ t += (Number(it.qty)||0)*(Number(it.unitPrice)||0); }); return Math.round(t*100)/100; }
+
+function poRenderModal(){
+  const f = _poForm; const ro = (f.mode==='view');
+  const titleMap = { new:'🧾 ใบสั่งซื้อ — สร้างใหม่', edit:'✏️ แก้ใบสั่งซื้อ', view:'👁 ดูใบสั่งซื้อ' };
+  document.getElementById('pomTitle').textContent = titleMap[f.mode] || '🧾 ใบสั่งซื้อ';
+  const dis = ro ? 'disabled' : '';
+  const statusOpts = PO_STATUS_ORDER.map(s => '<option value="'+s+'"'+(s===f.status?' selected':'')+'>'+PO_STATUS_LABELS[s]+'</option>').join('');
+  const poNoLine = f.poNo
+    ? '<span style="font-family:var(--mono);color:var(--acc);font-weight:700;">'+escHtml(f.poNo)+'</span>'
+    : '<span style="color:var(--mu);">— ยังไม่ออกเลข (กด "รันเลข" ในรายการ) —</span>';
+  let html = ''
+  + '<div class="row-form" style="gap:8px;flex-wrap:wrap;">'
+  +   '<div class="fg" style="flex:1;min-width:200px;"><label class="fl">ซัพพลายเออร์ *</label>'
+  +     '<input class="fi" id="poSupName" list="poSupplierList" '+dis+' value="'+escHtml(f.supplier.name)+'" placeholder="พิมพ์/เลือกซัพพลายเออร์" oninput="poOnSupName(this.value)"></div>'
+  +   '<div class="fg" style="width:160px;"><label class="fl">เบอร์โทร</label>'
+  +     '<input class="fi" id="poSupPhone" '+dis+' value="'+escHtml(f.supplier.phone)+'" placeholder="เบอร์" oninput="_poForm.supplier.phone=this.value"></div>'
+  + '</div>'
+  + '<div class="row-form" style="gap:8px;flex-wrap:wrap;margin-top:6px;">'
+  +   '<div class="fg" style="flex:1;min-width:160px;"><label class="fl">เลขที่ PO</label><div style="padding:8px 0;">'+poNoLine+'</div></div>'
+  +   '<div class="fg" style="width:160px;"><label class="fl">สถานะ</label>'
+  +     '<select class="fi" id="poStatusSel" onchange="poOnStatusChange(this.value)">'+statusOpts+'</select></div>'
+  + '</div>'
+  + '<div class="row-form" style="gap:8px;flex-wrap:wrap;margin-top:6px;">'
+  +   '<div class="fg" style="width:150px;"><label class="fl">วันที่</label><input class="fi" type="date" '+dis+' value="'+escHtml(f.doc.date)+'" oninput="_poForm.doc.date=this.value"></div>'
+  +   '<div class="fg" style="width:150px;"><label class="fl">กำหนดส่ง</label><input class="fi" type="date" '+dis+' value="'+escHtml(f.doc.dueDate)+'" oninput="_poForm.doc.dueDate=this.value"></div>'
+  +   '<div class="fg" style="flex:1;min-width:180px;"><label class="fl">เงื่อนไข</label><input class="fi" type="text" '+dis+' value="'+escHtml(f.doc.terms)+'" placeholder="เช่น เครดิต 30 วัน" oninput="_poForm.doc.terms=this.value"></div>'
+  + '</div>'
+  + '<div style="margin-top:10px;font-weight:600;color:var(--blu);">📦 รายการสินค้า</div>'
+  + '<div id="poItemsWrap"></div>'
+  + (ro ? '' : '<button class="btn btn-g" style="margin-top:6px;" onclick="poAddItem()">+ เพิ่มรายการ</button>')
+  + '<div class="fg" style="margin-top:10px;"><label class="fl">หมายเหตุ</label>'
+  +   '<textarea class="fi" id="poNote" rows="2" '+dis+' placeholder="หมายเหตุท้ายใบ" oninput="_poForm.note=this.value">'+escHtml(f.note)+'</textarea></div>'
+  + '<div id="poTotalBox" style="background:rgba(52,199,89,.08);border:1px solid rgba(52,199,89,.3);border-radius:6px;padding:8px 12px;margin-top:10px;text-align:right;">'
+  +   'ยอดรวม <b style="font-size:18px;color:var(--grn);font-family:var(--mono);">฿<span id="poTotalVal">'+fmt(poTotal())+'</span></b></div>';
+  document.getElementById('pomBody').innerHTML = html;
+  poRenderItems();
+  // save bar buttons
+  const bar = document.getElementById('pomSaveBar');
+  let btns = '<span class="quom-save-status" style="margin-left:auto;"></span>';
+  if (ro) {
+    btns += '<button class="btn btn-d" onclick="poCloseModal()">ปิด</button>'
+          + '<button class="btn btn-p" onclick="poOpenEdit(\''+f.id+'\')">✏️ แก้</button>';
+  } else {
+    btns = '<button class="btn btn-g" onclick="poAddItem()">+ เพิ่มรายการ</button><span class="quom-save-status" style="margin-left:auto;"></span>'
+         + '<button class="btn btn-d" onclick="poCloseModal()">ยกเลิก</button>'
+         + '<button class="btn btn-p" id="poSaveBtn" onclick="poSubmit()">💾 บันทึก</button>';
+  }
+  bar.innerHTML = btns;
+}
+function poRenderItems(){
+  const wrap = document.getElementById('poItemsWrap'); if (!wrap) return;
+  const ro = (_poForm.mode==='view'); const dis = ro?'disabled':'';
+  wrap.innerHTML = (_poForm.items||[]).map((it,i) => ''
+    + '<div class="row-form" style="gap:6px;flex-wrap:wrap;align-items:flex-end;border-bottom:1px dashed var(--bdr);padding:6px 0;">'
+    +   '<div class="fg" style="flex:1;min-width:160px;"><label class="fl">รายการ</label>'
+    +     '<input class="fi" '+dis+' value="'+escHtml(it.desc)+'" placeholder="ชื่อสินค้า/วัสดุ" oninput="poOnItem('+i+',\'desc\',this.value)"></div>'
+    +   '<div class="fg" style="width:70px;"><label class="fl">จำนวน</label>'
+    +     '<input class="fi" type="number" step="0.01" '+dis+' value="'+(it.qty||0)+'" oninput="poOnItem('+i+',\'qty\',this.value)"></div>'
+    +   '<div class="fg" style="width:70px;"><label class="fl">หน่วย</label>'
+    +     '<input class="fi" '+dis+' value="'+escHtml(it.unit)+'" placeholder="เส้น/อัน" oninput="poOnItem('+i+',\'unit\',this.value)"></div>'
+    +   '<div class="fg" style="width:90px;"><label class="fl">ราคา/หน่วย</label>'
+    +     '<input class="fi" type="number" step="0.01" '+dis+' value="'+(it.unitPrice||0)+'" oninput="poOnItem('+i+',\'unitPrice\',this.value)"></div>'
+    +   '<div class="fg" style="width:100px;"><label class="fl">รวม</label>'
+    +     '<div style="padding:8px 0;font-family:var(--mono);color:var(--grn);" id="poItemTotal'+i+'">฿'+fmt((Number(it.qty)||0)*(Number(it.unitPrice)||0))+'</div></div>'
+    +   (ro ? '' : '<button class="btn btn-d" style="padding:6px 10px;" onclick="poRemoveItem('+i+')">✕</button>')
+    + '</div>'
+  ).join('');
+}
+function poOnSupName(v){ _poForm.supplier.name = v; const s=_poSuppliers.find(x=>x.name===v); if (s && !_poForm.supplier.phone){ _poForm.supplier.phone = s.phone||''; const el=document.getElementById('poSupPhone'); if(el) el.value=_poForm.supplier.phone; } }
+function poOnItem(i, field, val){
+  _poForm.items[i][field] = (field==='qty'||field==='unitPrice') ? (Number(val)||0) : val;
+  const it=_poForm.items[i];
+  const cell=document.getElementById('poItemTotal'+i); if(cell) cell.textContent = '฿'+fmt((Number(it.qty)||0)*(Number(it.unitPrice)||0));
+  const tv=document.getElementById('poTotalVal'); if(tv) tv.textContent = fmt(poTotal());
+}
+function poAddItem(){ _poForm.items.push(poBlankItem()); poRenderItems(); }
+function poRemoveItem(i){ _poForm.items.splice(i,1); if(!_poForm.items.length) _poForm.items.push(poBlankItem()); poRenderItems(); const tv=document.getElementById('poTotalVal'); if(tv) tv.textContent=fmt(poTotal()); }
+
+// ── สถานะ: ถ้าใบบันทึกแล้ว เปลี่ยนทันที (แยกจากบันทึก) · ใบใหม่ = เก็บไว้ตอน create ──
+async function poOnStatusChange(val){
+  if (!PO_STATUS_ORDER.includes(val)) return;
+  if (_poForm.id) {
+    const r = await call({ action:'pk_poSetStatus', id:_poForm.id, status:val });
+    if (r && r.ok) { _poForm.status = val; toast('เปลี่ยนสถานะเป็น "'+PO_STATUS_LABELS[val]+'"'); poLoad(); }
+    else { toast('เปลี่ยนสถานะไม่สำเร็จ: '+((r&&r.error)||'?')); const sel=document.getElementById('poStatusSel'); if(sel) sel.value=_poForm.status; }
+  } else { _poForm.status = val; }
+}
+
+// ── save (create/update) ──
+async function poSubmit(){
+  const f = _poForm;
+  if (!f.supplier.name || !f.supplier.name.trim()) { toast('กรอกชื่อซัพพลายเออร์'); return; }
+  const items = (f.items||[]).filter(it => (it.desc||'').trim());
+  if (!items.length) { toast('ต้องมีอย่างน้อย 1 รายการ'); return; }
+  const btn = document.getElementById('poSaveBtn'); if (btn){ btn.disabled=true; btn.textContent='⏳ กำลังบันทึก...'; }
+  const payload = {
+    supplier: { name:f.supplier.name.trim(), phone:(f.supplier.phone||'').trim() },
+    items: items.map(it => ({ desc:it.desc.trim(), qty:Number(it.qty)||0, unit:(it.unit||'').trim(), unitPrice:Number(it.unitPrice)||0, receivedQty:Number(it.receivedQty)||0, catalogRef:(it.catalogRef||'').trim() })),
+    note: (f.note||'').trim(),
+    doc: { date:f.doc.date||'', dueDate:f.doc.dueDate||'', terms:f.doc.terms||'', poNo: f.poNo||'' },
+    status: f.status || 'draft'
+  };
+  let r;
+  if (f.mode === 'edit' && f.id) { payload.id = f.id; r = await call({ action:'pk_poUpdate', ...payload }); }
+  else { r = await call({ action:'pk_poCreate', ...payload }); }
+  if (btn){ btn.disabled=false; btn.textContent='💾 บันทึก'; }
+  if (r && r.ok) { toast(f.mode==='edit' ? 'บันทึกแล้ว' : 'สร้างใบสั่งซื้อแล้ว'); poCloseModal(); poFetchSuppliers(); poLoad(); }
+  else { toast('บันทึกไม่สำเร็จ: '+((r&&r.error)||'?')); }
+}
+
+// ── รันเลข (แยกจากสถานะ) ──
+async function poRunNo(id){
+  if (!confirm('ออกเลขใบสั่งซื้อ? (จะย้ายไปหมวด "ออกเลขแล้ว")')) return;
+  const r = await call({ action:'pk_poRunNo', id:id });
+  if (r && r.ok) { toast('ได้เลข '+r.poNo); poLoad(); }
+  else { toast('รันเลขไม่สำเร็จ: '+((r&&r.error)||'?')); }
+}
+async function poDelete(id){
+  if (!confirm('ลบใบสั่งซื้อนี้?')) return;
+  const r = await call({ action:'pk_poDelete', id:id });
+  if (r && r.ok) { toast('ลบแล้ว'); poLoad(); } else { toast('ลบไม่สำเร็จ: '+((r&&r.error)||'?')); }
+}
+async function poRestore(id){
+  const r = await call({ action:'pk_poRestore', id:id });
+  if (r && r.ok) { toast('กู้คืนแล้ว'); poLoad(); } else { toast('กู้คืนไม่สำเร็จ: '+((r&&r.error)||'?')); }
+}
+
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),2800); }
 
 // ════════ PK PRODUCTION MODULE (P2) — injected ════════
