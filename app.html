@@ -622,6 +622,16 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
     </div>
   </div>
 </div>
+<!-- 👤 QUOTE-BY-CUSTOMER POPUP (D4) -->
+<div class="quom-bg" id="quoCustModal" onclick="if(event.target===this)quoteCloseCust()">
+  <div style="margin:auto;width:92%;max-width:480px;max-height:82vh;background:var(--surf);border:1px solid var(--bdr);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.5);">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:10px;">
+      <div id="quoCustTitle" style="flex:1;font-weight:700;font-size:14px;color:var(--tx);">ใบเสนอราคาของลูกค้า</div>
+      <button class="hbtn danger" onclick="quoteCloseCust()">×</button>
+    </div>
+    <div id="quoCustBody" style="padding:12px 14px;overflow-y:auto;"></div>
+  </div>
+</div>
 <!-- 🧾 PO FORM MODAL (S3a) -->
 <div class="quom-bg" id="pomModal">
   <div class="quom-wrap">
@@ -8343,7 +8353,7 @@ function quotesRender(){
           <div class="rec-id">${q.quoteNo ? `<span style="color:var(--acc);font-weight:700;">🧾 ${q.quoteNo}</span>` : q.id}</div>
           <div class="rec-when">${updatedDate}</div>
         </div>
-        <div class="rec-cust">👤 ${q.customerName || '(ไม่มีชื่อ)'}</div>
+        <div class="rec-cust" data-c="${escAttr(q.customerName||'')}" ${q.customerName?'onclick="quoteByCustomer(this.dataset.c)" style="cursor:pointer;" title="ดูใบเสนอราคาทั้งหมดของลูกค้านี้"':''}>👤 ${q.customerName || '(ไม่มีชื่อ)'}${q.customerName?' <span style="font-size:11px;color:var(--blu);">🔎</span>':''}</div>
         <div class="rec-meta">
           ${q.customerPhone ? `<span>📞 ${q.customerPhone}</span>` : ''}
           <span>📋 <b>${q.entryCount}</b> รายการ</span>
@@ -8369,6 +8379,59 @@ function quotesRender(){
     `;
   }).join('');
 }
+
+// ════════════════════════════════════════
+//  👤 QUOTE-BY-CUSTOMER POPUP (D4)
+// ════════════════════════════════════════
+let _quoCustList = [];
+async function quoteByCustomer(name){
+  name = String(name||'').trim();
+  if (!name){ toast('ใบนี้ไม่มีชื่อลูกค้า'); return; }
+  const titleEl = document.getElementById('quoCustTitle');
+  const bodyEl = document.getElementById('quoCustBody');
+  if (titleEl) titleEl.innerHTML = '👤 ' + escHtml(name);
+  if (bodyEl) bodyEl.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  const modal = document.getElementById('quoCustModal');
+  if (modal) modal.classList.add('on');
+  try {
+    const [a, b] = await Promise.all([
+      getQuoteListFast({ search:'', includeDeleted:false, limit:200, category:'quote' }, { cache:true }),
+      getQuoteListFast({ search:'', includeDeleted:false, limit:200, category:'calc' }, { cache:true })
+    ]);
+    const seen = {}, merged = [];
+    [].concat((a&&a.quotes)||[], (b&&b.quotes)||[]).forEach(q => {
+      if (!q || seen[q.id]) return; seen[q.id] = true;
+      if (String(q.customerName||'').trim() === name) merged.push(q);
+    });
+    merged.sort((x,y) => (Number(y.updatedAt)||0) - (Number(x.updatedAt)||0));
+    _quoCustList = merged;
+    quoteRenderCust(name, merged);
+  } catch(e){
+    if (bodyEl) bodyEl.innerHTML = '<div class="loading-row" style="color:var(--red);">โหลดไม่สำเร็จ</div>';
+  }
+}
+function quoteRenderCust(name, list){
+  const bodyEl = document.getElementById('quoCustBody');
+  if (!bodyEl) return;
+  if (!list.length){ bodyEl.innerHTML = '<div style="color:var(--mu);text-align:center;padding:18px;">ไม่พบใบของลูกค้านี้</div>'; return; }
+  const total = list.reduce((s,q)=>s+(Number(q.totalAmount)||0),0);
+  bodyEl.innerHTML =
+    '<div style="font-size:12px;color:var(--mu);margin-bottom:10px;">พบ <b>'+list.length+'</b> ใบ · รวม <b style="color:var(--grn);">฿'+fmt(total)+'</b></div>' +
+    list.map(q => {
+      const when = new Date(q.updatedAt).toLocaleDateString('th-TH',{dateStyle:'short'});
+      const noTag = q.quoteNo
+        ? '<span style="color:var(--acc);font-weight:700;">🧾 '+escHtml(q.quoteNo)+'</span>'
+        : '<span style="color:var(--mu);">📝 '+escHtml(q.id)+' · ยังไม่รันเลข</span>';
+      return '<div onclick="quoteCustOpen(\''+q.id+'\')" style="background:var(--surf2);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:pointer;">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">'+noTag+'<span style="margin-left:auto;font-size:11px;color:var(--mu);">'+when+'</span></div>'
+        + '<div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--mu);">'
+        + '<span>📋 '+(q.entryCount||0)+' รายการ</span>'
+        + '<span style="margin-left:auto;font-weight:700;color:var(--grn);font-family:var(--mono);">฿'+fmt(q.totalAmount||0)+'</span>'
+        + '</div></div>';
+    }).join('');
+}
+function quoteCustOpen(id){ quoteCloseCust(); quoteOpenView(id); }
+function quoteCloseCust(){ const m = document.getElementById('quoCustModal'); if (m) m.classList.remove('on'); }
 
 // ════════════════════════════════════════
 //  💰 QUOTE FORM MODAL (D3)
