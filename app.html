@@ -9756,6 +9756,7 @@ function poRenderMgmt(){
     + '</div>'
     + '<div style="font-weight:700;color:var(--blu);margin:16px 0 4px;">📦 Stock map ('+_poMgmtStock.length+')</div>'
     + '<div style="font-size:11px;color:var(--mu);margin-bottom:6px;">วัสดุ → เข้าคลังไหนตอนรับของ (ไม่นับ = ไม่แตะ stock)</div>'
+    + '<button class="btn btn-g" style="margin-bottom:8px;" onclick="poMgmtSeed()">🔄 ดึงราง+อุปกรณ์ทั้งหมดเข้า map</button>'
     + (stockRows || '<div style="color:var(--mu);font-size:12px;">ยังไม่มี</div>')
     + '<div class="row-form" style="gap:6px;align-items:flex-end;margin-top:6px;">'
     +   '<div class="fg" style="flex:1;"><label class="fl">+ ชื่อวัสดุ</label><input class="fi" id="mkNewName" placeholder="ชื่อวัสดุ"></div>'
@@ -9765,6 +9766,12 @@ function poRenderMgmt(){
     + '</div>';
 }
 function _poV(id){ const el=document.getElementById(id); return el?(el.value||''):''; }
+async function poMgmtSeed(){
+  if(!confirm('ดึงราง + อุปกรณ์ทั้งหมดจากคลังเข้า Stock map?\n(วัสดุที่มีในคลังจะถูกตั้งเป็น ราง/อุปกรณ์ ให้นับ stock — ปรับ/ปิดทีหลังได้)')) return;
+  const r=await call({ action:'pk_poStockMapSeed' });
+  if(r&&r.ok){ toast('✅ ราง '+r.rail+' · อุปกรณ์ '+r.equip+' (ใหม่ '+r.added+' · อัปเดต '+r.updated+')'); await poMgmtLoad(); poFetchStockMap(); }
+  else { toast('ไม่สำเร็จ: '+((r&&r.error)||'?')); }
+}
 async function poMgmtSupSave(i){
   const s=_poMgmtSup[i];
   const r=await call({ action:'pk_poSupplierSet', name:s.name, phone:_poV('msPhone'+i), address:_poV('msAddr'+i), taxId:_poV('msTax'+i) });
