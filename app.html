@@ -9735,6 +9735,8 @@ function _poA4Header(f, hd){
     +   '<div style="flex:1;line-height:1.7;">'
     +     '<div><b style="color:#1e3a5f;">ผู้ขาย (ซัพพลายเออร์):</b> '+(escHtml(f.supplier.name)||'-')+'</div>'
     +     '<div><b style="color:#1e3a5f;">โทร:</b> '+(escHtml(f.supplier.phone)||'-')+'</div>'
+    +     (f.supplier.address ? '<div><b style="color:#1e3a5f;">ที่อยู่:</b> '+escHtml(f.supplier.address)+'</div>' : '')
+    +     (f.supplier.taxId ? '<div><b style="color:#1e3a5f;">เลขภาษี:</b> '+escHtml(f.supplier.taxId)+'</div>' : '')
     +   '</div>'
     +   '<div style="text-align:right;line-height:1.7;">'
     +     '<div><b style="color:#1e3a5f;">เลขที่:</b> '+(escHtml(f.poNo)||'(ร่าง)')+'</div>'
@@ -9938,7 +9940,7 @@ function poRender(list){
 // ── modal open ──
 function poBlankItem(){ return { desc:'', qty:1, unit:'', unitPrice:0, total:0, receivedQty:0, catalogRef:'', stockType:'', stockName:'', stockColor:'' }; }
 function poOpenNew(){
-  _poForm = { mode:'new', id:'', supplier:{name:'',phone:''}, items:[poBlankItem()], note:'', doc:{date:'',dueDate:'',terms:''}, status:'draft', poNo:'' };
+  _poForm = { mode:'new', id:'', supplier:{name:'',phone:'',address:'',taxId:''}, items:[poBlankItem()], note:'', doc:{date:'',dueDate:'',terms:''}, status:'draft', poNo:'' };
   poRenderModal();
   document.getElementById('pomModal').classList.add('on');
 }
@@ -9950,7 +9952,7 @@ async function poOpenLoaded(id, mode){
   const po = r.po || {};
   _poForm = {
     mode, id: po.id || id,
-    supplier: { name:(po.supplier&&po.supplier.name)||'', phone:(po.supplier&&po.supplier.phone)||'' },
+    supplier: { name:(po.supplier&&po.supplier.name)||'', phone:(po.supplier&&po.supplier.phone)||'', address:(po.supplier&&po.supplier.address)||'', taxId:(po.supplier&&po.supplier.taxId)||'' },
     items: (Array.isArray(po.items)&&po.items.length ? po.items.map(it => ({
       desc:it.desc||'', qty:Number(it.qty)||0, unit:it.unit||'', unitPrice:Number(it.unitPrice)||0,
       total:Number(it.total)||0, receivedQty:Number(it.receivedQty)||0, catalogRef:it.catalogRef||'',
@@ -9984,6 +9986,12 @@ function poRenderModal(){
   +     '<input class="fi" id="poSupName" list="poSupplierList" '+dis+' value="'+escHtml(f.supplier.name)+'" placeholder="พิมพ์/เลือกซัพพลายเออร์" oninput="poOnSupName(this.value)"></div>'
   +   '<div class="fg" style="width:160px;"><label class="fl">เบอร์โทร</label>'
   +     '<input class="fi" id="poSupPhone" '+dis+' value="'+escHtml(f.supplier.phone)+'" placeholder="เบอร์" oninput="_poForm.supplier.phone=this.value"></div>'
+  + '</div>'
+  + '<div class="row-form" style="gap:8px;flex-wrap:wrap;margin-top:6px;">'
+  +   '<div class="fg" style="flex:1;min-width:200px;"><label class="fl">ที่อยู่ (ซัพพลายเออร์)</label>'
+  +     '<input class="fi" id="poSupAddr" '+dis+' value="'+escHtml(f.supplier.address||'')+'" placeholder="ที่อยู่สำหรับออกบิล" oninput="_poForm.supplier.address=this.value"></div>'
+  +   '<div class="fg" style="width:170px;"><label class="fl">เลขผู้เสียภาษี</label>'
+  +     '<input class="fi" id="poSupTax" '+dis+' value="'+escHtml(f.supplier.taxId||'')+'" placeholder="เลขภาษี" oninput="_poForm.supplier.taxId=this.value"></div>'
   + '</div>'
   + '<div class="row-form" style="gap:8px;flex-wrap:wrap;margin-top:6px;">'
   +   '<div class="fg" style="flex:1;min-width:160px;"><label class="fl">เลขที่ PO</label><div style="padding:8px 0;">'+poNoLine+'</div></div>'
@@ -10042,7 +10050,11 @@ function poRenderItems(){
     + '</div>'
   ).join('');
 }
-function poOnSupName(v){ _poForm.supplier.name = v; const s=_poSuppliers.find(x=>x.name===v); if (s && !_poForm.supplier.phone){ _poForm.supplier.phone = s.phone||''; const el=document.getElementById('poSupPhone'); if(el) el.value=_poForm.supplier.phone; } }
+function poOnSupName(v){ _poForm.supplier.name = v; const s=_poSuppliers.find(x=>x.name===v); if (s){
+  if (!_poForm.supplier.phone && s.phone){ _poForm.supplier.phone=s.phone; const el=document.getElementById('poSupPhone'); if(el) el.value=s.phone; }
+  if (!_poForm.supplier.address && s.address){ _poForm.supplier.address=s.address; const el=document.getElementById('poSupAddr'); if(el) el.value=s.address; }
+  if (!_poForm.supplier.taxId && s.taxId){ _poForm.supplier.taxId=s.taxId; const el=document.getElementById('poSupTax'); if(el) el.value=s.taxId; }
+} }
 function poOnItem(i, field, val){
   _poForm.items[i][field] = (field==='qty'||field==='unitPrice') ? (Number(val)||0) : val;
   const it=_poForm.items[i];
@@ -10072,7 +10084,7 @@ async function poSubmit(){
   const btn = document.getElementById('poSaveBtn'); if (btn){ btn.disabled=true; btn.textContent='⏳ กำลังบันทึก...'; }
   const _ss = document.getElementById('poStatusSel'); if (_ss && PO_STATUS_ORDER.includes(_ss.value)) f.status = _ss.value; // อ่านสถานะจาก dropdown ตรงๆ
   const payload = {
-    supplier: { name:f.supplier.name.trim(), phone:(f.supplier.phone||'').trim() },
+    supplier: { name:f.supplier.name.trim(), phone:(f.supplier.phone||'').trim(), address:(f.supplier.address||'').trim(), taxId:(f.supplier.taxId||'').trim() },
     items: items.map(it => ({ desc:it.desc.trim(), qty:Number(it.qty)||0, unit:(it.unit||'').trim(), unitPrice:Number(it.unitPrice)||0, receivedQty:Number(it.receivedQty)||0, catalogRef:(it.catalogRef||'').trim(), stockType:it.stockType||'', stockName:(it.stockName||'').trim(), stockColor:(it.stockColor||'').trim() })),
     note: (f.note||'').trim(),
     doc: { date:f.doc.date||'', dueDate:f.doc.dueDate||'', terms:f.doc.terms||'', poNo: f.poNo||'' },
