@@ -6195,9 +6195,18 @@ function mtStart(id){
   }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
 }
 
+// ย้าย modal ไป body + ลบตัวซ้ำ (myTasksScreenHTML render 3 view → id ซ้ำ) → modal เดียวที่ body ไม่โดน content-area clip
+function mtEnsureModal(){
+  const list = document.querySelectorAll('#mtSubmitModal');
+  let modal = list[0] || null;
+  for (let i = 1; i < list.length; i++) list[i].remove();   // ลบตัวซ้ำ เหลือตัวเดียว
+  if (modal && modal.parentElement !== document.body) document.body.appendChild(modal);  // หลุดจาก content-area
+  return modal;
+}
 function mtOpenSubmit(id){
   const t = _myTasks.find(x => String(x.taskId) === String(id));
   if (!t) return;
+  mtEnsureModal();
   _mtSubmitId = id;
   _mtPhotos = (t.resultPhotos || []).slice();   // ★ คงรูปเดิมไว้ (กันหายตอนส่งใหม่หลังตีกลับ)
   document.getElementById('mtSubmitTitle').textContent = t.title;
