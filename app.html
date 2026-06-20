@@ -9345,8 +9345,9 @@ function renderQuoteA4Page(entriesInPage, pageNum, totalPages, customer, dateStr
 
 function renderQuoteA4Entry(e, showSize){
   const bd = (e._calc && e._calc.breakdown) || [];
-  const colorObj = e.colorId ? _quoteMetadata.colors.find(c => c.id === e.colorId) : null;
-  const colorLbl = colorObj ? colorObj.label : 'สีหลัก';
+  const _cid = e.colorId || (_quoForm && _quoForm.mainColor) || '';
+  const colorObj = _cid ? _quoteMetadata.colors.find(c => c.id === _cid) : null;
+  const colorLbl = colorObj ? colorObj.label : '—';
   const sizeStr = (e.kind === 'manual') ? '—' : ((e.width != null ? e.width : '-') + ' × ' + (e.height != null ? e.height : '-'));
   const lines = bd.length ? bd : [{ label: (e.kind === 'manual' ? (e.customType || '(รายการ)') : '(ไม่ระบุรูปแบบ)'), uqty: 0, unit: '', rate: 0, price: (e._calc && e._calc.total) || 0 }];
   const td = 'padding:6px 6px;vertical-align:top;border-bottom:1px solid #dde3ea;';
@@ -9585,8 +9586,8 @@ async function getPOGetFast(id){
 
 // ── tab init / suppliers ──
 async function poInit(){
-  if (!_poInited) { _poInited = true; await poFetchSuppliers(); await poFetchCatalog(); await poFetchHeader(); await poFetchStockMap(); }
-  poLoad();
+  poLoad(); // โหลด list ทันที — ไม่รอ aux (suppliers/catalog/header/stockmap ใช้ตอนเปิด modal)
+  if (!_poInited) { _poInited = true; poFetchSuppliers(); poFetchCatalog(); poFetchHeader(); poFetchStockMap(); }
 }
 async function poFetchSuppliers(){
   try { const r = await call({ action:'pk_poSupplierList' }); _poSuppliers = (r&&r.ok)?(r.suppliers||[]):[]; }
