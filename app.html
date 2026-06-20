@@ -627,11 +627,21 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
   <div class="quom-wrap">
     <div class="quom-head">
       <div class="quom-title" id="pomTitle">🧾 ใบสั่งซื้อ</div>
-      <button class="hbtn" id="pomExportImgBtn" onclick="poExportImg()" style="display:none;" title="Export PNG A4">🖼️</button><button class="hbtn" id="pomExportPdfBtn" onclick="poExportPdf()" style="display:none;" title="Export PDF">PDF</button>
+      <button class="hbtn" id="pomReceiveBtn" onclick="poOpenReceive()" style="display:none;" title="รับของเข้าสต๊อก">📥</button><button class="hbtn" id="pomExportImgBtn" onclick="poExportImg()" style="display:none;" title="Export PNG A4">🖼️</button><button class="hbtn" id="pomExportPdfBtn" onclick="poExportPdf()" style="display:none;" title="Export PDF">PDF</button>
       <button class="hbtn danger" onclick="poCloseModal()">×</button>
     </div>
     <div class="quom-body" id="pomBody"></div>
     <div class="quom-save-bar" id="pomSaveBar"></div>
+  </div>
+</div>
+<div class="quom-bg" id="poRecvModal">
+  <div class="quom-wrap">
+    <div class="quom-head">
+      <div class="quom-title">📥 รับของเข้าสต๊อก</div>
+      <button class="hbtn danger" onclick="poCloseReceive()">×</button>
+    </div>
+    <div class="quom-body" id="poRecvBody"></div>
+    <div class="quom-save-bar" id="poRecvBar"></div>
   </div>
 </div>
 
@@ -9575,7 +9585,7 @@ async function getPOGetFast(id){
 
 // ── tab init / suppliers ──
 async function poInit(){
-  if (!_poInited) { _poInited = true; await poFetchSuppliers(); await poFetchCatalog(); await poFetchHeader(); }
+  if (!_poInited) { _poInited = true; await poFetchSuppliers(); await poFetchCatalog(); await poFetchHeader(); await poFetchStockMap(); }
   poLoad();
 }
 async function poFetchSuppliers(){
@@ -9614,9 +9624,83 @@ function poOnItemPick(i, val){
   const it = _poForm.items[i];
   it.desc = c.label; it.unit = c.unit; it.unitPrice = c.price;
   it.catalogRef = c.name + (c.color ? ('|'+c.color) : '');
+  it.stockName = c.name; it.stockColor = c.color;
+  { const _st = poStockTypeFor(c.name, c.color); if (_st) it.stockType = _st; }
   poRenderItems();
   const tv=document.getElementById('poTotalVal'); if(tv) tv.textContent = fmt(poTotal());
 }
+// ── S5c: stock map + รับของ (frontend) ──
+let _poStockMap = [];
+async function poFetchStockMap(){
+  try { const g = await call({ action:'pk_poStockMapList' }); _poStockMap = (g&&g.ok)?(g.map||[]):[]; }
+  catch(e){ _poStockMap = []; }
+}
+function poStockTypeFor(name, color){
+  name = String(name||'').trim(); color = String(color||'').trim();
+  const f = _poStockMap.find(r => r.name===name && r.color===color);
+  return f ? f.stockType : '';
+}
+// เปลี่ยน dropdown คลังต่อรายการ → เติม stockName/stockColor (จาก catalogRef/desc) ถ้ายังว่าง
+function poOnItemStock(i, val){
+  const it = _poForm.items[i];
+  it.stockType = (val==='rail'||val==='equip') ? val : '';
+  if (it.stockType){
+    const ref = String(it.catalogRef||'');
+    if (ref.indexOf('|') >= 0){ const p = ref.split('|'); it.stockName = (p[0]||'').trim(); it.stockColor = (p[1]||'').trim(); }
+    else { it.stockName = String(it.desc||'').trim(); it.stockColor = ''; }
+  }
+}
+
+// ── panel รับของ ──
+let _poRecv = null;
+function poOpenReceive(){
+  const f = _poForm; if (!f || !f.id){ toast('บันทึกใบก่อนรับของ'); return; }
+  _poRecv = { id:f.id, mode:f.mode, items:(f.items||[]).map((it,i)=>({
+    i, desc:it.desc||'', qty:Number(it.qty)||0, oldRecv:Number(it.receivedQty)||0, recv:Number(it.receivedQty)||0, stockType:it.stockType||''
+  })) };
+  poRenderReceive();
+  document.getElementById('poRecvModal').classList.add('on');
+}
+function poCloseReceive(){ document.getElementById('poRecvModal').classList.remove('on'); _poRecv = null; }
+function poRecvSet(i, val){
+  const r = _poRecv.items.find(x=>x.i===i); if(!r) return;
+  let v = Number(val); if(!isFinite(v)||v<0) v=0; if(v>r.qty) v=r.qty; r.recv = v;
+  const d = document.getElementById('poRecvDelta'+i);
+  if(d){ const dl=v-r.oldRecv; d.textContent=(dl>0?('+'+dl):String(dl))+(r.stockType?(' '+(r.stockType==='rail'?'ราง':'อุปกรณ์')):''); d.style.color = dl>0?'var(--grn)':(dl<0?'var(--red,#e5484d)':'var(--mu)'); }
+}
+function poRecvFill(i){ const r=_poRecv.items.find(x=>x.i===i); if(!r) return; r.recv=r.qty; poRenderReceive(); }
+function poRenderReceive(){
+  const stLabel = { rail:'🛤 ราง', equip:'🔩 อุปกรณ์', '':'— ไม่นับ' };
+  const body = document.getElementById('poRecvBody');
+  body.innerHTML = '<div style="font-size:12px;color:var(--mu);margin-bottom:8px;">ตั้ง “จำนวนที่รับแล้วสะสม” ต่อรายการ — ระบบปรับ stock เฉพาะส่วนต่าง (เพิ่ม/ลดคืน) เฉพาะรายการที่ตั้งคลังไว้</div>'
+    + _poRecv.items.map(r => ''
+      + '<div class="row-form" style="gap:6px;align-items:flex-end;border-bottom:1px dashed var(--bdr);padding:6px 0;">'
+      +   '<div class="fg" style="flex:1;min-width:140px;"><label class="fl">รายการ</label><div style="padding:6px 0;">'+escHtml(r.desc)+' <span style="font-size:11px;color:var(--mu);">['+stLabel[r.stockType||'']+']</span></div></div>'
+      +   '<div class="fg" style="width:60px;"><label class="fl">สั่ง</label><div style="padding:6px 0;font-family:var(--mono);">'+fmt(r.qty)+'</div></div>'
+      +   '<div class="fg" style="width:90px;"><label class="fl">รับแล้ว</label><input class="fi" type="number" step="0.01" value="'+r.recv+'" oninput="poRecvSet('+r.i+',this.value)"></div>'
+      +   '<button class="btn btn-g" style="padding:6px 8px;" onclick="poRecvFill('+r.i+')" title="รับครบ">ครบ</button>'
+      +   '<div class="fg" style="width:90px;"><label class="fl">Δ stock</label><div style="padding:6px 0;font-family:var(--mono);" id="poRecvDelta'+r.i+'">'+((r.recv-r.oldRecv)>0?'+':'')+(r.recv-r.oldRecv)+'</div></div>'
+      + '</div>').join('');
+  const bar = document.getElementById('poRecvBar');
+  bar.innerHTML = '<span style="margin-left:auto;"></span><button class="btn btn-d" onclick="poCloseReceive()">ยกเลิก</button><button class="btn btn-p" id="poRecvSaveBtn" onclick="poSubmitReceive()">✅ ยืนยันรับของ</button>';
+}
+async function poSubmitReceive(){
+  if (!_poRecv) return;
+  const lines = _poRecv.items.filter(r => r.recv !== r.oldRecv).map(r => ({ i:r.i, received:r.recv }));
+  if (!lines.length){ toast('ไม่มีการเปลี่ยนแปลงจำนวนรับ'); return; }
+  const id = _poRecv.id, mode = _poRecv.mode;
+  const btn = document.getElementById('poRecvSaveBtn'); if(btn){ btn.disabled=true; btn.textContent='⏳ กำลังบันทึก...'; }
+  const r = await call({ action:'pk_poReceive', id, lines });
+  if(btn){ btn.disabled=false; btn.textContent='✅ ยืนยันรับของ'; }
+  if (r && r.ok){
+    toast(r.stockWriteEnabled ? ('รับของแล้ว · ปรับ stock '+(r.appliedCount||0)+' รายการ') : '✓ บันทึกจำนวนรับแล้ว · stock ยังไม่เขียน (flag ปิด)');
+    if (r.errors && r.errors.length) toast('⚠️ บางรายการเขียน stock ไม่ได้: '+r.errors.map(e=>e.desc).join(', '));
+    poCloseReceive();
+    await poOpenLoaded(id, mode==='view'?'view':'edit'); // refresh ใบ
+    poLoad();
+  } else { toast('รับของไม่สำเร็จ: '+((r&&r.error)||'?')); }
+}
+
 // ── S4: พิมพ์/PDF ใบ PO — แบ่งหน้าตามแถว (วัดความสูงจริง · render หน้าละ .a4-page ขนาดคงที่ เหมือน quote) ──
 let _poHeader = null;
 async function poFetchHeader(){
@@ -9851,7 +9935,7 @@ function poRender(list){
 }
 
 // ── modal open ──
-function poBlankItem(){ return { desc:'', qty:1, unit:'', unitPrice:0, total:0, receivedQty:0, catalogRef:'' }; }
+function poBlankItem(){ return { desc:'', qty:1, unit:'', unitPrice:0, total:0, receivedQty:0, catalogRef:'', stockType:'', stockName:'', stockColor:'' }; }
 function poOpenNew(){
   _poForm = { mode:'new', id:'', supplier:{name:'',phone:''}, items:[poBlankItem()], note:'', doc:{date:'',dueDate:'',terms:''}, status:'draft', poNo:'' };
   poRenderModal();
@@ -9868,7 +9952,8 @@ async function poOpenLoaded(id, mode){
     supplier: { name:(po.supplier&&po.supplier.name)||'', phone:(po.supplier&&po.supplier.phone)||'' },
     items: (Array.isArray(po.items)&&po.items.length ? po.items.map(it => ({
       desc:it.desc||'', qty:Number(it.qty)||0, unit:it.unit||'', unitPrice:Number(it.unitPrice)||0,
-      total:Number(it.total)||0, receivedQty:Number(it.receivedQty)||0, catalogRef:it.catalogRef||''
+      total:Number(it.total)||0, receivedQty:Number(it.receivedQty)||0, catalogRef:it.catalogRef||'',
+      stockType:it.stockType||'', stockName:it.stockName||'', stockColor:it.stockColor||''
     })) : [poBlankItem()]),
     note: po.note||'',
     doc: { date:(po.doc&&po.doc.date)||'', dueDate:(po.doc&&po.doc.dueDate)||'', terms:(po.doc&&po.doc.terms)||'' },
@@ -9886,7 +9971,7 @@ function poRenderModal(){
   const f = _poForm; const ro = (f.mode==='view');
   const titleMap = { new:'🧾 ใบสั่งซื้อ — สร้างใหม่', edit:'✏️ แก้ใบสั่งซื้อ', view:'👁 ดูใบสั่งซื้อ' };
   document.getElementById('pomTitle').textContent = titleMap[f.mode] || '🧾 ใบสั่งซื้อ';
-  { const _se=!!f.id, _ei=document.getElementById('pomExportImgBtn'), _ep=document.getElementById('pomExportPdfBtn'); if(_ei)_ei.style.display=_se?'':'none'; if(_ep)_ep.style.display=_se?'':'none'; }
+  { const _se=!!f.id, _ei=document.getElementById('pomExportImgBtn'), _ep=document.getElementById('pomExportPdfBtn'); if(_ei)_ei.style.display=_se?'':'none'; if(_ep)_ep.style.display=_se?'':'none'; const _er=document.getElementById('pomReceiveBtn'); if(_er)_er.style.display=(f.id&&f.status!=='draft')?'':'none'; }
   const dis = ro ? 'disabled' : '';
   const statusOpts = PO_STATUS_ORDER.map(s => '<option value="'+s+'"'+(s===f.status?' selected':'')+'>'+PO_STATUS_LABELS[s]+'</option>').join('');
   const poNoLine = f.poNo
@@ -9946,6 +10031,12 @@ function poRenderItems(){
     +     '<input class="fi" type="number" step="0.01" '+dis+' value="'+(it.unitPrice||0)+'" oninput="poOnItem('+i+',\'unitPrice\',this.value)"></div>'
     +   '<div class="fg" style="width:100px;"><label class="fl">รวม</label>'
     +     '<div style="padding:8px 0;font-family:var(--mono);color:var(--grn);" id="poItemTotal'+i+'">฿'+fmt((Number(it.qty)||0)*(Number(it.unitPrice)||0))+'</div></div>'
+    +   '<div class="fg" style="width:130px;"><label class="fl">คลัง</label>'
+    +     '<select class="fi" '+dis+' onchange="poOnItemStock('+i+',this.value)">'
+    +       '<option value=""'+(!it.stockType?' selected':'')+'>ไม่นับ stock</option>'
+    +       '<option value="rail"'+(it.stockType==='rail'?' selected':'')+'>เข้าคลังราง</option>'
+    +       '<option value="equip"'+(it.stockType==='equip'?' selected':'')+'>เข้าคลังอุปกรณ์</option>'
+    +     '</select></div>'
     +   (ro ? '' : '<button class="btn btn-d" style="padding:6px 10px;" onclick="poRemoveItem('+i+')">✕</button>')
     + '</div>'
   ).join('');
@@ -9979,7 +10070,7 @@ async function poSubmit(){
   const btn = document.getElementById('poSaveBtn'); if (btn){ btn.disabled=true; btn.textContent='⏳ กำลังบันทึก...'; }
   const payload = {
     supplier: { name:f.supplier.name.trim(), phone:(f.supplier.phone||'').trim() },
-    items: items.map(it => ({ desc:it.desc.trim(), qty:Number(it.qty)||0, unit:(it.unit||'').trim(), unitPrice:Number(it.unitPrice)||0, receivedQty:Number(it.receivedQty)||0, catalogRef:(it.catalogRef||'').trim() })),
+    items: items.map(it => ({ desc:it.desc.trim(), qty:Number(it.qty)||0, unit:(it.unit||'').trim(), unitPrice:Number(it.unitPrice)||0, receivedQty:Number(it.receivedQty)||0, catalogRef:(it.catalogRef||'').trim(), stockType:it.stockType||'', stockName:(it.stockName||'').trim(), stockColor:(it.stockColor||'').trim() })),
     note: (f.note||'').trim(),
     doc: { date:f.doc.date||'', dueDate:f.doc.dueDate||'', terms:f.doc.terms||'', poNo: f.poNo||'' },
     status: f.status || 'draft'
