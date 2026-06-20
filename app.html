@@ -9759,7 +9759,7 @@ function poRenderMgmt(){
     + '</div>').join('');
   const stockRows = _poMgmtStock.map((m,i) => ''
     + '<div class="row-form" style="gap:6px;align-items:flex-end;border-bottom:1px dashed var(--bdr);padding:6px 0;">'
-    +   '<div class="fg" style="flex:1;min-width:120px;"><label class="fl">ชื่อวัสดุ</label><div style="padding:6px 0;font-weight:600;">'+escHtml(m.name)+'</div></div>'
+    +   '<div class="fg" style="flex:1;min-width:120px;"><label class="fl">ชื่อวัสดุ</label><div style="padding:6px 0;font-weight:600;cursor:pointer;color:var(--blu);" onclick="poItemHistory(this.dataset.m,this.dataset.c)" data-m="'+escAttr(m.name)+'" data-c="'+escAttr(m.color||'')+'" title="ดูประวัติของวัสดุนี้">'+escHtml(m.name)+' 📜</div></div>'
     +   '<div class="fg" style="width:100px;"><label class="fl">สี</label><div style="padding:6px 0;">'+(escHtml(m.color)||'<span style="color:var(--mu);">—</span>')+'</div></div>'
     +   '<div class="fg" style="width:150px;"><label class="fl">คลัง</label><select class="fi" id="mkType'+i+'">'+_poStTypeOpt(m.stockType||'')+'</select></div>'
     +   '<button class="btn btn-p" style="padding:6px 8px;" onclick="poMgmtStockSave('+i+')" title="บันทึก">💾</button>'
@@ -9823,15 +9823,23 @@ async function poMgmtStockAdd(){
 }
 
 // ── ประวัติคลัง ราง/อุปกรณ์ (modal) ──
-let _poHistKind = '';
+let _poHistKind = '', _poHistMat = '', _poHistCol = '';
 async function poOpenHistory(){
-  _poHistKind = '';
+  _poHistKind = ''; _poHistMat = ''; _poHistCol = '';
   document.querySelectorAll('#poHistTabs [data-k]').forEach(b => b.classList.toggle('on', b.getAttribute('data-k') === ''));
   const s = document.getElementById('poHistSearch'); if (s) s.value = '';
   document.getElementById('poHistModal').classList.add('on');
   await poHistLoad();
 }
 function poCloseHistory(){ document.getElementById('poHistModal').classList.remove('on'); }
+async function poItemHistory(material, color){
+  _poHistMat = String(material||''); _poHistCol = String(color||''); _poHistKind = '';
+  document.querySelectorAll('#poHistTabs [data-k]').forEach(b => b.classList.toggle('on', b.getAttribute('data-k') === ''));
+  const s = document.getElementById('poHistSearch'); if (s) s.value = '';
+  document.getElementById('poHistModal').classList.add('on');
+  await poHistLoad();
+}
+function poHistClearItem(){ _poHistMat = ''; _poHistCol = ''; poHistLoad(); }
 function poHistSetKind(k){
   _poHistKind = k;
   document.querySelectorAll('#poHistTabs [data-k]').forEach(b => b.classList.toggle('on', b.getAttribute('data-k') === k));
@@ -9841,14 +9849,15 @@ async function poHistLoad(){
   const body = document.getElementById('poHistBody');
   body.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
   const q = (document.getElementById('poHistSearch')||{}).value || '';
-  const r = await call({ action:'pk_poStockHistory', kind:_poHistKind, q, limit:300 });
+  const r = await call({ action:'pk_poStockHistory', kind:_poHistKind, q, material:_poHistMat, color:_poHistCol, limit:300 });
   if (!r || !r.ok){ body.innerHTML = '<div class="loading-row" style="color:var(--red);">โหลดไม่สำเร็จ: '+escHtml((r&&r.error)||'?')+'</div>'; return; }
   poHistRender(r.moves||[], r.total||0);
 }
 function poHistRender(moves, total){
   const body = document.getElementById('poHistBody');
-  if (!moves.length){ body.innerHTML = '<div style="color:var(--mu);padding:12px;text-align:center;">ไม่มีประวัติ</div>'; return; }
-  body.innerHTML = '<div style="font-size:12px;color:var(--mu);margin-bottom:8px;">แสดง '+moves.length+' จาก '+total+' รายการ (ใหม่→เก่า)</div>'
+  const banner = _poHistMat ? '<div style="background:rgba(52,120,246,.1);border:1px solid var(--blu);border-radius:6px;padding:6px 10px;margin-bottom:8px;display:flex;align-items:center;gap:8px;font-size:12px;">🔍 เฉพาะ: <b>'+escHtml(_poHistMat)+'</b>'+(_poHistCol?(' ('+escHtml(_poHistCol)+')'):'')+'<button class="btn btn-g" style="margin-left:auto;padding:2px 10px;" onclick="poHistClearItem()">✕ ดูทั้งหมด</button></div>' : '';
+  if (!moves.length){ body.innerHTML = banner + '<div style="color:var(--mu);padding:12px;text-align:center;">ไม่มีประวัติ</div>'; return; }
+  body.innerHTML = banner + '<div style="font-size:12px;color:var(--mu);margin-bottom:8px;">แสดง '+moves.length+' จาก '+total+' รายการ (ใหม่→เก่า)</div>'
     + moves.map(m => {
       const dt = new Date(m.ts).toLocaleString('th-TH',{ day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
       const ico = m.kind === 'rail' ? '🛤' : '🔩';
@@ -9856,7 +9865,7 @@ function poHistRender(moves, total){
       const dTxt = (m.delta > 0 ? '+' : '') + m.delta;
       return '<div class="row-form" style="gap:8px;align-items:center;border-bottom:1px dashed var(--bdr);padding:7px 0;">'
         + '<div style="width:92px;font-size:11px;color:var(--mu);font-family:var(--mono);">'+dt+'</div>'
-        + '<div style="flex:1;min-width:0;">'+ico+' <b>'+escHtml(m.material)+'</b>'+(m.color?' <span style="font-size:11px;color:var(--mu);">('+escHtml(m.color)+')</span>':'')
+        + '<div style="flex:1;min-width:0;">'+ico+' <b style="cursor:pointer;color:var(--blu);" onclick="poItemHistory(this.dataset.m,this.dataset.c)" data-m="'+escAttr(m.material)+'" data-c="'+escAttr(m.color)+'">'+escHtml(m.material)+'</b>'+(m.color?' <span style="font-size:11px;color:var(--mu);">('+escHtml(m.color)+')</span>':'')
           + '<div style="font-size:11px;color:var(--blu);">'+escHtml(m.reason||'-')+(m.by?(' · '+escHtml(m.by)):'')+'</div></div>'
         + '<div style="font-family:var(--mono);font-weight:700;color:'+dCol+';width:54px;text-align:right;">'+dTxt+'</div>'
         + '</div>';
