@@ -644,6 +644,16 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
     <div class="quom-save-bar" id="poRecvBar"></div>
   </div>
 </div>
+<div class="quom-bg" id="poMgmtModal">
+  <div class="quom-wrap">
+    <div class="quom-head">
+      <div class="quom-title">⚙️ จัดการซัพพลายเออร์ &amp; Stock map</div>
+      <button class="hbtn danger" onclick="poCloseMgmt()">×</button>
+    </div>
+    <div class="quom-body" id="poMgmtBody"></div>
+    <div class="quom-save-bar"><span style="margin-left:auto;"></span><button class="btn btn-d" onclick="poCloseMgmt()">ปิด</button></div>
+  </div>
+</div>
 
 
 <div class="loading" id="loading"><div class="spinner"></div><span id="loadMsg">กำลังโหลด...</span></div>
@@ -1735,6 +1745,7 @@ function renderOfficeShell(){
             <input class="fi" id="poSearch" type="text" placeholder="ซัพพลายเออร์ / เบอร์ / ID / เลข PO">
           </div>
           <button class="btn btn-g" onclick="poLoad()">🔄 รีเฟรช</button>
+          <button class="btn btn-g" onclick="poOpenMgmt()">⚙️ จัดการ</button>
           <button class="btn btn-p" id="poNewBtn" onclick="poOpenNew()">+ สร้างใบสั่งซื้อ</button>
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;">
             <input type="checkbox" id="poShowDeleted" onchange="poLoad()"> รวมที่ถูกลบ
@@ -9700,6 +9711,89 @@ async function poSubmitReceive(){
     await poOpenLoaded(id, mode==='view'?'view':'edit'); // refresh ใบ
     poLoad();
   } else { toast('รับของไม่สำเร็จ: '+((r&&r.error)||'?')); }
+}
+
+// ── F-PO-B: หน้าจัดการ supplier + stock map (modal) ──
+let _poMgmtSup = [], _poMgmtStock = [];
+async function poOpenMgmt(){
+  document.getElementById('poMgmtModal').classList.add('on');
+  document.getElementById('poMgmtBody').innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  await poMgmtLoad();
+}
+function poCloseMgmt(){ document.getElementById('poMgmtModal').classList.remove('on'); }
+async function poMgmtLoad(){
+  const [s,m] = await Promise.all([ call({ action:'pk_poSupplierList' }), call({ action:'pk_poStockMapList' }) ]);
+  _poMgmtSup = (s&&s.ok)?(s.suppliers||[]):[];
+  _poMgmtStock = (m&&m.ok)?(m.map||[]):[];
+  poRenderMgmt();
+}
+function _poStTypeOpt(v){ return ['','rail','equip'].map(o => '<option value="'+o+'"'+(v===o?' selected':'')+'>'+({'':'ไม่นับ',rail:'เข้าคลังราง',equip:'เข้าคลังอุปกรณ์'}[o])+'</option>').join(''); }
+function poRenderMgmt(){
+  const supRows = _poMgmtSup.map((s,i) => ''
+    + '<div class="row-form" style="gap:6px;align-items:flex-end;border-bottom:1px dashed var(--bdr);padding:6px 0;">'
+    +   '<div class="fg" style="flex:1;min-width:110px;"><label class="fl">ชื่อ</label><div style="padding:6px 0;font-weight:600;">'+escHtml(s.name)+'</div></div>'
+    +   '<div class="fg" style="width:110px;"><label class="fl">เบอร์</label><input class="fi" id="msPhone'+i+'" value="'+escHtml(s.phone||'')+'"></div>'
+    +   '<div class="fg" style="flex:1;min-width:130px;"><label class="fl">ที่อยู่</label><input class="fi" id="msAddr'+i+'" value="'+escHtml(s.address||'')+'"></div>'
+    +   '<div class="fg" style="width:100px;"><label class="fl">เลขภาษี</label><input class="fi" id="msTax'+i+'" value="'+escHtml(s.taxId||'')+'"></div>'
+    +   '<button class="btn btn-p" style="padding:6px 8px;" onclick="poMgmtSupSave('+i+')" title="บันทึก">💾</button>'
+    +   '<button class="btn btn-d" style="padding:6px 8px;" onclick="poMgmtSupDel('+i+')" title="ลบ">🗑</button>'
+    + '</div>').join('');
+  const stockRows = _poMgmtStock.map((m,i) => ''
+    + '<div class="row-form" style="gap:6px;align-items:flex-end;border-bottom:1px dashed var(--bdr);padding:6px 0;">'
+    +   '<div class="fg" style="flex:1;min-width:120px;"><label class="fl">ชื่อวัสดุ</label><div style="padding:6px 0;font-weight:600;">'+escHtml(m.name)+'</div></div>'
+    +   '<div class="fg" style="width:100px;"><label class="fl">สี</label><div style="padding:6px 0;">'+(escHtml(m.color)||'<span style="color:var(--mu);">—</span>')+'</div></div>'
+    +   '<div class="fg" style="width:150px;"><label class="fl">คลัง</label><select class="fi" id="mkType'+i+'">'+_poStTypeOpt(m.stockType||'')+'</select></div>'
+    +   '<button class="btn btn-p" style="padding:6px 8px;" onclick="poMgmtStockSave('+i+')" title="บันทึก">💾</button>'
+    +   '<button class="btn btn-d" style="padding:6px 8px;" onclick="poMgmtStockDel('+i+')" title="ลบ">🗑</button>'
+    + '</div>').join('');
+  document.getElementById('poMgmtBody').innerHTML =
+      '<div style="font-weight:700;color:var(--blu);margin-bottom:4px;">🏭 ซัพพลายเออร์ ('+_poMgmtSup.length+')</div>'
+    + (supRows || '<div style="color:var(--mu);font-size:12px;">ยังไม่มี</div>')
+    + '<div class="row-form" style="gap:6px;align-items:flex-end;margin-top:6px;">'
+    +   '<div class="fg" style="flex:1;"><label class="fl">+ ชื่อใหม่</label><input class="fi" id="msNewName" placeholder="ชื่อซัพพลายเออร์"></div>'
+    +   '<div class="fg" style="width:120px;"><label class="fl">เบอร์</label><input class="fi" id="msNewPhone"></div>'
+    +   '<button class="btn btn-g" onclick="poMgmtSupAdd()">+ เพิ่ม</button>'
+    + '</div>'
+    + '<div style="font-weight:700;color:var(--blu);margin:16px 0 4px;">📦 Stock map ('+_poMgmtStock.length+')</div>'
+    + '<div style="font-size:11px;color:var(--mu);margin-bottom:6px;">วัสดุ → เข้าคลังไหนตอนรับของ (ไม่นับ = ไม่แตะ stock)</div>'
+    + (stockRows || '<div style="color:var(--mu);font-size:12px;">ยังไม่มี</div>')
+    + '<div class="row-form" style="gap:6px;align-items:flex-end;margin-top:6px;">'
+    +   '<div class="fg" style="flex:1;"><label class="fl">+ ชื่อวัสดุ</label><input class="fi" id="mkNewName" placeholder="ชื่อวัสดุ"></div>'
+    +   '<div class="fg" style="width:90px;"><label class="fl">สี</label><input class="fi" id="mkNewColor"></div>'
+    +   '<div class="fg" style="width:150px;"><label class="fl">คลัง</label><select class="fi" id="mkNewType">'+_poStTypeOpt('')+'</select></div>'
+    +   '<button class="btn btn-g" onclick="poMgmtStockAdd()">+ เพิ่ม</button>'
+    + '</div>';
+}
+function _poV(id){ const el=document.getElementById(id); return el?(el.value||''):''; }
+async function poMgmtSupSave(i){
+  const s=_poMgmtSup[i];
+  const r=await call({ action:'pk_poSupplierSet', name:s.name, phone:_poV('msPhone'+i), address:_poV('msAddr'+i), taxId:_poV('msTax'+i) });
+  toast(r&&r.ok?('บันทึก '+s.name):('ไม่สำเร็จ: '+((r&&r.error)||'?'))); if(r&&r.ok){ await poMgmtLoad(); poFetchSuppliers(); }
+}
+async function poMgmtSupDel(i){
+  const s=_poMgmtSup[i]; if(!confirm('ลบซัพพลายเออร์ "'+s.name+'"?')) return;
+  const r=await call({ action:'pk_poSupplierDelete', name:s.name });
+  toast(r&&r.ok?'ลบแล้ว':('ไม่สำเร็จ: '+((r&&r.error)||'?'))); if(r&&r.ok){ await poMgmtLoad(); poFetchSuppliers(); }
+}
+async function poMgmtSupAdd(){
+  const name=_poV('msNewName'); if(!name.trim()){ toast('ใส่ชื่อ'); return; }
+  const r=await call({ action:'pk_poSupplierSet', name, phone:_poV('msNewPhone') });
+  toast(r&&r.ok?'เพิ่มแล้ว':('ไม่สำเร็จ: '+((r&&r.error)||'?'))); if(r&&r.ok){ await poMgmtLoad(); poFetchSuppliers(); }
+}
+async function poMgmtStockSave(i){
+  const m=_poMgmtStock[i];
+  const r=await call({ action:'pk_poStockMapSet', name:m.name, color:m.color, stockType:_poV('mkType'+i) });
+  toast(r&&r.ok?'บันทึกแล้ว':('ไม่สำเร็จ: '+((r&&r.error)||'?'))); if(r&&r.ok){ await poMgmtLoad(); poFetchStockMap(); }
+}
+async function poMgmtStockDel(i){
+  const m=_poMgmtStock[i]; if(!confirm('ลบ map "'+m.name+(m.color?(' ('+m.color+')'):'')+'"?')) return;
+  const r=await call({ action:'pk_poStockMapDelete', name:m.name, color:m.color });
+  toast(r&&r.ok?'ลบแล้ว':('ไม่สำเร็จ: '+((r&&r.error)||'?'))); if(r&&r.ok){ await poMgmtLoad(); poFetchStockMap(); }
+}
+async function poMgmtStockAdd(){
+  const name=_poV('mkNewName'); if(!name.trim()){ toast('ใส่ชื่อวัสดุ'); return; }
+  const r=await call({ action:'pk_poStockMapSet', name, color:_poV('mkNewColor'), stockType:_poV('mkNewType') });
+  toast(r&&r.ok?'เพิ่มแล้ว':('ไม่สำเร็จ: '+((r&&r.error)||'?'))); if(r&&r.ok){ await poMgmtLoad(); poFetchStockMap(); }
 }
 
 // ── S4: พิมพ์/PDF ใบ PO — แบ่งหน้าตามแถว (วัดความสูงจริง · render หน้าละ .a4-page ขนาดคงที่ เหมือน quote) ──
