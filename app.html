@@ -9735,6 +9735,17 @@ async function poSubmitReceive(){
   const r = await call({ action:'pk_poReceive', id, lines });
   if(btn){ btn.disabled=false; btn.textContent='✅ ยืนยันรับของ'; }
   if (r && r.ok){
+    // ── DEBUG ชั่วคราว: โชว์ว่าเกิดอะไรจริง (สถานะ/stock/plan) เพื่อหาเหตุ ──
+    try {
+      console.log('[PO receive result]', r);
+      const planTxt = (r.plan||[]).map(p => '#'+p.i+' '+(p.desc||'').slice(0,14)+' Δ'+p.delta+' ['+(p.stockType||'ไม่นับ')+(p.stockName?(':'+p.stockName+(p.stockColor?('/'+p.stockColor):'')):'')+']').join('\n');
+      const errTxt = (r.errors||[]).map(e => '• '+(e.desc||'')+' → '+(e.error||'')).join('\n') || '(ไม่มี)';
+      alert('🔎 DEBUG รับของ\n'
+        + 'สถานะ: '+r.prevStatus+' → '+r.status+(r.prevStatus===r.status?'  (ไม่เปลี่ยน!)':'  ✓เปลี่ยน')+'\n'
+        + 'แถว index: '+r.rowIdx+' · เขียน stock flag: '+r.stockWriteFlag+' · สำเร็จ: '+(r.appliedCount||0)+'\n\n'
+        + 'รายการที่รับ:\n'+(planTxt||'(plan ว่าง — ไม่มี delta!)')+'\n\n'
+        + 'stock error:\n'+errTxt);
+    } catch(e){}
     toast(r.stockWriteEnabled ? ('รับของแล้ว · ปรับ stock '+(r.appliedCount||0)+' รายการ') : '✓ บันทึกจำนวนรับแล้ว · stock ยังไม่เขียน (flag ปิด)');
     if (r.errors && r.errors.length) toast('⚠️ รับของ+เปลี่ยนสถานะแล้ว แต่ stock บางตัวไม่อัปเดต (ไปปรับเอง): '+r.errors.map(e=>e.desc+(e.error?(' — '+e.error):'')).join(' · '));
     poCloseReceive();
