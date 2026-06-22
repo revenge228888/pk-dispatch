@@ -697,7 +697,6 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 // ════════════════════════════════════════
 const WORKER_URL   = 'https://pk-discord-relay.revenge2288.workers.dev';
 const API          = 'https://pk-discord-relay.revenge2288.workers.dev/api';
-const API_SECRET   = '2389';   // ค่าเดียวกับ PK_SECRET ใน Cloudflare Worker
 
 // ── เฟส 1: list คิว ผ่าน Sheets API (/jobs) แทน GAS pk_getJobs ──
 // USE_SHEETS_JOBS=false → ใช้ GAS เดิมทุกอย่าง · =true → ลอง /jobs ก่อน, พลาดเมื่อไหร่ fallback GAS อัตโนมัติ (ไม่ downtime)
@@ -721,7 +720,7 @@ async function getJobsFast(team, date){
     try {
       const r = await fetch(API.replace(/\/api$/, '/jobs'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ team, date, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -743,7 +742,7 @@ async function getTechJobsFast(date){
     try {
       const r = await fetch(API.replace(/\/api$/, '/tech-jobs'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ date, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -766,7 +765,7 @@ async function getProdListFast(opts){
     try {
       const r = await fetch(API.replace(/\/api$/, '/prod-list'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -794,7 +793,7 @@ async function getRecordListFast(opts, cacheOpts){
     try {
       const r = await fetch(API.replace(/\/api$/, '/record-list'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -819,7 +818,7 @@ async function getQuoteListFast(opts, cacheOpts){
     try {
       const r = await fetch(API.replace(/\/api$/, '/quote-list'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -839,7 +838,7 @@ async function getRecordGetFast(id){
     try {
       const r = await fetch(API.replace(/\/api$/, '/record-get'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ id, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -856,7 +855,7 @@ async function getQuoteGetFast(id){
     try {
       const r = await fetch(API.replace(/\/api$/, '/quote-get'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ id, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -873,7 +872,7 @@ async function getProdGetFast(woId){
     try {
       const r = await fetch(API.replace(/\/api$/, '/prod-get'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ woId, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -890,7 +889,7 @@ async function getExpenseListMyFast(statusFilter){
     try {
       const r = await fetch(API.replace(/\/api$/, '/expense-list-my'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ statusFilter, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -910,7 +909,7 @@ async function getExpenseListAllFast(opts){
     try {
       const r = await fetch(API.replace(/\/api$/, '/expense-list-all'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -932,7 +931,7 @@ async function getDashboardFast(date){
     try {
       const r = await fetch(API.replace(/\/api$/, '/dashboard'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ date, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -954,7 +953,7 @@ async function getExpenseMonthSummaryFast(month){
     try {
       const r = await fetch(API.replace(/\/api$/, '/expense-month-summary'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ month, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -1055,8 +1054,7 @@ async function call(body, opts){
       method: 'POST',
       redirect: 'follow',
       headers: {
-        'Content-Type': 'application/json',
-        'X-PK-Secret': API_SECRET
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(body)
     });
@@ -6459,7 +6457,7 @@ async function dashCalFetch(){
       const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 8000);   // กัน worker ค้าง
       const r = await fetch(API.replace(/\/api$/, '/install-month'), {
         method:'POST', redirect:'follow', signal: ctrl.signal,
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ month, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       clearTimeout(to);
@@ -6727,7 +6725,7 @@ async function ptFetch(){
     try{
       var ctrl=new AbortController(); var to=setTimeout(function(){ctrl.abort();},8000);
       var r=await fetch(API.replace(/\/api$/,'/prod-track'),{method:'POST',redirect:'follow',signal:ctrl.signal,
-        headers:{'Content-Type':'application/json','X-PK-Secret':API_SECRET},
+        headers:{'Content-Type':'application/json'},
         body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
       clearTimeout(to); var data=await r.json();
       if(data&&data.ok&&Array.isArray(data.jobs)){ _ptJobs=data.jobs; return; }
@@ -6906,7 +6904,7 @@ async function railStockFetch(){
   var got=false;
   if(CURRENT_USER){
     try{ var ctrl=new AbortController(); var to=setTimeout(function(){ctrl.abort();},8000);
-      var r=await fetch(API.replace(/\/api$/,'/rail-stock'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json','X-PK-Secret':API_SECRET},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
+      var r=await fetch(API.replace(/\/api$/,'/rail-stock'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
       clearTimeout(to); var data=await r.json();
       if(data&&data.ok&&Array.isArray(data.items)){ _railStock=data.items; got=true; }
     }catch(e){ console.warn('[railStock] /rail-stock → fallback:', e&&e.message); }
@@ -6918,7 +6916,7 @@ async function railCatalogFetch(){   // ดึงรายการรางจ�
   var prices=[];
   if(CURRENT_USER){
     try{ var ctrl=new AbortController(); var to=setTimeout(function(){ctrl.abort();},8000);
-      var r=await fetch(API.replace(/\/api$/,'/cost-prices'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json','X-PK-Secret':API_SECRET},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
+      var r=await fetch(API.replace(/\/api$/,'/cost-prices'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
       clearTimeout(to); var data=await r.json(); if(data&&data.ok&&Array.isArray(data.prices)) prices=data.prices;
     }catch(e){}
   }
@@ -6987,7 +6985,7 @@ async function equipStockFetch(){
   var got=false;
   if(CURRENT_USER){
     try{ var ctrl=new AbortController(); var to=setTimeout(function(){ctrl.abort();},8000);
-      var r=await fetch(API.replace(/\/api$/,'/equip-stock'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json','X-PK-Secret':API_SECRET},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
+      var r=await fetch(API.replace(/\/api$/,'/equip-stock'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
       clearTimeout(to); var data=await r.json();
       if(data&&data.ok&&Array.isArray(data.items)){ _equipStock=data.items; got=true; }
     }catch(e){ console.warn('[equip] /equip-stock → fallback:', e&&e.message); }
@@ -6999,7 +6997,7 @@ async function equipCatalogFetch(){
   var prices=[];
   if(CURRENT_USER){
     try{ var ctrl=new AbortController(); var to=setTimeout(function(){ctrl.abort();},8000);
-      var r=await fetch(API.replace(/\/api$/,'/cost-prices'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json','X-PK-Secret':API_SECRET},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
+      var r=await fetch(API.replace(/\/api$/,'/cost-prices'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
       clearTimeout(to); var data=await r.json(); if(data&&data.ok&&Array.isArray(data.prices)) prices=data.prices;
     }catch(e){}
   }
@@ -7066,7 +7064,7 @@ let _cePrices=[];
 async function ceFetch(){
   if(CURRENT_USER){
     try{ var ctrl=new AbortController(); var to=setTimeout(function(){ctrl.abort();},8000);
-      var r=await fetch(API.replace(/\/api$/,'/cost-prices'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json','X-PK-Secret':API_SECRET},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
+      var r=await fetch(API.replace(/\/api$/,'/cost-prices'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
       clearTimeout(to); var data=await r.json();
       if(data&&data.ok&&Array.isArray(data.prices)){ _cePrices=data.prices; return; }
       console.warn('[cost] /cost-prices ไม่ ok → fallback GAS:', data&&data.error);
@@ -9662,7 +9660,7 @@ async function getPOListFast(opts){
     try {
       const r = await fetch(API.replace(/\/api$/, '/po-list'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -9677,7 +9675,7 @@ async function getPOGetFast(id){
     try {
       const r = await fetch(API.replace(/\/api$/, '/po-get'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ id, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -9706,7 +9704,7 @@ async function poFetchCatalog(){
     try {
       const r = await fetch(API.replace(/\/api$/, '/cost-prices'), {
         method:'POST', redirect:'follow',
-        headers:{ 'Content-Type':'application/json', 'X-PK-Secret':API_SECRET },
+        headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
