@@ -10420,8 +10420,8 @@ function pkpCalcItem(it){
   if(pkpHANDLE[t]){
     var bt=pkpHANDLE[t][0],hn=pkpHANDLE[t][1],div=hn===4?2:3,mul=hn===4?2:3;
     var b=pkpScreenCalc(bt,it.w,it.h); if(!b.calculable)return{calculable:false,fields:{}};
-    var f=Object.assign({},b.fields); f.cutScreen=b.fields.cutScreen/div+5; f.nRope=b.fields.nRope*mul;
-    f.jeeb=pkpRi(f.jeeb); f.pieces=pieces; f.pvcCount=pieces*2; return {calculable:true,kind:'handle',fields:f};
+    var f=Object.assign({},b.fields); f.nRope=b.fields.nRope*mul;
+    f.jeeb=Math.ceil(b.fields.jeeb/div); f.pieces=pieces; f.pvcCount=pieces*2; return {calculable:true,kind:'handle',fields:f};
   }
   if(pkpSPLIT[t]){
     var bl=pkpSPLIT[t][0],br=pkpSPLIT[t][1],wl=parseFloat(it.wl),wr=parseFloat(it.wr),h=parseFloat(it.h);
