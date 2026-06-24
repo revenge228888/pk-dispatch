@@ -6554,6 +6554,7 @@ function dashCalRenderPanel(){
           + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);">'
             + '<span style="color:var(--acc);font-weight:800;">★ คะแนน '+(Number(j.score)||0)+'</span>'
             + '<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount||0)+'</span></div>'
+          + dashShowAmtBtn(j)
           + '</div>';
       } else {
         html += '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--bdr);font-size:14px;">'
@@ -6667,6 +6668,30 @@ function measCalPick(ds){ _measCalSel = ds; measCalRender(); const el=document.g
 function measCalPrev(){ _measCalM--; if(_measCalM<0){_measCalM=11;_measCalY--;} measCalRender(); }
 function measCalNext(){ _measCalM++; if(_measCalM>11){_measCalM=0;_measCalY++;} measCalRender(); }
 function measCalToday(){ const t=new Date(); _measCalY=t.getFullYear(); _measCalM=t.getMonth(); _measCalSel=pkTodayStr_(); measCalRender(); }
+// ── Feature 1.2: ปุ่ม toggle โชว์/ซ่อนยอดให้ tech (office เท่านั้น) บนการ์ดงานติดตั้ง ──
+function dashShowAmtBtn(j){
+  if (!(CURRENT_USER && CURRENT_USER.role === 'office')) return '';   // เฉพาะ office
+  const hidden = (j.showAmtTech === false);
+  const col = hidden ? 'var(--rd)' : 'var(--grn)';
+  const txt = hidden ? '🚫 ช่างไม่เห็นยอด · แตะเพื่อโชว์' : '👁 ช่างเห็นยอด · แตะเพื่อซ่อน';
+  const nextShow = hidden ? 'true' : 'false';
+  return '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--bdr);">'
+    + '<button onclick="dashToggleShowAmt(\''+j.id+'\','+nextShow+')" '
+    + 'style="font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;border:1px solid '+col+';background:transparent;color:'+col+';cursor:pointer;">'
+    + txt + '</button></div>';
+}
+async function dashToggleShowAmt(id, show){
+  try {
+    const r = await call({ action:'pk_setShowAmount', id:id, show:show });
+    if (r && r.ok){
+      const j = _dashCalJobs.find(x => x.id === id);
+      if (j) j.showAmtTech = (r.show === true);
+      dashCalRenderPanel();
+    } else {
+      alert('บันทึกไม่สำเร็จ: ' + ((r && r.error) || 'unknown'));
+    }
+  } catch(e){ alert('ผิดพลาด: ' + ((e && e.message) || e)); }
+}
 function pkCutoff7_(today){
   const d = new Date(today + 'T00:00:00'); d.setDate(d.getDate()+7);
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
