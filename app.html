@@ -6670,7 +6670,7 @@ function measCalNext(){ _measCalM++; if(_measCalM>11){_measCalM=0;_measCalY++;} 
 function measCalToday(){ const t=new Date(); _measCalY=t.getFullYear(); _measCalM=t.getMonth(); _measCalSel=pkTodayStr_(); measCalRender(); }
 // ── Feature 1.2: ปุ่ม toggle โชว์/ซ่อนยอดให้ tech (office เท่านั้น) บนการ์ดงานติดตั้ง ──
 function dashShowAmtBtn(j){
-  if (!(CURRENT_USER && CURRENT_USER.role === 'office')) return '';   // เฉพาะ office
+  if (!isOfficeLevel()) return '';   // office + manager
   const hidden = (j.showAmtTech === false);
   const col = hidden ? 'var(--rd)' : 'var(--grn)';
   const txt = hidden ? '🚫 ช่างไม่เห็นยอด · แตะเพื่อโชว์' : '👁 ช่างเห็นยอด · แตะเพื่อซ่อน';
