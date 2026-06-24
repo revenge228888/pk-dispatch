@@ -1337,6 +1337,26 @@ function renderOfficeShell(){
           </div>
           <div class="section-pad" id="dashRangeList"><div class="loading-row">เลือกช่วงวันที่แล้วกด "ดูงาน"</div></div>
         </div>
+        <div class="modal-bg" id="jobEditModal">
+          <div class="modal">
+            <div class="card-head"><span>✏️ แก้ไขงานติดตั้ง</span></div>
+            <div style="padding:14px 16px;">
+              <div class="fg"><label class="fl">ชื่อลูกค้า</label><input class="fi" id="jeName"></div>
+              <div class="fg"><label class="fl">วันที่</label><input class="fi" id="jeDate" type="date"></div>
+              <div class="fg"><label class="fl">ที่อยู่</label><textarea class="fi" id="jeAddr" rows="2"></textarea></div>
+              <div class="fg"><label class="fl">รายการงาน</label><textarea class="fi" id="jeJob" rows="2"></textarea></div>
+              <div class="row-form">
+                <div class="fg"><label class="fl">ยอด (บาท)</label><input class="fi" id="jeAmount" type="number" inputmode="decimal"></div>
+                <div class="fg"><label class="fl">ลำดับคิว</label><input class="fi" id="jeOrder" type="number" inputmode="numeric"></div>
+              </div>
+              <div class="fg"><label class="fl">ทีม</label><input class="fi" id="jeTeam" list="jeTeamList" autocomplete="off"><datalist id="jeTeamList"></datalist></div>
+              <div style="display:flex;gap:8px;margin-top:8px;">
+                <button class="btn btn-g" style="flex:1;" onclick="jobEditClose()">ยกเลิก</button>
+                <button class="btn btn-p" style="flex:1;" id="jeSaveBtn" onclick="jobEditSave()">บันทึก</button>
+              </div>
+            </div>
+          </div>
+        </div>
         </div><!-- /dashInstallView -->
         <!-- 📏 วัดงาน VIEW — Feature 1.1 -->
         <div id="dashMeasureView" style="display:none;">
@@ -6595,6 +6615,7 @@ function dashCalRenderPanel(){
             + '<span style="color:var(--acc);font-weight:800;">★ คะแนน '+(Number(j.score)||0)+'</span>'
             + '<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount||0)+'</span></div>'
           + dashShowAmtBtn(j)
+          + jobEditBtn_(j.id)
           + '</div>';
       } else {
         html += '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--bdr);font-size:14px;">'
@@ -6727,12 +6748,62 @@ function dashRangeCard_(j, none){
     + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:7px;padding-top:7px;border-top:1px solid var(--bdr);">'
       + '<span style="color:var(--acc);font-weight:800;">★ '+(Number(j.score)||0)+'</span>'
       + '<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount||0)+'</span></div>'
+    + jobEditBtn_(j.id)
     + '</div>';
 }
 function pkThaiDateFull_(ds){
   const x = ds.split('-');
   const dow = ['อา','จ','อ','พ','พฤ','ศ','ส'][new Date(Number(x[0]),Number(x[1])-1,Number(x[2])).getDay()];
   return dow+'. '+Number(x[2])+' '+PK_DASH_TH_M[Number(x[1])-1]+' '+(Number(x[0])+543);
+}
+// ── แก้ไขงานติดตั้ง (office/manager) — ก้อน A · write single-row ──
+let _jobEditCur = null;
+function jobEditBtn_(id){ return isOfficeLevel() ? '<button class="btn btn-g btn-sm" style="margin-top:9px;" onclick="jobEditOpen(\''+id+'\')">✏️ แก้ไขงาน</button>' : ''; }
+function jobEditOpen(id){
+  if (!isOfficeLevel()) return;
+  const pool = (_dashRangeJobs||[]).concat(_dashCalJobs||[]);
+  const j = pool.find(x => String(x.id)===String(id));
+  if (!j){ toast('ไม่พบงาน'); return; }
+  _jobEditCur = j;
+  document.getElementById('jeName').value   = j.name||'';
+  document.getElementById('jeDate').value   = j.date||'';
+  document.getElementById('jeAddr').value   = j.rawAddr||'';
+  document.getElementById('jeJob').value    = j.job||'';
+  document.getElementById('jeAmount').value = (j.amount!=null ? j.amount : '');
+  document.getElementById('jeOrder').value  = (j.orderStr!=null ? String(j.orderStr).replace(/[^0-9]/g,'') : '');
+  document.getElementById('jeTeam').value   = j.team||'';
+  const teams = {}; pool.forEach(x => { const tt=(x.team||'').trim(); if(tt) teams[tt]=1; });
+  document.getElementById('jeTeamList').innerHTML = Object.keys(teams).sort().map(tt=>'<option value="'+escHtml(tt)+'"></option>').join('');
+  document.getElementById('jobEditModal').classList.add('on');
+}
+function jobEditClose(){ const m=document.getElementById('jobEditModal'); if(m) m.classList.remove('on'); _jobEditCur=null; }
+async function jobEditSave(){
+  if (!_jobEditCur) return;
+  const id = _jobEditCur.id;
+  const payload = {
+    action:'pk_editJob', id:id,
+    name:    document.getElementById('jeName').value,
+    date:    document.getElementById('jeDate').value,
+    address: document.getElementById('jeAddr').value,
+    job:     document.getElementById('jeJob').value,
+    amount:  document.getElementById('jeAmount').value,
+    team:    document.getElementById('jeTeam').value,
+    order:   document.getElementById('jeOrder').value
+  };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(payload.date))){ toast('วันที่ไม่ถูกต้อง'); return; }
+  const btn = document.getElementById('jeSaveBtn'); if (btn){ btn.disabled=true; btn.textContent='กำลังบันทึก...'; }
+  let r;
+  try { r = await call(payload); } catch(e){ r = { ok:false, error:(e&&e.message)||'error' }; }
+  if (btn){ btn.disabled=false; btn.textContent='บันทึก'; }
+  if (r && r.ok){
+    toast('บันทึกแล้ว');
+    jobEditClose();
+    _dashRangeJobs = [];
+    if (document.getElementById('dashCalGrid')) await dashCalReload();
+    if (_dashInstallView === 'range') await dashRangeRun();
+  } else {
+    toast((r&&r.error) ? ('บันทึกไม่สำเร็จ: '+r.error) : 'บันทึกไม่สำเร็จ');
+  }
 }
 async function measCalLoad(){
   if (!document.getElementById('measCalGrid')) return;
