@@ -1295,6 +1295,11 @@ function renderOfficeShell(){
           <button class="quo-subtab" id="dashModeMeasure" onclick="dashSetMode('measure')">📏 วัดงาน</button>
         </div>
         <div id="dashInstallView">
+        <div class="section-pad" style="display:flex;gap:8px;padding-bottom:0;">
+          <button class="quo-subtab on" id="dashViewCalBtn" onclick="dashInstallSetView('cal')">📅 ปฏิทิน</button>
+          <button class="quo-subtab" id="dashViewRangeBtn" onclick="dashInstallSetView('range')">📋 ช่วงวันที่</button>
+        </div>
+        <div id="dashCalView">
         <!-- 6.3 ปฏิทินคิวงาน (เสริมด้านบน · สรุปทีมเดิมอยู่ล่าง) -->
         <div class="section-pad" id="dashCalWrap">
           <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin:2px 0 12px;">
@@ -1323,6 +1328,15 @@ function renderOfficeShell(){
           <button class="btn btn-p" onclick="clearCache('pk_dashboard');loadDashboard()">ดูสรุป</button>
         </div>
         <div id="dashContent"><div class="loading-row">เลือกวันที่เพื่อดูสรุปงาน</div></div>
+        </div><!-- /dashCalView -->
+        <div id="dashRangeView" style="display:none;">
+          <div class="section-pad row-form" style="align-items:flex-end;flex-wrap:wrap;">
+            <div class="fg"><label class="fl">จากวันที่</label><input class="fi" id="dashRangeStart" type="date"></div>
+            <div class="fg"><label class="fl">ถึงวันที่</label><input class="fi" id="dashRangeEnd" type="date"></div>
+            <button class="btn btn-p" onclick="dashRangeRun()">ดูงาน</button>
+          </div>
+          <div class="section-pad" id="dashRangeList"><div class="loading-row">เลือกช่วงวันที่แล้วกด "ดูงาน"</div></div>
+        </div>
         </div><!-- /dashInstallView -->
         <!-- 📏 วัดงาน VIEW — Feature 1.1 -->
         <div id="dashMeasureView" style="display:none;">
@@ -6610,6 +6624,115 @@ function dashSetMode(mode){
   if (bi) bi.classList.toggle('on', !measure);
   if (bm) bm.classList.toggle('on', measure);
   if (measure && !_measCalLoaded) measCalLoad();
+}
+// ══ Dashboard: view ช่วงวันที่ (range list, READ-ONLY) — ก้อน B ══
+let _dashInstallView = 'cal';   // 'cal' | 'range'
+let _dashRangeJobs = [];
+function pkYmd_(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function dashInstallSetView(v){
+  _dashInstallView = v;
+  const cal = document.getElementById('dashCalView'), rng = document.getElementById('dashRangeView');
+  const bc = document.getElementById('dashViewCalBtn'), br = document.getElementById('dashViewRangeBtn');
+  const isRange = (v === 'range');
+  if (cal) cal.style.display = isRange ? 'none' : '';
+  if (rng) rng.style.display = isRange ? '' : 'none';
+  if (bc) bc.classList.toggle('on', !isRange);
+  if (br) br.classList.toggle('on', isRange);
+  if (isRange){
+    const s = document.getElementById('dashRangeStart'), e = document.getElementById('dashRangeEnd');
+    if (s && !s.value) s.value = pkTodayStr_();
+    if (e && !e.value){ const d = new Date(); d.setDate(d.getDate()+6); e.value = pkYmd_(d); }
+    if (!_dashRangeJobs.length) dashRangeRun();
+  }
+}
+function pkMonthsInRange_(startDs, endDs){
+  const out = [];
+  let sy = Number(startDs.split('-')[0]), sm = Number(startDs.split('-')[1]);
+  const ey = Number(endDs.split('-')[0]), em = Number(endDs.split('-')[1]);
+  let y = sy, m = sm;
+  for (let i=0; i<24; i++){
+    out.push(y+'-'+String(m).padStart(2,'0'));
+    if (y===ey && m===em) break;
+    m++; if (m>12){ m=1; y++; }
+  }
+  return out;
+}
+async function pkInstallMonthJobs_(month){
+  if (USE_SHEETS_INSTALL && CURRENT_USER){
+    try {
+      const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 8000);
+      const r = await fetch(API.replace(/\/api$/, '/install-month'), {
+        method:'POST', redirect:'follow', signal: ctrl.signal,
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ month, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      clearTimeout(to);
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.jobs)) return data.jobs;
+    } catch(e){ console.warn('[range] /install-month → fallback GAS:', e && e.message); }
+  }
+  try {
+    const r = await Promise.race([
+      call({ action:'pk_installMonth', month:month }),
+      new Promise(res => setTimeout(() => res({ ok:false, error:'GAS timeout' }), 12000))
+    ]);
+    return (r && r.ok) ? (r.jobs || []) : [];
+  } catch(e){ console.warn('[range] GAS error:', e && e.message); return []; }
+}
+async function dashRangeRun(){
+  const sEl = document.getElementById('dashRangeStart'), eEl = document.getElementById('dashRangeEnd');
+  const out = document.getElementById('dashRangeList'); if (!out) return;
+  let s = sEl ? sEl.value : '', e = eEl ? eEl.value : '';
+  if (!s || !e){ out.innerHTML = '<div class="loading-row">เลือกช่วงวันที่ก่อน</div>'; return; }
+  if (s > e){ const t=s; s=e; e=t; if(sEl)sEl.value=s; if(eEl)eEl.value=e; }
+  out.innerHTML = '<div class="loading-row">กำลังโหลดงาน...</div>';
+  const months = pkMonthsInRange_(s, e);
+  let all = [];
+  for (let i=0;i<months.length;i++){ const js = await pkInstallMonthJobs_(months[i]); all = all.concat(js||[]); }
+  const seen = {}, jobs = [];
+  all.forEach(j => { if (!j || !j.date) return; if (j.date < s || j.date > e) return; const k = j.id || (j.date+'|'+j.name); if (seen[k]) return; seen[k]=1; jobs.push(j); });
+  _dashRangeJobs = jobs;
+  dashRangeRender();
+}
+function dashRangeRender(){
+  const out = document.getElementById('dashRangeList'); if (!out) return;
+  const jobs = _dashRangeJobs;
+  if (!jobs.length){ out.innerHTML = '<div class="loading-row">ไม่มีงานในช่วงนี้</div>'; return; }
+  const byDay = {}; jobs.forEach(j => { (byDay[j.date]=byDay[j.date]||[]).push(j); });
+  const days = Object.keys(byDay).sort();
+  const today = pkTodayStr_();
+  let html = '<div style="font-size:12px;color:var(--mu);margin:2px 2px 12px;">รวม '+jobs.length+' งาน · '+days.length+' วัน · ★ '+pkDashSumScore_(jobs)+'</div>';
+  days.forEach(ds => {
+    const list = byDay[ds];
+    html += '<div style="position:sticky;top:0;z-index:2;background:var(--bg);display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;margin:18px 0 10px;padding:6px 2px;border-bottom:2px solid var(--acc);">'
+      + '📅 '+pkThaiDateFull_(ds)+(ds===today?' <span style="font-size:11px;color:var(--blu);font-weight:700;">· วันนี้</span>':'')
+      + '<span style="margin-left:auto;font-size:12px;color:var(--mu);font-weight:600;">'+list.length+' งาน · ★'+pkDashSumScore_(list)+'</span></div>';
+    const grp = pkDashGroupTeam_(list);
+    grp.order.forEach(tm => {
+      const sub = grp.g[tm], none = (tm==='__none__'), col = none ? 'var(--rd)' : 'var(--blu)';
+      html += '<div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;margin:10px 0 6px;padding-left:8px;border-left:3px solid '+col+';color:'+col+';">'
+        + (none ? '⚠ ยังไม่จัดทีม' : '👷 '+escHtml(tm)) + ' <span style="color:var(--mu);font-weight:600;">· '+sub.length+' งาน</span></div>';
+      sub.forEach(j => { html += dashRangeCard_(j, none); });
+    });
+  });
+  out.innerHTML = html;
+}
+function dashRangeCard_(j, none){
+  const cont = (j.status==='continue') ? ' <span style="font-size:10px;background:#3a2228;color:var(--rd);border:1px solid #54323a;border-radius:20px;padding:1px 8px;font-weight:800;">➡ ต่องาน</span>' : '';
+  const dot = '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+pkDashTone_(j.status||j.sheetStatus)+';margin-right:6px;vertical-align:middle;"></span>';
+  return '<div style="background:var(--surf2);border:1px solid '+(none?'#54323a':'var(--bdr)')+';border-radius:10px;padding:11px 13px;margin-bottom:9px;">'
+    + '<div style="font-size:15px;font-weight:800;margin-bottom:5px;">'+dot+escHtml(j.name||'-')+cont+'</div>'
+    + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:30px;">📍</span><span>'+escHtml(j.rawAddr||'-')+'</span></div>'
+    + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:30px;">🔧</span><span>'+escHtml(j.job||'-')+'</span></div>'
+    + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:7px;padding-top:7px;border-top:1px solid var(--bdr);">'
+      + '<span style="color:var(--acc);font-weight:800;">★ '+(Number(j.score)||0)+'</span>'
+      + '<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount||0)+'</span></div>'
+    + '</div>';
+}
+function pkThaiDateFull_(ds){
+  const x = ds.split('-');
+  const dow = ['อา','จ','อ','พ','พฤ','ศ','ส'][new Date(Number(x[0]),Number(x[1])-1,Number(x[2])).getDay()];
+  return dow+'. '+Number(x[2])+' '+PK_DASH_TH_M[Number(x[1])-1]+' '+(Number(x[0])+543);
 }
 async function measCalLoad(){
   if (!document.getElementById('measCalGrid')) return;
