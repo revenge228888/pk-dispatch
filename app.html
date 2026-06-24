@@ -1332,8 +1332,8 @@ function renderOfficeShell(){
             </div>
             <div id="measCalGrid"><div class="loading-row">กำลังโหลด...</div></div>
             <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin:10px 2px 0;">
-              <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--acc);"></i> รอรับงาน</span>
-              <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--blu);"></i> กำลังทำ</span>
+              <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--rd);"></i> ยังไม่รับงาน</span>
+              <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--blu);"></i> รับงานแล้ว</span>
               <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--grn);"></i> จบงาน</span>
             </div>
             <div id="measCalPanel" style="margin-top:16px;"></div>
@@ -6615,7 +6615,8 @@ function measMonthJobs_(){
   const pfx = _measCalY + '-' + String(_measCalM+1).padStart(2,'0');
   return (_measAllJobs || []).filter(j => String(j.date||'').slice(0,7) === pfx);
 }
-function measStatusLabel_(st){ return st==='working' ? 'กำลังทำ' : st==='done' ? 'จบงาน' : st==='continue' ? 'ต่องาน' : 'รอรับงาน'; }
+function measStatusLabel_(st){ return st==='working' ? '▶ รับงานแล้ว' : st==='done' ? '✅ จบงาน' : st==='continue' ? '➡ ต่องาน' : '⏳ ยังไม่รับงาน'; }
+function measTone_(st){ return st==='working' ? 'var(--blu)' : st==='done' ? 'var(--grn)' : 'var(--rd)'; }   // Feature 1.3: pending/continue = แดง(ยังไม่รับ) · working = ฟ้า(รับแล้ว) · done = เขียว
 function measCalRender(){
   const grid = document.getElementById('measCalGrid'); if (!grid) return;
   const today = pkTodayStr_();
@@ -6632,7 +6633,7 @@ function measCalRender(){
     if (ds===today) st += 'box-shadow:inset 0 0 0 2px var(--blu);';
     if (ds===_measCalSel) st += 'box-shadow:inset 0 0 0 2px var(--acc);background:rgba(181,101,63,.14);';
     const cnt = js.length ? '<span style="position:absolute;top:5px;right:6px;font-size:10px;background:var(--acc);color:#fff;border-radius:9px;padding:1px 6px;font-weight:800;">'+js.length+'</span>' : '';
-    const dots = js.slice(0,6).map(j => '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;margin:1px;background:'+pkDashTone_(j.status)+';"></span>').join('');
+    const dots = js.slice(0,6).map(j => '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;margin:1px;background:'+measTone_(j.status)+';"></span>').join('');
     html += '<div onclick="measCalPick(\''+ds+'\')" style="'+st+'"><span style="font-size:13px;font-weight:700;">'+d+'</span>'+cnt+'<div style="margin-top:22px;">'+dots+'</div></div>';
   }
   html += '</div>';
@@ -6648,8 +6649,8 @@ function measCalRenderPanel(){
     + '<div style="font-size:12px;color:var(--mu);">'+js.length+' งานวัด</div></div>';
   if (!js.length){ p.innerHTML = html + '<div class="loading-row">ไม่มีงานวัดในวันนี้</div>'; return; }
   js.forEach(j => {
-    const tone = pkDashTone_(j.status), lbl = measStatusLabel_(j.status);
-    const worker = j.worker ? '👷 '+escHtml(j.worker) : '<span style="color:var(--rd);">⚠ ยังไม่รับงาน</span>';
+    const tone = measTone_(j.status), lbl = measStatusLabel_(j.status);
+    const worker = j.worker ? '👷 '+escHtml(j.worker) : '<span style="color:var(--mu);">— ยังไม่มีผู้รับ</span>';
     const mapBtn = j.mapLink ? '<a href="'+j.mapLink+'" target="_blank" style="color:var(--blu);text-decoration:none;font-weight:700;">🗺 แผนที่</a>' : '';
     const sheetSt = j.sheetStatus ? '<span style="font-size:11px;color:var(--mu);">'+escHtml(j.sheetStatus)+'</span>' : '';
     html += '<div style="background:var(--surf2);border:1px solid var(--bdr);border-left:4px solid '+tone+';border-radius:10px;padding:12px 14px;margin-bottom:10px;">'
