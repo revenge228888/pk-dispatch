@@ -83,7 +83,8 @@ select.fi{cursor:pointer;}
 .sidebar-item{display:flex;align-items:center;gap:14px;padding:12px 16px;cursor:pointer;color:var(--mu);font-size:13px;font-weight:600;white-space:nowrap;border:none;background:none;width:100%;text-align:left;font-family:var(--sans);border-left:3px solid transparent;transition:all .12s;box-sizing:border-box;}
 .sidebar-item:hover{background:var(--surf2);color:var(--tx);}
 .sidebar-item.on{color:var(--acc);border-left-color:var(--acc);background:var(--surf2);}
-.sidebar-ico{font-size:18px;flex-shrink:0;width:22px;text-align:center;display:inline-flex;align-items:center;justify-content:center;}
+.sidebar-ico{font-size:18px;flex-shrink:0;width:22px;text-align:center;display:inline-flex;align-items:center;justify-content:center;position:relative;}
+.nav-dot{position:absolute;top:-2px;right:-2px;width:8px;height:8px;border-radius:50%;background:var(--rd);box-shadow:0 0 0 2px var(--surf2);pointer-events:none;}
 .sidebar-ico svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
 .sidebar-label{overflow:hidden;opacity:0;transition:opacity .2s;}
 .sidebar.expanded .sidebar-label{opacity:1;}
@@ -1194,6 +1195,8 @@ function enterApp(){
     }
   }
   else                                      c.innerHTML = '<div class="empty-section"><h2>ไม่รู้จัก role</h2></div>';
+
+  pkRefreshMyTaskDot();   // จุดแดงงานของฉันบน sidebar (ทุก role)
 
   if (window._pkSessionInterval) clearInterval(window._pkSessionInterval);
   window._pkSessionFails = 0;
@@ -6133,6 +6136,28 @@ function mtSubmitModalHTML(){
   + '</div>';
 }
 
+// ── จุดแดงแจ้งเตือนงานบนเมนู "งานของฉัน" (sidebar) ──
+function pkCountMyOpenTasks_(tasks){
+  return (tasks||[]).filter(function(t){ return ['pending','in_progress','rejected'].indexOf(t.status) !== -1; }).length;
+}
+function pkSetMyTaskDot(n){
+  var btns = document.querySelectorAll('[data-tab="mytasks"]');
+  for (var i=0;i<btns.length;i++){
+    var btn = btns[i];
+    var host = btn.querySelector('.sidebar-ico') || btn;
+    var dot = btn.querySelector('.nav-dot');
+    if (n > 0){
+      if (!dot){ dot = document.createElement('span'); dot.className = 'nav-dot'; host.appendChild(dot); }
+      dot.style.display = '';
+    } else if (dot){ dot.style.display = 'none'; }
+  }
+}
+async function pkRefreshMyTaskDot(){
+  try {
+    var r = await call({ action:'pk_taskListMine' });
+    if (r && r.ok) pkSetMyTaskDot(pkCountMyOpenTasks_(r.tasks || []));
+  } catch(e){}
+}
 async function myTasksLoad(){
   const w = document.getElementById('myTasksList');
   if (!w) return;
@@ -6164,6 +6189,7 @@ function myTasksRender(){
   if (sum) sum.textContent = 'ต้องทำ ' + active.length + ' · ทั้งหมด ' + _myTasks.length;
   if (!_myTasks.length){ w.innerHTML = '<div class="loading-row">🎉 ยังไม่มีงานที่ได้รับมอบหมาย</div>'; }
   else w.innerHTML = _myTasks.map(mtCard).join('');
+  pkSetMyTaskDot(pkCountMyOpenTasks_(_myTasks));
   if (document.getElementById('myCalGrid')) myTasksCalRender();   // ปฏิทินใช้ _myTasks ชุดเดียวกัน
 }
 
