@@ -6513,10 +6513,12 @@ const PK_DASH_TH_M = ['มกราคม','กุมภาพันธ์','ม
 const PK_DASH_DOW = ['อา','จ','อ','พ','พฤ','ศ','ส'];
 function pkDashTone_(st){ return st==='working' ? 'var(--blu)' : st==='continue' ? 'var(--rd)' : st==='done' ? 'var(--grn)' : 'var(--acc)'; }
 function pkDashSumScore_(js){ return js.reduce((s,j) => s + (Number(j.score)||0), 0); }
+function pkOrderNum_(j){ return parseInt(String(j.orderStr||'').replace(/[^0-9]/g,'')) || 999; }   // ว่าง/0/ไม่ใช่เลข → 999 (ท้าย)
 function pkDashGroupTeam_(js){
   const g = {}, order = [];
   js.forEach(j => { const t = (j.team && String(j.team).trim()) ? String(j.team).trim() : '__none__'; if (!g[t]){ g[t]=[]; order.push(t); } g[t].push(j); });
   order.sort((a,b) => a==='__none__' ? -1 : b==='__none__' ? 1 : String(a).localeCompare(b));   // ยังไม่จัด บนสุด
+  Object.keys(g).forEach(t => g[t].sort((a,b) => pkOrderNum_(a) - pkOrderNum_(b)));   // เรียงตามลำดับคิว (col K)
   return { g:g, order:order };
 }
 
