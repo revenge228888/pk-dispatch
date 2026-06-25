@@ -1336,6 +1336,9 @@ function renderOfficeShell(){
             <div class="fg"><label class="fl">ถึงวันที่</label><input class="fi" id="dashRangeEnd" type="date"></div>
             <button class="btn btn-p" onclick="dashRangeRun()">ดูงาน</button>
           </div>
+          <div class="section-pad" style="padding-top:0;">
+            <input class="fi" id="dashRangeSearch" placeholder="🔍 ค้นหา ชื่อ/ที่อยู่ (ในช่วงที่โหลด)" oninput="dashRangeRender()">
+          </div>
           <div class="section-pad" id="dashRangeList"><div class="loading-row">เลือกช่วงวันที่แล้วกด "ดูงาน"</div></div>
         </div>
         <div class="modal-bg" id="jobEditModal">
@@ -1388,6 +1391,9 @@ function renderOfficeShell(){
             <div class="fg"><label class="fl">จากวันที่</label><input class="fi" id="measRangeStart" type="date"></div>
             <div class="fg"><label class="fl">ถึงวันที่</label><input class="fi" id="measRangeEnd" type="date"></div>
             <button class="btn btn-p" onclick="measRangeRun()">ดูงาน</button>
+          </div>
+          <div class="section-pad" style="padding-top:0;">
+            <input class="fi" id="measRangeSearch" placeholder="🔍 ค้นหา ชื่อ/ที่อยู่ (ในช่วงที่โหลด)" oninput="measRangeRender()">
           </div>
           <div class="section-pad" id="measRangeList"><div class="loading-row">เลือกช่วงวันที่แล้วกด "ดูงาน"</div></div>
         </div>
@@ -6735,12 +6741,13 @@ async function dashRangeRun(){
 }
 function dashRangeRender(){
   const out = document.getElementById('dashRangeList'); if (!out) return;
-  const jobs = _dashRangeJobs;
-  if (!jobs.length){ out.innerHTML = '<div class="loading-row">ไม่มีงานในช่วงนี้</div>'; return; }
+  const q = ((document.getElementById('dashRangeSearch')||{}).value || '').trim().toLowerCase();
+  const jobs = q ? _dashRangeJobs.filter(j => ((j.name||'')+' '+(j.rawAddr||'')).toLowerCase().indexOf(q) !== -1) : _dashRangeJobs;
+  if (!jobs.length){ out.innerHTML = '<div class="loading-row">'+(q?'ไม่พบงานที่ตรงกับคำค้น':'ไม่มีงานในช่วงนี้')+'</div>'; return; }
   const byDay = {}; jobs.forEach(j => { (byDay[j.date]=byDay[j.date]||[]).push(j); });
   const days = Object.keys(byDay).sort();
   const today = pkTodayStr_();
-  let html = '<div style="font-size:12px;color:var(--mu);margin:2px 2px 12px;">รวม '+jobs.length+' งาน · '+days.length+' วัน · ★ '+pkDashSumScore_(jobs)+'</div>';
+  let html = '<div style="font-size:12px;color:var(--mu);margin:2px 2px 12px;">'+(q?'🔍 พบ ':'รวม ')+jobs.length+' งาน · '+days.length+' วัน · ★ '+pkDashSumScore_(jobs)+'</div>';
   days.forEach(ds => {
     const list = byDay[ds];
     html += '<div style="position:sticky;top:0;z-index:2;background:var(--bg);display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;margin:18px 0 10px;padding:6px 2px;border-bottom:2px solid var(--acc);">'
@@ -6867,12 +6874,13 @@ async function measRangeRun(){
 }
 function measRangeRender(){
   const out=document.getElementById('measRangeList'); if(!out) return;
-  const jobs=_measRangeJobs;
-  if(!jobs.length){ out.innerHTML='<div class="loading-row">ไม่มีงานวัดในช่วงนี้</div>'; return; }
+  const q = ((document.getElementById('measRangeSearch')||{}).value || '').trim().toLowerCase();
+  const jobs = q ? _measRangeJobs.filter(j => ((j.name||'')+' '+(j.address||'')).toLowerCase().indexOf(q) !== -1) : _measRangeJobs;
+  if(!jobs.length){ out.innerHTML='<div class="loading-row">'+(q?'ไม่พบงานที่ตรงกับคำค้น':'ไม่มีงานวัดในช่วงนี้')+'</div>'; return; }
   const byDay={}; jobs.forEach(j => { (byDay[j.date]=byDay[j.date]||[]).push(j); });
   const days=Object.keys(byDay).sort();
   const today=pkTodayStr_();
-  let html='<div style="font-size:12px;color:var(--mu);margin:2px 2px 12px;">รวม '+jobs.length+' งานวัด · '+days.length+' วัน</div>';
+  let html='<div style="font-size:12px;color:var(--mu);margin:2px 2px 12px;">'+(q?'🔍 พบ ':'รวม ')+jobs.length+' งานวัด · '+days.length+' วัน</div>';
   days.forEach(ds => {
     const list=byDay[ds];
     html += '<div style="position:sticky;top:0;z-index:2;background:var(--bg);display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;margin:18px 0 10px;padding:6px 2px;border-bottom:2px solid var(--acc);">'
