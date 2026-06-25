@@ -6779,18 +6779,26 @@ function jobEditOpen(id){
 function jobEditClose(){ const m=document.getElementById('jobEditModal'); if(m) m.classList.remove('on'); _jobEditCur=null; }
 async function jobEditSave(){
   if (!_jobEditCur) return;
-  const id = _jobEditCur.id;
-  const payload = {
-    action:'pk_editJob', id:id,
-    name:    document.getElementById('jeName').value,
-    date:    document.getElementById('jeDate').value,
-    address: document.getElementById('jeAddr').value,
-    job:     document.getElementById('jeJob').value,
-    amount:  document.getElementById('jeAmount').value,
-    team:    document.getElementById('jeTeam').value,
-    order:   document.getElementById('jeOrder').value
-  };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(payload.date))){ toast('วันที่ไม่ถูกต้อง'); return; }
+  const cur = _jobEditCur;
+  const gv = id => document.getElementById(id).value;
+  const nameV=gv('jeName'), dateV=gv('jeDate'), addrV=gv('jeAddr'), jobV=gv('jeJob'), teamV=gv('jeTeam').trim();
+  const amtEl=document.getElementById('jeAmount'), ordEl=document.getElementById('jeOrder');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateV)){ toast('วันที่ไม่ถูกต้อง'); return; }
+  if (amtEl.validity && amtEl.validity.badInput){ toast('ยอดไม่ถูกต้อง (ตัวเลขเท่านั้น)'); return; }
+  if (amtEl.value!=='' && Number(amtEl.value) < 0){ toast('ยอดต้องไม่ติดลบ'); return; }
+  if (ordEl.validity && ordEl.validity.badInput){ toast('ลำดับต้องเป็นตัวเลข'); return; }
+  // ─ ส่งเฉพาะ field ที่เปลี่ยนจริง ─
+  const payload = { action:'pk_editJob', id:cur.id };
+  if (nameV !== (cur.name||''))            payload.name = nameV;
+  if (dateV !== (cur.date||''))            payload.date = dateV;
+  if (addrV !== (cur.rawAddr||''))         payload.address = addrV;
+  if (jobV  !== (cur.job||''))             payload.job = jobV;
+  if (teamV !== String(cur.team||'').trim()) payload.team = teamV;
+  const curAmt = (cur.amount!=null ? Number(cur.amount) : 0);
+  if (amtEl.value!=='' && Number(amtEl.value) !== curAmt) payload.amount = amtEl.value;
+  const curOrd = (cur.orderStr!=null ? String(cur.orderStr).replace(/[^0-9]/g,'') : '');
+  if (ordEl.value !== curOrd)              payload.order = ordEl.value;
+  if (!Object.keys(payload).filter(k=>k!=='action'&&k!=='id').length){ toast('ไม่มีการเปลี่ยนแปลง'); jobEditClose(); return; }
   const btn = document.getElementById('jeSaveBtn'); if (btn){ btn.disabled=true; btn.textContent='กำลังบันทึก...'; }
   let r;
   try { r = await call(payload); } catch(e){ r = { ok:false, error:(e&&e.message)||'error' }; }
