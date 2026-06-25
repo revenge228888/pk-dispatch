@@ -255,6 +255,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 .rec-toolbar{display:flex;gap:8px;align-items:center;padding:12px 16px;flex-wrap:wrap;border-bottom:1px solid var(--bdr);}
 .quo-subtabs{display:flex;gap:6px;padding:10px 16px 0;flex-wrap:wrap;}
 .quo-subtab{appearance:none;border:1px solid var(--bdr);background:var(--surf2);color:var(--mu);font-family:var(--sans);font-size:13px;font-weight:600;padding:7px 18px;border-radius:9px 9px 0 0;cursor:pointer;transition:all .15s;}
+.dash-vbar{display:flex;gap:8px;padding:10px 0 6px;justify-content:center;}.dash-vtab{appearance:none;border:1px solid var(--bdr);background:transparent;color:var(--mu);font-family:var(--sans);font-size:12px;font-weight:700;padding:5px 16px;border-radius:20px;cursor:pointer;transition:all .15s;}.dash-vtab.on{background:var(--acc);color:#fff;border-color:var(--acc);}
 .quo-subtab:hover{color:var(--tx);}
 .quo-subtab.on{background:var(--acc);color:#fff;border-color:var(--acc);}
 .rec-search{flex:1;min-width:160px;}
@@ -1295,9 +1296,9 @@ function renderOfficeShell(){
           <button class="quo-subtab" id="dashModeMeasure" onclick="dashSetMode('measure')">📏 วัดงาน</button>
         </div>
         <div id="dashInstallView">
-        <div class="section-pad" style="display:flex;gap:8px;padding-bottom:0;">
-          <button class="quo-subtab on" id="dashViewCalBtn" onclick="dashInstallSetView('cal')">📅 ปฏิทิน</button>
-          <button class="quo-subtab" id="dashViewRangeBtn" onclick="dashInstallSetView('range')">📋 ช่วงวันที่</button>
+        <div class="section-pad dash-vbar">
+          <button class="dash-vtab on" id="dashViewCalBtn" onclick="dashInstallSetView('cal')">📅 ปฏิทิน</button>
+          <button class="dash-vtab" id="dashViewRangeBtn" onclick="dashInstallSetView('range')">📋 ช่วงวันที่</button>
         </div>
         <div id="dashCalView">
         <!-- 6.3 ปฏิทินคิวงาน (เสริมด้านบน · สรุปทีมเดิมอยู่ล่าง) -->
@@ -1361,6 +1362,11 @@ function renderOfficeShell(){
         </div><!-- /dashInstallView -->
         <!-- 📏 วัดงาน VIEW — Feature 1.1 -->
         <div id="dashMeasureView" style="display:none;">
+        <div class="section-pad dash-vbar">
+          <button class="dash-vtab on" id="measViewCalBtn" onclick="dashMeasSetView('cal')">📅 ปฏิทิน</button>
+          <button class="dash-vtab" id="measViewRangeBtn" onclick="dashMeasSetView('range')">📋 ช่วงวันที่</button>
+        </div>
+        <div id="measCalView">
           <div class="section-pad">
             <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin:2px 0 12px;">
               <button class="btn btn-g btn-sm" onclick="measCalPrev()">‹</button>
@@ -1376,6 +1382,15 @@ function renderOfficeShell(){
             </div>
             <div id="measCalPanel" style="margin-top:16px;"></div>
           </div>
+        </div><!-- /measCalView -->
+        <div id="measRangeView" style="display:none;">
+          <div class="section-pad row-form" style="align-items:flex-end;flex-wrap:wrap;">
+            <div class="fg"><label class="fl">จากวันที่</label><input class="fi" id="measRangeStart" type="date"></div>
+            <div class="fg"><label class="fl">ถึงวันที่</label><input class="fi" id="measRangeEnd" type="date"></div>
+            <button class="btn btn-p" onclick="measRangeRun()">ดูงาน</button>
+          </div>
+          <div class="section-pad" id="measRangeList"><div class="loading-row">เลือกช่วงวันที่แล้วกด "ดูงาน"</div></div>
+        </div>
         </div>
       </div>
 
@@ -6820,6 +6835,70 @@ async function jobEditSave(){
   } else {
     toast((r&&r.error) ? ('บันทึกไม่สำเร็จ: '+r.error) : 'บันทึกไม่สำเร็จ');
   }
+}
+// ══ วัดงาน: view ช่วงวันที่ (range list, READ-ONLY) ══
+let _measView = 'cal', _measRangeJobs = [];
+function dashMeasSetView(v){
+  _measView = v;
+  const cal=document.getElementById('measCalView'), rng=document.getElementById('measRangeView');
+  const bc=document.getElementById('measViewCalBtn'), br=document.getElementById('measViewRangeBtn');
+  const isRange=(v==='range');
+  if(cal) cal.style.display=isRange?'none':'';
+  if(rng) rng.style.display=isRange?'':'none';
+  if(bc) bc.classList.toggle('on',!isRange);
+  if(br) br.classList.toggle('on',isRange);
+  if(isRange){
+    const s=document.getElementById('measRangeStart'), e=document.getElementById('measRangeEnd');
+    if(s&&!s.value) s.value=pkTodayStr_();
+    if(e&&!e.value){ const d=new Date(); d.setDate(d.getDate()+6); e.value=pkYmd_(d); }
+    if(!_measRangeJobs.length) measRangeRun();
+  }
+}
+async function measRangeRun(){
+  const sEl=document.getElementById('measRangeStart'), eEl=document.getElementById('measRangeEnd');
+  const out=document.getElementById('measRangeList'); if(!out) return;
+  let s=sEl?sEl.value:'', e=eEl?eEl.value:'';
+  if(!s||!e){ out.innerHTML='<div class="loading-row">เลือกช่วงวันที่ก่อน</div>'; return; }
+  if(s>e){ const t=s; s=e; e=t; if(sEl)sEl.value=s; if(eEl)eEl.value=e; }
+  out.innerHTML='<div class="loading-row">กำลังโหลดงานวัด...</div>';
+  if(!_measAllJobs){ await measCalLoad(); }
+  _measRangeJobs=(_measAllJobs||[]).filter(j => j && j.date && j.date>=s && j.date<=e);
+  measRangeRender();
+}
+function measRangeRender(){
+  const out=document.getElementById('measRangeList'); if(!out) return;
+  const jobs=_measRangeJobs;
+  if(!jobs.length){ out.innerHTML='<div class="loading-row">ไม่มีงานวัดในช่วงนี้</div>'; return; }
+  const byDay={}; jobs.forEach(j => { (byDay[j.date]=byDay[j.date]||[]).push(j); });
+  const days=Object.keys(byDay).sort();
+  const today=pkTodayStr_();
+  let html='<div style="font-size:12px;color:var(--mu);margin:2px 2px 12px;">รวม '+jobs.length+' งานวัด · '+days.length+' วัน</div>';
+  days.forEach(ds => {
+    const list=byDay[ds];
+    html += '<div style="position:sticky;top:0;z-index:2;background:var(--bg);display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;margin:18px 0 10px;padding:6px 2px;border-bottom:2px solid var(--acc);">'
+      + '📅 '+pkThaiDateFull_(ds)+(ds===today?' <span style="font-size:11px;color:var(--blu);font-weight:700;">· วันนี้</span>':'')
+      + '<span style="margin-left:auto;font-size:12px;color:var(--mu);font-weight:600;">'+list.length+' งาน</span></div>';
+    const g={}, order=[];
+    list.forEach(j => { const w=(j.worker&&String(j.worker).trim())?String(j.worker).trim():'__none__'; if(!g[w]){g[w]=[];order.push(w);} g[w].push(j); });
+    order.sort((a,b)=> a==='__none__'?-1 : b==='__none__'?1 : String(a).localeCompare(b));
+    order.forEach(w => {
+      const sub=g[w], none=(w==='__none__'), col=none?'var(--rd)':'var(--blu)';
+      html += '<div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;margin:10px 0 6px;padding-left:8px;border-left:3px solid '+col+';color:'+col+';">'
+        + (none?'⚠ ยังไม่มีผู้รับ':'👷 '+escHtml(w)) + ' <span style="color:var(--mu);font-weight:600;">· '+sub.length+' งาน</span></div>';
+      sub.forEach(j => { html += measRangeCard_(j); });
+    });
+  });
+  out.innerHTML=html;
+}
+function measRangeCard_(j){
+  const dot='<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+measTone_(j.status)+';margin-right:6px;vertical-align:middle;"></span>';
+  const map=j.mapLink ? ' <a href="'+j.mapLink+'" target="_blank" style="color:var(--blu);text-decoration:none;font-weight:700;">🗺</a>' : '';
+  return '<div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:11px 13px;margin-bottom:9px;">'
+    + '<div style="font-size:15px;font-weight:800;margin-bottom:5px;">'+dot+escHtml(j.name||'-')+map+'</div>'
+    + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:30px;">🔧</span><span>'+escHtml(j.job||'-')+'</span></div>'
+    + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:30px;">📍</span><span>'+escHtml(j.address||'-')+'</span></div>'
+    + '<div style="margin-top:6px;font-size:12px;color:'+measTone_(j.status)+';font-weight:700;">'+measStatusLabel_(j.status)+'</div>'
+    + '</div>';
 }
 async function measCalLoad(){
   if (!document.getElementById('measCalGrid')) return;
