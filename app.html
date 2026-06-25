@@ -1347,6 +1347,7 @@ function renderOfficeShell(){
               <div class="fg"><label class="fl">รายการงาน</label><textarea class="fi" id="jeJob" rows="2"></textarea></div>
               <div class="row-form">
                 <div class="fg"><label class="fl">ยอด (บาท)</label><input class="fi" id="jeAmount" type="number" inputmode="decimal"></div>
+                <div class="fg"><label class="fl">คะแนน</label><input class="fi" id="jeScore" type="number" inputmode="decimal"></div>
                 <div class="fg"><label class="fl">ลำดับคิว</label><input class="fi" id="jeOrder" type="number" inputmode="numeric"></div>
               </div>
               <div class="fg"><label class="fl">ทีม</label><input class="fi" id="jeTeam" list="jeTeamList" autocomplete="off"><datalist id="jeTeamList"></datalist></div>
@@ -6772,6 +6773,7 @@ function jobEditOpen(id){
   document.getElementById('jeAddr').value   = j.rawAddr||'';
   document.getElementById('jeJob').value    = j.job||'';
   document.getElementById('jeAmount').value = (j.amount!=null ? j.amount : '');
+  document.getElementById('jeScore').value  = (j.score!=null ? j.score : '');
   document.getElementById('jeOrder').value  = (j.orderStr!=null ? String(j.orderStr).replace(/[^0-9]/g,'') : '');
   document.getElementById('jeTeam').value   = j.team||'';
   const teams = {}; pool.forEach(x => { const tt=(x.team||'').trim(); if(tt) teams[tt]=1; });
@@ -6784,11 +6786,13 @@ async function jobEditSave(){
   const cur = _jobEditCur;
   const gv = id => document.getElementById(id).value;
   const nameV=gv('jeName'), dateV=gv('jeDate'), addrV=gv('jeAddr'), jobV=gv('jeJob'), teamV=gv('jeTeam').trim();
-  const amtEl=document.getElementById('jeAmount'), ordEl=document.getElementById('jeOrder');
+  const amtEl=document.getElementById('jeAmount'), ordEl=document.getElementById('jeOrder'), scEl=document.getElementById('jeScore');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateV)){ toast('วันที่ไม่ถูกต้อง'); return; }
   if (amtEl.validity && amtEl.validity.badInput){ toast('ยอดไม่ถูกต้อง (ตัวเลขเท่านั้น)'); return; }
   if (amtEl.value!=='' && Number(amtEl.value) < 0){ toast('ยอดต้องไม่ติดลบ'); return; }
   if (ordEl.validity && ordEl.validity.badInput){ toast('ลำดับต้องเป็นตัวเลข'); return; }
+  if (scEl.validity && scEl.validity.badInput){ toast('คะแนนต้องเป็นตัวเลข'); return; }
+  if (scEl.value!=='' && Number(scEl.value) < 0){ toast('คะแนนต้องไม่ติดลบ'); return; }
   // ─ ส่งเฉพาะ field ที่เปลี่ยนจริง ─
   const payload = { action:'pk_editJob', id:cur.id };
   if (nameV !== (cur.name||''))            payload.name = nameV;
@@ -6800,6 +6804,8 @@ async function jobEditSave(){
   if (amtEl.value!=='' && Number(amtEl.value) !== curAmt) payload.amount = amtEl.value;
   const curOrd = (cur.orderStr!=null ? String(cur.orderStr).replace(/[^0-9]/g,'') : '');
   if (ordEl.value !== curOrd)              payload.order = ordEl.value;
+  const curScore = (cur.score!=null ? Number(cur.score) : 0);
+  if (scEl.value!=='' && Number(scEl.value) !== curScore) payload.score = scEl.value;
   if (!Object.keys(payload).filter(k=>k!=='action'&&k!=='id').length){ toast('ไม่มีการเปลี่ยนแปลง'); jobEditClose(); return; }
   const btn = document.getElementById('jeSaveBtn'); if (btn){ btn.disabled=true; btn.textContent='กำลังบันทึก...'; }
   let r;
