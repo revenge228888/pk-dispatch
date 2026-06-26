@@ -2314,6 +2314,7 @@ function fillBookingTeam(){
 //  EXPENSE — ระบบเบิกจ่าย (Phase F2a: ตั้งเบิก)
 // ════════════════════════════════════════════════════════════
 let _expMaster = null;     // master data (cache ใน memory ทั้ง session)
+let _expMasterPromise = null;  // single-flight loader (กันยิง bootstrap ซ้ำตอน race)
 let _expCat = '';          // หมวดหลักที่เลือกอยู่
 let _expCanApprove = false;
 let _expPayeeMap = {};     // ชื่อผู้รับ → {bank, account} (สำหรับ auto-fill / เช็คชื่อใหม่)
@@ -2329,20 +2330,27 @@ function _expFileToBase64(file){
   });
 }
 
-async function expenseInit(){
-  if (!_expMaster){
-    showLoad('โหลดข้อมูล...');
-    try {
+// โหลด master แบบ single-flight: คืน promise เดียวถ้ากำลังโหลดอยู่ (กันยิงซ้ำตอน login+เปิดฟอร์มชนกัน)
+async function expenseEnsureMaster(){
+  if (_expMaster) return true;
+  if (!_expMasterPromise){
+    _expMasterPromise = (async () => {
       const r = await call({ action:'pk_expenseBootstrap' });
-      if (!r.ok){ hideLoad(); toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
+      if (!r || !r.ok){ toast('❌ ' + ((r&&r.error)||'โหลดไม่ได้')); return false; }
       _expMaster = r.master;
       _expCanApprove = !!r.canApprove;
       if (typeof r.pendingCount === 'number') expenseSetBadge(r.pendingCount);
       if (typeof r.myRejectedCount === 'number') expenseSetMyBadge(r.myRejectedCount);
-    } catch(e){ hideLoad(); return; }
-    hideLoad();
+      return true;
+    })().catch(() => false).finally(() => { _expMasterPromise = null; });
   }
+  return _expMasterPromise;
+}
+
+// เปิดฟอร์มทันที — ไม่บล็อกรอ master · warm เบื้องหลัง (ใช้ตอนเลือกหมวด)
+function expenseInit(){
   expenseResetForm();
+  if (!_expMaster) expenseEnsureMaster();   // fire-and-forget warm (เลือกหมวดจะ await ถ้ายังไม่เสร็จ)
 }
 
 function expenseResetForm(){
@@ -2364,8 +2372,14 @@ function expenseResetForm(){
   if (typeof expWageReset === 'function') expWageReset();
 }
 
-function expenseSelectCat(cat, btn){
-  if (!_expMaster){ toast('ข้อมูลยังโหลดไม่เสร็จ ลองกดใหม่อีกครั้ง'); return; }
+async function expenseSelectCat(cat, btn){
+  if (!_expMaster){
+    const _restore = (btn ? btn.innerHTML : '');
+    if (btn){ btn.classList.add('on'); btn.innerHTML = '⏳ กำลังเตรียม...'; }
+    const ok = await expenseEnsureMaster();
+    if (btn){ btn.innerHTML = _restore; btn.classList.remove('on'); }
+    if (!ok) return;
+  }
   _expCat = cat;
   document.querySelectorAll('.exp-chip').forEach(c => c.classList.remove('on'));
   if (btn) btn.classList.add('on');
