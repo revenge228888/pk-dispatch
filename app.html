@@ -2315,6 +2315,8 @@ function fillBookingTeam(){
 // ════════════════════════════════════════════════════════════
 let _expMaster = null;     // master data (cache ใน memory ทั้ง session)
 let _expMasterPromise = null;  // single-flight loader (กันยิง bootstrap ซ้ำตอน race)
+let _expFailed = [];           // รายการที่เซฟไม่สำเร็จ (ถาดกู้คืน — in-memory)
+let _expSubmitBusy = false;    // กัน double-submit ช่วง sync prep (validate+อ่านไฟล์)
 let _expCat = '';          // หมวดหลักที่เลือกอยู่
 let _expCanApprove = false;
 let _expPayeeMap = {};     // ชื่อผู้รับ → {bank, account} (สำหรับ auto-fill / เช็คชื่อใหม่)
@@ -2620,7 +2622,9 @@ function expSalRecalc(){
   document.getElementById('expNote').value = np.concat(notes).join(', ');
 }
 
+// ส่งคำขอเบิกแบบ optimistic: เคลียร์ฟอร์มทันที → เซฟเบื้องหลัง → พลาดเก็บไว้ในถาดให้กดส่งใหม่/ทิ้ง (ไม่ auto-retry, ไม่ทำข้อมูลหาย)
 async function expenseSubmit(){
+  if (_expSubmitBusy) return;
   if (!_expCat){ toast('เลือกหมวดหลัก'); return; }
   const formData = {
     mainCat: _expCat,
@@ -2641,32 +2645,88 @@ async function expenseSubmit(){
   if (formData.mainCat === 'ค่าเดินทาง' && !formData.vehicle){ toast('เลือกทะเบียนรถ'); return; }
   if (formData.mainCat !== 'ค่าเดินทาง' && !formData.payee){ toast('เลือกผู้รับเงิน'); return; }
 
+  _expSubmitBusy = true;
   let fileData = null;
   const fileEl = document.getElementById('expFile');
   if (fileEl && fileEl.files && fileEl.files[0]){
     const file = fileEl.files[0];
-    if (file.size > 5*1024*1024){ toast('ไฟล์ใหญ่เกิน 5MB'); return; }
-    showLoad('อัปโหลดใบแจ้งหนี้...');
+    if (file.size > 5*1024*1024){ _expSubmitBusy = false; toast('ไฟล์ใหญ่เกิน 5MB'); return; }
     try { fileData = await _expFileToBase64(file); }
-    catch(e){ hideLoad(); toast('อ่านไฟล์ไม่ได้'); return; }
-  } else {
-    showLoad('บันทึก...');
+    catch(e){ _expSubmitBusy = false; toast('อ่านไฟล์ไม่ได้'); return; }
   }
 
-  try {
-    const r = await call({ action:'pk_expenseSubmit', formData, fileData });
-    hideLoad();
-    if (!r.ok){ toast('❌ ' + (r.error||'บันทึกไม่ได้')); return; }
-    // ผู้รับใหม่ถูกเพิ่มเข้า master → อัปเดต map + datalist ใน memory (ไม่ต้อง re-bootstrap)
-    if (r.payeeAdded && formData.payee){
-      _expPayeeMap[formData.payee] = { bank:formData.payeeBank, account:formData.payeeAccount };
-      const dl = document.getElementById('expPayeeList');
-      if (dl){ const o = document.createElement('option'); o.value = formData.payee; dl.appendChild(o); }
-      if (_expMaster && _expMaster.payees) _expMaster.payees.push({ name:formData.payee, bank:formData.payeeBank, account:formData.payeeAccount });
-    }
+  const payload = { action:'pk_expenseSubmit', formData, fileData };
+  const label = _expLabel_(formData);
+  // optimistic: เคลียร์ฟอร์มทันที — ไม่บล็อกจอ กรอกรายการถัดไปได้เลย
+  expenseResetForm();
+  _expSubmitBusy = false;
+  toast('⏳ กำลังบันทึก · ' + label);
+  call(payload).then(r => {
+    if (!r || !r.ok){ _expPushFailed_(payload, label, (r&&r.error)||'บันทึกไม่ได้'); toast('❌ บันทึกไม่สำเร็จ — กู้คืนได้ที่หัวฟอร์ม'); return; }
+    if (r.payeeAdded) _expApplyPayeeAdded_(formData);
     toast('✅ ตั้งเบิกสำเร็จ ' + r.id + (r.payeeAdded ? ' · เพิ่มผู้รับใหม่แล้ว' : ''));
-    expenseResetForm();
-  } catch(e){ hideLoad(); }
+  }).catch(e => {
+    _expPushFailed_(payload, label, (e&&e.message)||'เชื่อมต่อไม่ได้');
+    toast('❌ บันทึกไม่สำเร็จ — กู้คืนได้ที่หัวฟอร์ม');
+  });
+}
+
+// ป้ายสรุปรายการ (ประเภท + ยอด + ผู้รับ/รถ) — ใช้ใน toast + ถาด
+function _expLabel_(f){
+  const amt = parseFloat(f.amount) || 0;
+  const who = f.mainCat === 'ค่าเดินทาง' ? (f.vehicle||'') : (f.payee||'');
+  return (f.subType || f.mainCat || '') + ' ' + amt.toLocaleString() + '฿' + (who ? (' · ' + who) : '');
+}
+
+// ผู้รับใหม่ถูกเพิ่มที่ server → อัปเดต map + datalist ใน memory (ไม่ต้อง re-bootstrap)
+function _expApplyPayeeAdded_(f){
+  if (!f || !f.payee) return;
+  _expPayeeMap[f.payee] = { bank:f.payeeBank, account:f.payeeAccount };
+  const dl = document.getElementById('expPayeeList');
+  if (dl && !Array.prototype.some.call(dl.options, o => o.value === f.payee)){
+    const o = document.createElement('option'); o.value = f.payee; dl.appendChild(o);
+  }
+  if (_expMaster && _expMaster.payees && !_expMaster.payees.some(p => p.name === f.payee)){
+    _expMaster.payees.push({ name:f.payee, bank:f.payeeBank, account:f.payeeAccount });
+  }
+}
+
+// ถาดกู้คืน: เก็บรายการที่เซฟไม่สำเร็จ → ให้กดส่งใหม่/ทิ้ง (DOM สร้าง dynamic ไม่แตะ static HTML)
+function _expPushFailed_(payload, label, err){
+  _expFailed.push({ payload, label, err });
+  _expRenderFailTray_();
+}
+function _expDiscardFailed_(idx){
+  _expFailed.splice(idx, 1);
+  _expRenderFailTray_();
+}
+function _expRetryFailed_(idx){
+  const item = _expFailed[idx]; if (!item) return;
+  _expFailed.splice(idx, 1); _expRenderFailTray_();
+  toast('⏳ กำลังส่งใหม่ · ' + item.label);
+  call(item.payload).then(r => {
+    if (!r || !r.ok){ _expPushFailed_(item.payload, item.label, (r&&r.error)||'บันทึกไม่ได้'); toast('❌ ยังส่งไม่สำเร็จ'); return; }
+    if (r.payeeAdded) _expApplyPayeeAdded_(item.payload.formData);
+    toast('✅ ตั้งเบิกสำเร็จ ' + r.id);
+  }).catch(e => {
+    _expPushFailed_(item.payload, item.label, (e&&e.message)||'เชื่อมต่อไม่ได้');
+    toast('❌ ยังส่งไม่สำเร็จ');
+  });
+}
+function _expRenderFailTray_(){
+  const tab = document.getElementById('tabExpensesubmit'); if (!tab) return;
+  let tray = document.getElementById('expFailTray');
+  if (!_expFailed.length){ if (tray) tray.remove(); return; }
+  if (!tray){ tray = document.createElement('div'); tray.id = 'expFailTray'; tab.insertBefore(tray, tab.firstChild); }
+  tray.style.cssText = 'background:#3a2228;border:1px solid var(--rd);border-radius:10px;padding:10px 12px;margin-bottom:12px;';
+  tray.innerHTML = '<div style="font-weight:800;color:var(--rd);margin-bottom:8px;">⚠️ บันทึกไม่สำเร็จ ' + _expFailed.length + ' รายการ — กดส่งใหม่หรือทิ้ง</div>' +
+    _expFailed.map((it, i) =>
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid #54323a;">' +
+        '<span style="flex:1;min-width:140px;">' + escHtml(it.label) + ' <span style="color:var(--mu);font-size:12px;">· ' + escHtml(it.err) + '</span></span>' +
+        '<button class="btn btn-p btn-sm" onclick="_expRetryFailed_(' + i + ')">↻ ส่งใหม่</button>' +
+        '<button class="btn btn-g btn-sm" onclick="_expDiscardFailed_(' + i + ')">✕ ทิ้ง</button>' +
+      '</div>'
+    ).join('');
 }
 
 function expenseSetBadge(n){
