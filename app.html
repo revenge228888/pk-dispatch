@@ -8076,6 +8076,7 @@ function recordEmptyEntry(no){
   return {
     no, isEmpty: true, location: '',
     width: null, height: null, qty: null,
+    colorId: '',
     muang: [], krachok: [], rang: null, detail: ''
   };
 }
@@ -8227,13 +8228,14 @@ async function recordLoadRecentJobs(){
 // ── Render Form ──
 let _recColorLoading = false;
 // ตัวเลือกสีหลักในจดขนาด — ใช้ vocabulary เดียวกับคำนวณราคา (_quoteMetadata.colors)
-function recColorOptionsHtml(){
-  return ['<option value="">— ไม่ระบุ (ใช้ค่าเริ่มต้นตอนคำนวณราคา) —</option>']
+function recColorOptsHtml_(selectedId, emptyLabel){
+  return ['<option value="">' + emptyLabel + '</option>']
     .concat((_quoteMetadata?.colors||[]).map(c => {
-      const sel = c.id === _recForm.mainColor ? ' selected' : '';
+      const sel = c.id === selectedId ? ' selected' : '';
       return `<option value="${c.id}"${sel}>${c.label} (${c.group})</option>`;
     })).join('');
 }
+function recColorOptionsHtml(){ return recColorOptsHtml_(_recForm.mainColor, '— ไม่ระบุ (ใช้ค่าเริ่มต้นตอนคำนวณราคา) —'); }
 
 function recordRenderForm(){
   const body = document.getElementById('recmBody');
@@ -8283,7 +8285,7 @@ function recordRenderForm(){
 
   body.innerHTML = html;
   recordUpdateSaveStatus();
-  if (!_quoteMetadata && !_recColorLoading){ _recColorLoading = true; quoteLoadMetadata().finally(() => { _recColorLoading = false; const _s = document.getElementById('recmMainColor'); if (_s) _s.innerHTML = recColorOptionsHtml(); }); }
+  if (!_quoteMetadata && !_recColorLoading){ _recColorLoading = true; quoteLoadMetadata().finally(() => { _recColorLoading = false; const _m = document.getElementById('recmMainColor'); if (_m) _m.innerHTML = recColorOptionsHtml(); _recForm.entries.forEach((e, i) => { const _e = document.getElementById('recmColor_' + i); if (_e) _e.innerHTML = recColorOptsHtml_(e.colorId||'', '— ตามสีหลัก —'); }); }); }
 }
 
 function recordRenderEntry(e, idx, ro){
@@ -8327,6 +8329,10 @@ function recordRenderEntry(e, idx, ro){
           <label class="fl">🔢 จำนวน</label>
           <input class="fi" type="number" inputmode="numeric" value="${e.qty??''}" placeholder="1" min="1" oninput="recordOnEntryChange(${idx},'qty',this.value===''?null:parseInt(this.value))">
         </div>
+      </div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label class="fl">🎨 สีชุดนี้</label>
+        <select class="fi" id="recmColor_${idx}" onchange="recordOnEntryChange(${idx},'colorId',this.value)"${ro?' disabled':''}>${recColorOptsHtml_(e.colorId||'', '— ตามสีหลัก —')}</select>
       </div>
 
       <div style="margin-bottom:10px;">
@@ -8664,7 +8670,7 @@ function pkRecordEntriesToQuote(entries){
       no: i + 1, isEmpty: false,
       location: e.location || '',
       width: e.width, height: e.height, qty: e.qty || 1,
-      colorId: '', types, note: noteParts.join(' · ')
+      colorId: e.colorId || '', types, note: noteParts.join(' · ')
     };
   });
 }
