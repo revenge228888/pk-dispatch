@@ -8087,33 +8087,26 @@ function recordEmptyEntry(no){
 async function recordOpenNew(prefill){
   if (_modalOpening) return;
   _modalOpening = true;
-  showLoad('กำลังเตรียมฟอร์ม...');
   try {
     prefill = prefill || {};
     _recForm = {
       mode: 'new', id: null,
       customer: { name: prefill.customerName || '', phone: prefill.customerPhone || '' },
       linkedJobId: prefill.linkedJobId || '',
-      mainColor: prefill.mainColor || '',
-      note: prefill.note || '',
-      showNote: !!prefill.showNote,
       entries: [ recordEmptyEntry(1) ],
       recentJobs: [], draftKey: 'pk_record_draft_new',
       draftTimer: null, lastSavedAt: null, dirty: false
     };
-    await recordLoadRecentJobs();
-    // ถาม recover draft (เฉพาะตอน new ไม่มี prefill)
+    // recover draft (local, instant — no server)
     if (!prefill.customerName && !prefill.linkedJobId) {
       const draft = localStorage.getItem(_recForm.draftKey);
       if (draft) {
-        hideLoad();
         if (confirm('พบ draft ที่บันทึกค้างไว้ — โหลดกลับ?')) {
           try { Object.assign(_recForm, JSON.parse(draft)); }
           catch(e) { localStorage.removeItem(_recForm.draftKey); }
         } else {
           localStorage.removeItem(_recForm.draftKey);
         }
-        showLoad('กำลังเตรียมฟอร์ม...');
       }
     }
     document.getElementById('recmTitle').textContent = '📐 บันทึกขนาด — สร้างใหม่';
@@ -8125,8 +8118,11 @@ async function recordOpenNew(prefill){
     recordRenderForm();
     recordOpenModal();
     recordStartAutosave();
+    // job dropdown: show brief loading hint, then load recent jobs in background and fill
+    var _ls = document.getElementById('recmLinkedJob');
+    if (_ls && !(_recForm.recentJobs||[]).length) _ls.insertAdjacentHTML('beforeend', '<option value="" disabled>⏳ กำลังโหลดงานล่าสุด...</option>');
+    recordLoadRecentJobs().then(recordFillRecentJobs_).catch(function(){});
   } finally {
-    hideLoad();
     _modalOpening = false;
   }
 }
@@ -8231,6 +8227,23 @@ async function recordLoadRecentJobs(){
     const r = await call({ action:'pk_recordListRecentJobs' });
     if (r.ok) _recForm.recentJobs = r.jobs || [];
   } catch(e) {}
+}
+
+// เติม dropdown "ผูกกับงาน" หลังโหลด recentJobs เสร็จ (background — คู่กับ recordRenderForm)
+function recordFillRecentJobs_(){
+  var sel = document.getElementById('recmLinkedJob');
+  if (!sel) return;
+  var rj = _recForm.recentJobs || [];
+  var opts = ['<option value="">— ไม่ผูกกับงาน —</option>'];
+  rj.forEach(function(j){
+    var s = (j.id === _recForm.linkedJobId) ? ' selected' : '';
+    opts.push('<option value="' + j.id + '"' + s + '>' + j.id + ' · ' + (j.name||'') + ' · ' + fmtD(j.date) + '</option>');
+  });
+  if (_recForm.linkedJobId && !rj.find(function(j){ return j.id === _recForm.linkedJobId; })) {
+    opts.push('<option value="' + _recForm.linkedJobId + '" selected>' + _recForm.linkedJobId + ' · (เก่า)</option>');
+  }
+  sel.innerHTML = opts.join('');
+  sel.value = _recForm.linkedJobId || '';
 }
 
 // ── Render Form ──
