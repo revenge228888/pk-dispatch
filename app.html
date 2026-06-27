@@ -9112,9 +9112,7 @@ async function quoteEnsureMetadata(){
 async function quoteOpenNew(prefill){
   if (_modalOpening) return;
   _modalOpening = true;
-  showLoad('กำลังเตรียมฟอร์ม...');
   try {
-    if (!await quoteEnsureMetadata()) { return; }
     prefill = prefill || {};
     _quoForm = {
       mode: 'new', id: null,
@@ -9132,19 +9130,16 @@ async function quoteOpenNew(prefill){
       draftTimer: null, lastSavedAt: null, dirty: false,
       autoNo: !!prefill.autoNo
     };
-    await quoteLoadRecentJobs();
-    // ถาม recover draft (ถ้าไม่มี prefill)
+    // recover draft (local, instant — no server)
     if (!prefill.customer && !prefill.entries) {
       const draft = localStorage.getItem(_quoForm.draftKey);
       if (draft) {
-        hideLoad();
         if (confirm('พบ draft ที่บันทึกค้างไว้ — โหลดกลับ?')) {
           try { Object.assign(_quoForm, JSON.parse(draft)); }
           catch(e) { localStorage.removeItem(_quoForm.draftKey); }
         } else {
           localStorage.removeItem(_quoForm.draftKey);
         }
-        showLoad('กำลังเตรียมฟอร์ม...');
       }
     }
     document.getElementById('quomTitle').textContent = _quoForm.autoNo ? '🧾 ใบเสนอราคา — สร้างใหม่ (รันเลขอัตโนมัติ)' : '💰 คำนวณราคา — สร้างใหม่';
@@ -9154,8 +9149,17 @@ async function quoteOpenNew(prefill){
     quoteRenderForm();
     quoteOpenModal();
     quoteStartAutosave();
+    // job dropdown: brief loading hint
+    var _ls = document.getElementById('quomLinkedJob');
+    if (_ls && !(_quoForm.recentJobs||[]).length) _ls.insertAdjacentHTML('beforeend', '<option value="" disabled>⏳ กำลังโหลดงานล่าสุด...</option>');
+    // background: headers + (metadata if missing) + recent jobs, then refresh (non-blocking)
+    var _needMeta = !_quoteMetadata;
+    Promise.all([
+      quoteLoadHeaders(),
+      _needMeta ? quoteLoadMetadata() : Promise.resolve(),
+      quoteLoadRecentJobs()
+    ]).then(function(){ quoteAfterBgLoad_(_needMeta); }).catch(function(){});
   } finally {
-    hideLoad();
     _modalOpening = false;
   }
 }
@@ -9259,6 +9263,49 @@ async function quoteLoadRecentJobs(){
     const r = await call({ action:'pk_recordListRecentJobs' });
     if (r.ok) _quoForm.recentJobs = r.jobs || [];
   } catch(e) {}
+}
+
+// หลัง background load ของ quoteOpenNew: ถ้าเพิ่งได้ metadata → re-render (ฟอร์มยัง pristine); ถ้ามีอยู่แล้ว → เติมเฉพาะ dropdown
+function quoteAfterBgLoad_(neededMeta){
+  if (!document.getElementById('quomLinkedJob')) return; // navigated away
+  if (neededMeta) {
+    quoteRenderForm(); // metadata มาถึงแล้ว — re-render ให้สี/ราคา/type ขึ้น (ข้อมูลที่พิมพ์อยู่ใน model แล้ว)
+  } else {
+    quoteFillRecentJobs_();
+    quoteFillHeaders_();
+  }
+  if (neededMeta && !_quoteMetadata) toast('โหลดราคา/สีไม่ได้ — ลองปิดเปิดใหม่');
+}
+
+// เติม dropdown "ผูกกับงาน" ของใบเสนอราคา (background)
+function quoteFillRecentJobs_(){
+  var sel = document.getElementById('quomLinkedJob');
+  if (!sel) return;
+  var rj = _quoForm.recentJobs || [];
+  var opts = ['<option value="">— ไม่ผูกกับงาน —</option>'];
+  rj.forEach(function(j){
+    var s = (j.id === _quoForm.linkedJobId) ? ' selected' : '';
+    opts.push('<option value="' + j.id + '"' + s + '>' + j.id + ' · ' + (j.name||'') + ' · ' + fmtD(j.date) + '</option>');
+  });
+  if (_quoForm.linkedJobId && !rj.find(function(j){ return j.id === _quoForm.linkedJobId; })) {
+    opts.push('<option value="' + _quoForm.linkedJobId + '" selected>' + _quoForm.linkedJobId + ' · (เก่า)</option>');
+  }
+  sel.innerHTML = opts.join('');
+  sel.value = _quoForm.linkedJobId || '';
+}
+
+// เติม dropdown "หัวเอกสาร" ของใบเสนอราคา (background)
+function quoteFillHeaders_(){
+  var sel = document.getElementById('quomHeaderSel');
+  if (!sel) return;
+  var dc = _quoForm.doc || {};
+  if (!_quoteHeaders.length) { sel.innerHTML = '<option value="">(ค่าเริ่มต้น)</option>'; return; }
+  var selId = quoteSelHeaderId(dc);
+  sel.innerHTML = _quoteHeaders.map(function(x){
+    var s = (selId === x.templateId) ? ' selected' : '';
+    return '<option value="' + escAttr(x.templateId) + '"' + s + '>' + escAttr(x.name||x.companyName||x.templateId) + '</option>';
+  }).join('');
+  sel.value = selId;
 }
 
 // ════════════════════════════════════════
@@ -9412,7 +9459,7 @@ function quoteRenderForm(){
       <div class="quom-section-head">เอกสารใบเสนอราคา</div>
       <div class="fg" style="margin-bottom:10px;">
         <label class="fl">📄 หัวเอกสาร</label>
-        <select class="fi" onchange="quoteOnDocChange('headerId',this.value)" ${ro?'disabled':''}>
+        <select class="fi" id="quomHeaderSel" onchange="quoteOnDocChange('headerId',this.value)" ${ro?'disabled':''}>
           ${_quoteHeaders.length ? _quoteHeaders.map(x => `<option value="${escAttr(x.templateId)}"${quoteSelHeaderId(dc)===x.templateId?' selected':''}>${escAttr(x.name||x.companyName||x.templateId)}</option>`).join('') : `<option value="">(ค่าเริ่มต้น)</option>`}
         </select>
       </div>
