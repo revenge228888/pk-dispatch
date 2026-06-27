@@ -8528,7 +8528,7 @@ async function recordSubmit(){
 }
 
 // ── Export PNG A4 (C4) ──
-const A4_ENTRIES_PER_PAGE = 5;
+const A4_ENTRIES_PER_PAGE = 16;
 
 async function recordExportImg(){
   if (typeof html2canvas === 'undefined') {
@@ -8539,6 +8539,7 @@ async function recordExportImg(){
   const customer = _recForm.customer || { name:'', phone:'' };
   const entries = (_recForm.entries || []).filter(e => !e.isEmpty);
   if (!entries.length) { toast('ไม่มีรายการให้ export'); return; }
+  if (!_quoteMetadata) { try { await quoteLoadMetadata(); } catch(e){} }
 
   // แบ่งหน้า
   const pages = [];
@@ -8594,69 +8595,72 @@ async function recordExportImg(){
   }
 }
 
-function renderA4Page(entriesInPage, pageNum, totalPages, customer, dateStr){
-  const linkedHtml = _recForm.linkedJobId
-    ? `<div class="a4-meta-row"><span class="a4-meta-label">🔗 ผูกกับงาน:</span><span class="a4-meta-val">${escAttr(_recForm.linkedJobId)}</span></div>`
-    : '';
-  const headBlock = `
-    <div class="a4-header">
-      <div class="a4-title">📐 บันทึกขนาดรายการ</div>
-      <div class="a4-meta-grid">
-        <div class="a4-meta-row"><span class="a4-meta-label">👤 ลูกค้า:</span><span class="a4-meta-val">${escAttr(customer.name)||'-'}</span></div>
-        <div class="a4-meta-row"><span class="a4-meta-label">📞 เบอร์:</span><span class="a4-meta-val">${escAttr(customer.phone)||'-'}</span></div>
-        <div class="a4-meta-row"><span class="a4-meta-label">📅 วันที่:</span><span class="a4-meta-val">${dateStr}</span></div>
-        <div class="a4-meta-row"><span class="a4-meta-label">✍️ ผู้บันทึก:</span><span class="a4-meta-val">${escAttr(CURRENT_USER.username)||'-'}</span></div>
-        ${linkedHtml}
-      </div>
-    </div>
-  `;
-  const entriesHtml = entriesInPage.map(e => renderA4Entry(e)).join('');
-  return `
-    <div class="a4-page">
-      ${headBlock}
-      <div class="a4-entries">
-        ${entriesHtml}
-      </div>
-      <div class="a4-footer">
-        <span>${_recForm.id || ''}</span>
-        <span>หน้า ${pageNum} / ${totalPages}</span>
-      </div>
-    </div>
-  `;
+function recA4Color_(e){
+  var id = (e.colorId || (_recForm && _recForm.mainColor) || '');
+  if (!id) return '<span style="color:#999;">—</span>';
+  var colors = (_quoteMetadata && _quoteMetadata.colors) || [];
+  var c = colors.filter(function(x){ return x.id === id; })[0];
+  var label = c ? c.label : id;
+  return '<span style="display:inline-block;font-size:9.5px;background:#eef4fb;color:#1e3a5f;border:1px solid #cfe0f2;border-radius:9px;padding:1px 7px;white-space:nowrap;">' + escHtml(label) + '</span>';
 }
-
+function recA4Items_(e){
+  var parts = [];
+  if (e.muang && e.muang.length) parts.push('🪟 ' + e.muang.map(escHtml).join(', '));
+  if (e.rang) parts.push('📏 ' + escHtml(e.rang));
+  if (e.krachok && e.krachok.length) parts.push('🪞 ' + e.krachok.map(escHtml).join(', '));
+  return parts.length ? parts.join(' · ') : '—';
+}
+function renderA4Page(entriesInPage, pageNum, totalPages, customer, dateStr){
+  var isLast = pageNum === totalPages;
+  var cust = customer || { name:'', phone:'' };
+  var linked = (_recForm && _recForm.linkedJobId) ? '<div><b style="color:#1e3a5f;">ผูกกับงาน:</b> ' + escHtml(_recForm.linkedJobId) + '</div>' : '';
+  var header = '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e6fb8;padding-bottom:9px;margin-bottom:11px;">'
+    + '<div><div style="font-size:21px;font-weight:800;color:#1e3a5f;">📐 บันทึกขนาด</div>'
+    + '<div style="font-size:11px;color:#666;margin-top:2px;">มุ้งจีบ · มุ้งลวด · กระจกอลูมิเนียม</div></div>'
+    + '<div style="text-align:right;"><div style="font-size:21px;font-weight:800;color:#1e6fb8;letter-spacing:1px;">บันทึกขนาด</div>'
+    + '<div style="font-size:10px;color:#999;letter-spacing:2px;">MEASUREMENT</div></div></div>';
+  var meta = '<div style="display:flex;justify-content:space-between;gap:20px;font-size:12px;margin-bottom:13px;">'
+    + '<div style="flex:1;line-height:1.7;"><div><b style="color:#1e3a5f;">ลูกค้า:</b> ' + (escHtml(cust.name)||'-') + '</div>'
+    + '<div><b style="color:#1e3a5f;">โทร:</b> ' + (escHtml(cust.phone)||'-') + '</div></div>'
+    + '<div style="flex:1;text-align:right;line-height:1.7;"><div><b style="color:#1e3a5f;">เลขที่:</b> ' + (escHtml((_recForm&&_recForm.id)||'')||'-') + '</div>'
+    + '<div><b style="color:#1e3a5f;">วันที่:</b> ' + dateStr + '</div>'
+    + '<div><b style="color:#1e3a5f;">ผู้บันทึก:</b> ' + (escHtml(CURRENT_USER.username)||'-') + '</div>'
+    + linked + '</div></div>';
+  var thS = 'padding:6px 5px;font-weight:600;color:#fff;';
+  var thead = '<thead><tr style="background:#1e6fb8;font-size:10px;">'
+    + '<th style="' + thS + 'text-align:center;">ลำดับ</th>'
+    + '<th style="' + thS + 'text-align:left;">ตำแหน่ง</th>'
+    + '<th style="' + thS + 'text-align:center;">ขนาด (ซม.)</th>'
+    + '<th style="' + thS + 'text-align:center;">จำนวน</th>'
+    + '<th style="' + thS + 'text-align:center;">สี</th>'
+    + '<th style="' + thS + 'text-align:left;">รายการ (มุ้ง / ราง / กระจก)</th>'
+    + '<th style="' + thS + 'text-align:left;">หมายเหตุ</th></tr></thead>';
+  var colg = '<colgroup><col style="width:5%;"><col style="width:15%;"><col style="width:11%;"><col style="width:6%;"><col style="width:11%;"><col style="width:33%;"><col style="width:19%;"></colgroup>';
+  var rows = entriesInPage.map(function(e){ return renderA4Entry(e); }).join('');
+  var table = '<table style="width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed;">' + colg + thead + '<tbody>' + rows + '</tbody></table>';
+  var noteBox = (isLast && _recForm && _recForm.note) ? '<div style="margin-top:15px;border:1px solid #cfe0f2;background:#f6f9fc;border-radius:6px;padding:8px 11px;font-size:11.5px;"><b style="color:#1e3a5f;">📝 หมายเหตุรวมของงาน</b><div style="white-space:pre-wrap;margin-top:3px;color:#333;">' + escHtml(_recForm.note) + '</div></div>' : '';
+  var sign = isLast ? '<div style="margin-top:28px;display:flex;justify-content:space-around;text-align:center;font-size:12px;color:#333;"><div><div style="border-top:1px solid #333;width:160px;margin:28px auto 4px;"></div>ผู้วัด / ผู้บันทึก</div><div><div style="border-top:1px solid #333;width:160px;margin:28px auto 4px;"></div>ลูกค้า</div></div>' : '';
+  var footer = '<div style="margin-top:14px;display:flex;justify-content:space-between;font-size:10px;color:#aaa;border-top:1px dashed #ccc;padding-top:6px;"><span>' + escHtml((_recForm&&_recForm.id)||'') + '</span><span>หน้า ' + pageNum + ' / ' + totalPages + '</span></div>';
+  return '<div class="a4-page">' + header + meta + table + noteBox + '<div style="flex:1;"></div>' + sign + footer + '</div>';
+}
 function renderA4Entry(e){
-  const w = e.width != null ? e.width : '-';
-  const h = e.height != null ? e.height : '-';
-  const qty = e.qty || 1;
-  const sizeStr = `${w} × ${h} cm × ${qty} ชุด`;
-
-  const muang = (e.muang || []);
-  const krachok = (e.krachok || []);
-  const muangTags = muang.length
-    ? muang.map(m => `<span class="a4-tag muang">🪟 ${escAttr(m)}</span>`).join('')
-    : '';
-  const krachokTags = krachok.length
-    ? krachok.map(k => `<span class="a4-tag krachok">🪞 ${escAttr(k)}</span>`).join('')
-    : '';
-  const rangTag = e.rang ? `<span class="a4-tag rang">📏 ${escAttr(e.rang)}</span>` : '';
-
-  return `
-    <div class="a4-entry">
-      <div class="a4-entry-head">
-        <span class="a4-entry-num">#${e.no}</span>
-        <span class="a4-entry-loc">📍 ${escAttr(e.location)||'(ไม่ระบุตำแหน่ง)'}</span>
-      </div>
-      <div>
-        <span class="a4-size-box">${sizeStr}</span>
-      </div>
-      <div class="a4-row">
-        ${muangTags}${rangTag}
-      </div>
-      ${krachok.length ? `<div class="a4-row">${krachokTags}</div>` : ''}
-      ${e.detail ? `<div class="a4-detail">📝 ${escAttr(e.detail)}</div>` : ''}
-    </div>
-  `;
+  var w = (e.width != null && e.width !== '') ? e.width : '-';
+  var h = (e.height != null && e.height !== '') ? e.height : '-';
+  var qty = e.qty || 1;
+  var loc = escHtml(e.location) || '-';
+  var note = e.detail ? escHtml(e.detail) : '—';
+  var tdB = 'padding:5px 5px;border-bottom:1px solid #dde3ea;vertical-align:top;line-height:1.35;';
+  var nw = 'white-space:nowrap;';
+  var wr = 'word-break:break-word;overflow-wrap:anywhere;';
+  return '<tr>'
+    + '<td style="' + tdB + nw + 'text-align:center;color:#1e6fb8;font-weight:700;">' + e.no + '</td>'
+    + '<td style="' + tdB + wr + '">' + loc + '</td>'
+    + '<td style="' + tdB + nw + 'text-align:center;font-weight:600;">' + w + ' × ' + h + '</td>'
+    + '<td style="' + tdB + nw + 'text-align:center;">' + qty + '</td>'
+    + '<td style="' + tdB + nw + 'text-align:center;">' + recA4Color_(e) + '</td>'
+    + '<td style="' + tdB + wr + 'color:#333;">' + recA4Items_(e) + '</td>'
+    + '<td style="' + tdB + wr + 'color:#666;">' + note + '</td>'
+    + '</tr>';
 }
 
 // ── เปลี่ยน/ยกเลิก linkedJobId ของ record ที่มีอยู่ ──
