@@ -8063,6 +8063,7 @@ let _recForm = {
   id: null,
   customer: { name:'', phone:'' },
   linkedJobId: '',
+  mainColor: '',
   entries: [],
   recentJobs: [],
   draftKey: null,
@@ -8090,6 +8091,7 @@ async function recordOpenNew(prefill){
       mode: 'new', id: null,
       customer: { name: prefill.customerName || '', phone: prefill.customerPhone || '' },
       linkedJobId: prefill.linkedJobId || '',
+      mainColor: prefill.mainColor || '',
       entries: [ recordEmptyEntry(1) ],
       recentJobs: [], draftKey: 'pk_record_draft_new',
       draftTimer: null, lastSavedAt: null, dirty: false
@@ -8138,6 +8140,7 @@ async function recordOpenView(id){
       mode: 'view', id,
       customer: rec.customer || { name:'', phone:'' },
       linkedJobId: rec.linkedJobId || '',
+      mainColor: rec.mainColor || '',
       entries: (rec.entries && rec.entries.length) ? rec.entries : [ recordEmptyEntry(1) ],
       recentJobs: [], draftKey: null,
       draftTimer: null, lastSavedAt: null, dirty: false
@@ -8167,6 +8170,7 @@ async function recordOpenEdit(id){
       mode: 'edit', id,
       customer: rec.customer || { name:'', phone:'' },
       linkedJobId: rec.linkedJobId || '',
+      mainColor: rec.mainColor || '',
       entries: (rec.entries && rec.entries.length) ? rec.entries : [ recordEmptyEntry(1) ],
       recentJobs: [], draftKey: 'pk_record_draft_' + id,
       draftTimer: null, lastSavedAt: null, dirty: false
@@ -8221,6 +8225,16 @@ async function recordLoadRecentJobs(){
 }
 
 // ── Render Form ──
+let _recColorLoading = false;
+// ตัวเลือกสีหลักในจดขนาด — ใช้ vocabulary เดียวกับคำนวณราคา (_quoteMetadata.colors)
+function recColorOptionsHtml(){
+  return ['<option value="">— ไม่ระบุ (ใช้ค่าเริ่มต้นตอนคำนวณราคา) —</option>']
+    .concat((_quoteMetadata?.colors||[]).map(c => {
+      const sel = c.id === _recForm.mainColor ? ' selected' : '';
+      return `<option value="${c.id}"${sel}>${c.label} (${c.group})</option>`;
+    })).join('');
+}
+
 function recordRenderForm(){
   const body = document.getElementById('recmBody');
   const ro = _recForm.mode === 'view';
@@ -8252,6 +8266,10 @@ function recordRenderForm(){
         <label class="fl">🔗 ผูกกับงาน (Optional)</label>
         <select class="fi" id="recmLinkedJob" onchange="recordOnChange()">${jobOptions.join('')}</select>
       </div>
+      <div class="fg" style="margin-top:10px;">
+        <label class="fl">🎨 สีหลัก (ใช้ตอนคำนวณราคา)</label>
+        <select class="fi" id="recmMainColor" onchange="recordOnChange()"${ro?' disabled':''}>${recColorOptionsHtml()}</select>
+      </div>
     </div>
   `;
 
@@ -8265,6 +8283,7 @@ function recordRenderForm(){
 
   body.innerHTML = html;
   recordUpdateSaveStatus();
+  if (!_quoteMetadata && !_recColorLoading){ _recColorLoading = true; quoteLoadMetadata().finally(() => { _recColorLoading = false; const _s = document.getElementById('recmMainColor'); if (_s) _s.innerHTML = recColorOptionsHtml(); }); }
 }
 
 function recordRenderEntry(e, idx, ro){
@@ -8347,6 +8366,7 @@ function recordOnChange(){
   _recForm.customer.name = document.getElementById('recmCustName').value;
   _recForm.customer.phone = document.getElementById('recmCustPhone').value;
   _recForm.linkedJobId = document.getElementById('recmLinkedJob').value;
+  const _mc = document.getElementById('recmMainColor'); if (_mc) _recForm.mainColor = _mc.value;
   _recForm.dirty = true;
 }
 function recordOnEntryChange(idx, field, val){
@@ -8455,6 +8475,7 @@ async function recordSubmit(){
   const body = {
     customer: _recForm.customer,
     linkedJobId: _recForm.linkedJobId,
+    mainColor: _recForm.mainColor,
     entries: _recForm.entries
   };
 
@@ -8687,6 +8708,7 @@ async function recordHandoffToQuote(){
   setTimeout(() => {
     quoteOpenNew({
       customer: _recForm.customer,
+      mainColor: _recForm.mainColor,
       linkedJobId: _recForm.linkedJobId,
       linkedRecordId: _recForm.id,
       entries: quoteEntries
