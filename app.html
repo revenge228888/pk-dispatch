@@ -8064,6 +8064,8 @@ let _recForm = {
   customer: { name:'', phone:'' },
   linkedJobId: '',
   mainColor: '',
+  note: '',
+  showNote: false,
   entries: [],
   recentJobs: [],
   draftKey: null,
@@ -8093,6 +8095,8 @@ async function recordOpenNew(prefill){
       customer: { name: prefill.customerName || '', phone: prefill.customerPhone || '' },
       linkedJobId: prefill.linkedJobId || '',
       mainColor: prefill.mainColor || '',
+      note: prefill.note || '',
+      showNote: !!prefill.showNote,
       entries: [ recordEmptyEntry(1) ],
       recentJobs: [], draftKey: 'pk_record_draft_new',
       draftTimer: null, lastSavedAt: null, dirty: false
@@ -8142,6 +8146,8 @@ async function recordOpenView(id){
       customer: rec.customer || { name:'', phone:'' },
       linkedJobId: rec.linkedJobId || '',
       mainColor: rec.mainColor || '',
+      note: rec.note || '',
+      showNote: !!rec.showNote,
       entries: (rec.entries && rec.entries.length) ? rec.entries : [ recordEmptyEntry(1) ],
       recentJobs: [], draftKey: null,
       draftTimer: null, lastSavedAt: null, dirty: false
@@ -8172,6 +8178,8 @@ async function recordOpenEdit(id){
       customer: rec.customer || { name:'', phone:'' },
       linkedJobId: rec.linkedJobId || '',
       mainColor: rec.mainColor || '',
+      note: rec.note || '',
+      showNote: !!rec.showNote,
       entries: (rec.entries && rec.entries.length) ? rec.entries : [ recordEmptyEntry(1) ],
       recentJobs: [], draftKey: 'pk_record_draft_' + id,
       draftTimer: null, lastSavedAt: null, dirty: false
@@ -8272,6 +8280,14 @@ function recordRenderForm(){
         <label class="fl">🎨 สีหลัก (ใช้ตอนคำนวณราคา)</label>
         <select class="fi" id="recmMainColor" onchange="recordOnChange()"${ro?' disabled':''}>${recColorOptionsHtml()}</select>
       </div>
+      <div class="fg" style="margin-top:10px;">
+        <label class="fl">📝 หมายเหตุรวมของงาน</label>
+        <textarea class="fi" id="recmNote" rows="2" placeholder="เช่น ลูกค้าขอเร่งงาน · ทางเข้าแคบ" oninput="recordOnChange()"${ro?' readonly':''}>${escHtml(_recForm.note||'')}</textarea>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="recmShowNote" ${_recForm.showNote?'checked':''} onchange="recordOnChange()"${ro?' disabled':''}>
+        แสดงหมายเหตุนี้บนใบเสนอราคา (PDF)
+      </label>
     </div>
   `;
 
@@ -8373,6 +8389,8 @@ function recordOnChange(){
   _recForm.customer.phone = document.getElementById('recmCustPhone').value;
   _recForm.linkedJobId = document.getElementById('recmLinkedJob').value;
   const _mc = document.getElementById('recmMainColor'); if (_mc) _recForm.mainColor = _mc.value;
+  const _nt = document.getElementById('recmNote'); if (_nt) _recForm.note = _nt.value;
+  const _sn = document.getElementById('recmShowNote'); if (_sn) _recForm.showNote = _sn.checked;
   _recForm.dirty = true;
 }
 function recordOnEntryChange(idx, field, val){
@@ -8482,6 +8500,8 @@ async function recordSubmit(){
     customer: _recForm.customer,
     linkedJobId: _recForm.linkedJobId,
     mainColor: _recForm.mainColor,
+    note: _recForm.note,
+    showNote: _recForm.showNote,
     entries: _recForm.entries
   };
 
@@ -8715,6 +8735,7 @@ async function recordHandoffToQuote(){
     quoteOpenNew({
       customer: _recForm.customer,
       mainColor: _recForm.mainColor,
+      doc: { note: _recForm.note, showNote: _recForm.showNote },
       linkedJobId: _recForm.linkedJobId,
       linkedRecordId: _recForm.id,
       entries: quoteEntries
@@ -9056,6 +9077,8 @@ function quoteDefaultDoc(){
     vat: { on:false, rate:7 },
     wht: { on:false, rate:3 },
     deposit: { on:false, mode:'percent', value:50 },
+    note: '',
+    showNote: false,
     terms: ''
   };
 }
@@ -9483,6 +9506,14 @@ function quoteRenderForm(){
         <label class="fl">📋 เงื่อนไข / หมายเหตุท้ายเอกสาร</label>
         <textarea class="fi" rows="3" placeholder="เช่น ราคารวมติดตั้ง · รับประกัน 1 ปี · มัดจำ 50% ก่อนเริ่มงาน" oninput="quoteOnDocChange('terms',this.value)" ${ro?'readonly':''}>${escHtml(dc.terms||'')}</textarea>
       </div>
+      <div class="fg">
+        <label class="fl">📝 หมายเหตุรวมของงาน</label>
+        <textarea class="fi" rows="2" placeholder="หมายเหตุสำหรับงานนี้" oninput="quoteOnDocChange('note',this.value)" ${ro?'readonly':''}>${escHtml(dc.note||'')}</textarea>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" ${dc.showNote?'checked':''} onchange="quoteSetDoc('showNote',this.checked)" ${ro?'disabled':''}>
+        แสดงหมายเหตุนี้ในเอกสาร (PDF)
+      </label>
     </div>
     <div class="quom-grand-total" style="flex-direction:column;align-items:stretch;gap:4px;">
       <div id="quomSummary">${quoteSummaryHtml(sm)}</div>
@@ -9994,13 +10025,14 @@ function quoteA4Tail(doc, fees, summary){
     s += sumRow('คงเหลือ', '฿'+fmt(summary.remaining), '#555');
   }
   const terms = doc.terms ? `<div style="margin-top:14px;font-size:11px;color:#444;border-top:1px dashed #bbb;padding-top:8px;"><b style="color:#1e3a5f;">เงื่อนไข / หมายเหตุ</b><div style="white-space:pre-wrap;margin-top:3px;">${escHtml(doc.terms)}</div></div>` : '';
+  const note = (doc.showNote && doc.note) ? `<div style="margin-top:10px;font-size:11px;color:#444;"><b style="color:#1e3a5f;">หมายเหตุ</b><div style="white-space:pre-wrap;margin-top:3px;">${escHtml(doc.note)}</div></div>` : '';
   const sign = `<div style="margin-top:26px;display:flex;justify-content:space-around;text-align:center;font-size:12px;color:#333;">
       <div><div style="border-top:1px solid #333;width:150px;margin:26px auto 4px;"></div>ผู้เสนอราคา</div>
       <div><div style="border-top:1px solid #333;width:150px;margin:26px auto 4px;"></div>ผู้อนุมัติ / ลูกค้า</div>
     </div>`;
   return `${feesHtml}
     <div style="margin-top:12px;display:flex;justify-content:flex-end;"><div style="width:320px;">${s}</div></div>
-    ${terms}${sign}`;
+    ${terms}${note}${sign}`;
 }
 
 function renderQuoteA4Page(entriesInPage, pageNum, totalPages, customer, dateStr, doc, fees, summary){
