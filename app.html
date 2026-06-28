@@ -6619,6 +6619,7 @@ function pkDashGroupTeam_(js){
 }
 
 let _dashCalJobs = [], _dashCalY = null, _dashCalM = null, _dashCalSel = '', _dashCalClicked = false, _dashCalLoading = false;
+let _dashCalCache = {};   // SWR cache ปฏิทินต่อเดือน (in-memory)
 async function dashCalLoad(){
   if (!document.getElementById('dashCalGrid')) return;
   if (_dashCalY === null){ const t = new Date(); _dashCalY = t.getFullYear(); _dashCalM = t.getMonth(); }
@@ -6627,9 +6628,21 @@ async function dashCalLoad(){
   await dashCalReload();
 }
 async function dashCalReload(){
-  const panel = document.getElementById('dashCalPanel'); if (panel) panel.innerHTML = '<div class="loading-row">กำลังโหลดงาน...</div>';
-  try { await dashCalFetch(); } catch(e){ _dashCalJobs = []; console.warn('[dashCal] fetch error:', e && e.message); }
-  dashCalRender();           // วาดซ้ำพร้อมงาน (ถึงโหลดพลาดก็โชว์ปฏิทินเปล่า ไม่ค้าง)
+  const month = _dashCalY + '-' + String(_dashCalM+1).padStart(2,'0');
+  const cached = _dashCalCache[month];
+  if (cached) {
+    // SWR: แสดง cache ของเดือนนี้ทันที แล้ว revalidate เบื้องหลัง
+    _dashCalJobs = cached;
+    dashCalRender();
+    let ok = false;
+    try { ok = await dashCalFetch(); } catch(e){ console.warn('[dashCal] revalidate error:', e && e.message); }
+    if (ok) dashCalRender();          // วาดซ้ำเฉพาะตอน revalidate สำเร็จ
+    else _dashCalJobs = cached;        // revalidate พลาด → คง cache ที่แสดงอยู่
+  } else {
+    const panel = document.getElementById('dashCalPanel'); if (panel) panel.innerHTML = '<div class="loading-row">กำลังโหลดงาน...</div>';
+    try { await dashCalFetch(); } catch(e){ _dashCalJobs = []; console.warn('[dashCal] fetch error:', e && e.message); }
+    dashCalRender();
+  }
 }
 let USE_SHEETS_INSTALL = true;   // ON: ปฏิทินคิวงานใช้ /install-month (Sheets API) · fallback GAS อัตโนมัติ
 async function dashCalFetch(){
@@ -6645,19 +6658,22 @@ async function dashCalFetch(){
       });
       clearTimeout(to);
       const data = await r.json();
-      if (data && data.ok && Array.isArray(data.jobs)) { _dashCalJobs = data.jobs; _dashCalLoading = false; return; }
+      if (data && data.ok && Array.isArray(data.jobs)) { _dashCalJobs = data.jobs; _dashCalCache[month] = data.jobs; _dashCalLoading = false; return true; }
       console.warn('[dashCalFetch] /install-month ไม่ ok → fallback GAS:', data && data.error);
     } catch(e){ console.warn('[dashCalFetch] /install-month error → fallback GAS:', e && e.message); }
   }
+  let _ok = false;
   try {
     const r = await Promise.race([
       call({ action:'pk_installMonth', month:month }),
       new Promise(res => setTimeout(() => res({ ok:false, error:'GAS timeout' }), 12000))   // กัน GAS ค้าง
     ]);
     _dashCalJobs = (r && r.ok) ? (r.jobs || []) : [];
-    if (!(r && r.ok)) console.warn('[dashCalFetch] GAS pk_installMonth:', r && r.error);
+    if (r && r.ok) { _dashCalCache[month] = _dashCalJobs; _ok = true; }
+    else console.warn('[dashCalFetch] GAS pk_installMonth:', r && r.error);
   } catch(e){ _dashCalJobs = []; console.warn('[dashCalFetch] GAS error:', e && e.message); }
   _dashCalLoading = false;
+  return _ok;
 }
 function dashCalRender(){
   const grid = document.getElementById('dashCalGrid'); if (!grid) return;
