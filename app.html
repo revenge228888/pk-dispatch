@@ -7085,18 +7085,28 @@ function measCalNext(){ _measCalM++; if(_measCalM>11){_measCalM=0;_measCalY++;} 
 function measCalToday(){ const t=new Date(); _measCalY=t.getFullYear(); _measCalM=t.getMonth(); _measCalSel=pkTodayStr_(); measCalRender(); }
 // ── Feature 1.2: ปุ่ม toggle โชว์/ซ่อนยอดให้ tech (office เท่านั้น) บนการ์ดงานติดตั้ง ──
 function dashMapBtn_(j){
-  var lat = j.lat, lng = j.lng;
-  var hasCoord = (lat !== '' && lat != null && lng !== '' && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng)));
-  var url, label;
-  if (hasCoord) {
-    url = 'https://www.google.com/maps/search/?api=1&query=' + Number(lat) + ',' + Number(lng);
-    label = '🗺️ ดูแผนที่ (พิกัด)';
-  } else {
-    var addr = (j.rawAddr || '').trim();
-    if (!addr) return '';
-    url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr);
-    label = '🗺️ ดูแผนที่';
+  var url = '', pin = false;
+  // 1) server-provided link (e.g. /install-day jobs)
+  if (j && j.mapLink) { url = j.mapLink; pin = (url.indexOf('/maps/search/?api=1&query=') === -1); }
+  // 2) explicit coordinates
+  if (!url) {
+    var lat = j.lat, lng = j.lng;
+    if (lat !== '' && lat != null && lng !== '' && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng))) {
+      url = 'https://www.google.com/maps/search/?api=1&query=' + Number(lat) + ',' + Number(lng); pin = true;
+    }
   }
+  // 3) parse rawAddr: embedded Google Maps link -> use it; else search cleaned address
+  if (!url) {
+    var addr = String((j && j.rawAddr) || '');
+    var m = addr.match(/(https?:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|www\.google\.com\/maps|maps\.google\.com)\S*)/i);
+    if (m) { url = m[1].replace(/[?&]g_st=\S*/, '').trim(); pin = true; }
+    else {
+      var clean = addr.replace(/(https?:\/\/\S+)/g, '').replace(/\s+/g, ' ').trim();
+      if (!clean) return '';
+      url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(clean);
+    }
+  }
+  var label = pin ? '\U0001F5FA\uFE0F \u0e14\u0e39\u0e41\u0e1c\u0e19\u0e17\u0e35\u0e48 (\u0e1b\u0e31\u0e01\u0e2b\u0e21\u0e38\u0e14)' : '\U0001F5FA\uFE0F \u0e14\u0e39\u0e41\u0e1c\u0e19\u0e17\u0e35\u0e48';
   return '<a href="' + url + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:9px;font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;border:1px solid var(--blu);background:transparent;color:var(--blu);cursor:pointer;text-decoration:none;">' + label + '</a>';
 }
 function dashShowAmtBtn(j){
