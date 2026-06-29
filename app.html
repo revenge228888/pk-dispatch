@@ -6728,6 +6728,7 @@ function dashCalRenderPanel(){
           + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);">'
             + '<span style="color:var(--acc);font-weight:800;">★ คะแนน '+(Number(j.score)||0)+'</span>'
             + '<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount||0)+'</span></div>'
+          + dashMapBtn_(j)
           + dashShowAmtBtn(j)
           + jobEditBtn_(j.id)
           + '</div>';
@@ -7083,6 +7084,21 @@ function measCalPrev(){ _measCalM--; if(_measCalM<0){_measCalM=11;_measCalY--;} 
 function measCalNext(){ _measCalM++; if(_measCalM>11){_measCalM=0;_measCalY++;} measCalRender(); }
 function measCalToday(){ const t=new Date(); _measCalY=t.getFullYear(); _measCalM=t.getMonth(); _measCalSel=pkTodayStr_(); measCalRender(); }
 // ── Feature 1.2: ปุ่ม toggle โชว์/ซ่อนยอดให้ tech (office เท่านั้น) บนการ์ดงานติดตั้ง ──
+function dashMapBtn_(j){
+  var lat = j.lat, lng = j.lng;
+  var hasCoord = (lat !== '' && lat != null && lng !== '' && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng)));
+  var url, label;
+  if (hasCoord) {
+    url = 'https://www.google.com/maps/search/?api=1&query=' + Number(lat) + ',' + Number(lng);
+    label = '🗺️ ดูแผนที่ (พิกัด)';
+  } else {
+    var addr = (j.rawAddr || '').trim();
+    if (!addr) return '';
+    url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr);
+    label = '🗺️ ดูแผนที่';
+  }
+  return '<a href="' + url + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:9px;font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;border:1px solid var(--blu);background:transparent;color:var(--blu);cursor:pointer;text-decoration:none;">' + label + '</a>';
+}
 function dashShowAmtBtn(j){
   if (!isOfficeLevel()) return '';   // office + manager
   const hidden = (j.showAmtTech === false);
