@@ -1308,6 +1308,7 @@ function renderOfficeShell(){
             <span style="font-size:17px;font-weight:800;" id="dashCalTitle">ปฏิทินคิวงาน</span>
             <button class="btn btn-g btn-sm" onclick="dashCalToday()">วันนี้</button>
             <button class="btn btn-g btn-sm" onclick="dashCalNext()">›</button>
+            <button class="btn btn-g btn-sm" id="dashCmpBtn" onclick="dashCmpToggle()" style="margin-left:6px;">⇄ เทียบ 2 วัน</button>
           </div>
           <div id="dashCalGrid"><div class="loading-row">กำลังโหลด...</div></div>
           <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin:10px 2px 0;">
@@ -6619,7 +6620,8 @@ function pkDashGroupTeam_(js){
 }
 
 let _dashCalJobs = [], _dashCalY = null, _dashCalM = null, _dashCalSel = '', _dashCalClicked = false, _dashCalLoading = false;
-let _dashCalCache = {};   // SWR cache ปฏิทินต่อเดือน (in-memory)
+let _dashCalCache = {};
+let _dashCmpMode = false, _dashCmpA = '', _dashCmpB = '';   // โหมดเทียบ 2 วัน   // SWR cache ปฏิทินต่อเดือน (in-memory)
 async function dashCalLoad(){
   if (!document.getElementById('dashCalGrid')) return;
   if (_dashCalY === null){ const t = new Date(); _dashCalY = t.getFullYear(); _dashCalM = t.getMonth(); }
@@ -6689,7 +6691,10 @@ function dashCalRender(){
     const js = byDay[ds] || [], dow = new Date(_dashCalY,_dashCalM,d).getDay(), wk = (dow===0||dow===6);
     let st = 'min-height:64px;background:'+(wk?'rgba(181,101,63,.08)':'var(--surf)')+';border:1px solid var(--bdr);border-radius:10px;padding:6px 7px;cursor:pointer;position:relative;';
     if (ds===today) st += 'box-shadow:inset 0 0 0 2px var(--blu);';
-    if (ds===_dashCalSel) st += 'box-shadow:inset 0 0 0 2px var(--acc);background:rgba(181,101,63,.14);';
+    if (_dashCmpMode){
+      if (ds===_dashCmpA) st += 'box-shadow:inset 0 0 0 3px var(--blu);background:rgba(91,141,239,.16);';
+      else if (ds===_dashCmpB) st += 'box-shadow:inset 0 0 0 3px var(--acc);background:rgba(181,101,63,.16);';
+    } else if (ds===_dashCalSel) st += 'box-shadow:inset 0 0 0 2px var(--acc);background:rgba(181,101,63,.14);';
     const cnt = js.length ? '<span style="position:absolute;top:5px;right:6px;font-size:10px;background:var(--acc);color:#fff;border-radius:9px;padding:1px 6px;font-weight:800;">'+js.length+'</span>' : '';
     const sc  = js.length ? '<span style="position:absolute;top:24px;right:6px;font-size:10px;color:var(--acc);font-weight:700;">★'+pkDashSumScore_(js)+'</span>' : '';
     const dots = js.slice(0,6).map(j => '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;margin:1px;background:'+pkDashTone_(j.status||j.sheetStatus)+';"></span>').join('');
@@ -6699,8 +6704,74 @@ function dashCalRender(){
   grid.innerHTML = html;
   dashCalRenderPanel();
 }
+// การ์ดงานแบบเต็ม (ใช้ร่วมกันระหว่างมุมมองวันเดียว กับโหมดเทียบ)
+function dashJobCardFull_(j, none){
+  const badge = none ? ' <span style="font-size:10px;background:#3a2228;color:var(--rd);border:1px solid #54323a;border-radius:20px;padding:1px 8px;font-weight:800;">ยังไม่จัด</span>' : '';
+  const contBadge = (j.status==='continue') ? ' <span style="font-size:10px;background:#3a2228;color:var(--rd);border:1px solid #54323a;border-radius:20px;padding:1px 8px;font-weight:800;">➡ ต่องาน</span>' : '';
+  return '<div style="background:var(--surf2);border:1px solid '+(none?'#54323a':'var(--bdr)')+';border-radius:10px;padding:12px 14px;margin-bottom:10px;">'
+    + '<div style="font-size:16px;font-weight:800;margin-bottom:6px;">'+escHtml(j.name||'-')+badge+contBadge+'</div>'
+    + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:54px;">📍 ที่อยู่</span><span>'+escHtml(j.rawAddr||'-')+'</span></div>'
+    + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:54px;">🔧 รายการ</span><span>'+escHtml(j.job||'-')+'</span></div>'
+    + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);">'
+      + '<span style="color:var(--acc);font-weight:800;">★ คะแนน '+(Number(j.score)||0)+'</span>'
+      + '<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount||0)+'</span></div>'
+    + dashMapBtn_(j)
+    + dashShowAmtBtn(j)
+    + jobEditBtn_(j.id)
+    + '</div>';
+}
+
+// render งานของวันหนึ่งแบบเต็ม (header + กลุ่มทีม + การ์ดเต็ม) — ใช้ทั้งมุมมองเต็มและโหมดเทียบ
+function dashRenderDayFull_(ds){
+  const today = pkTodayStr_();
+  const js = _dashCalJobs.filter(j => j.date === ds);
+  const thd = (function(){ const x = ds.split('-'); return Number(x[2])+' '+PK_DASH_TH_M[Number(x[1])-1]+' '+(Number(x[0])+543); })();
+  let html = '<div style="margin-bottom:10px;"><div style="font-size:15px;font-weight:800;">📅 '+thd+(ds===today?' · วันนี้':'')+'</div>'
+    + '<div style="font-size:12px;color:var(--mu);">'+js.length+' งาน · <b style="color:var(--acc);">★ รวม '+pkDashSumScore_(js)+'</b></div></div>';
+  if (!js.length) return html + '<div class="loading-row">ไม่มีงานในวันนี้</div>';
+  const grp = pkDashGroupTeam_(js);
+  grp.order.forEach(tm => {
+    const list = grp.g[tm], none = (tm==='__none__');
+    const col = none ? 'var(--rd)' : 'var(--blu)';
+    html += '<div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:.4px;margin:14px 0 8px;padding-left:8px;border-left:3px solid '+col+';color:'+col+';">'
+      + (none ? '⚠ ยังไม่จัดทีม' : '👷 '+escHtml(tm))
+      + ' <span style="color:var(--mu);font-weight:600;">· '+list.length+' งาน · ★'+pkDashSumScore_(list)+'</span></div>';
+    list.forEach(j => { html += dashJobCardFull_(j, none); });
+  });
+  return html;
+}
+
+// render โหมดเทียบ 2 คอลัมน์ (ซ้าย=A, ขวา=B)
+function dashRenderCompare_(){
+  const colA = _dashCmpA ? dashRenderDayFull_(_dashCmpA) : '<div class="loading-row">แตะวันในปฏิทิน<br>(ช่องซ้าย)</div>';
+  const colB = _dashCmpB ? dashRenderDayFull_(_dashCmpB) : '<div class="loading-row">แตะอีกวันเพื่อเทียบ<br>(ช่องขวา)</div>';
+  return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surf2);border:1px solid var(--bdr);border-radius:12px;padding:10px 12px;margin-bottom:12px;">'
+    + '<div style="font-size:15px;font-weight:800;">⇄ เทียบงานติดตั้ง 2 วัน</div>'
+    + '<button onclick="dashCmpToggle()" style="font-size:12px;color:var(--mu);border:1px solid var(--bdr);background:transparent;border-radius:20px;padding:4px 12px;cursor:pointer;white-space:nowrap;">✕ ออกจากโหมดเทียบ</button></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start;">'
+    + '<div style="background:var(--surf);border:1px solid var(--bdr);border-top:3px solid var(--blu);border-radius:12px;padding:10px;min-width:0;"><div style="font-size:11px;font-weight:800;color:var(--blu);margin-bottom:8px;">◀ ซ้าย</div>'+colA+'</div>'
+    + '<div style="background:var(--surf);border:1px solid var(--bdr);border-top:3px solid var(--acc);border-radius:12px;padding:10px;min-width:0;"><div style="font-size:11px;font-weight:800;color:var(--acc);margin-bottom:8px;">ขวา ▶</div>'+colB+'</div>'
+    + '</div>';
+}
+
+// toggle โหมดเทียบ
+function dashCmpToggle(){
+  _dashCmpMode = !_dashCmpMode;
+  _dashCmpA = ''; _dashCmpB = '';
+  const b = document.getElementById('dashCmpBtn');
+  if (b){
+    b.textContent = _dashCmpMode ? '✕ เลิกเทียบ' : '⇄ เทียบ 2 วัน';
+    b.style.background = _dashCmpMode ? 'var(--acc)' : '';
+    b.style.color = _dashCmpMode ? '#fff' : '';
+  }
+  if (!_dashCmpMode) _dashCalClicked = false;
+  dashCalRender();
+  const el = document.getElementById('dashCalPanel'); if (el) el.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
 function dashCalRenderPanel(){
   const p = document.getElementById('dashCalPanel'); if (!p) return;
+  if (_dashCmpMode) { p.innerHTML = dashRenderCompare_(); return; }
   const ds = _dashCalSel, today = pkTodayStr_();
   const js = _dashCalJobs.filter(j => j.date === ds);
   const full = _dashCalClicked;
@@ -6721,18 +6792,8 @@ function dashCalRenderPanel(){
       const badge = none ? ' <span style="font-size:10px;background:#3a2228;color:var(--rd);border:1px solid #54323a;border-radius:20px;padding:1px 8px;font-weight:800;">ยังไม่จัด</span>' : '';
       const contBadge = (j.status==='continue') ? ' <span style="font-size:10px;background:#3a2228;color:var(--rd);border:1px solid #54323a;border-radius:20px;padding:1px 8px;font-weight:800;">➡ ต่องาน</span>' : '';
       if (full){
-        html += '<div style="background:var(--surf2);border:1px solid '+(none?'#54323a':'var(--bdr)')+';border-radius:10px;padding:12px 14px;margin-bottom:10px;">'
-          + '<div style="font-size:16px;font-weight:800;margin-bottom:6px;">'+escHtml(j.name||'-')+badge+contBadge+'</div>'
-          + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:54px;">📍 ที่อยู่</span><span>'+escHtml(j.rawAddr||'-')+'</span></div>'
-          + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:54px;">🔧 รายการ</span><span>'+escHtml(j.job||'-')+'</span></div>'
-          + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);">'
-            + '<span style="color:var(--acc);font-weight:800;">★ คะแนน '+(Number(j.score)||0)+'</span>'
-            + '<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount||0)+'</span></div>'
-          + dashMapBtn_(j)
-          + dashShowAmtBtn(j)
-          + jobEditBtn_(j.id)
-          + '</div>';
-      } else {
+        html += dashJobCardFull_(j, none);
+            } else {
         html += '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--bdr);font-size:14px;">'
           + '<span style="font-weight:700;flex:1;min-width:0;">'+escHtml(j.name||'-')+badge+contBadge+'</span>'
           + '<span style="color:var(--mu);font-size:12px;">📍 '+escHtml(pkExtractDistrict_(j.rawAddr))+'</span>'
@@ -6742,7 +6803,20 @@ function dashCalRenderPanel(){
   });
   p.innerHTML = html;
 }
-function dashCalPick(ds){ _dashCalSel = ds; _dashCalClicked = true; dashCalRender(); const el=document.getElementById('dashCalPanel'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+function dashCalPick(ds){
+  if (_dashCmpMode){
+    if (ds === _dashCmpA) _dashCmpA = '';
+    else if (ds === _dashCmpB) _dashCmpB = '';
+    else if (!_dashCmpA) _dashCmpA = ds;
+    else if (!_dashCmpB) _dashCmpB = ds;
+    else { toast('เลือกได้ 2 วัน · แตะวันที่เลือกไว้เพื่อเอาออกก่อน'); return; }
+    dashCalRender();
+    if (_dashCmpA && _dashCmpB){ const el=document.getElementById('dashCalPanel'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+    return;
+  }
+  _dashCalSel = ds; _dashCalClicked = true; dashCalRender();
+  const el=document.getElementById('dashCalPanel'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+}
 async function dashCalPrev(){ _dashCalM--; if(_dashCalM<0){_dashCalM=11;_dashCalY--;} dashCalRender(); await dashCalReload(); }
 async function dashCalNext(){ _dashCalM++; if(_dashCalM>11){_dashCalM=0;_dashCalY++;} dashCalRender(); await dashCalReload(); }
 async function dashCalToday(){ const t=new Date(); _dashCalY=t.getFullYear(); _dashCalM=t.getMonth(); _dashCalSel=pkTodayStr_(); _dashCalClicked=false; dashCalRender(); await dashCalReload(); }
@@ -7106,7 +7180,7 @@ function dashMapBtn_(j){
       url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(clean);
     }
   }
-  var label = pin ? '\U0001F5FA\uFE0F \u0e14\u0e39\u0e41\u0e1c\u0e19\u0e17\u0e35\u0e48 (\u0e1b\u0e31\u0e01\u0e2b\u0e21\u0e38\u0e14)' : '\U0001F5FA\uFE0F \u0e14\u0e39\u0e41\u0e1c\u0e19\u0e17\u0e35\u0e48';
+  var label = pin ? '🗺️ \u0e14\u0e39\u0e41\u0e1c\u0e19\u0e17\u0e35\u0e48 (\u0e1b\u0e31\u0e01\u0e2b\u0e21\u0e38\u0e14)' : '🗺️ \u0e14\u0e39\u0e41\u0e1c\u0e19\u0e17\u0e35\u0e48';
   return '<a href="' + url + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:9px;font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;border:1px solid var(--blu);background:transparent;color:var(--blu);cursor:pointer;text-decoration:none;">' + label + '</a>';
 }
 function dashShowAmtBtn(j){
