@@ -3192,12 +3192,32 @@ async function employeeSave(){
 // ════════════════════════════════════════
 let _tlRecords = [], _tlEmps = [], _tlType = '', _tlDeduct = false;
 
+let USE_SHEETS_PAY = true;   // ON: payroll บันทึกเวลา /payroll-timelog
+async function getPayTimeLogFast(){
+  if (USE_SHEETS_PAY && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/payroll-timelog'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.records)) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getPayTimeLogFast] /payroll-timelog ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e) {
+      console.warn('[getPayTimeLogFast] /payroll-timelog error → fallback GAS:', e.message);
+    }
+  }
+  const _g = await call({ action:'pk_payListTimeLog' });
+  _markJobSource('gas');
+  return _g;
+}
 async function timelogInit(){ timelogLoad(); }
 async function timelogLoad(){
   const box = document.getElementById('tlRecList');
   box.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
   try {
-    const r = await call({ action:'pk_payListTimeLog' });
+    const r = await getPayTimeLogFast();
     if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
     _tlRecords = r.records || [];
     _tlEmps = r.employees || [];
