@@ -3231,6 +3231,44 @@ async function getPayEmployeesFast(){
   _markJobSource('gas');
   return _g;
 }
+// คำนวณงวดเงินเดือน (pk_paySalaryV2) — shadow-compare: Worker vs GAS, ยึด GAS จนกว่าจะ verified
+let PAYCALC_SHADOW = true;   // true = เทียบ Workerกับ GAS (ไม่ตรง=ใช้ GAS) ; false = Worker-first + GAS fallback (เร็ว)
+function _payCalcDiff(w, g){
+  const fields = ['base','perDay','gross','absentDays','dedAbsent','lateTotal','advTaken','advDeducted','advOutstanding'];
+  const out = [];
+  fields.forEach(f => { if (Number(w[f]||0) !== Number(g[f]||0)) out.push(f + ': W=' + w[f] + ' G=' + g[f]); });
+  const wi = (w.employee && w.employee.id) || '', gi = (g.employee && g.employee.id) || '';
+  if (wi !== gi) out.push('empId: W=' + wi + ' G=' + gi);
+  return out;
+}
+async function getPaySalaryV2Fast(empId, from, to, gross){
+  const args = { action:'pk_paySalaryV2', empId: empId, from: from, to: to, gross: gross };
+  if (!(USE_SHEETS_PAY && CURRENT_USER)) { const g = await call(args); _markJobSource('gas'); return g; }
+  const wfetch = (async () => {
+    const r = await fetch(API.replace(/\/api$/, '/payroll-calc'), {
+      method:'POST', redirect:'follow',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ empId: empId, from: from, to: to, gross: Number(gross) || 0, username:CURRENT_USER.username, token:CURRENT_USER.token })
+    });
+    return r.json();
+  })();
+  if (PAYCALC_SHADOW) {
+    let w = null, g = null;
+    try { [w, g] = await Promise.all([ wfetch.catch(e => ({ ok:false, error:e.message })), call(args) ]); }
+    catch(e) { g = await call(args); }
+    if (g && g.ok && w && w.ok) {
+      const diff = _payCalcDiff(w, g);
+      if (diff.length === 0) { console.log('[payroll-calc] ✓ Worker == GAS (' + w.ms + 'ms)'); _markJobSource('sheets', w.ms); return w; }
+      console.warn('[payroll-calc] ✗ Worker ≠ GAS → ใช้ GAS. diff:', diff);
+    } else if (w && !w.ok) {
+      console.warn('[payroll-calc] worker ไม่ ok → ใช้ GAS:', w && w.error);
+    }
+    _markJobSource('gas'); return g;
+  }
+  try { const w = await wfetch; if (w && w.ok) { _markJobSource('sheets', w.ms); return w; } console.warn('[payroll-calc] ไม่ ok → fallback GAS:', w && w.error); }
+  catch(e) { console.warn('[payroll-calc] error → fallback GAS:', e.message); }
+  const g = await call(args); _markJobSource('gas'); return g;
+}
 async function timelogInit(){ timelogLoad(); }
 async function timelogLoad(){
   const box = document.getElementById('tlRecList');
@@ -3431,7 +3469,7 @@ async function payrollCalc(){
   if (!from || !to){ toast('ระบุช่วงงวด'); return; }
   showLoad('คำนวณ...');
   try {
-    const r = await call({ action:'pk_paySalaryV2', empId: empId, from: from, to: to, gross: gross });
+    const r = await getPaySalaryV2Fast(empId, from, to, gross);
     hideLoad();
     if (!r.ok){ toast('❌ ' + (r.error||'')); return; }
     _payCalc = r; payrollRenderCalc(r);
