@@ -3527,12 +3527,31 @@ async function payrollCommit(){
     payrollLoadRuns();
   } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
+async function getPaySalaryRunsFast(empId){
+  if (USE_SHEETS_PAY && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/payroll-runs'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ empId: empId, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.runs)) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getPaySalaryRunsFast] /payroll-runs ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e) {
+      console.warn('[getPaySalaryRunsFast] /payroll-runs error → fallback GAS:', e.message);
+    }
+  }
+  const _g = await call({ action:'pk_paySalaryRuns', empId: empId });
+  _markJobSource('gas');
+  return _g;
+}
 async function payrollLoadRuns(){
   const empId = document.getElementById('payEmp').value; const box = document.getElementById('payRuns');
   if (!empId){ box.innerHTML = '<div class="loading-row">เลือกพนักงานเพื่อดูประวัติ</div>'; return; }
   box.innerHTML = '<div class="loading-row">โหลด...</div>';
   try {
-    const r = await call({ action:'pk_paySalaryRuns', empId: empId });
+    const r = await getPaySalaryRunsFast(empId);
     if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'') + '</div>'; return; }
     if (!r.runs.length){ box.innerHTML = '<div class="loading-row">ยังไม่มีงวด</div>'; return; }
     const b0 = n => '฿' + (Number(n)||0).toLocaleString('th-TH');
