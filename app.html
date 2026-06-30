@@ -1628,7 +1628,7 @@ function renderOfficeShell(){
               </div>
               <div class="fg" style="min-width:100px;">
                 <label class="fl">คะแนน (1-10)</label>
-                <input class="fi" id="bkScore" type="number" min="1" max="10" step="0.5" value="1">
+                <input class="fi" id="bkScore" type="number" min="1" max="10" step="0.5" value="" placeholder="ใส่คะแนน 1-10">
               </div>
               <div class="fg" style="flex:1;min-width:140px;">
                 <label class="fl">ยอดเงิน</label>
@@ -3864,6 +3864,8 @@ async function submitBooking(){
     const amount   = document.getElementById('bkAmount').value;
     const team     = document.getElementById('bkTeam').value;
     if (!date || !customer) { toast('กรอก วันที่ และ ชื่อลูกค้า'); return; }
+    if (score === '' || score == null) { toast('กรอกคะแนนก่อน (บังคับลงคะแนน)'); return; }
+    { const _sc = Number(score); if (isNaN(_sc) || _sc < 1 || _sc > 10) { toast('คะแนนต้องอยู่ระหว่าง 1-10'); return; } }
     // ติ๊กงานกระจก → ต่อท้าย JOB ด้วย [กระจก] (ใช้เป็น flag จังหวะ2)
     const _glassChk = document.getElementById('bkGlass');
     const job2 = (_glassChk && _glassChk.checked && job.indexOf('[กระจก]') === -1) ? (job + ' [กระจก]').trim() : job;
@@ -3880,6 +3882,7 @@ async function submitBooking(){
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error || 'ผิดพลาด')); return; }
     toast(`✅ ลงคิว ${r.sheet} #${r.id} สำเร็จ`);
+    clearCache(); _dashCalCache = {};   // ลงคิวแล้วล้าง cache ให้ขึ้นทันที
     addRecentBooking(r);
     clearBookingForm();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
@@ -4234,7 +4237,7 @@ function clearBookingForm_impl(){
     document.getElementById('bkCustomer').value = '';
     document.getElementById('bkAddress').value = '';
     document.getElementById('bkJob').value = '';
-    document.getElementById('bkScore').value = '1';
+    document.getElementById('bkScore').value = '';
     document.getElementById('bkAmount').value = '';
     document.getElementById('bkTeam').value = '';
   } else {
