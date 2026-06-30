@@ -3104,7 +3104,7 @@ async function employeesLoad(){
   const box = document.getElementById('empRegList');
   box.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
   try {
-    const r = await call({ action:'pk_payListEmployees' });
+    const r = await getPayEmployeesFast();
     if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
     _empList = r.employees || [];
     employeesRender();
@@ -3209,6 +3209,25 @@ async function getPayTimeLogFast(){
     }
   }
   const _g = await call({ action:'pk_payListTimeLog' });
+  _markJobSource('gas');
+  return _g;
+}
+async function getPayEmployeesFast(){
+  if (USE_SHEETS_PAY && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/payroll-employees'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.employees)) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getPayEmployeesFast] /payroll-employees ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e) {
+      console.warn('[getPayEmployeesFast] /payroll-employees error → fallback GAS:', e.message);
+    }
+  }
+  const _g = await call({ action:'pk_payListEmployees' });
   _markJobSource('gas');
   return _g;
 }
@@ -3397,7 +3416,7 @@ async function payrollInit(){
   if (!document.getElementById('payTo').value) document.getElementById('payTo').value = iso(d2);
   if (_payEmps.length) return;
   try {
-    const r = await call({ action:'pk_payListEmployees' });
+    const r = await getPayEmployeesFast();
     if (r.ok){ _payEmps = r.employees || [];
       document.getElementById('payEmp').innerHTML = '<option value="">— เลือก —</option>' +
         _payEmps.map(e => '<option value="' + e.id + '">' + e.name + ' (' + (e.type||'-') + ')</option>').join(''); }
