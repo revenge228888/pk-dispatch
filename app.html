@@ -4118,9 +4118,9 @@ function bkRenderSuggest(r){
       bc = 'var(--mu)'; tag = '';
     }
     const bw = isMax ? '2px' : '1.5px';
-    h += '<div onclick="bkPickDate(\'' + s.dateKey + '\')" style="cursor:pointer;border:' + bw + ' solid ' + bc + ';border-radius:8px;padding:8px 12px;min-width:150px;">'
+    h += '<div onclick="bkPickDate(\'' + s.dateKey + '\')" style="cursor:pointer;border:' + bw + ' solid ' + bc + ';border-radius:8px;padding:8px 12px;min-width:196px;">'
        +   '<div style="font-size:15px;font-weight:600;">' + s.dateKey + tag + '</div>'
-       +   (s.capacity>0 ? '<div title="ภาระวันนี้ '+s.loadBefore+'/'+s.capacity+'" style="height:6px;background:var(--surf2);border-radius:3px;overflow:hidden;margin:6px 0 4px;"><div style="height:100%;width:'+Math.min(100,Math.round(s.loadBefore/s.capacity*100))+'%;background:'+(s.clusterOver?'var(--rd)':(s.loadBefore/s.capacity>=0.85?'var(--acc)':'var(--grn)'))+';"></div></div>' : '')
+       +   bkTeamMetersHtml(s)
        +   '<div style="font-size:11px;color:var(--mu);margin-top:3px;line-height:1.5;">' + s.reasons.join('<br>') + '</div>'
        +   '<div style="font-size:11px;margin-top:3px;color:var(--acc);">ถัง: ' + s.pool + '</div>'
        + '</div>';
@@ -4129,6 +4129,31 @@ function bkRenderSuggest(r){
   box.innerHTML = h;
 }
 
+function bkTeamMetersHtml(s){
+  if (s.perTeamLoad && s.perTeamLoad.length){
+    var rows = s.perTeamLoad.map(function(t){
+      var nm=(t.team||'').replace(/[^A-Za-z]/g,'')||t.team;
+      var cap=Math.max(t.cap||10,1), pct=Math.min(100,Math.round(t.load/cap*100));
+      var col=t.over?'var(--rd)':(t.load/cap>=0.85?'var(--acc)':'var(--grn)');
+      var rec=(t.team===s.recommendedTeam);
+      return '<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px;">'
+        +'<span style="font-size:10px;width:66px;color:'+(rec?'var(--acc)':'var(--mu)')+';'+(rec?'font-weight:700;':'')+'">'+(rec?'\u25B6 ':'')+'ทีม '+nm+(t.backup?' (สำรอง)':'')+'</span>'
+        +'<div style="flex:1;height:5px;background:var(--surf2);border-radius:3px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+col+';"></div></div>'
+        +'<span style="font-size:9px;color:var(--mu);width:32px;text-align:right;">'+t.load+'/'+t.cap+'</span>'
+        +'</div>';
+    }).join('');
+    var badge = s.recommendedTeam
+      ? '<div style="font-size:11px;color:var(--acc);margin-top:3px;font-weight:600;">\u2b50 แนะนำ: ทีม '+(s.recommendedTeam||'').replace(/[^A-Za-z]/g,'')+(s.usedBackup?' \u00b7 ต้องใช้สำรอง':'')+'</div>'
+      : '<div style="font-size:11px;color:var(--rd);margin-top:3px;">\u26a0 ทุกทีมเต็มวันนี้</div>';
+    return '<div style="margin:7px 0 2px;">'+rows+badge+'</div>';
+  }
+  if (s.capacity>0){
+    var p=Math.min(100,Math.round(s.loadBefore/s.capacity*100));
+    var c=s.clusterOver?'var(--rd)':(s.loadBefore/s.capacity>=0.85?'var(--acc)':'var(--grn)');
+    return '<div title="ภาระวันนี้ '+s.loadBefore+'/'+s.capacity+'" style="height:6px;background:var(--surf2);border-radius:3px;overflow:hidden;margin:6px 0 4px;"><div style="height:100%;width:'+p+'%;background:'+c+';"></div></div>';
+  }
+  return '';
+}
 function bkPickDate(dateKey){
   const p = String(dateKey).split('/');
   if (p.length === 3){
