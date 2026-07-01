@@ -1034,6 +1034,27 @@ function clearCache(actions){
   }
 }
 
+// ── call() timeout + safe-retry ──
+// retry เฉพาะ action อ่าน (idempotent) = ปลอดภัย ไม่เขียนซ้ำ · action เขียน = timeout อย่างเดียว
+const CALL_TIMEOUT_MS = 25000;
+const CALL_RETRIES = 1;
+const CALL_RETRY_BACKOFF_MS = 800;
+function _callRetrySafe(action){
+  return CACHEABLE_ACTIONS.has(action) || action === 'pk_checkSession' || action === 'pk_login';
+}
+async function _fetchCall(body, timeoutMs){
+  const ctrl = new AbortController();
+  const _t = setTimeout(function(){ ctrl.abort(); }, timeoutMs);
+  try {
+    const r = await fetch(API, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+    return await r.json();
+  } finally { clearTimeout(_t); }
+}
 async function call(body, opts){
   opts = opts || {};
   // Auto-attach username + token (ยกเว้น pk_login ที่ส่ง username/password)
@@ -1052,16 +1073,14 @@ async function call(body, opts){
     }
   }
 
-  try {
-    const r = await fetch(API, {
-      method: 'POST',
-      redirect: 'follow',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
-    });
-    const data = await r.json();
+  const _retrySafe = _callRetrySafe(body.action);
+  const _maxAttempts = _retrySafe ? (CALL_RETRIES + 1) : 1;
+  let data = null, _lastErr = null;
+  for (let _a = 1; _a <= _maxAttempts; _a++) {
+    try { data = await _fetchCall(body, CALL_TIMEOUT_MS); _lastErr = null; break; }
+    catch(e) { _lastErr = e; if (_a < _maxAttempts) { await new Promise(function(res){ setTimeout(res, CALL_RETRY_BACKOFF_MS * _a); }); } }
+  }
+  if (_lastErr) { toast(_lastErr.name === 'AbortError' ? '❌ เชื่อมต่อช้า/หมดเวลา' : '❌ เชื่อมต่อไม่ได้'); throw _lastErr; }
 
     // ถ้า server บอกว่า session ไม่ valid → verify อีกครั้งก่อน kick (กัน glitch ชั่วคราว)
     if (data && data.ok === false && data.error &&
@@ -1088,7 +1107,7 @@ async function call(body, opts){
     }
 
     return data;
-  } catch(e) { toast('❌ เชื่อมต่อไม่ได้'); throw e; }
+
 }
 
 // ════════════════════════════════════════
