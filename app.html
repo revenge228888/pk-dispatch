@@ -4120,6 +4120,7 @@ function bkRenderSuggest(r){
     const bw = isMax ? '2px' : '1.5px';
     h += '<div onclick="bkPickDate(\'' + s.dateKey + '\')" style="cursor:pointer;border:' + bw + ' solid ' + bc + ';border-radius:8px;padding:8px 12px;min-width:150px;">'
        +   '<div style="font-size:15px;font-weight:600;">' + s.dateKey + tag + '</div>'
+       +   (s.capacity>0 ? '<div title="ภาระวันนี้ '+s.loadBefore+'/'+s.capacity+'" style="height:6px;background:var(--surf2);border-radius:3px;overflow:hidden;margin:6px 0 4px;"><div style="height:100%;width:'+Math.min(100,Math.round(s.loadBefore/s.capacity*100))+'%;background:'+(s.clusterOver?'var(--rd)':(s.loadBefore/s.capacity>=0.85?'var(--acc)':'var(--grn)'))+';"></div></div>' : '')
        +   '<div style="font-size:11px;color:var(--mu);margin-top:3px;line-height:1.5;">' + s.reasons.join('<br>') + '</div>'
        +   '<div style="font-size:11px;margin-top:3px;color:var(--acc);">ถัง: ' + s.pool + '</div>'
        + '</div>';
@@ -4305,8 +4306,6 @@ function assignRenderBoard(){
        + ' <span style="font-size:11px;font-weight:400;color:'+(over?'var(--acc)':'var(--mu)')+';">('+list.length+' งาน · '+sum+'/'+cap+' คะแนน'
        + (over?' ⚠️ เกินเพดาน OT':'')
        + (!_asDirty&&_asTeamInfo[team]? ' · เส้นทาง ~'+_asTeamInfo[team].routeKm+' กม.':'')+')</span></div>';
-    h += '<div style="height:6px;background:var(--surf2);border-radius:3px;overflow:hidden;margin-bottom:8px;">'
-       + '<div style="height:100%;width:'+Math.min(100,Math.round(sum/Math.max(cap,1)*100))+'%;background:'+(over?'var(--rd)':(sum/Math.max(cap,1)>=0.85?'var(--acc)':'var(--grn)'))+';"></div></div>';
     list.forEach(j => {
       const diffColor = j.difficulty==='หนัก'?'var(--rd)':(j.difficulty==='ปานกลาง'?'var(--acc)':'var(--grn)');
       const bad = !_asCanDo(j, team);
