@@ -2050,7 +2050,7 @@ function renderOfficeShell(){
       <div id="tabExpenseapprove" style="display:none;">
         <div class="section-pad">
           <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
-            <select class="fi" id="expApproveFilter" onchange="expenseApproveLoad()" style="flex:1;">
+            <select class="fi" id="expApproveFilter" onchange="expenseApproveFilterChanged()" style="flex:1;">
               <option value="รออนุมัติ">⏳ รออนุมัติ</option>
               <option value="อนุมัติแล้ว">💰 อนุมัติแล้ว (รอจ่าย)</option>
               <option value="จ่ายแล้ว">✅ จ่ายแล้ว</option>
@@ -2793,6 +2793,8 @@ async function expenseApproveInit(){
   if (f) f.value = 'รออนุมัติ';
   expenseApproveLoad();
 }
+// เปลี่ยน filter = ออกจากโหมด batch เสมอ (กัน action/selection ค้างข้ามชุดสถานะ)
+function expenseApproveFilterChanged(){ if (_batchMode) expenseBatchExit(); expenseApproveLoad(); }
 async function expenseApproveLoad(){
   const box = document.getElementById('expApproveList');
   box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">กำลังโหลด...</div>';
