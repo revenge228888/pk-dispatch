@@ -9423,6 +9423,7 @@ function quoteDefaultDoc(){
     showSize: true,
     vat: { on:false, rate:7 },
     wht: { on:false, rate:3 },
+    discount: { on:false, mode:'amount', value:0 },
     deposit: { on:false, mode:'percent', value:50 },
     note: '',
     showNote: false,
@@ -9860,7 +9861,7 @@ function quoteRenderForm(){
       <div class="quom-section-head">ค่าใช้จ่ายเพิ่มเติม</div>
       <div id="quomFeesList">${feesRows || '<div style="color:var(--mu);font-size:12px;font-style:italic;padding:4px 0;">ยังไม่มีรายการ</div>'}</div>
       ${!ro?`<button class="quom-add-btn" onclick="quoteAddFee()" style="margin-top:8px;">+ เพิ่มค่าใช้จ่าย</button>`:''}
-      ${feesTotal>0?`<div style="text-align:right;margin-top:8px;font-size:13px;color:var(--mu);">รวมค่าใช้จ่ายเพิ่ม: <b style="color:var(--blu);font-family:var(--mono);">฿${fmt(feesTotal)}</b></div>`:''}
+      ${feesTotal!==0?`<div style="text-align:right;margin-top:8px;font-size:13px;color:var(--mu);">รวมค่าใช้จ่ายเพิ่ม: <b style="color:${feesTotal<0?'var(--rd)':'var(--blu)'};font-family:var(--mono);">${feesTotal<0?'−':''}฿${fmt(Math.abs(feesTotal))}</b></div>`:''}
     </div>
   `;
 
@@ -9868,9 +9869,21 @@ function quoteRenderForm(){
   const grand = quoteCalcAll();
   const sm = quoteCalcSummary(dc, grand);
   const dep = dc.deposit || {};
+  const dsc = dc.discount || {};
   html += `
     <div class="quom-section">
       <div class="quom-section-head">ตัวเลือกเอกสาร & ภาษี</div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" ${dsc.on?'checked':''} onchange="quoteToggleTax('discount',this.checked)" ${ro?'disabled':''}>
+        🏷 ส่วนลด
+        ${dsc.on?`
+          <select class="fi" style="width:auto;margin-left:auto;" onchange="quoteSetDoc('discount.mode',this.value)" ${ro?'disabled':''}>
+            <option value="amount"${dsc.mode!=='percent'?' selected':''}>บาท</option>
+            <option value="percent"${dsc.mode==='percent'?' selected':''}>%</option>
+          </select>
+          <input class="fi" type="number" min="0" style="width:84px;text-align:right;" value="${dsc.value??0}" oninput="quoteSetDocNum('discount.value',this.value)" ${ro?'readonly':''}>
+        `:''}
+      </label>
       <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;cursor:pointer;">
         <input type="checkbox" ${dc.vat&&dc.vat.on?'checked':''} onchange="quoteToggleTax('vat',this.checked)" ${ro?'disabled':''}>
         เพิ่ม VAT
@@ -10045,19 +10058,28 @@ function quoteCalcSummary(dc, subtotal){
   const vatOn = !!(dc.vat && dc.vat.on), whtOn = !!(dc.wht && dc.wht.on), depOn = !!(dc.deposit && dc.deposit.on);
   const vatRate = Number(dc.vat && dc.vat.rate) || 0;
   const whtRate = Number(dc.wht && dc.wht.rate) || 0;
-  const vat = vatOn ? Math.round(subtotal * vatRate / 100) : 0;
-  const wht = whtOn ? Math.round(subtotal * whtRate / 100) : 0;
-  const net = subtotal + vat - wht;
+  const discOn = !!(dc.discount && dc.discount.on);
+  const discMode = (dc.discount && dc.discount.mode === 'percent') ? 'percent' : 'amount';
+  const discValue = Number(dc.discount && dc.discount.value) || 0;
+  let discount = 0;
+  if (discOn) discount = discMode === 'percent' ? Math.round(subtotal * discValue / 100) : Math.round(discValue);
+  if (discount > subtotal) discount = subtotal;   // กันยอดติดลบ
+  if (discount < 0) discount = 0;
+  const base = subtotal - discount;               // ภาษีคิดจากยอดหลังหักส่วนลด
+  const vat = vatOn ? Math.round(base * vatRate / 100) : 0;
+  const wht = whtOn ? Math.round(base * whtRate / 100) : 0;
+  const net = base + vat - wht;
   const depMode = (dc.deposit && dc.deposit.mode === 'amount') ? 'amount' : 'percent';
   const depValue = Number(dc.deposit && dc.deposit.value) || 0;
   let deposit = 0;
   if (depOn) deposit = depMode === 'amount' ? depValue : Math.round(net * depValue / 100);
   const remaining = net - deposit;
-  return { subtotal, vatOn, vat, vatRate, whtOn, wht, whtRate, net, depOn, depMode, depValue, deposit, remaining };
+  return { subtotal, discOn, discMode, discValue, discount, base, vatOn, vat, vatRate, whtOn, wht, whtRate, net, depOn, depMode, depValue, deposit, remaining };
 }
 function quoteSummaryHtml(sm){
   const row = (label, val, color, mono) => `<div style="display:flex;justify-content:space-between;font-size:13px;color:${color||'var(--mu)'};padding:2px 0;"><span>${label}</span><span style="font-family:var(--mono);">${val}</span></div>`;
   let h = row('ยอดรวมรายการ', '฿' + fmt(sm.subtotal));
+  if (sm.discOn) h += row('− ส่วนลด' + (sm.discMode === 'percent' ? ' ' + sm.discValue + '%' : ''), '−฿' + fmt(sm.discount), 'var(--rd)');
   if (sm.vatOn) h += row('+ VAT ' + sm.vatRate + '%', '฿' + fmt(sm.vat));
   if (sm.whtOn) h += row('− หัก ณ ที่จ่าย ' + sm.whtRate + '%', '−฿' + fmt(sm.wht), 'var(--rd)');
   h += `<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--bdr);margin-top:4px;padding-top:6px;"><span class="quom-grand-label">💰 ยอดสุทธิ</span><span class="quom-grand-amt" id="quomGrandTotal">฿${fmt(sm.net)}</span></div>`;
@@ -10089,6 +10111,7 @@ function quoteToggleTax(which, on){
   const d = _quoForm.doc;
   if (which === 'vat'){ d.vat = d.vat || {}; d.vat.on = on; if (on && !(Number(d.vat.rate) > 0)) d.vat.rate = 7; }
   else if (which === 'wht'){ d.wht = d.wht || {}; d.wht.on = on; if (on && !(Number(d.wht.rate) > 0)) d.wht.rate = 3; }
+  else if (which === 'discount'){ d.discount = d.discount || {}; d.discount.on = on; if (!d.discount.mode) d.discount.mode = 'amount'; }
   else if (which === 'deposit'){ d.deposit = d.deposit || {}; d.deposit.on = on; if (!d.deposit.mode) d.deposit.mode = 'percent'; if (on && !(Number(d.deposit.value) > 0)) d.deposit.value = 50; }
   _quoForm.dirty = true;
   quoteRenderForm();
@@ -10406,11 +10429,12 @@ function quoteA4Tail(doc, fees, summary){
   let feesHtml = '';
   if (fees && fees.length){
     feesHtml = `<div style="margin-top:10px;font-size:12px;">` +
-      fees.map(f => `<div style="display:flex;justify-content:space-between;padding:2px 0;color:#856404;"><span>🔧 ${escAttr(f.label)||'(ค่าใช้จ่าย)'}</span><span>฿${fmt(f.amount)}</span></div>`).join('') + `</div>`;
+      fees.map(f => { const _neg = Number(f.amount) < 0; return `<div style="display:flex;justify-content:space-between;padding:2px 0;color:${_neg?'#c0392b':'#856404'};"><span>${_neg?'🏷':'🔧'} ${escAttr(f.label)||(_neg?'(ส่วนลด)':'(ค่าใช้จ่าย)')}</span><span>${_neg?'−':''}฿${fmt(Math.abs(Number(f.amount)||0))}</span></div>`; }).join('') + `</div>`;
   }
   const sumRow = (lbl, val, color, big) =>
     `<div style="display:flex;justify-content:space-between;padding:${big?'6px':'3px'} 0;${big?'border-top:2px solid #1e6fb8;font-weight:800;font-size:15px;color:#1e6f3a;':'font-size:13px;color:'+(color||'#333')+';'}"><span>${lbl}</span><span style="font-family:'IBM Plex Mono',monospace;">${val}</span></div>`;
   let s = sumRow('ยอดรวมรายการ', '฿'+fmt(summary.subtotal));
+  if (summary.discOn) s += sumRow('− ส่วนลด' + (summary.discMode === 'percent' ? ' ' + summary.discValue + '%' : ''), '−฿'+fmt(summary.discount), '#c0392b');
   if (summary.vatOn) s += sumRow('+ VAT ' + summary.vatRate + '%', '฿'+fmt(summary.vat));
   if (summary.whtOn) s += sumRow('− หัก ณ ที่จ่าย ' + summary.whtRate + '%', '−฿'+fmt(summary.wht), '#c0392b');
   s += sumRow('ยอดสุทธิ', '฿'+fmt(summary.net), null, true);
@@ -10488,7 +10512,7 @@ async function _quotePaginate(){
   const customer = _quoForm.customer || { name:'', phone:'' };
   const entries = (_quoForm.entries || []).filter(e => !e.isEmpty).map(e => { e._calc = quoteCalcEntry(e); return e; });
   if (!entries.length) { toast('ไม่มีรายการให้ export'); return null; }
-  const fees = (_quoForm.additionalFees || []).filter(f => Number(f.amount) > 0);
+  const fees = (_quoForm.additionalFees || []).filter(f => Number(f.amount) !== 0);   // รวมค่าติดลบ (ส่วนลด) ด้วย — เดิมกรอง >0 ทำให้ยอดในใบไม่รวมส่วนลด
   const doc = _quoForm.doc || {};
   const showSize = doc.showSize !== false;
   let subtotal = entries.reduce((s,e) => s + (e._calc?.total||0), 0);
