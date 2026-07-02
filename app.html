@@ -9410,7 +9410,8 @@ function quoteEmptyEntry(no){
     width: null, height: null, qty: null,
     colorId: '',          // '' = use mainColor
     types: [], note: '',
-    kind: 'auto', customType: '', unitPrice: null
+    kind: 'auto', customType: '', unitPrice: null,
+    unitMode: 'set', sqmManual: null, sqmMin: null
   };
 }
 
@@ -9650,6 +9651,15 @@ function quoteCalcEntry(entry){
   if (entry.kind === 'manual') {
     const up = Number(entry.unitPrice) || 0;
     const mq = Number(entry.qty) || 1;
+    if (entry.unitMode === 'sqm') {
+      const mw = Number(entry.width) || 0, mh = Number(entry.height) || 0;
+      const sqm = (mw > 0 && mh > 0) ? Math.round(mw * mh / 100) / 100 : Math.round((Number(entry.sqmManual) || 0) * 100) / 100;
+      const mn = Number(entry.sqmMin) || 0;
+      const used = sqm > 0 ? Math.max(sqm, mn) : 0;   // ขั้นต่ำต่อรายการ
+      const mt = Math.round(up * used * mq);
+      const noteMin = (mn > 0 && sqm > 0 && sqm < mn) ? ' · คิดขั้นต่ำ ' + mn + ' ตร.ม.' : '';
+      return { total: mt, breakdown: mt ? [{ typeId:'manual', label: entry.customType || 'รายการ', price: mt, note: used + ' ตร.ม. × ' + fmt(up) + '/ตร.ม. × ' + mq + noteMin, unit:'ตร.ม.', uqty: used, rate: up }] : [] };
+    }
     const mt = Math.round(up * mq);
     return { total: mt, breakdown: mt ? [{ typeId:'manual', label: entry.customType || 'รายการ', price: mt, note: fmt(up) + '/ชุด × ' + mq, unit:'ชุด', uqty: mq, rate: up }] : [] };
   }
@@ -10005,18 +10015,40 @@ function quoteRenderEntry(e, idx, ro){
       <div style="margin-bottom:8px;">
         <div style="display:flex;gap:6px;margin-bottom:8px;">
           <button type="button" style="flex:1;padding:7px;border-radius:8px;border:1px solid var(--bdr);background:${!isManual?'var(--acc)':'transparent'};color:${!isManual?'#11151c':'var(--mu)'};font-weight:700;font-size:12px;cursor:pointer;" onclick="quoteSetEntryKind(${idx},'auto')">📐 คำนวณอัตโนมัติ</button>
-          <button type="button" style="flex:1;padding:7px;border-radius:8px;border:1px solid var(--bdr);background:${isManual?'var(--acc)':'transparent'};color:${isManual?'#11151c':'var(--mu)'};font-weight:700;font-size:12px;cursor:pointer;" onclick="quoteSetEntryKind(${idx},'manual')">✏️ พิมพ์ราคาเอง (ชุด)</button>
+          <button type="button" style="flex:1;padding:7px;border-radius:8px;border:1px solid var(--bdr);background:${isManual?'var(--acc)':'transparent'};color:${isManual?'#11151c':'var(--mu)'};font-weight:700;font-size:12px;cursor:pointer;" onclick="quoteSetEntryKind(${idx},'manual')">✏️ พิมพ์ราคาเอง</button>
         </div>
         ${isManual ? `
           <div class="fg" style="margin-bottom:8px;">
-            <label class="fl">📝 รูปแบบ</label>
-            <input class="fi" list="quomSug${idx}" type="text" placeholder="เช่น มุ้งบานเลื่อน, กระจกอลูมิเนียม" value="${escAttr(e.customType||'')}" oninput="quoteOnEntryChange(${idx},'customType',this.value)">
+            <label class="fl">📝 ชื่อสินค้า / รูปแบบ</label>
+            <input class="fi" list="quomSug${idx}" type="text" placeholder="เช่น กระจกอลูมิเนียม, ประตูบานสวิง" value="${escAttr(e.customType||'')}" oninput="quoteOnEntryChange(${idx},'customType',this.value)">
             <datalist id="quomSug${idx}">${QUO_MANUAL_SUGGEST.map(s => `<option value="${escAttr(s)}">`).join('')}</datalist>
           </div>
-          <div class="fg" style="margin-bottom:8px;">
-            <label class="fl">💵 ราคา/ชุด (บาท)</label>
-            <input class="fi" type="number" inputmode="decimal" placeholder="0" value="${e.unitPrice??''}" oninput="quoteOnEntryChange(${idx},'unitPrice',this.value===''?null:parseFloat(this.value))">
+          <div style="display:flex;gap:6px;margin-bottom:8px;">
+            <button type="button" style="flex:1;padding:6px;border-radius:8px;border:1px solid ${e.unitMode==='sqm'?'var(--bdr)':'var(--acc)'};background:transparent;color:${e.unitMode==='sqm'?'var(--mu)':'var(--acc)'};font-weight:700;font-size:12px;cursor:pointer;" onclick="quoteSetUnitMode(${idx},'set')">ราคา/ชุด</button>
+            <button type="button" style="flex:1;padding:6px;border-radius:8px;border:1px solid ${e.unitMode==='sqm'?'var(--acc)':'var(--bdr)'};background:transparent;color:${e.unitMode==='sqm'?'var(--acc)':'var(--mu)'};font-weight:700;font-size:12px;cursor:pointer;" onclick="quoteSetUnitMode(${idx},'sqm')">ราคา/ตร.ม.</button>
           </div>
+          ${e.unitMode==='sqm' ? `
+            <div id="quoSqm_${idx}" style="background:var(--surf2);border:1px dashed var(--bdr);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:8px;">${quoSqmLineHtml(e)}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+              <div class="fg" style="margin:0;">
+                <label class="fl">ตร.ม. (ถ้าไม่กรอกกว้าง/สูง)</label>
+                <input class="fi" type="number" inputmode="decimal" placeholder="เช่น 2.5" value="${e.sqmManual??''}" oninput="quoteOnEntryChange(${idx},'sqmManual',this.value===''?null:parseFloat(this.value))">
+              </div>
+              <div class="fg" style="margin:0;">
+                <label class="fl">ขั้นต่ำ ตร.ม. (ถ้ามี)</label>
+                <input class="fi" type="number" inputmode="decimal" placeholder="เช่น 1" value="${e.sqmMin??''}" oninput="quoteOnEntryChange(${idx},'sqmMin',this.value===''?null:parseFloat(this.value))">
+              </div>
+            </div>
+            <div class="fg" style="margin-bottom:8px;">
+              <label class="fl">💵 ราคา/ตร.ม. (บาท)</label>
+              <input class="fi" type="number" inputmode="decimal" placeholder="0" value="${e.unitPrice??''}" oninput="quoteOnEntryChange(${idx},'unitPrice',this.value===''?null:parseFloat(this.value))">
+            </div>
+          ` : `
+            <div class="fg" style="margin-bottom:8px;">
+              <label class="fl">💵 ราคา/ชุด (บาท)</label>
+              <input class="fi" type="number" inputmode="decimal" placeholder="0" value="${e.unitPrice??''}" oninput="quoteOnEntryChange(${idx},'unitPrice',this.value===''?null:parseFloat(this.value))">
+            </div>
+          `}
         ` : `
           <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">ประเภทมุ้ง (ติ๊กได้หลายอย่าง)</div>
           <div class="quom-types-grid">${typesHtml}</div>
@@ -10156,6 +10188,10 @@ function quoteOnEntryChange(idx, field, val){
   _quoForm.dirty = true;
   // re-calc แค่ entry นี้
   e._calc = e.isEmpty ? { total:0, breakdown:[] } : quoteCalcEntry(e);
+  if (e.kind === 'manual' && e.unitMode === 'sqm' && (field === 'width' || field === 'height' || field === 'sqmManual' || field === 'sqmMin')) {
+    const _sq = document.getElementById('quoSqm_' + idx);
+    if (_sq) _sq.innerHTML = quoSqmLineHtml(e);
+  }
   // ถ้าเปลี่ยน colorId ของ entry → ต้อง re-render เพราะ unavailable เปลี่ยน
   if (field === 'colorId') {
     quoteRerenderEntriesOnly();
@@ -10177,8 +10213,32 @@ function quoteToggleType(idx, typeId, el){
 }
 
 function quoteEntryIsEmpty(e){
-  if (e.kind === 'manual') return !e.customType && !e.unitPrice && !e.location && !e.note && !e.qty;
+  if (e.kind === 'manual') return !e.customType && !e.unitPrice && !e.location && !e.note && !e.qty && !e.sqmManual;
   return !e.location && !e.width && !e.height && !e.qty && !e.note && (!e.types || !e.types.length);
+}
+// ── สินค้านอกแคตตาล็อก: แถบสรุป ตร.ม. (update สดผ่าน hook ไม่ re-render ทั้งแถว) ──
+function quoSqmLineHtml(e){
+  const w = Number(e.width) || 0, h = Number(e.height) || 0;
+  const hasWH = w > 0 && h > 0;
+  const auto = hasWH ? Math.round(w * h / 100) / 100 : 0;
+  const sqm = hasWH ? auto : (Math.round((Number(e.sqmManual) || 0) * 100) / 100);
+  const mn = Number(e.sqmMin) || 0;
+  let s;
+  if (hasWH) s = 'ขนาด ' + w + ' × ' + h + ' ซม. = <b>' + auto + ' ตร.ม.</b> <span style="color:var(--mu);">(อัตโนมัติ)</span>';
+  else if (sqm > 0) s = 'พื้นที่ = <b>' + sqm + ' ตร.ม.</b> <span style="color:var(--mu);">(กรอกเอง)</span>';
+  else s = '<span style="color:var(--mu);">กรอกกว้าง×สูงด้านบน หรือพิมพ์ ตร.ม. เองด้านล่าง</span>';
+  if (mn > 0 && sqm > 0 && sqm < mn) s += ' → <b style="color:var(--acc);">คิดขั้นต่ำ ' + mn + ' ตร.ม.</b>';
+  return s;
+}
+function quoteSetUnitMode(idx, mode){
+  const e = _quoForm.entries[idx];
+  if (!e) return;
+  e.unitMode = mode;
+  e.isEmpty = quoteEntryIsEmpty(e);
+  e._calc = e.isEmpty ? { total:0, breakdown:[] } : quoteCalcEntry(e);
+  _quoForm.dirty = true;
+  quoteRerenderEntriesOnly();
+  quoteUpdateGrandTotal();
 }
 function quoteSetEntryKind(idx, kind){
   const e = _quoForm.entries[idx];
@@ -10474,7 +10534,7 @@ function renderQuoteA4Entry(e, showSize){
   const _cid = e.colorId || (_quoForm && _quoForm.mainColor) || '';
   const colorObj = _cid ? _quoteMetadata.colors.find(c => c.id === _cid) : null;
   const colorLbl = colorObj ? colorObj.label : '—';
-  const sizeStr = (e.kind === 'manual') ? '—' : ((e.width != null ? e.width : '-') + ' × ' + (e.height != null ? e.height : '-'));
+  const sizeStr = (e.kind === 'manual') ? ((Number(e.width) > 0 && Number(e.height) > 0) ? (e.width + ' × ' + e.height) : '—') : ((e.width != null ? e.width : '-') + ' × ' + (e.height != null ? e.height : '-'));
   const lines = bd.length ? bd : [{ label: (e.kind === 'manual' ? (e.customType || '(รายการ)') : '(ไม่ระบุรูปแบบ)'), uqty: 0, unit: '', rate: 0, price: (e._calc && e._calc.total) || 0 }];
   const td = 'padding:6px 6px;vertical-align:top;border-bottom:1px solid #dde3ea;';
   const eidx = (e._eidx != null ? e._eidx : '');
