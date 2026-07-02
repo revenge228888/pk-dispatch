@@ -8671,6 +8671,7 @@ function recordRenderEntry(e, idx, ro){
           <input class="fi" type="number" inputmode="numeric" value="${e.qty??''}" placeholder="1" min="1" oninput="recordOnEntryChange(${idx},'qty',this.value===''?null:parseInt(this.value))">
         </div>
       </div>
+      <div id="recmPrev_${idx}" style="display:flex;align-items:center;gap:10px;margin:0 0 10px;">${recmPreviewHtml(e)}</div>
       <div class="fg" style="margin-bottom:10px;">
         <label class="fl">🎨 สีชุดนี้</label>
         <select class="fi" id="recmColor_${idx}" onchange="recordOnEntryChange(${idx},'colorId',this.value)"${ro?' disabled':''}>${recColorOptsHtml_(e.colorId||'', '— ตามสีหลัก —')}</select>
@@ -8705,6 +8706,19 @@ function recordRenderEntry(e, idx, ro){
   `;
 }
 
+// ── จดขนาด: รูปร่างสัดส่วนจาก กว้าง×สูง + ข้อความทวน (ทุกแถว · ไม่ตัดสินปกติ/ผิดปกติ เพราะสินค้าหลากหลาย) ──
+function recmPreviewHtml(e){
+  var w = Number(e.width)||0, h = Number(e.height)||0, q = Number(e.qty)||0;
+  if (w>0 && h>0){
+    var sc = Math.min(44/w, 26/h);
+    var bw = Math.max(6, Math.round(w*sc)), bh = Math.max(6, Math.round(h*sc));
+    return '<div style="width:52px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--surf2);border-radius:4px;">'
+      + '<div style="width:'+bw+'px;height:'+bh+'px;border:1.5px solid var(--mu);border-radius:2px;"></div></div>'
+      + '<div style="font-size:11px;color:var(--mu);line-height:1.45;">\uD83D\uDD01 ทวนกับหน้างาน: <b style="color:var(--tx);font-weight:600;">กว้าง '+w+' \u00d7 สูง '+h+' ซม.'+(q>0?' \u00b7 '+q+' ชุด':'')+'</b></div>';
+  }
+  return '<div style="font-size:11px;color:var(--mu);">กรอกกว้าง\u2013สูง เพื่อดูรูปร่างสัดส่วน แล้วทวนขนาดกับหน้างาน</div>';
+}
+
 function escAttr(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function escHtml(s){ return String(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
@@ -8725,6 +8739,10 @@ function recordOnEntryChange(idx, field, val){
   const e = _recForm.entries[idx];
   e.isEmpty = !e.location && !e.width && !e.height && !e.qty && !e.detail
               && (!e.muang || !e.muang.length) && (!e.krachok || !e.krachok.length) && !e.rang;
+  if (field==='width' || field==='height' || field==='qty'){
+    var _pv = document.getElementById('recmPrev_'+idx);
+    if (_pv) _pv.innerHTML = recmPreviewHtml(e);
+  }
   _recForm.dirty = true;
 }
 function recordToggleMuang(idx, opt, el){
