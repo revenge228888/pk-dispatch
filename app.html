@@ -135,12 +135,12 @@ select.fi{cursor:pointer;}
 
 /* Mobile: sidebar เป็น drawer */
 @media (max-width:768px){
-  .sidebar{position:fixed;left:0;top:0;height:100vh;width:220px;transform:translateX(-100%);transition:transform .25s ease;box-shadow:2px 0 16px rgba(0,0,0,.4);}
+  .sidebar{position:fixed;left:0;top:0;height:100vh;height:100dvh;width:220px;transform:translateX(-100%);transition:transform .25s ease;box-shadow:2px 0 16px rgba(0,0,0,.4);z-index:150;background:rgb(255,253,249);}
   .sidebar.expanded{transform:translateX(0);width:220px;}
   .sidebar .sidebar-brand,.sidebar .sidebar-label{opacity:1;}
-  .sidebar-backdrop.on{display:block;}
+  .sidebar-backdrop.on{display:block;z-index:120;}
   .content-area{width:100%;}
-  .mobile-topbar{display:flex !important;}
+  .mobile-topbar{display:flex !important;top:54px;}
   body.nav-hidden .hdr-menu-btn{display:none!important;}
 }
 .mobile-topbar{display:none;align-items:center;gap:12px;padding:12px 16px;background:var(--surf);border-bottom:1px solid var(--bdr);position:sticky;top:0;z-index:40;}
