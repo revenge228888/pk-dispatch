@@ -7094,7 +7094,9 @@ async function dashRangeRun(){
   out.innerHTML = '<div class="loading-row">กำลังโหลดงาน...</div>';
   const months = pkMonthsInRange_(s, e);
   let all = [];
-  for (let i=0;i<months.length;i++){ const js = await pkInstallMonthJobs_(months[i]); all = all.concat(js||[]); }
+  // [PERF] ยิงขนานทุกเดือน (เดิมรอทีละเดือน) · Promise.all คงลำดับตาม months → dedup เดิมทำงานเหมือนเดิม
+  const perMonth = await Promise.all(months.map(m => pkInstallMonthJobs_(m)));
+  perMonth.forEach(js => { all = all.concat(js || []); });
   const seen = {}, jobs = [];
   all.forEach(j => { if (!j || !j.date) return; if (j.date < s || j.date > e) return; const k = j.id || (j.date+'|'+j.name); if (seen[k]) return; seen[k]=1; jobs.push(j); });
   _dashRangeJobs = jobs;
