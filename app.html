@@ -5802,15 +5802,32 @@ async function initTech(){
   const sync = document.getElementById('tSync');
   if (sync) sync.textContent = 'กำลังโหลด...';
 
+  // [PERF] stale-while-revalidate: ใช้ bootstrap ล่าสุดจาก localStorage เปิดจอได้ทันที
+  // ระหว่างรอ GAS · ของสดตามมาอัปเดตด้านล่าง · งานจริงสดเสมอ (วิ่ง /tech-jobs ทุกครั้ง)
+  const bootKey = 'pk_techBoot_' + CURRENT_USER.team;
+  let usedCache = false;
+  try {
+    const cached = JSON.parse(localStorage.getItem(bootKey) || 'null');
+    if (cached && Array.isArray(cached.access)) {
+      _techAccess = cached.access;
+      _techMembers = cached.members || [];
+      fillTechDates();
+      usedCache = true;
+      if (sync) sync.textContent = 'กำลังอัปเดต...';
+    }
+  } catch(e) {}
+
   try {
     const r = await call({ action:'pk_techBootstrap' });
     if (!r.ok) {
-      if (sync) sync.textContent = '❌ ' + (r.error || 'โหลดไม่ได้');
+      if (sync && !usedCache) sync.textContent = '❌ ' + (r.error || 'โหลดไม่ได้');
       return;
     }
     _techAccess = r.access || [];
     _techMembers = r.members || [];
+    try { localStorage.setItem(bootKey, JSON.stringify({ access: _techAccess, members: _techMembers })); } catch(e) {}
     fillTechDates();
+    if (usedCache && _techDate) techOnDateChange();   // รีเฟรชสมาชิก+งานด้วยข้อมูลสด (fillTechDates คงวันที่เลือกไว้แล้ว)
     if (sync) sync.textContent = 'อัปเดต ' + new Date().toLocaleTimeString('th-TH',{timeStyle:'short'});
     // start auto-refresh
     if (_techRefreshTimer) clearInterval(_techRefreshTimer);
@@ -5820,7 +5837,7 @@ async function initTech(){
     // ── load records auto for tech ──
     setTimeout(recordsLoad, 200);
   } catch(e) {
-    if (sync) sync.textContent = '❌ เชื่อมต่อไม่ได้';
+    if (sync) sync.textContent = usedCache ? 'ออฟไลน์ — ใช้ข้อมูลล่าสุดที่มี' : '❌ เชื่อมต่อไม่ได้';
   }
 }
 
