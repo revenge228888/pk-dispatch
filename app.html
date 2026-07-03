@@ -11580,6 +11580,15 @@ function pkpRequisition(items, mainAlu){
 var pkpCostPrices=null;   // cache: [{name,color,buyPrice,divisor,useUnit,unitPrice}]
 async function pkpLoadCostPrices(force){
   if(pkpCostPrices && !force) return pkpCostPrices;
+  // [PERF] ทางเร็ว worker /cost-prices ก่อน (pattern เดียวกับ ceFetch) · ไม่ ok/timeout → fallback GAS อัตโนมัติ
+  if(CURRENT_USER){
+    try{ var ctrl=new AbortController(); var to=setTimeout(function(){ctrl.abort();},8000);
+      var w=await fetch(API.replace(/\/api$/,'/cost-prices'),{method:'POST',redirect:'follow',signal:ctrl.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({username:CURRENT_USER.username,token:CURRENT_USER.token})});
+      clearTimeout(to); var data=await w.json();
+      if(data&&data.ok&&Array.isArray(data.prices)){ pkpCostPrices=data.prices; return pkpCostPrices; }
+      console.warn('[pkp] /cost-prices ไม่ ok → fallback GAS:', data&&data.error);
+    }catch(e){ console.warn('[pkp] /cost-prices error → fallback GAS:', e&&e.message); }
+  }
   var r=await call({action:'pk_costListPrices'});
   if(!r||!r.ok){ toast('โหลดราคาไม่ได้: '+((r&&r.error)||'')); return null; }
   pkpCostPrices=r.prices||[]; return pkpCostPrices;
