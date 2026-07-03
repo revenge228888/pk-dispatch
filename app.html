@@ -5796,6 +5796,22 @@ let _payStatus  = '';        // collected | partial | unpaid | no_charge
 let _payMethod  = 'cash';    // cash | transfer | other
 let _doneAmount = '';        // ยอดงาน (prefill จาก j.amount)
 
+// [PERF] bootstrap ทางเร็ว: worker /tech-bootstrap ก่อน (team จาก session) · ไม่ ok/timeout → fallback GAS อัตโนมัติ
+async function techBootstrapFetch(){
+  if (CURRENT_USER) {
+    try {
+      var ctrl = new AbortController(); var to = setTimeout(function(){ ctrl.abort(); }, 8000);
+      var w = await fetch(API.replace(/\/api$/, '/tech-bootstrap'), { method:'POST', redirect:'follow', signal:ctrl.signal,
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token }) });
+      clearTimeout(to); var data = await w.json();
+      if (data && data.ok && Array.isArray(data.access)) return data;
+      console.warn('[tech] /tech-bootstrap ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e){ console.warn('[tech] /tech-bootstrap error → fallback GAS:', e && e.message); }
+  }
+  return await call({ action:'pk_techBootstrap' });
+}
+
 async function initTech(){
   if (!CURRENT_USER.team) return;
 
@@ -5818,7 +5834,7 @@ async function initTech(){
   } catch(e) {}
 
   try {
-    const r = await call({ action:'pk_techBootstrap' });
+    const r = await techBootstrapFetch();
     if (!r.ok) {
       if (sync && !usedCache) sync.textContent = '❌ ' + (r.error || 'โหลดไม่ได้');
       return;
