@@ -221,7 +221,7 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
     <div class="legend">
       <b>สัญลักษณ์</b>
       <div class="lg-row"><span class="lg-pin fill"></span> ติดตั้ง (จาง = จบแล้ว) · <span class="lg-pin dash"></span> วัดงาน</div>
-      <div class="lg-row"><span class="lg-line"></span> ผ่านแล้ว · <span class="lg-line dash"></span> กำลังไป/คิวถัดไป</div>
+      <div class="lg-row"><span class="lg-line"></span> ผ่านแล้ว · <span class="lg-line dash"></span> กำลังไป/คิวถัดไป (เส้นตามถนนจริง · ระยะ/เวลาโดยประมาณ)</div>
       <div class="lg-row">🚐 รถทีมช่าง · 🚗 รถทีมเซลล์ (จำลองจากสถานะงาน)</div>
       <div class="lg-row">🏭 โรงงาน (จุดเริ่ม) · 📌 จุดแวะ (ลาก/คลิกแก้ได้)</div>
     </div>
@@ -288,8 +288,11 @@ const S = {
   geoTarget: '',            // key ของงานที่กำลังปักพิกัดให้ (โหมด geo)
   pendingLL: null,          // จุดที่คลิกไว้ระหว่างกรอกฟอร์มจุดแวะ
   factory: null,            // {lat,lng}
-  anims: [],                // [{mk, from:[lat,lng], to:[lat,lng]}] — รถที่กำลังวิ่ง
+  anims: [],                // [{mk, path, cum, total}] — รถที่กำลังวิ่ง (เส้นตรงหรือตามถนน)
   animRunning: false,
+  osrmCache: {},            // เส้นตามถนนต่อชุดพิกัด (จำใน session — filter สลับไปมาไม่ยิงซ้ำ)
+  roadInfo: {},             // ระยะ/เวลา leg ปัจจุบันต่อทีม จาก OSRM
+  routeToken: 0,            // กันผล OSRM รอบเก่ามาวาดทับหลังเปลี่ยนวัน/filter
   searchHit: null,
   extraColorIdx: 0,
   fitted: ''
@@ -509,6 +512,8 @@ function computeRouteSeq(stops, wps, factory){
 function buildRoutes(){
   S.routeLayer.clearLayers();
   S.anims = [];
+  S.roadInfo = {};
+  const token = ++S.routeToken;
   if (!S.routeOn) return;
   const byTeam = {};
   for (const j of Object.values(S.jobs)){
@@ -516,6 +521,7 @@ function buildRoutes(){
     (byTeam[j.team] = byTeam[j.team] || []).push(j);
   }
   const allWps = loadWps();
+  const teamJobs = [];
   for (const [team, jobs] of Object.entries(byTeam)){
     jobs.sort((a,b) => (a.orderNum||999) - (b.orderNum||999));
     const stops = jobs.map(j => ({ lat:j.glat, lng:j.glng, done:j.status === 'done', working:j.status === 'working', label:j.orderLabel || '' }));
@@ -523,23 +529,100 @@ function buildRoutes(){
       .map(w => ({ lat:w.lat, lng:w.lng, done:false, working:false, wp:true, label:w.name }));
     const { seq, curIdx, veh } = computeRouteSeq(stops, wps, S.factory);
     const c = teamColor(team);
-    for (let i = 1; i < seq.length; i++){
-      const passed = seq[i].done;
-      L.polyline([[seq[i-1].lat, seq[i-1].lng], [seq[i].lat, seq[i].lng]], {
-        color: c, weight: 3,
-        opacity: passed ? .85 : (i === curIdx ? .8 : .4),
-        dashArray: passed ? null : '7 6'
-      }).addTo(S.routeLayer);
-    }
+    const group = L.layerGroup().addTo(S.routeLayer);
+    drawTeamLegs(group, seq, curIdx, c, null);   // เส้นตรงขึ้นก่อนทันที · OSRM มาแทนเมื่อโหลดเสร็จ
+    let anim = null;
     if (veh){
       const icon = L.divIcon({ className:'', html:'<div class="veh" style="--c:' + c + '">' + teamEmoji(team) + '</div>', iconSize:[30,30], iconAnchor:[15,15] });
       const at = veh.mode === 'go' ? veh.from : veh.at;
       const mk = L.marker(at, { icon, zIndexOffset: 500, interactive: false }).addTo(S.routeLayer);
-      if (veh.mode === 'go') S.anims.push({ mk, from: veh.from, to: veh.to });
+      if (veh.mode === 'go'){ anim = makeAnim(mk, [veh.from, veh.to]); S.anims.push(anim); }
     }
+    teamJobs.push({ team: team, seq: seq, curIdx: curIdx, color: c, group: group, anim: anim });
   }
   startAnimLoop();
+  enhanceRoads(teamJobs, token);
 }
+// วาดเส้น leg ของทีมลง group — roadLegs = เส้นตามถนนจาก OSRM (null = เส้นตรง)
+function drawTeamLegs(group, seq, curIdx, color, roadLegs){
+  group.clearLayers();
+  for (let i = 1; i < seq.length; i++){
+    const passed = seq[i].done;
+    const coords = (roadLegs && roadLegs[i-1] && roadLegs[i-1].coords.length > 1)
+      ? roadLegs[i-1].coords
+      : [[seq[i-1].lat, seq[i-1].lng], [seq[i].lat, seq[i].lng]];
+    L.polyline(coords, {
+      color: color, weight: 3,
+      opacity: passed ? .85 : (i === curIdx ? .8 : .4),
+      dashArray: passed ? null : '7 6'
+    }).addTo(group);
+  }
+}
+// ระยะสะสมตามเส้น (หน่วยองศาถ่วง cos(lat) — ใช้เทียบสัดส่วนตำแหน่งรถเท่านั้น)
+function pathMetrics(path){
+  const cum = [0];
+  let total = 0;
+  for (let i = 1; i < path.length; i++){
+    const dy = path[i][0] - path[i-1][0];
+    const dx = (path[i][1] - path[i-1][1]) * Math.cos(path[i][0] * Math.PI / 180);
+    total += Math.sqrt(dx*dx + dy*dy);
+    cum.push(total);
+  }
+  return { cum: cum, total: total || 1 };
+}
+function makeAnim(mk, path){
+  const m = pathMetrics(path);
+  return { mk: mk, path: path, cum: m.cum, total: m.total };
+}
+// ตำแหน่งบนเส้นทางที่สัดส่วน t (0-1) — ใช้ได้ทั้งเส้นตรงและเส้นตามถนน
+function pointAt(a, t){
+  const d = Math.max(0, Math.min(1, t)) * a.total;
+  let i = 1;
+  while (i < a.cum.length && a.cum[i] < d) i++;
+  if (i >= a.path.length) return a.path[a.path.length - 1];
+  const span = a.cum[i] - a.cum[i-1];
+  const f = span > 0 ? (d - a.cum[i-1]) / span : 0;
+  return [a.path[i-1][0] + (a.path[i][0] - a.path[i-1][0]) * f,
+          a.path[i-1][1] + (a.path[i][1] - a.path[i-1][1]) * f];
+}
+// ── การบ้าน 3: เส้นตามถนนจริงจาก OSRM (public server ฟรี) — fail-soft: พลาด = คงเส้นตรงไว้ ──
+async function fetchRoad(seq){
+  const key = seq.map(p => p.lng.toFixed(5) + ',' + p.lat.toFixed(5)).join(';');
+  if (S.osrmCache[key]) return S.osrmCache[key];
+  const res = await fetch('https://router.project-osrm.org/route/v1/driving/' + key + '?overview=false&steps=true&geometries=geojson');
+  const data = await res.json();
+  if (data.code !== 'Ok' || !data.routes || !data.routes[0]) return null;
+  const legs = data.routes[0].legs.map(leg => ({
+    dist: leg.distance, dur: leg.duration,
+    coords: leg.steps.flatMap(st => st.geometry.coordinates).map(c => [c[1], c[0]])   // OSRM ส่ง [lng,lat]
+  }));
+  S.osrmCache[key] = legs;
+  return legs;
+}
+// อัปเกรดเส้นตรง → เส้นตามถนน ทีละทีม (ยิงเรียงตัว ถนอม server ฟรี) · token กันผลรอบเก่ามาทับ
+async function enhanceRoads(teamJobs, token){
+  let gotInfo = false;
+  for (const tj of teamJobs){
+    if (token !== S.routeToken) return;
+    if (tj.seq.length < 2 || tj.seq.length > 25) continue;
+    let legs = null;
+    try { legs = await fetchRoad(tj.seq); } catch (e) { legs = null; }
+    if (token !== S.routeToken) return;
+    if (!legs || legs.length !== tj.seq.length - 1) continue;
+    drawTeamLegs(tj.group, tj.seq, tj.curIdx, tj.color, legs);
+    if (tj.curIdx > 0 && legs[tj.curIdx - 1]){
+      const leg = legs[tj.curIdx - 1];
+      if (tj.anim && leg.coords.length > 1){
+        const m = pathMetrics(leg.coords);
+        tj.anim.path = leg.coords; tj.anim.cum = m.cum; tj.anim.total = m.total;
+      }
+      S.roadInfo[tj.team] = { dist: leg.dist, dur: leg.dur };
+      gotInfo = true;
+    }
+  }
+  if (gotInfo && token === S.routeToken) renderTeamCards();
+}
+function fmtKm(m){ return m < 950 ? Math.round(m) + ' ม.' : (m/1000).toFixed(m < 10000 ? 1 : 0) + ' กม.'; }
 function startAnimLoop(){
   if (S.animRunning) return;
   S.animRunning = true;
@@ -550,7 +633,7 @@ function startAnimLoop(){
       p = p < .88 ? p / .88 : 1;                       // วิ่ง 88% ของรอบ แล้วพักที่ปลายทางก่อนวนใหม่
       const t = reduce ? .5 : (p < .5 ? 2*p*p : 1 - Math.pow(-2*p + 2, 2) / 2);   // easeInOutQuad
       for (const a of S.anims){
-        a.mk.setLatLng([a.from[0] + (a.to[0]-a.from[0])*t, a.from[1] + (a.to[1]-a.from[1])*t]);
+        a.mk.setLatLng(pointAt(a, t));   // วิ่งตามเส้นจริง (ตรงหรือโค้งถนน)
       }
     }
     requestAnimationFrame(tick);
@@ -584,6 +667,9 @@ function renderTeamCards(){
         ? head + '<b>' + esc((cur.orderLabel || '') + ' · ' + cur.name) + '</b>'
         : '<b>จบครบทุกงานแล้ว ✓</b>') + '</div>' +
       (lastCk ? '<div class="checkin">✓ อัปเดตล่าสุด ' + lastCk + ' · ' + esc(lastLabel) + '</div>' : '') +
+      (S.roadInfo[team] && cur && cur.status !== 'working'
+        ? '<div class="checkin" style="background:rgba(47,115,230,.10);color:var(--blu)">🛣 ช่วงถัดไป ~' + fmtKm(S.roadInfo[team].dist) + ' · ~' + Math.max(1, Math.round(S.roadInfo[team].dur / 60)) + ' นาที</div>'
+        : '') +
       '</div>';
   }
   $('teamCards').innerHTML = h;
