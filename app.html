@@ -5256,13 +5256,17 @@ function salesMeasureButtons(j){
 
 async function salesMeasureAccept(id){
   if (!confirm('รับงานวัดนี้?')) return;
+  showLoad('กำลังดึงพิกัดเช็คอิน...');
+  const gps = await getQuickGps(8000);                 // ★ Phase3: เช็คอินรับงานวัด (fail-soft)
   showLoad('กำลังรับงาน...');
   try {
-    const r = await call({
+    const body = {
       action: 'pk_salesUpdateMeasureStatus',
       id, status: 'working', startAt: Date.now(),
       worker: CURRENT_USER.name || CURRENT_USER.username
-    });
+    };
+    if (gps) { body.lat = gps.lat; body.lng = gps.lng; }
+    const r = await call(body);
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast('✅ รับงานแล้ว');
@@ -5277,7 +5281,7 @@ async function salesMeasureCancelAccept(id){
     const r = await call({
       action: 'pk_salesUpdateMeasureStatus',
       id, status: 'pending',
-      startAt: '', doneAt: '', worker: ''
+      startAt: '', doneAt: '', worker: '', lat: '', lng: ''   // ★ Phase3: ล้างพิกัดเช็คอินด้วย
     });
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
@@ -5288,13 +5292,17 @@ async function salesMeasureCancelAccept(id){
 
 async function salesMeasureDone(id){
   if (!confirm('จบงานวัดนี้?\n(อย่าลืมจดขนาดก่อนจบงาน)')) return;
+  showLoad('กำลังดึงพิกัดเช็คอิน...');
+  const gps = await getQuickGps(8000);                 // ★ Phase3: เช็คอินจบงานวัด (fail-soft)
   showLoad('กำลังบันทึก...');
   try {
-    const r = await call({
+    const body = {
       action: 'pk_salesUpdateMeasureStatus',
       id, status: 'done', doneAt: Date.now(),
       worker: CURRENT_USER.name || CURRENT_USER.username
-    });
+    };
+    if (gps) { body.lat = gps.lat; body.lng = gps.lng; }
+    const r = await call(body);
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast('✅ จบงานวัดแล้ว');
@@ -5309,7 +5317,7 @@ async function salesMeasureUndo(id){
     const r = await call({
       action: 'pk_salesUpdateMeasureStatus',
       id, status: 'pending',
-      startAt: '', doneAt: '', worker: ''
+      startAt: '', doneAt: '', worker: '', lat: '', lng: ''   // ★ Phase3: ล้างพิกัดเช็คอินด้วย
     });
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
@@ -6065,17 +6073,36 @@ function techJobButtons(j){
   return '';
 }
 
+// ── ★ Phase3: ดึงพิกัดเช็คอินแบบเร็ว fail-soft — ได้ก็แนบ ไม่ได้/ไม่อนุญาต/ช้า ก็ปล่อยผ่าน ไม่บล็อกปุ่ม ──
+function getQuickGps(timeoutMs){
+  return new Promise(resolve => {
+    if (!navigator.geolocation) return resolve(null);
+    let settled = false;
+    const finish = v => { if (!settled) { settled = true; resolve(v); } };
+    navigator.geolocation.getCurrentPosition(
+      pos => finish({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => finish(null),
+      { enableHighAccuracy: true, timeout: timeoutMs || 8000, maximumAge: 30000 }
+    );
+    setTimeout(() => finish(null), (timeoutMs || 8000) + 1500);   // กันเบราว์เซอร์เงียบไม่ callback
+  });
+}
+
 // ── รับงาน ──
 async function techAcceptJob(id){
   if (!confirm('รับงานนี้?')) return;
+  showLoad('กำลังดึงพิกัดเช็คอิน...');
+  const gps = await getQuickGps(8000);                 // ★ Phase3: เช็คอินถึงหน้างาน
   showLoad('กำลังรับงาน...');
   try {
-    const r = await call({
+    const body = {
       action: 'pk_techUpdateJobStatus',
       id, status: 'working',
       startAt: Date.now(),
       notify: { event: 'accept' }
-    });
+    };
+    if (gps) { body.lat = gps.lat; body.lng = gps.lng; }
+    const r = await call(body);
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast('✅ รับงานแล้ว');
