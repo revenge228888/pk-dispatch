@@ -306,7 +306,15 @@ function thaiDate(ymd){
   const today = ymd === ymdToday() ? ' (วันนี้)' : '';
   return TH_DAYS[dt.getDay()]+' '+d+' '+TH_MONS[m-1]+' '+(y+543)+today;
 }
-function fmtTime(s){ const m = String(s||'').match(/(\d{1,2}):(\d{2})/); return m ? m[1].padStart(2,'0')+':'+m[2] : ''; }
+function fmtTime(s){
+  s = String(s || '').trim();
+  if (/^\d{12,}$/.test(s)){   // epoch ms จาก Date.now() ฝั่ง app.html (check-in Phase 3)
+    const d = new Date(Number(s));
+    return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  }
+  const m = s.match(/(\d{1,2}):(\d{2})/);
+  return m ? m[1].padStart(2,'0')+':'+m[2] : '';
+}
 function teamColor(name){
   if (!TEAM_COLORS[name]) { TEAM_COLORS[name] = EXTRA_COLORS[S.extraColorIdx++ % EXTRA_COLORS.length]; }
   return TEAM_COLORS[name];
