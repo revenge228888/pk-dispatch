@@ -259,7 +259,7 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
 'use strict';
 // ══ config ══
 const WORKER = 'https://pk-discord-relay.revenge2288.workers.dev';
-const TECH_TEAMS = ['ช่างทีม A', 'ช่างทีม B', 'ช่างทีม C'];   // C = สำรอง (ไม่มีงานก็แค่ว่าง)
+// รายชื่อทีมไม่ hard-code แล้ว — มาจากข้อมูลงานจริงทั้งสองชีท (ทีม D..Z โผล่เองเมื่อมีงาน)
 const TEAM_COLORS = {
   'ช่างทีม A':'#2F73E6', 'ช่างทีม B':'#B5653F', 'ช่างทีม C':'#1FA463',
   'เซลล์ทีม A':'#7A5CC6', 'เซลล์ทีม B':'#2E9BA6'
@@ -369,28 +369,28 @@ async function api(path, body){
 async function loadDay(){
   setStatus('กำลังโหลดงานวันที่ ' + S.date + ' ...');
   $('dateBox').textContent = thaiDate(S.date);
-  const calls = TECH_TEAMS.map(t =>
-    api('/jobs', { team: t, date: S.date })
-      .then(r => ({ kind:'install', team:t, r }))
-      .catch(e => ({ kind:'install', team:t, r:{ ok:false, error:String(e) } })));
-  calls.push(
+  const calls = [
+    api('/install-jobs', { team:'', date: S.date })
+      .then(r => ({ kind:'install', r }))
+      .catch(e => ({ kind:'install', r:{ ok:false, error:String(e) } })),
     api('/measure-jobs', { team:'', date: S.date })
       .then(r => ({ kind:'measure', r }))
-      .catch(e => ({ kind:'measure', r:{ ok:false, error:String(e) } })));
+      .catch(e => ({ kind:'measure', r:{ ok:false, error:String(e) } }))
+  ];
   const results = await Promise.all(calls);
 
   S.jobs = {};
   const errs = [];
   let authFail = null;
-  for (const { kind, team, r } of results){
+  for (const { kind, r } of results){
     if (!r || !r.ok){
       const msg = (r && r.error) || 'โหลดไม่สำเร็จ';
       if (/session|token|สิทธิ์|role|login/i.test(msg)) authFail = msg;
-      errs.push((team || 'วัดงาน') + ': ' + msg);
+      errs.push((kind === 'install' ? 'ติดตั้ง' : 'วัดงาน') + ': ' + msg);
       continue;
     }
     for (const j of (r.jobs || [])){
-      const job = Object.assign({}, j, { kind, team: j.team || team || '(ไม่ระบุทีม)' });
+      const job = Object.assign({}, j, { kind, team: j.team || '(ไม่ระบุทีม)' });
       const g = jobGeo(job);
       if (g){ job.glat = g.lat; job.glng = g.lng; job.gsrc = g.src; }
       S.jobs[kind + ':' + job.id] = job;
@@ -427,12 +427,13 @@ function chipHtml(team){
     '<span class="dot" style="background:' + teamColor(team) + '"></span>' + esc(team) + '</button>';
 }
 function renderChips(){
-  const teams = new Set(TECH_TEAMS);
+  const teams = new Set();
   Object.values(S.jobs).forEach(j => teams.add(j.team));
+  loadWps().forEach(w => { if (w.team) teams.add(w.team); });
   const tech = [], sales = [];
-  for (const t of teams) (TECH_TEAMS.includes(t) || /ช่าง/.test(t) ? tech : sales).push(t);
+  for (const t of teams) (/ช่าง/.test(t) ? tech : sales).push(t);
   tech.sort(); sales.sort();
-  $('techChips').innerHTML = '<span class="tb-label">ช่าง</span>' + tech.map(chipHtml).join('');
+  $('techChips').innerHTML = '<span class="tb-label">ช่าง</span>' + (tech.length ? tech.map(chipHtml).join('') : '<span class="muted">ไม่มีงานช่างวันนี้</span>');
   $('salesChips').innerHTML = '<span class="tb-label">เซลล์</span>' + (sales.length ? sales.map(chipHtml).join('') : '<span class="muted">ไม่มีงานวัดวันนี้</span>');
 }
 function toggleTeam(team){
@@ -784,8 +785,9 @@ function onMapClick(e){
   }
 }
 function showWpForm(){
-  const teams = new Set(TECH_TEAMS);
+  const teams = new Set();
   Object.values(S.jobs).forEach(j => teams.add(j.team));
+  loadWps().forEach(w => { if (w.team) teams.add(w.team); });
   $('wpTeam').innerHTML = '<option value="">ไม่ผูกทีม (หมุดกลาง)</option>' +
     [...teams].sort().map(t => '<option value="' + esc(t) + '">' + esc(t) + '</option>').join('');
   $('wpName').value = '';
