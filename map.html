@@ -109,6 +109,7 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
 .ng-row{padding:5px 12px;cursor:pointer;line-height:1.5;}
 .ng-row:hover{background:var(--surf2);}
 .ng-row small{color:var(--mu);font-family:var(--mono);font-size:9px;}
+.ng-pin{padding:1px 8px;font-size:10px;margin-left:4px;border-radius:6px;}
 
 /* ฟอร์มจุดแวะ */
 .wpform{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#FFFDF9;border:1px solid var(--bdr);border-radius:14px;padding:16px;z-index:1050;box-shadow:0 10px 30px rgba(56,44,35,.25);width:250px;display:flex;flex-direction:column;gap:8px;}
@@ -283,7 +284,8 @@ const S = {
   saveTimer: null,
   map: null, jobLayer: null, wpLayer: null, routeLayer: null, searchLayer: null,
   markers: {},
-  pickMode: '',             // '' | 'wp' | 'factory'
+  pickMode: '',             // '' | 'wp' | 'factory' | 'geo'
+  geoTarget: '',            // key ของงานที่กำลังปักพิกัดให้ (โหมด geo)
   pendingLL: null,          // จุดที่คลิกไว้ระหว่างกรอกฟอร์มจุดแวะ
   factory: null,            // {lat,lng}
   anims: [],                // [{mk, from:[lat,lng], to:[lat,lng]}] — รถที่กำลังวิ่ง
@@ -361,6 +363,14 @@ async function api(path, body){
   const res = await fetch(WORKER + path, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(Object.assign({}, body, { username: S.user.username, token: S.user.token }))
+  });
+  return res.json();
+}
+// เรียก action ฝั่ง GAS ผ่าน /api proxy ของ worker (ใช้กับ pk_setJobGeo — server เช็ค role office/manager เอง)
+async function apiGas(action, body){
+  const res = await fetch(WORKER + '/api', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ action: action }, body, { username: S.user.username, token: S.user.token }))
   });
   return res.json();
 }
@@ -588,6 +598,7 @@ function renderNoGeo(){
   $('nogeoHead').className = 'nogeo-head' + (misses.length ? '' : ' zero');
   $('nogeoList').innerHTML = misses.map(([key, j]) =>
     '<div class="ng-row" onclick="openJob(\'' + esc(key) + '\')">' + esc(j.name || j.id) +
+    ' <button class="btn ng-pin" onclick="event.stopPropagation();startGeoPin(\'' + esc(key) + '\')">📌 ปักพิกัด</button>' +
     '<br><small>' + esc(j.team) + ' · ' + (j.kind === 'measure' ? 'วัดงาน' : 'ติดตั้ง') + ' · ' + esc(j.orderLabel || '') + '</small></div>').join('');
 }
 
@@ -616,8 +627,8 @@ function openJob(key){
 
   const phs = photosHtml((j.photos || []), 'รูปหน้างาน') + photosHtml((j.refPhotos || []), 'รูปอ้างอิง');
   const geoNote = j.glat === undefined
-    ? '<div class="muted">⚠ งานนี้ไม่มี geo tag ใน note — ไม่แสดงบนแผนที่</div>'
-    : (j.gsrc === 'checkin' ? '<div class="muted">~ ตำแหน่งหมุดมาจากจุดเช็คอิน (note ไม่มี geo tag)</div>' : '');
+    ? '<div class="muted">⚠ งานนี้ไม่มี geo tag ใน note — ไม่แสดงบนแผนที่ <button class="btn ng-pin" onclick="startGeoPin(\'' + esc(key) + '\')">📌 ปักพิกัดงานนี้</button></div>'
+    : (j.gsrc === 'checkin' ? '<div class="muted">~ ตำแหน่งหมุดมาจากจุดเช็คอิน (note ไม่มี geo tag) <button class="btn ng-pin" onclick="startGeoPin(\'' + esc(key) + '\')">📌 ปักพิกัดถาวร</button></div>' : '');
 
   $('panel').innerHTML =
     '<button class="pn-close" onclick="closePanel()">ปิด ✕</button>' +
@@ -766,6 +777,7 @@ function renderFactory(){
 // ══ โหมดคลิกบนแผนที่ (จุดแวะ / โรงงาน) ══
 function togglePickMode(mode){
   S.pickMode = S.pickMode === mode ? '' : mode;
+  S.geoTarget = '';                                  // สลับโหมด = ยกเลิกการปักพิกัดงานที่ค้างอยู่
   $('wpBtn').classList.toggle('on', S.pickMode === 'wp');
   $('factBtn').classList.toggle('on', S.pickMode === 'factory');
   $('mapWrap').classList.toggle('picking', !!S.pickMode);
@@ -774,6 +786,13 @@ function togglePickMode(mode){
     : S.pickMode === 'factory' ? 'โหมดตั้งโรงงาน: คลิกตำแหน่งโรงงานบนแผนที่' : '');
 }
 function onMapClick(e){
+  if (S.pickMode === 'geo'){
+    const j = S.jobs[S.geoTarget];
+    if (!j){ cancelGeoPin(); return; }
+    if (!confirm('ยืนยันปักพิกัดให้\n"' + (j.orderLabel || '') + ' · ' + (j.name || j.id) + '"\nที่จุดนี้?')) return;
+    saveJobGeo(e.latlng.lat, e.latlng.lng);
+    return;
+  }
   if (S.pickMode === 'factory'){
     setFactory(e.latlng.lat, e.latlng.lng);
     togglePickMode('factory');
@@ -782,6 +801,43 @@ function onMapClick(e){
   if (S.pickMode === 'wp'){
     S.pendingLL = e.latlng;
     showWpForm();
+  }
+}
+
+// ══ ปักพิกัดให้งานที่ไม่มี geo tag — เขียน [geo:] เข้า note ผ่าน GAS (office/manager) ══
+function startGeoPin(key){
+  const j = S.jobs[key];
+  if (!j) return;
+  if (S.pickMode === 'geo' && S.geoTarget === key){ cancelGeoPin(); return; }   // กดปุ่มเดิมซ้ำ = ยกเลิก
+  S.pickMode = 'geo';
+  S.geoTarget = key;
+  $('wpBtn').classList.remove('on');
+  $('factBtn').classList.remove('on');
+  $('mapWrap').classList.add('picking');
+  hideWpForm();
+  setStatus('📌 ปักพิกัดให้ "' + (j.orderLabel || '') + ' · ' + (j.name || j.id) + '" — คลิกจุดบนแผนที่ หรือค้นหาที่อยู่แล้วกดปุ่มในหมุด 🔍 · กดปุ่มปักพิกัดเดิมซ้ำเพื่อยกเลิก');
+}
+function cancelGeoPin(){
+  S.pickMode = '';
+  S.geoTarget = '';
+  $('mapWrap').classList.remove('picking');
+  setStatus('');
+}
+async function saveJobGeo(lat, lng){
+  const j = S.jobs[S.geoTarget];
+  if (!j){ cancelGeoPin(); return; }
+  if (!geoOk(lat, lng)){ setStatus('⚠ พิกัดไม่อยู่ในกรอบประเทศไทย', true); return; }
+  setStatus('กำลังบันทึกพิกัดของ "' + (j.name || j.id) + '" …');
+  try {
+    const r = await apiGas('pk_setJobGeo', { id: j.id, sheet: j.kind === 'measure' ? 'measure' : 'install', lat: lat, lng: lng });
+    if (!r.ok){ setStatus('⚠ บันทึกพิกัดไม่สำเร็จ: ' + (r.error || ''), true); return; }
+    const name = j.name || j.id;
+    cancelGeoPin();
+    clearSearch();
+    await loadDay();
+    setStatus('✓ ปักพิกัดให้ "' + name + '" แล้ว — หมุดขึ้นบนแผนที่และบันทึกลงชีทถาวร');
+  } catch (e) {
+    setStatus('⚠ บันทึกพิกัดไม่สำเร็จ: ' + e, true);
   }
 }
 function showWpForm(){
@@ -855,8 +911,11 @@ function showSearchPin(lat, lng, name){
   S.searchHit = { lat, lng, name };
   const icon = L.divIcon({ className:'', html:'<div class="spin">🔍</div>', iconSize:[30,30], iconAnchor:[15,15] });
   const mk = L.marker([lat, lng], { icon, zIndexOffset: 600 }).addTo(S.searchLayer);
+  const geoBtn = (S.pickMode === 'geo' && S.jobs[S.geoTarget])
+    ? '<button class="btn acc" onclick="saveJobGeo(S.searchHit.lat, S.searchHit.lng)">📍 ใช้จุดนี้ปักให้งานที่เลือก</button>'
+    : '';
   mk.bindPopup('<div class="wp-pop"><b>' + esc(name) + '</b>' +
-    '<div class="pop-btns">' +
+    '<div class="pop-btns">' + geoBtn +
     '<button class="btn" onclick="wpFromSearch()">📌 ปักเป็นจุดแวะ</button>' +
     '<button class="btn" onclick="factoryFromSearch()">🏭 ตั้งเป็นโรงงาน</button>' +
     '<button class="btn" onclick="clearSearch()">✕</button>' +
