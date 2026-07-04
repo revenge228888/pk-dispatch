@@ -176,7 +176,7 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
   <div class="hd-right">
     <span class="count-badge" id="countBadge">–</span>
     <span class="hd-user" id="hdUser"></span>
-    <button class="btn" onclick="loadDay()">↻ รีเฟรช</button>
+    <button class="btn" onclick="refreshAll()">↻ รีเฟรช</button>
   </div>
 </header>
 
@@ -277,6 +277,10 @@ const S = {
   jobs: {},                 // key = kind:id → job
   teamOn: {}, kindOn: { install:true, measure:true },
   routeOn: true,
+  wps: [],                  // จุดแวะ (sync กับชีท MapWaypoints ผ่าน worker)
+  cfgServer: false,         // true = ชีทกลางใช้ได้ · false = fallback localStorage เครื่องนี้
+  cfgWarn: '',              // ข้อความเตือนค้างเรื่อง config (โชว์ต่อจากผลโหลดงาน)
+  saveTimer: null,
   map: null, jobLayer: null, wpLayer: null, routeLayer: null, searchLayer: null,
   markers: {},
   pickMode: '',             // '' | 'wp' | 'factory'
@@ -323,6 +327,7 @@ function coordsFromText(q){
   let m = q.match(/^(-?\d{1,2}\.\d{2,})\s*,\s*(-?\d{1,3}\.\d{2,})$/);
   if (!m) m = q.match(/@(-?\d{1,2}\.\d{2,}),(-?\d{1,3}\.\d{2,})/);
   if (!m) m = q.match(/[?&](?:q|query|ll|destination)=(-?\d{1,2}\.\d{2,})(?:%2C|,)(-?\d{1,3}\.\d{2,})/i);
+  if (!m) m = q.match(/!3d(-?\d{1,2}\.\d{2,})!4d(-?\d{1,3}\.\d{2,})/);
   if (!m) return null;
   const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
   return geoOk(lat, lng) ? { lat, lng } : null;
@@ -389,6 +394,7 @@ async function loadDay(){
     return;
   }
   if (errs.length) setStatus('⚠ บางส่วนโหลดไม่สำเร็จ — ' + errs.join(' · '), true);
+  else if (S.cfgWarn) setStatus(S.cfgWarn, true);
   else if (!S.factory && S.routeOn) setStatus('แนะนำ: กด "🏭 ตั้งโรงงาน" แล้วคลิกตำแหน่งโรงงานบนแผนที่ เพื่อให้เส้นทางเริ่มจากโรงงาน');
   else setStatus('');
   renderAll();
@@ -659,9 +665,56 @@ function closePanel(){
   $('panel').innerHTML = '<div class="empty">📍 คลิกหมุดงาน การ์ดทีม<br>หรือรายการไม่มีพิกัด เพื่อดูรายละเอียด</div>';
 }
 
-// ══ จุดแวะ (ผูกทีมได้) + โรงงาน — localStorage (การบ้าน R1: ย้ายขึ้นชีท MapWaypoints ให้ทุกเครื่องเห็นตรงกัน) ══
-function loadWps(){ try { const l = JSON.parse(localStorage.getItem(WP_KEY) || '[]'); return l.map(w => Object.assign({ team:'' }, w)); } catch { return []; } }
-function saveWps(list){ localStorage.setItem(WP_KEY, JSON.stringify(list)); }
+// ══ จุดแวะ (ผูกทีมได้) + โรงงาน — ชีทกลาง MapWaypoints ผ่าน worker · localStorage เป็น cache/fallback ══
+function readLocalWps(){ try { return (JSON.parse(localStorage.getItem(WP_KEY) || '[]')).map(w => Object.assign({ team:'' }, w)); } catch { return []; } }
+function readLocalFactory(){ try { const f = JSON.parse(localStorage.getItem(FACT_KEY) || 'null'); return (f && geoOk(f.lat, f.lng)) ? f : null; } catch { return null; } }
+function writeLocalCache(){
+  localStorage.setItem(WP_KEY, JSON.stringify(S.wps));
+  localStorage.setItem(FACT_KEY, JSON.stringify(S.factory));
+}
+function loadWps(){ return S.wps; }
+function saveWps(list){ S.wps = list; persistCfg(); }
+// บันทึก: ลง cache เครื่องทันที + debounce ส่งขึ้นชีทกลาง (ทั้งชุด — คนแก้ทีหลังชนะ)
+function persistCfg(){
+  writeLocalCache();
+  if (!S.cfgServer) return;
+  clearTimeout(S.saveTimer);
+  S.saveTimer = setTimeout(async () => {
+    try {
+      const r = await api('/map-config-set', { waypoints: S.wps, factory: S.factory });
+      if (!r.ok) setStatus('⚠ บันทึกขึ้นชีทกลางไม่สำเร็จ: ' + (r.error || ''), true);
+    } catch (e) {
+      setStatus('⚠ บันทึกขึ้นชีทกลางไม่สำเร็จ: ' + e, true);
+    }
+  }, 800);
+}
+// โหลด config จากชีทกลาง · ชีทว่างแต่เครื่องนี้มีของเก่า → ย้ายขึ้นให้รอบแรก · server ไม่พร้อม → ใช้ของเครื่อง
+async function loadConfig(){
+  S.wps = readLocalWps();
+  S.factory = readLocalFactory();
+  S.cfgServer = false;
+  S.cfgWarn = '';
+  try {
+    const r = await api('/map-config-get');
+    if (r.ok){
+      S.cfgServer = true;
+      if (!r.waypoints.length && !r.factory && (S.wps.length || S.factory)){
+        persistCfg();
+        setStatus('ย้ายจุดแวะ/โรงงานจากเครื่องนี้ขึ้นชีทกลางแล้ว — ทุกเครื่องจะเห็นชุดเดียวกัน');
+      } else {
+        S.wps = r.waypoints || [];
+        S.factory = r.factory || null;
+        writeLocalCache();
+      }
+    } else {
+      S.cfgWarn = '⚠ จุดแวะ/โรงงานใช้เฉพาะเครื่องนี้ — ' + (r.error || 'server ไม่พร้อม');
+    }
+  } catch (e) {
+    S.cfgWarn = '⚠ จุดแวะ/โรงงานใช้เฉพาะเครื่องนี้ (ต่อ server ไม่ได้)';
+  }
+  $('factBtn').textContent = S.factory ? '🏭 ย้ายโรงงาน' : '🏭 ตั้งโรงงาน';
+  renderWps(); renderFactory(); buildRoutes();
+}
 function renderWps(){
   S.wpLayer.clearLayers();
   for (const wp of loadWps()){
@@ -686,13 +739,12 @@ function delWp(id){
   S.map.closePopup();
   renderWps(); buildRoutes();
 }
-function loadFactory(){ try { const f = JSON.parse(localStorage.getItem(FACT_KEY) || 'null'); return (f && geoOk(f.lat, f.lng)) ? f : null; } catch { return null; } }
 function setFactory(lat, lng){
   S.factory = { lat, lng };
-  localStorage.setItem(FACT_KEY, JSON.stringify(S.factory));
+  persistCfg();
   $('factBtn').textContent = '🏭 ย้ายโรงงาน';
   renderFactory(); buildRoutes();
-  setStatus('ตั้งตำแหน่งโรงงานแล้ว — เส้นทางทุกทีมเริ่มจากจุดนี้');
+  setStatus('ตั้งตำแหน่งโรงงานแล้ว — เส้นทางทุกทีมเริ่มจากจุดนี้' + (S.cfgServer ? ' (บันทึกขึ้นชีทกลาง)' : ' (เฉพาะเครื่องนี้)'));
 }
 function renderFactory(){
   if (S.factMk){ S.factMk.remove(); S.factMk = null; }
@@ -749,8 +801,7 @@ function saveWpForm(){
   renderWps(); buildRoutes();
 }
 
-// ══ ค้นหา: พิกัด/ลิงก์เต็ม → ตรง ๆ · ข้อความ → Nominatim (OSM ฟรี) ══
-// การบ้าน: ลิงก์ย่อ maps.app.goo.gl ต้องให้ worker ช่วยตาม redirect (ทำ endpoint /resolve-link ทีหลัง)
+// ══ ค้นหา: พิกัด/ลิงก์เต็ม → ตรง ๆ · ลิงก์ย่อ → worker /resolve-link ตาม redirect ให้ · ข้อความ → Nominatim (OSM ฟรี) ══
 async function doSearch(){
   const q = $('searchBox').value.trim();
   const rbox = $('searchResults');
@@ -758,8 +809,15 @@ async function doSearch(){
   if (!q) return;
   const c = coordsFromText(q);
   if (c){ showSearchPin(c.lat, c.lng, 'พิกัด ' + c.lat.toFixed(5) + ', ' + c.lng.toFixed(5)); return; }
-  if (/maps\.app\.goo\.gl|goo\.gl\/maps/i.test(q)){
-    setStatus('ลิงก์ย่อของ Google เปิดพิกัดตรง ๆ ไม่ได้ — เปิดลิงก์นั้นในเบราว์เซอร์ก่อน แล้วคัดลอก URL เต็มจากแถบที่อยู่ (มี @lat,lng) มาวางแทน หรือพิมพ์ชื่อสถานที่', true);
+  if (/maps\.app\.goo\.gl|goo\.gl\/maps|\bg\.co\//i.test(q)){
+    setStatus('กำลังตามลิงก์ย่อผ่าน server …');
+    try {
+      const r = await api('/resolve-link', { url: q });
+      if (r.ok && geoOk(r.lat, r.lng)){ setStatus(''); showSearchPin(r.lat, r.lng, 'จากลิงก์ Google Maps'); }
+      else setStatus(r.error || 'หาพิกัดจากลิงก์ไม่เจอ — เปิดลิงก์แล้วคัดลอก URL เต็ม (มี @lat,lng) มาวางแทน', true);
+    } catch (e) {
+      setStatus('ตามลิงก์ไม่สำเร็จ (worker ยังไม่มี /resolve-link?) — เปิดลิงก์แล้วคัดลอก URL เต็มมาวางแทน', true);
+    }
     return;
   }
   setStatus('กำลังค้นหา "' + q + '" …');
@@ -840,13 +898,10 @@ function boot(){
   S.routeLayer = L.layerGroup().addTo(S.map);
   S.searchLayer = L.layerGroup().addTo(S.map);
   S.map.on('click', onMapClick);
-  S.factory = loadFactory();
-  if (S.factory) $('factBtn').textContent = '🏭 ย้ายโรงงาน';
-  renderFactory();
-  renderWps();
   S.date = ymdToday();
-  loadDay();
+  loadConfig().then(loadDay);
 }
+async function refreshAll(){ await loadConfig(); loadDay(); }
 boot();
 </script>
 </body>
