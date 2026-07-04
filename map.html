@@ -36,7 +36,7 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
 .btn.on{background:var(--acc);border-color:var(--acc);color:#fff;}
 
 .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 18px;}
-.tb-group{display:flex;gap:6px;align-items:center;background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:6px 10px;flex-wrap:wrap;}
+.tb-group{display:flex;gap:6px;align-items:center;background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:6px 10px;flex-wrap:wrap;position:relative;}
 .tb-label{font-family:var(--mono);font-size:10px;color:var(--mu);letter-spacing:1px;margin-right:2px;}
 .chip{border:1px solid var(--bdr);background:none;color:var(--mu);font-size:12px;font-family:var(--sans);padding:4px 12px;border-radius:20px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;}
 .chip .dot{width:8px;height:8px;border-radius:50%;background:var(--mu);}
@@ -47,10 +47,19 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
 .status-line{font-family:var(--mono);font-size:10px;color:var(--mu);padding:0 18px 6px;min-height:16px;}
 .status-line.err{color:var(--rd);}
 
+.search-in{border:1px solid var(--bdr);border-radius:8px;background:var(--surf2);color:var(--tx);font-family:var(--sans);font-size:12px;padding:5px 10px;width:230px;}
+.search-results{display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:#FFFDF9;border:1px solid var(--bdr);border-radius:10px;box-shadow:0 8px 24px rgba(120,96,72,.18);z-index:1200;max-height:260px;overflow-y:auto;}
+.search-results.show{display:block;}
+.sr-row{padding:8px 12px;font-size:12px;line-height:1.5;cursor:pointer;border-bottom:1px solid var(--bdr);}
+.sr-row:last-child{border-bottom:none;}
+.sr-row:hover{background:var(--surf2);}
+.sr-row small{color:var(--mu);display:block;}
+
 .stage{display:flex;gap:14px;padding:0 18px 18px;align-items:stretch;height:calc(100vh - 148px);min-height:520px;}
 .map-wrap{flex:1;position:relative;background:var(--surf2);border:1px solid var(--bdr);border-radius:16px;overflow:hidden;box-shadow:0 8px 30px rgba(120,96,72,.10);}
 #map{width:100%;height:100%;background:#F1EADC;}
 .leaflet-container{font-family:var(--sans);}
+.map-wrap.picking #map{cursor:crosshair;}
 
 /* หมุดงาน */
 .mpin{width:26px;height:26px;border-radius:50%;background:var(--c);border:2.5px solid var(--c);color:#fff;
@@ -60,10 +69,18 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
 .mpin.done{opacity:.5;}
 .mpin .chk{position:absolute;top:-13px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--c);opacity:1;text-shadow:0 1px 2px #fff;}
 .mpin.approx::after{content:'~';position:absolute;right:-7px;top:-7px;font-size:10px;color:var(--mu);}
-.wpin{width:28px;height:28px;border-radius:50%;background:#FFFDF9;border:2px solid var(--acc);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 6px rgba(56,44,35,.3);cursor:grab;}
-.wp-pop b{font-size:13px;}
-.wp-pop .wp-del{margin-top:6px;}
-.map-wrap.adding #map{cursor:crosshair;}
+.wpin{width:28px;height:28px;border-radius:50%;background:#FFFDF9;border:2px solid var(--c,#B5653F);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 6px rgba(56,44,35,.3);cursor:grab;}
+.fpin{width:34px;height:34px;border-radius:10px;background:#FFFDF9;border:2px solid var(--tx);display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 8px rgba(56,44,35,.35);}
+.spin{width:30px;height:30px;border-radius:50%;background:#FFFDF9;border:2px solid var(--blu);display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 8px rgba(47,115,230,.4);}
+.pop-btns{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+.pop-team{font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:10px;color:#fff;display:inline-block;margin-top:3px;}
+
+/* รถทีม */
+.veh{width:30px;height:30px;border-radius:50%;background:var(--c);border:2px solid #FFFDF9;color:#fff;font-size:14px;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(56,44,35,.4);position:relative;}
+.veh::before{content:'';position:absolute;inset:-3px;border-radius:50%;border:2px solid var(--c);opacity:.6;animation:vpulse 2.2s ease-out infinite;}
+@keyframes vpulse{0%{transform:scale(.7);opacity:.6;}100%{transform:scale(2.1);opacity:0;}}
+@media (prefers-reduced-motion: reduce){ .veh::before{animation:none;opacity:.25;} }
 
 /* การ์ดสรุปทีม */
 .team-cards{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:8px;z-index:1000;max-height:calc(100% - 24px);overflow-y:auto;}
@@ -82,6 +99,8 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
 .lg-pin{width:12px;height:12px;border-radius:50%;border:2px solid var(--mu);flex-shrink:0;}
 .lg-pin.fill{background:var(--mu);}
 .lg-pin.dash{border-style:dashed;}
+.lg-line{width:26px;height:0;border-top:2.5px solid var(--mu);flex-shrink:0;}
+.lg-line.dash{border-top-style:dashed;}
 .nogeo{position:absolute;left:12px;top:12px;background:rgba(255,253,249,.92);border:1px solid var(--bdr);border-radius:10px;z-index:1000;font-size:12px;max-width:270px;max-height:45%;display:flex;flex-direction:column;}
 .nogeo-head{padding:8px 12px;cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.5px;color:var(--rd);white-space:nowrap;}
 .nogeo-head.zero{color:var(--grn);}
@@ -90,6 +109,12 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
 .ng-row{padding:5px 12px;cursor:pointer;line-height:1.5;}
 .ng-row:hover{background:var(--surf2);}
 .ng-row small{color:var(--mu);font-family:var(--mono);font-size:9px;}
+
+/* ฟอร์มจุดแวะ */
+.wpform{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#FFFDF9;border:1px solid var(--bdr);border-radius:14px;padding:16px;z-index:1050;box-shadow:0 10px 30px rgba(56,44,35,.25);width:250px;display:flex;flex-direction:column;gap:8px;}
+.wpform b{font-size:13px;}
+.wpform input,.wpform select{border:1px solid var(--bdr);border-radius:8px;background:var(--surf2);color:var(--tx);font-family:var(--sans);font-size:12px;padding:7px 10px;width:100%;}
+.wpf-btns{display:flex;gap:6px;justify-content:flex-end;}
 
 /* Detail panel */
 .panel{width:340px;background:var(--surf);border:1px solid var(--bdr);border-radius:16px;padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;flex-shrink:0;}
@@ -140,6 +165,7 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
   .tcard{min-width:170px;}
   .legend{display:none;}
   .hd-user{display:none;}
+  .search-in{width:150px;}
 }
 </style>
 </head>
@@ -164,12 +190,21 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
   <div class="tb-group" id="techChips"><span class="tb-label">ช่าง</span></div>
   <div class="tb-group" id="salesChips"><span class="tb-label">เซลล์</span></div>
   <div class="tb-group">
-    <span class="tb-label">ประเภท</span>
+    <span class="tb-label">แสดง</span>
     <button class="chip on" id="fInstall" onclick="toggleKind('install',this)">ติดตั้ง</button>
     <button class="chip on" id="fMeasure" onclick="toggleKind('measure',this)">วัดงาน</button>
+    <button class="chip on" id="fRoute" onclick="toggleRoute(this)">เส้นทาง</button>
   </div>
   <div class="tb-group">
-    <button class="btn" id="wpBtn" onclick="toggleWpMode()">📌 เพิ่มจุดแวะ</button>
+    <span class="tb-label">ค้นหา</span>
+    <input class="search-in" id="searchBox" placeholder="ที่อยู่ / พิกัด / ลิงก์ Google Maps"
+           onkeydown="if(event.key==='Enter')doSearch()">
+    <button class="btn" onclick="doSearch()">🔎</button>
+    <div class="search-results" id="searchResults"></div>
+  </div>
+  <div class="tb-group">
+    <button class="btn" id="wpBtn" onclick="togglePickMode('wp')">📌 เพิ่มจุดแวะ</button>
+    <button class="btn" id="factBtn" onclick="togglePickMode('factory')">🏭 ตั้งโรงงาน</button>
   </div>
 </div>
 <div class="status-line" id="statusLine"></div>
@@ -184,10 +219,19 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
     <div class="team-cards" id="teamCards"></div>
     <div class="legend">
       <b>สัญลักษณ์</b>
-      <div class="lg-row"><span class="lg-pin fill"></span> งานติดตั้ง (จาง = จบแล้ว)</div>
-      <div class="lg-row"><span class="lg-pin dash"></span> งานวัด (เส้นประ)</div>
-      <div class="lg-row"><span style="font-family:var(--mono)">~</span> ตำแหน่งจากจุดเช็คอิน</div>
-      <div class="lg-row">📌 จุดแวะ (ลากย้าย / คลิกลบ)</div>
+      <div class="lg-row"><span class="lg-pin fill"></span> ติดตั้ง (จาง = จบแล้ว) · <span class="lg-pin dash"></span> วัดงาน</div>
+      <div class="lg-row"><span class="lg-line"></span> ผ่านแล้ว · <span class="lg-line dash"></span> กำลังไป/คิวถัดไป</div>
+      <div class="lg-row">🚐 รถทีมช่าง · 🚗 รถทีมเซลล์ (จำลองจากสถานะงาน)</div>
+      <div class="lg-row">🏭 โรงงาน (จุดเริ่ม) · 📌 จุดแวะ (ลาก/คลิกแก้ได้)</div>
+    </div>
+    <div class="wpform" id="wpForm" style="display:none">
+      <b>📌 เพิ่มจุดแวะ</b>
+      <input id="wpName" placeholder="ชื่อจุด เช่น ร้านวัสดุ บ้านลูกค้า">
+      <select id="wpTeam"></select>
+      <div class="wpf-btns">
+        <button class="btn" onclick="hideWpForm()">ยกเลิก</button>
+        <button class="btn acc" onclick="saveWpForm()">บันทึก</button>
+      </div>
     </div>
   </div>
 
@@ -223,18 +267,26 @@ const TEAM_COLORS = {
 const EXTRA_COLORS = ['#C2497D','#5B8C2A','#8A6A1F','#3E6FA3','#A3543E'];
 const GEO_RE = /\[geo:(-?\d{1,2}\.\d{3,}),\s*(-?\d{1,3}\.\d{3,})\]/;
 const WP_KEY = 'pk_map_waypoints_v1';
+const FACT_KEY = 'pk_map_factory_v1';
 const ALLOW_ROLES = ['manager', 'office'];
+const VEH_CYCLE_MS = 9000;   // รอบ animation รถวิ่งบน leg ปัจจุบัน
 
 // ══ state ══
 const S = {
   user: null, date: '',
   jobs: {},                 // key = kind:id → job
   teamOn: {}, kindOn: { install:true, measure:true },
-  map: null, jobLayer: null, wpLayer: null,
-  markers: {},              // key → leaflet marker
-  wpAddMode: false,
+  routeOn: true,
+  map: null, jobLayer: null, wpLayer: null, routeLayer: null, searchLayer: null,
+  markers: {},
+  pickMode: '',             // '' | 'wp' | 'factory'
+  pendingLL: null,          // จุดที่คลิกไว้ระหว่างกรอกฟอร์มจุดแวะ
+  factory: null,            // {lat,lng}
+  anims: [],                // [{mk, from:[lat,lng], to:[lat,lng]}] — รถที่กำลังวิ่ง
+  animRunning: false,
+  searchHit: null,
   extraColorIdx: 0,
-  fitted: ''                // วันที่ที่ fitBounds ไปแล้ว (fit ครั้งแรกของวันเท่านั้น)
+  fitted: ''
 };
 
 // ══ utils ══
@@ -255,6 +307,7 @@ function teamColor(name){
   if (!TEAM_COLORS[name]) { TEAM_COLORS[name] = EXTRA_COLORS[S.extraColorIdx++ % EXTRA_COLORS.length]; }
   return TEAM_COLORS[name];
 }
+function teamEmoji(name){ return /ช่าง/.test(name) ? '🚐' : '🚗'; }
 function geoOk(lat, lng){ return isFinite(lat) && isFinite(lng) && lat >= 5 && lat <= 21 && lng >= 95 && lng <= 106; }
 // พิกัดหมุด: geo tag ใน note ก่อน → ไม่มีค่อย fallback จุดเช็คอิน (JobStatus lat/lng) พร้อม flag
 function jobGeo(j){
@@ -263,6 +316,16 @@ function jobGeo(j){
   const lat = parseFloat(j.lat), lng = parseFloat(j.lng);
   if (geoOk(lat, lng)) return { lat, lng, src:'checkin' };
   return null;
+}
+// อ่านพิกัดจากข้อความ: "13.72,100.52" หรือ URL Google Maps แบบเต็ม (@lat,lng · q=lat,lng)
+function coordsFromText(q){
+  q = String(q || '').trim();
+  let m = q.match(/^(-?\d{1,2}\.\d{2,})\s*,\s*(-?\d{1,3}\.\d{2,})$/);
+  if (!m) m = q.match(/@(-?\d{1,2}\.\d{2,}),(-?\d{1,3}\.\d{2,})/);
+  if (!m) m = q.match(/[?&](?:q|query|ll|destination)=(-?\d{1,2}\.\d{2,})(?:%2C|,)(-?\d{1,3}\.\d{2,})/i);
+  if (!m) return null;
+  const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+  return geoOk(lat, lng) ? { lat, lng } : null;
 }
 function setStatus(msg, isErr){ const el = $('statusLine'); el.textContent = msg || ''; el.className = 'status-line' + (isErr ? ' err' : ''); }
 
@@ -309,7 +372,7 @@ async function loadDay(){
   for (const { kind, team, r } of results){
     if (!r || !r.ok){
       const msg = (r && r.error) || 'โหลดไม่สำเร็จ';
-      if (/session|token|สิทธิ์|role/i.test(msg)) authFail = msg;
+      if (/session|token|สิทธิ์|role|login/i.test(msg)) authFail = msg;
       errs.push((team || 'วัดงาน') + ': ' + msg);
       continue;
     }
@@ -325,7 +388,9 @@ async function loadDay(){
     setStatus(authFail, true);
     return;
   }
-  setStatus(errs.length ? '⚠ บางส่วนโหลดไม่สำเร็จ — ' + errs.join(' · ') : '', errs.length > 0);
+  if (errs.length) setStatus('⚠ บางส่วนโหลดไม่สำเร็จ — ' + errs.join(' · '), true);
+  else if (!S.factory && S.routeOn) setStatus('แนะนำ: กด "🏭 ตั้งโรงงาน" แล้วคลิกตำแหน่งโรงงานบนแผนที่ เพื่อให้เส้นทางเริ่มจากโรงงาน');
+  else setStatus('');
   renderAll();
 }
 
@@ -333,6 +398,9 @@ async function loadDay(){
 function renderAll(){
   renderChips();
   renderMarkers();
+  renderWps();
+  renderFactory();
+  buildRoutes();
   renderTeamCards();
   renderNoGeo();
   renderCounts();
@@ -360,7 +428,12 @@ function toggleTeam(team){
 function toggleKind(kind, btn){
   S.kindOn[kind] = !S.kindOn[kind];
   btn.classList.toggle('on', S.kindOn[kind]);
-  renderMarkers(); renderNoGeo(); renderCounts();
+  renderMarkers(); buildRoutes(); renderNoGeo(); renderCounts();
+}
+function toggleRoute(btn){
+  S.routeOn = !S.routeOn;
+  btn.classList.toggle('on', S.routeOn);
+  buildRoutes();
 }
 
 function renderMarkers(){
@@ -378,6 +451,7 @@ function renderMarkers(){
       iconSize: [26, 26], iconAnchor: [13, 13]
     });
     const mk = L.marker([j.glat, j.glng], { icon }).addTo(S.jobLayer);
+    mk.bindTooltip(j.team + ' · ' + (j.orderLabel || '') + ' ' + (j.name || ''), { direction:'top', offset:[0,-14] });
     mk.on('click', () => openJob(key));
     S.markers[key] = mk;
     pts.push([j.glat, j.glng]);
@@ -386,6 +460,77 @@ function renderMarkers(){
     S.map.fitBounds(L.latLngBounds(pts).pad(0.2), { maxZoom: 14 });
     S.fitted = S.date;
   }
+}
+
+// ══ เส้นทาง + รถทีม (Phase 2 — จำลองจากสถานะ/ลำดับงาน ไม่ใช่ GPS จริง) ══
+// stops: งานของทีม (มีพิกัด) เรียงตามลำดับแล้ว · wps: จุดแวะของทีม · factory: {lat,lng}|null
+// คืน { seq, curIdx, veh } — curIdx = จุดเป้าหมายปัจจุบัน (-1 = จบหมดแล้ว)
+function computeRouteSeq(stops, wps, factory){
+  const seq = [];
+  if (factory) seq.push({ lat:factory.lat, lng:factory.lng, done:true, factory:true, label:'โรงงาน' });
+  // จุดแวะแทรกก่อนงานแรกที่ยังไม่เริ่ม (ไม่แทรกก่อนงานที่กำลังทำ — ทีมอยู่หน้างานแล้ว)
+  let cut = stops.findIndex(s => !s.done && !s.working);
+  if (cut === -1) cut = stops.length;
+  seq.push(...stops.slice(0, cut), ...wps, ...stops.slice(cut));
+  const curIdx = seq.findIndex(s => !s.done);
+  const workPt = seq.find(s => s.working);
+  let veh = null;
+  if (workPt) veh = { mode:'at', at:[workPt.lat, workPt.lng] };
+  else if (curIdx > 0) veh = { mode:'go', from:[seq[curIdx-1].lat, seq[curIdx-1].lng], to:[seq[curIdx].lat, seq[curIdx].lng] };
+  else if (curIdx === 0) veh = { mode:'at', at:[seq[0].lat, seq[0].lng] };
+  else if (seq.length) veh = { mode:'at', at:[seq[seq.length-1].lat, seq[seq.length-1].lng] };
+  return { seq, curIdx, veh };
+}
+function buildRoutes(){
+  S.routeLayer.clearLayers();
+  S.anims = [];
+  if (!S.routeOn) return;
+  const byTeam = {};
+  for (const j of Object.values(S.jobs)){
+    if (!visible(j) || j.glat === undefined) continue;
+    (byTeam[j.team] = byTeam[j.team] || []).push(j);
+  }
+  const allWps = loadWps();
+  for (const [team, jobs] of Object.entries(byTeam)){
+    jobs.sort((a,b) => (a.orderNum||999) - (b.orderNum||999));
+    const stops = jobs.map(j => ({ lat:j.glat, lng:j.glng, done:j.status === 'done', working:j.status === 'working', label:j.orderLabel || '' }));
+    const wps = allWps.filter(w => w.team === team && geoOk(w.lat, w.lng))
+      .map(w => ({ lat:w.lat, lng:w.lng, done:false, working:false, wp:true, label:w.name }));
+    const { seq, curIdx, veh } = computeRouteSeq(stops, wps, S.factory);
+    const c = teamColor(team);
+    for (let i = 1; i < seq.length; i++){
+      const passed = seq[i].done;
+      L.polyline([[seq[i-1].lat, seq[i-1].lng], [seq[i].lat, seq[i].lng]], {
+        color: c, weight: 3,
+        opacity: passed ? .85 : (i === curIdx ? .8 : .4),
+        dashArray: passed ? null : '7 6'
+      }).addTo(S.routeLayer);
+    }
+    if (veh){
+      const icon = L.divIcon({ className:'', html:'<div class="veh" style="--c:' + c + '">' + teamEmoji(team) + '</div>', iconSize:[30,30], iconAnchor:[15,15] });
+      const at = veh.mode === 'go' ? veh.from : veh.at;
+      const mk = L.marker(at, { icon, zIndexOffset: 500, interactive: false }).addTo(S.routeLayer);
+      if (veh.mode === 'go') S.anims.push({ mk, from: veh.from, to: veh.to });
+    }
+  }
+  startAnimLoop();
+}
+function startAnimLoop(){
+  if (S.animRunning) return;
+  S.animRunning = true;
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function tick(ts){
+    if (S.anims.length){
+      let p = (ts % VEH_CYCLE_MS) / VEH_CYCLE_MS;
+      p = p < .88 ? p / .88 : 1;                       // วิ่ง 88% ของรอบ แล้วพักที่ปลายทางก่อนวนใหม่
+      const t = reduce ? .5 : (p < .5 ? 2*p*p : 1 - Math.pow(-2*p + 2, 2) / 2);   // easeInOutQuad
+      for (const a of S.anims){
+        a.mk.setLatLng([a.from[0] + (a.to[0]-a.from[0])*t, a.from[1] + (a.to[1]-a.from[1])*t]);
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
 }
 
 function renderTeamCards(){
@@ -405,10 +550,13 @@ function renderTeamCards(){
       if (fmtTime(j.startAt) && fmtTime(j.startAt) > lastCk){ lastCk = fmtTime(j.startAt); lastLabel = 'เริ่ม ' + (j.orderLabel || ''); }
     }
     const curKey = cur ? cur.kind + ':' + cur.id : '';
+    const head = cur
+      ? (cur.status === 'working' ? '🔧 กำลังทำ ' : teamEmoji(team) + ' กำลังไป ')
+      : '';
     h += '<div class="tcard" style="--c:' + teamColor(team) + '" onclick="' + (curKey ? "openJob('" + esc(curKey) + "')" : '') + '">' +
       '<div class="tname">' + esc(team) + ' <span class="tprog">' + done + '/' + jobs.length + ' งาน</span></div>' +
       '<div class="tstat">' + (cur
-        ? (cur.status === 'working' ? 'กำลังทำ ' : 'คิวถัดไป ') + '<b>' + esc((cur.orderLabel || '') + ' · ' + cur.name) + '</b>'
+        ? head + '<b>' + esc((cur.orderLabel || '') + ' · ' + cur.name) + '</b>'
         : '<b>จบครบทุกงานแล้ว ✓</b>') + '</div>' +
       (lastCk ? '<div class="checkin">✓ อัปเดตล่าสุด ' + lastCk + ' · ' + esc(lastLabel) + '</div>' : '') +
       '</div>';
@@ -444,7 +592,6 @@ function openJob(key){
   const stTxt = j.status === 'done' ? (j.continueNote ? 'จบ (ต่องาน)' : '✓ จบแล้ว')
     : j.status === 'working' ? 'กำลังทำ' : 'รอคิว';
 
-  // timeline จาก JobStatus (เช็คอินจริง Phase 3 — ตอนนี้มี start/done + พิกัด)
   const rows = [];
   const geoChip = (j.lat && j.lng) ? '<span class="tl-geo">📍 ' + Number(j.lat).toFixed(4) + ',' + Number(j.lng).toFixed(4) + '</span>' : '';
   if (j.startAt) rows.push(['<span class="tl-t">' + (fmtTime(j.startAt) || '–') + '</span>', 'เริ่มงาน' + (j.status === 'working' && !j.doneAt ? geoChip : ''), j.doneAt ? 'done' : 'now']);
@@ -512,42 +659,159 @@ function closePanel(){
   $('panel').innerHTML = '<div class="empty">📍 คลิกหมุดงาน การ์ดทีม<br>หรือรายการไม่มีพิกัด เพื่อดูรายละเอียด</div>';
 }
 
-// ══ waypoints (localStorage — Phase 1 zero-backend) ══
-function loadWps(){ try { return JSON.parse(localStorage.getItem(WP_KEY) || '[]'); } catch { return []; } }
+// ══ จุดแวะ (ผูกทีมได้) + โรงงาน — localStorage (การบ้าน R1: ย้ายขึ้นชีท MapWaypoints ให้ทุกเครื่องเห็นตรงกัน) ══
+function loadWps(){ try { const l = JSON.parse(localStorage.getItem(WP_KEY) || '[]'); return l.map(w => Object.assign({ team:'' }, w)); } catch { return []; } }
 function saveWps(list){ localStorage.setItem(WP_KEY, JSON.stringify(list)); }
 function renderWps(){
   S.wpLayer.clearLayers();
   for (const wp of loadWps()){
-    const icon = L.divIcon({ className:'', html:'<div class="wpin">' + esc(wp.icon || '📌') + '</div>', iconSize:[28,28], iconAnchor:[14,14] });
+    if (wp.team && S.teamOn[wp.team] === false) continue;
+    const c = wp.team ? teamColor(wp.team) : '#B5653F';
+    const icon = L.divIcon({ className:'', html:'<div class="wpin" style="--c:' + c + '">' + esc(wp.icon || '📌') + '</div>', iconSize:[28,28], iconAnchor:[14,14] });
     const mk = L.marker([wp.lat, wp.lng], { icon, draggable: true }).addTo(S.wpLayer);
-    mk.bindPopup('<div class="wp-pop"><b>' + esc(wp.name) + '</b><br><button class="btn wp-del" onclick="delWp(\'' + esc(wp.id) + '\')">🗑 ลบจุดนี้</button></div>');
+    mk.bindPopup('<div class="wp-pop"><b>' + esc(wp.name) + '</b><br>' +
+      '<span class="pop-team" style="background:' + c + '">' + esc(wp.team || 'ไม่ผูกทีม') + '</span>' +
+      '<div class="pop-btns"><button class="btn" onclick="delWp(\'' + esc(wp.id) + '\')">🗑 ลบ</button></div>' +
+      '<div class="muted">ลากหมุดเพื่อย้ายตำแหน่ง</div></div>');
     mk.on('dragend', () => {
       const ll = mk.getLatLng();
       const list = loadWps();
       const it = list.find(x => x.id === wp.id);
-      if (it){ it.lat = ll.lat; it.lng = ll.lng; saveWps(list); }
+      if (it){ it.lat = ll.lat; it.lng = ll.lng; saveWps(list); buildRoutes(); }
     });
   }
 }
-function toggleWpMode(){
-  S.wpAddMode = !S.wpAddMode;
-  $('wpBtn').classList.toggle('on', S.wpAddMode);
-  $('mapWrap').classList.toggle('adding', S.wpAddMode);
-  setStatus(S.wpAddMode ? 'โหมดเพิ่มจุดแวะ: คลิกตำแหน่งบนแผนที่' : '');
-}
 function delWp(id){
   saveWps(loadWps().filter(x => x.id !== id));
-  renderWps();
+  S.map.closePopup();
+  renderWps(); buildRoutes();
+}
+function loadFactory(){ try { const f = JSON.parse(localStorage.getItem(FACT_KEY) || 'null'); return (f && geoOk(f.lat, f.lng)) ? f : null; } catch { return null; } }
+function setFactory(lat, lng){
+  S.factory = { lat, lng };
+  localStorage.setItem(FACT_KEY, JSON.stringify(S.factory));
+  $('factBtn').textContent = '🏭 ย้ายโรงงาน';
+  renderFactory(); buildRoutes();
+  setStatus('ตั้งตำแหน่งโรงงานแล้ว — เส้นทางทุกทีมเริ่มจากจุดนี้');
+}
+function renderFactory(){
+  if (S.factMk){ S.factMk.remove(); S.factMk = null; }
+  if (!S.factory) return;
+  const icon = L.divIcon({ className:'', html:'<div class="fpin">🏭</div>', iconSize:[34,34], iconAnchor:[17,17] });
+  S.factMk = L.marker([S.factory.lat, S.factory.lng], { icon, zIndexOffset: 400 }).addTo(S.map);
+  S.factMk.bindTooltip('โรงงาน (จุดเริ่มเส้นทาง)', { direction:'top', offset:[0,-18] });
+}
+
+// ══ โหมดคลิกบนแผนที่ (จุดแวะ / โรงงาน) ══
+function togglePickMode(mode){
+  S.pickMode = S.pickMode === mode ? '' : mode;
+  $('wpBtn').classList.toggle('on', S.pickMode === 'wp');
+  $('factBtn').classList.toggle('on', S.pickMode === 'factory');
+  $('mapWrap').classList.toggle('picking', !!S.pickMode);
+  hideWpForm();
+  setStatus(S.pickMode === 'wp' ? 'โหมดเพิ่มจุดแวะ: คลิกตำแหน่งบนแผนที่'
+    : S.pickMode === 'factory' ? 'โหมดตั้งโรงงาน: คลิกตำแหน่งโรงงานบนแผนที่' : '');
 }
 function onMapClick(e){
-  if (!S.wpAddMode) return;
-  const name = prompt('ชื่อจุดแวะ (เช่น ร้านวัสดุ, บ้านลูกค้า):');
-  if (name === null) return;
+  if (S.pickMode === 'factory'){
+    setFactory(e.latlng.lat, e.latlng.lng);
+    togglePickMode('factory');
+    return;
+  }
+  if (S.pickMode === 'wp'){
+    S.pendingLL = e.latlng;
+    showWpForm();
+  }
+}
+function showWpForm(){
+  const teams = new Set(TECH_TEAMS);
+  Object.values(S.jobs).forEach(j => teams.add(j.team));
+  $('wpTeam').innerHTML = '<option value="">ไม่ผูกทีม (หมุดกลาง)</option>' +
+    [...teams].sort().map(t => '<option value="' + esc(t) + '">' + esc(t) + '</option>').join('');
+  $('wpName').value = '';
+  $('wpForm').style.display = 'flex';
+  $('wpName').focus();
+}
+function hideWpForm(){ $('wpForm').style.display = 'none'; S.pendingLL = null; }
+function saveWpForm(){
+  if (!S.pendingLL) { hideWpForm(); return; }
   const list = loadWps();
-  list.push({ id: 'wp' + Date.now(), name: name.trim() || 'จุดแวะ', icon: '📌', lat: e.latlng.lat, lng: e.latlng.lng });
+  list.push({
+    id: 'wp' + Date.now(),
+    name: $('wpName').value.trim() || 'จุดแวะ',
+    team: $('wpTeam').value,
+    icon: '📌',
+    lat: S.pendingLL.lat, lng: S.pendingLL.lng
+  });
   saveWps(list);
-  renderWps();
-  toggleWpMode();
+  hideWpForm();
+  if (S.pickMode === 'wp') togglePickMode('wp');
+  renderWps(); buildRoutes();
+}
+
+// ══ ค้นหา: พิกัด/ลิงก์เต็ม → ตรง ๆ · ข้อความ → Nominatim (OSM ฟรี) ══
+// การบ้าน: ลิงก์ย่อ maps.app.goo.gl ต้องให้ worker ช่วยตาม redirect (ทำ endpoint /resolve-link ทีหลัง)
+async function doSearch(){
+  const q = $('searchBox').value.trim();
+  const rbox = $('searchResults');
+  rbox.classList.remove('show');
+  if (!q) return;
+  const c = coordsFromText(q);
+  if (c){ showSearchPin(c.lat, c.lng, 'พิกัด ' + c.lat.toFixed(5) + ', ' + c.lng.toFixed(5)); return; }
+  if (/maps\.app\.goo\.gl|goo\.gl\/maps/i.test(q)){
+    setStatus('ลิงก์ย่อของ Google เปิดพิกัดตรง ๆ ไม่ได้ — เปิดลิงก์นั้นในเบราว์เซอร์ก่อน แล้วคัดลอก URL เต็มจากแถบที่อยู่ (มี @lat,lng) มาวางแทน หรือพิมพ์ชื่อสถานที่', true);
+    return;
+  }
+  setStatus('กำลังค้นหา "' + q + '" …');
+  try {
+    const res = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=th&accept-language=th&q=' + encodeURIComponent(q));
+    const list = await res.json();
+    setStatus('');
+    if (!list.length){ setStatus('ไม่พบ "' + q + '" — ลองพิมพ์กว้างขึ้น เช่น ชื่อถนน+เขต', true); return; }
+    rbox.innerHTML = list.map((r, i) =>
+      '<div class="sr-row" onclick="pickSearch(' + i + ')">' + esc(r.name || r.display_name.split(',')[0]) +
+      '<small>' + esc(r.display_name) + '</small></div>').join('');
+    S.searchList = list;
+    rbox.classList.add('show');
+  } catch (e) {
+    setStatus('ค้นหาไม่สำเร็จ: ' + e, true);
+  }
+}
+function pickSearch(i){
+  const r = S.searchList[i];
+  $('searchResults').classList.remove('show');
+  showSearchPin(parseFloat(r.lat), parseFloat(r.lon), r.name || r.display_name.split(',')[0]);
+}
+function showSearchPin(lat, lng, name){
+  S.searchLayer.clearLayers();
+  S.searchHit = { lat, lng, name };
+  const icon = L.divIcon({ className:'', html:'<div class="spin">🔍</div>', iconSize:[30,30], iconAnchor:[15,15] });
+  const mk = L.marker([lat, lng], { icon, zIndexOffset: 600 }).addTo(S.searchLayer);
+  mk.bindPopup('<div class="wp-pop"><b>' + esc(name) + '</b>' +
+    '<div class="pop-btns">' +
+    '<button class="btn" onclick="wpFromSearch()">📌 ปักเป็นจุดแวะ</button>' +
+    '<button class="btn" onclick="factoryFromSearch()">🏭 ตั้งเป็นโรงงาน</button>' +
+    '<button class="btn" onclick="clearSearch()">✕</button>' +
+    '</div></div>');
+  S.map.flyTo([lat, lng], Math.max(S.map.getZoom(), 15));
+  setTimeout(() => mk.openPopup(), 400);
+}
+function wpFromSearch(){
+  if (!S.searchHit) return;
+  S.pendingLL = { lat: S.searchHit.lat, lng: S.searchHit.lng };
+  S.map.closePopup();
+  showWpForm();
+  $('wpName').value = S.searchHit.name || '';
+}
+function factoryFromSearch(){
+  if (!S.searchHit) return;
+  setFactory(S.searchHit.lat, S.searchHit.lng);
+  clearSearch();
+}
+function clearSearch(){
+  S.searchLayer.clearLayers();
+  S.searchHit = null;
+  S.map.closePopup();
 }
 
 // ══ date nav ══
@@ -573,7 +837,12 @@ function boot(){
   }).addTo(S.map);
   S.jobLayer = L.layerGroup().addTo(S.map);
   S.wpLayer = L.layerGroup().addTo(S.map);
+  S.routeLayer = L.layerGroup().addTo(S.map);
+  S.searchLayer = L.layerGroup().addTo(S.map);
   S.map.on('click', onMapClick);
+  S.factory = loadFactory();
+  if (S.factory) $('factBtn').textContent = '🏭 ย้ายโรงงาน';
+  renderFactory();
   renderWps();
   S.date = ymdToday();
   loadDay();
