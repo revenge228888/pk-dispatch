@@ -116,6 +116,20 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
 .wpform b{font-size:13px;}
 .wpform input,.wpform select{border:1px solid var(--bdr);border-radius:8px;background:var(--surf2);color:var(--tx);font-family:var(--sans);font-size:12px;padding:7px 10px;width:100%;}
 .wpf-btns{display:flex;gap:6px;justify-content:flex-end;}
+.wpf-hint{line-height:1.6;}
+
+/* panel ทีม */
+.tp{display:flex;flex-direction:column;}
+.tp-row{display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 4px;border-radius:8px;}
+.tp-row.link{cursor:pointer;}
+.tp-row.link:hover{background:var(--surf2);}
+.tp-num{width:20px;height:20px;border-radius:50%;background:var(--c);color:#fff;font-family:var(--mono);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.tp-name{flex:1;line-height:1.4;word-break:break-word;}
+.tp-st{font-family:var(--mono);font-size:9px;color:var(--mu);white-space:nowrap;}
+.tp-st.ok{color:var(--grn);}
+.tp-st.now{color:var(--acc);}
+.tp-leg{font-family:var(--mono);font-size:9px;color:var(--mu);padding:1px 0 1px 32px;position:relative;}
+.tp-leg::before{content:'';position:absolute;left:13px;top:-8px;bottom:-8px;width:1px;background:var(--bdr);}
 
 /* Detail panel */
 .panel{width:340px;background:var(--surf);border:1px solid var(--bdr);border-radius:16px;padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;flex-shrink:0;}
@@ -228,7 +242,9 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
     <div class="wpform" id="wpForm" style="display:none">
       <b>📌 เพิ่มจุดแวะ</b>
       <input id="wpName" placeholder="ชื่อจุด เช่น ร้านวัสดุ บ้านลูกค้า">
-      <select id="wpTeam"></select>
+      <select id="wpTeam" onchange="updateWpAfterOptions()"></select>
+      <select id="wpAfter"></select>
+      <div class="wpf-hint muted" id="wpHint"></div>
       <div class="wpf-btns">
         <button class="btn" onclick="hideWpForm()">ยกเลิก</button>
         <button class="btn acc" onclick="saveWpForm()">บันทึก</button>
@@ -293,6 +309,8 @@ const S = {
   osrmCache: {},            // เส้นตามถนนต่อชุดพิกัด (จำใน session — filter สลับไปมาไม่ยิงซ้ำ)
   roadInfo: {},             // ระยะ/เวลา leg ปัจจุบันต่อทีม จาก OSRM
   routeToken: 0,            // กันผล OSRM รอบเก่ามาวาดทับหลังเปลี่ยนวัน/filter
+  teamRoutes: {},           // team → {seq, curIdx, legs, color} สำหรับ panel ทีม + แนะนำคิวจุดแวะ
+  openTeamName: '',         // panel กำลังโชว์ทีมไหน (refresh เมื่อ OSRM มาถึง)
   searchHit: null,
   extraColorIdx: 0,
   fitted: ''
@@ -496,10 +514,23 @@ function renderMarkers(){
 function computeRouteSeq(stops, wps, factory){
   const seq = [];
   if (factory) seq.push({ lat:factory.lat, lng:factory.lng, done:true, factory:true, label:'โรงงาน' });
-  // จุดแวะแทรกก่อนงานแรกที่ยังไม่เริ่ม (ไม่แทรกก่อนงานที่กำลังทำ — ทีมอยู่หน้างานแล้ว)
   let cut = stops.findIndex(s => !s.done && !s.working);
   if (cut === -1) cut = stops.length;
-  seq.push(...stops.slice(0, cut), ...wps, ...stops.slice(cut));
+  seq.push(...stops);
+  // แทรกจุดแวะตาม after: '' = ก่อนงานถัดไป (เดิม) · 'auto' = จุดที่เพิ่มระยะน้อยสุด · <jobId> = หลังงานนั้น (ถ้ายังไม่จบ)
+  let cutIdx = (factory ? 1 : 0) + cut;
+  for (const w of wps){
+    let idx = -1;
+    if (w.after === 'auto'){
+      idx = cheapestSlotIdx(seq, cutIdx, w);
+    } else if (w.after){
+      const j = seq.findIndex(s => s.id && s.id === w.after && !s.done);
+      if (j !== -1 && j + 1 >= cutIdx) idx = j + 1;
+    }
+    if (idx < 0) idx = cutIdx;
+    seq.splice(idx, 0, w);
+    if (idx <= cutIdx) cutIdx++;
+  }
   const curIdx = seq.findIndex(s => !s.done);
   const workPt = seq.find(s => s.working);
   let veh = null;
@@ -513,6 +544,7 @@ function buildRoutes(){
   S.routeLayer.clearLayers();
   S.anims = [];
   S.roadInfo = {};
+  S.teamRoutes = {};
   const token = ++S.routeToken;
   if (!S.routeOn) return;
   const byTeam = {};
@@ -524,11 +556,13 @@ function buildRoutes(){
   const teamJobs = [];
   for (const [team, jobs] of Object.entries(byTeam)){
     jobs.sort((a,b) => (a.orderNum||999) - (b.orderNum||999));
-    const stops = jobs.map(j => ({ lat:j.glat, lng:j.glng, done:j.status === 'done', working:j.status === 'working', label:j.orderLabel || '' }));
+    const stops = jobs.map(j => ({ lat:j.glat, lng:j.glng, done:j.status === 'done', working:j.status === 'working',
+      label:j.orderLabel || '', id:j.id, key:j.kind + ':' + j.id, name:j.name || '', status:j.status }));
     const wps = allWps.filter(w => w.team === team && geoOk(w.lat, w.lng))
-      .map(w => ({ lat:w.lat, lng:w.lng, done:false, working:false, wp:true, label:w.name }));
+      .map(w => ({ lat:w.lat, lng:w.lng, done:false, working:false, wp:true, label:w.name, after:w.after || '' }));
     const { seq, curIdx, veh } = computeRouteSeq(stops, wps, S.factory);
     const c = teamColor(team);
+    S.teamRoutes[team] = { seq: seq, curIdx: curIdx, legs: null, color: c };
     const group = L.layerGroup().addTo(S.routeLayer);
     drawTeamLegs(group, seq, curIdx, c, null);   // เส้นตรงขึ้นก่อนทันที · OSRM มาแทนเมื่อโหลดเสร็จ
     let anim = null;
@@ -542,6 +576,26 @@ function buildRoutes(){
   }
   startAnimLoop();
   enhanceRoads(teamJobs, token);
+}
+// ระยะห่างสองจุดหน่วยกม. (equirect — สำหรับเทียบ/ประมาณเท่านั้น)
+function distKm(a, b){
+  const dy = (a.lat - b.lat) * 111;
+  const dx = (a.lng - b.lng) * 111 * Math.cos(a.lat * Math.PI / 180);
+  return Math.sqrt(dx*dx + dy*dy);
+}
+// หา slot แทรกจุดแวะที่เพิ่มระยะทางรวมน้อยที่สุด (cheapest insertion) ในช่วงที่ยังไม่ผ่าน
+function cheapestSlotIdx(seq, cutIdx, wp){
+  let best = cutIdx, bestAdd = Infinity;
+  for (let k = cutIdx; k <= seq.length; k++){
+    const prev = seq[k-1], next = seq[k];
+    let add;
+    if (prev && next) add = distKm(prev, wp) + distKm(wp, next) - distKm(prev, next);
+    else if (prev) add = distKm(prev, wp);
+    else if (next) add = distKm(wp, next);
+    else add = 0;
+    if (add < bestAdd - 1e-9){ bestAdd = add; best = k; }
+  }
+  return best;
 }
 // วาดเส้น leg ของทีมลง group — roadLegs = เส้นตามถนนจาก OSRM (null = เส้นตรง)
 function drawTeamLegs(group, seq, curIdx, color, roadLegs){
@@ -610,6 +664,7 @@ async function enhanceRoads(teamJobs, token){
     if (token !== S.routeToken) return;
     if (!legs || legs.length !== tj.seq.length - 1) continue;
     drawTeamLegs(tj.group, tj.seq, tj.curIdx, tj.color, legs);
+    if (S.teamRoutes[tj.team]) S.teamRoutes[tj.team].legs = legs;
     if (tj.curIdx > 0 && legs[tj.curIdx - 1]){
       const leg = legs[tj.curIdx - 1];
       if (tj.anim && leg.coords.length > 1){
@@ -620,9 +675,13 @@ async function enhanceRoads(teamJobs, token){
       gotInfo = true;
     }
   }
-  if (gotInfo && token === S.routeToken) renderTeamCards();
+  if (token === S.routeToken){
+    if (gotInfo) renderTeamCards();
+    if (S.openTeamName && S.teamRoutes[S.openTeamName]) openTeam(S.openTeamName);   // เติมเวลาเดินทางลง panel ทีมที่เปิดค้าง
+  }
 }
 function fmtKm(m){ return m < 950 ? Math.round(m) + ' ม.' : (m/1000).toFixed(m < 10000 ? 1 : 0) + ' กม.'; }
+function fmtMin(sec){ const mn = Math.max(1, Math.round(sec / 60)); return mn >= 60 ? Math.floor(mn/60) + ' ชม. ' + (mn%60) + ' นาที' : mn + ' นาที'; }
 function startAnimLoop(){
   if (S.animRunning) return;
   S.animRunning = true;
@@ -661,7 +720,7 @@ function renderTeamCards(){
     const head = cur
       ? (cur.status === 'working' ? '🔧 กำลังทำ ' : teamEmoji(team) + ' กำลังไป ')
       : '';
-    h += '<div class="tcard" style="--c:' + teamColor(team) + '" onclick="' + (curKey ? "openJob('" + esc(curKey) + "')" : '') + '">' +
+    h += '<div class="tcard" style="--c:' + teamColor(team) + '" onclick="openTeam(this.dataset.team)" data-team="' + esc(team) + '">' +
       '<div class="tname">' + esc(team) + ' <span class="tprog">' + done + '/' + jobs.length + ' งาน</span></div>' +
       '<div class="tstat">' + (cur
         ? head + '<b>' + esc((cur.orderLabel || '') + ' · ' + cur.name) + '</b>'
@@ -695,10 +754,67 @@ function renderCounts(){
   $('countBadge').textContent = 'หมุด ' + pins + ' · ไม่มีพิกัด ' + (vis.length - pins) + ' · รวม ' + all.length + ' งาน';
 }
 
+// ══ panel ทีม: งานทั้งหมดตามลำดับคิว + เวลาเดินทางระหว่างจุด ══
+function openTeam(team){
+  const tr = S.teamRoutes[team];
+  const all = Object.values(S.jobs).filter(j => j.team === team);
+  if (!all.length) return;
+  S.openTeamName = team;
+  const c = teamColor(team);
+  const done = all.filter(j => j.status === 'done').length;
+  let h = '<button class="pn-close" onclick="closePanel()">ปิด ✕</button>' +
+    '<div class="pn-head"><h3>' + teamEmoji(team) + ' ' + esc(team) + '</h3>' +
+    '<span class="pn-team" style="background:' + c + '">' + done + '/' + all.length + ' งาน</span></div>';
+  if (tr && tr.seq.length){
+    const legs = tr.legs;
+    let totM = 0, totS = 0, remM = 0, remS = 0;
+    const rows = [];
+    for (let i = 0; i < tr.seq.length; i++){
+      const s = tr.seq[i];
+      if (i > 0){
+        const leg = (legs && legs[i-1]) ? legs[i-1] : null;
+        const m = leg ? leg.dist : distKm(tr.seq[i-1], s) * 1000;
+        const sec = leg ? leg.dur : distKm(tr.seq[i-1], s) * 120;   // ไม่มีถนนจริง → ประมาณ ~30 กม./ชม.
+        rows.push('<div class="tp-leg">' + (leg ? '🛣 ' : '≈ ') + fmtKm(m) + ' · ' + fmtMin(sec) + '</div>');
+        totM += m; totS += sec;
+        if (tr.curIdx !== -1 && i >= Math.max(tr.curIdx, 1)){ remM += m; remS += sec; }
+      }
+      const icon = s.factory ? '<span style="font-size:15px">🏭</span>'
+        : s.wp ? '<span style="font-size:14px">📌</span>'
+        : '<span class="tp-num" style="--c:' + c + '">' + ((s.label || '').replace(/[^0-9]/g, '') || '·') + '</span>';
+      const st = s.factory ? '' : s.wp ? '<span class="tp-st">จุดแวะ</span>'
+        : s.done ? '<span class="tp-st ok">✓ จบ</span>'
+        : s.working ? '<span class="tp-st now">🔧 กำลังทำ</span>'
+        : '<span class="tp-st">รอคิว</span>';
+      const text = s.factory ? 'โรงงาน (จุดเริ่ม)' : s.wp ? s.label : ((s.label ? s.label + ' · ' : '') + (s.name || ''));
+      const click = s.key ? ' onclick="openJob(\'' + esc(s.key) + '\')"' : '';
+      rows.push('<div class="tp-row' + (s.key ? ' link' : '') + '"' + click + '>' + icon + '<span class="tp-name">' + esc(text) + '</span>' + st + '</div>');
+    }
+    h += '<div class="pn-sec">เส้นทางวันนี้ (ตามลำดับคิว)</div><div class="tp">' + rows.join('') + '</div>' +
+      '<div class="pn-meta" style="margin-top:4px">' +
+      '<div>เดินทางรวม<b>' + fmtKm(totM) + ' · ' + fmtMin(totS) + '</b></div>' +
+      (tr.curIdx !== -1
+        ? '<div>เหลืออีก<b>' + fmtKm(remM) + ' · ' + fmtMin(remS) + '</b></div>'
+        : '<div>สถานะ<b>จบครบทุกงาน ✓</b></div>') +
+      '</div>' +
+      (legs ? '' : '<div class="muted">≈ = ประมาณจากเส้นตรง — กำลังโหลดเส้นทางถนนจริง…</div>');
+  } else {
+    h += '<div class="muted">ทีมนี้ไม่มีงานที่มีพิกัดในวันนี้</div>';
+  }
+  const misses = Object.entries(S.jobs).filter(([, j]) => j.team === team && j.glat === undefined);
+  if (misses.length){
+    h += '<div class="pn-sec">ไม่มีพิกัด (' + misses.length + ')</div>' + misses.map(([key, j]) =>
+      '<div class="tp-row link" onclick="openJob(\'' + esc(key) + '\')">⚠<span class="tp-name">' + esc((j.orderLabel ? j.orderLabel + ' · ' : '') + (j.name || j.id)) + '</span>' +
+      '<button class="btn ng-pin" onclick="event.stopPropagation();startGeoPin(\'' + esc(key) + '\')">📌 ปักพิกัด</button></div>').join('');
+  }
+  $('panel').innerHTML = h;
+}
+
 // ══ detail panel ══
 function openJob(key){
   const j = S.jobs[key];
   if (!j) return;
+  S.openTeamName = '';
   if (j.glat !== undefined) S.map.panTo([j.glat, j.glng]);
   const c = teamColor(j.team);
   const stTxt = j.status === 'done' ? (j.continueNote ? 'จบ (ต่องาน)' : '✓ จบแล้ว')
@@ -768,6 +884,7 @@ async function loadRecords(jobId){
   }
 }
 function closePanel(){
+  S.openTeamName = '';
   $('panel').innerHTML = '<div class="empty">📍 คลิกหมุดงาน การ์ดทีม<br>หรือรายการไม่มีพิกัด เพื่อดูรายละเอียด</div>';
 }
 
@@ -933,8 +1050,44 @@ function showWpForm(){
   $('wpTeam').innerHTML = '<option value="">ไม่ผูกทีม (หมุดกลาง)</option>' +
     [...teams].sort().map(t => '<option value="' + esc(t) + '">' + esc(t) + '</option>').join('');
   $('wpName').value = '';
+  updateWpAfterOptions();
   $('wpForm').style.display = 'flex';
   $('wpName').focus();
+}
+// เลือกทีมแล้ว → คำนวณจุดแทรกในคิวที่เพิ่มเวลาเดินทางน้อยสุด (cheapest insertion) มาเป็นตัวเลือกแนะนำ
+function updateWpAfterOptions(){
+  const team = $('wpTeam').value;
+  const sel = $('wpAfter'), hint = $('wpHint');
+  const tr = team ? S.teamRoutes[team] : null;
+  if (!team || !S.pendingLL || !tr || !tr.seq.length){
+    sel.innerHTML = '<option value="">แวะก่อนงานถัดไปของทีม</option>';
+    sel.disabled = true;
+    hint.textContent = team ? 'ทีมนี้ยังไม่มีเส้นทางวันนี้ — จุดแวะจะแสดงบนแผนที่อย่างเดียว' : 'เลือกทีมเพื่อให้ระบบแนะนำคิวที่ประหยัดเวลาที่สุด';
+    return;
+  }
+  sel.disabled = false;
+  const wpLL = { lat: S.pendingLL.lat, lng: S.pendingLL.lng };
+  let cutIdx = tr.seq.findIndex(s => !s.done && !s.working);
+  if (cutIdx === -1) cutIdx = tr.seq.length;
+  const best = cheapestSlotIdx(tr.seq, cutIdx, wpLL);
+  const prev = tr.seq[best - 1], next = tr.seq[best];
+  let addKm = 0;
+  if (prev && next) addKm = distKm(prev, wpLL) + distKm(wpLL, next) - distKm(prev, next);
+  else if (prev) addKm = distKm(prev, wpLL);
+  else if (next) addKm = distKm(wpLL, next);
+  const where = best === cutIdx
+    ? 'แวะก่อนงานถัดไป'
+    : 'แวะหลัง ' + (prev.factory ? 'ออกจากโรงงาน' : (prev.label || prev.name || 'จุดก่อนหน้า'));
+  const opts = [
+    '<option value="auto">⭐ แนะนำ: ' + esc(where) + ' (เพิ่ม ~' + fmtMin(addKm * 120) + ')</option>',
+    '<option value="">แวะก่อนงานถัดไปทันที</option>'
+  ];
+  for (const s of tr.seq){
+    if (!s.id || s.done) continue;
+    opts.push('<option value="' + esc(s.id) + '">แวะหลัง ' + esc((s.label ? s.label + ' · ' : '') + (s.name || s.id)) + '</option>');
+  }
+  sel.innerHTML = opts.join('');
+  hint.textContent = 'ระบบคำนวณตำแหน่งที่เพิ่มเวลาเดินทางน้อยที่สุดให้แล้ว (เวลาเป็นค่าประมาณ · เปลี่ยนเองได้)';
 }
 function hideWpForm(){ $('wpForm').style.display = 'none'; S.pendingLL = null; }
 function saveWpForm(){
@@ -945,7 +1098,8 @@ function saveWpForm(){
     name: $('wpName').value.trim() || 'จุดแวะ',
     team: $('wpTeam').value,
     icon: '📌',
-    lat: S.pendingLL.lat, lng: S.pendingLL.lng
+    lat: S.pendingLL.lat, lng: S.pendingLL.lng,
+    after: $('wpTeam').value ? $('wpAfter').value : ''
   });
   saveWps(list);
   hideWpForm();
