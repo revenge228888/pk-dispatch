@@ -764,7 +764,8 @@ function openTeam(team){
   const done = all.filter(j => j.status === 'done').length;
   let h = '<button class="pn-close" onclick="closePanel()">ปิด ✕</button>' +
     '<div class="pn-head"><h3>' + teamEmoji(team) + ' ' + esc(team) + '</h3>' +
-    '<span class="pn-team" style="background:' + c + '">' + done + '/' + all.length + ' งาน</span></div>';
+    '<span class="pn-team" style="background:' + c + '">' + done + '/' + all.length + ' งาน</span></div>' +
+    '<button class="btn" style="margin:2px 0 8px" onclick="startReorder(\'' + esc(team) + '\')">↕ จัดลำดับงาน</button>';
   if (tr && tr.seq.length){
     const legs = tr.legs;
     let totM = 0, totS = 0, remM = 0, remS = 0;
@@ -808,6 +809,81 @@ function openTeam(team){
       '<button class="btn ng-pin" onclick="event.stopPropagation();startGeoPin(\'' + esc(key) + '\')">📌 ปักพิกัด</button></div>').join('');
   }
   $('panel').innerHTML = h;
+}
+
+// ══ จัดลำดับงานทีม — เขียนคอลัมน์ K "งานที่ N" (ลำดับเดียวกับที่ช่างเห็นในแอป) ══
+let REORD = null;   // { team, keys:[jobKey...] } — ลำดับใน keys = งานที่ 1..N
+function startReorder(team){
+  const jobs = Object.values(S.jobs).filter(j => j.team === team);
+  if (!jobs.length) return;
+  jobs.sort((a,b) => ((a.orderNum||999) - (b.orderNum||999)) || String(a.id).localeCompare(String(b.id)));
+  REORD = { team: team, keys: jobs.map(j => j.kind + ':' + j.id) };
+  renderReorder();
+}
+function renderReorder(){
+  if (!REORD) return;
+  const c = teamColor(REORD.team);
+  let h = '<button class="pn-close" onclick="cancelReorder()">ยกเลิก ✕</button>' +
+    '<div class="pn-head"><h3>↕ จัดลำดับ · ' + esc(REORD.team) + '</h3></div>' +
+    '<div class="muted" style="margin-bottom:8px">เลื่อนงานด้วยปุ่ม ▲▼ แล้วกดบันทึก — ลำดับใหม่จะเขียนลงชีต ("งานที่ 1..N") และเป็นลำดับที่ช่างเห็นในแอป</div>';
+  REORD.keys.forEach((key, i) => {
+    const j = S.jobs[key];
+    if (!j) return;
+    const st = j.status === 'done' ? '<span class="tp-st ok">✓ จบ</span>'
+      : j.status === 'working' ? '<span class="tp-st now">🔧</span>' : '';
+    h += '<div class="tp-row" style="gap:6px">' +
+      '<span class="tp-num" style="--c:' + c + '">' + (i + 1) + '</span>' +
+      '<span class="tp-name">' + esc(j.name || j.id) +
+        (j.kind === 'measure' ? ' <small>(วัด)</small>' : '') +
+        (j.glat === undefined ? ' <small>⚠ ไม่มีพิกัด</small>' : '') + '</span>' + st +
+      '<button class="btn" style="padding:3px 9px"' + (i === 0 ? ' disabled' : '') + ' onclick="moveReorder(' + i + ',-1)">▲</button>' +
+      '<button class="btn" style="padding:3px 9px"' + (i === REORD.keys.length - 1 ? ' disabled' : '') + ' onclick="moveReorder(' + i + ',1)">▼</button>' +
+      '</div>';
+  });
+  h += '<div style="display:flex;gap:8px;margin-top:10px">' +
+    '<button class="btn" style="flex:1" onclick="cancelReorder()">ยกเลิก</button>' +
+    '<button class="btn acc" style="flex:1" id="reordSave" onclick="saveReorder()">💾 บันทึกลำดับ</button></div>';
+  $('panel').innerHTML = h;
+}
+function moveReorder(i, dir){
+  if (!REORD) return;
+  const k = REORD.keys, ni = i + dir;
+  if (ni < 0 || ni >= k.length) return;
+  const t = k[i]; k[i] = k[ni]; k[ni] = t;
+  renderReorder();
+}
+function cancelReorder(){
+  const team = REORD && REORD.team;
+  REORD = null;
+  if (team) openTeam(team);
+}
+async function saveReorder(){
+  if (!REORD) return;
+  const items = REORD.keys.map(key => ({ id: S.jobs[key].id, sheet: S.jobs[key].kind }));
+  const btn = $('reordSave');
+  if (btn){ btn.disabled = true; btn.textContent = 'กำลังบันทึก...'; }
+  try {
+    const r = await apiGas('pk_reorderJobs', { items: items });
+    if (!r || !r.ok){
+      setStatus('บันทึกลำดับไม่สำเร็จ: ' + ((r && r.error) || 'ไม่ทราบสาเหตุ'), true);
+      if (btn){ btn.disabled = false; btn.textContent = '💾 บันทึกลำดับ'; }
+      return;
+    }
+    // อัปเดต local ให้เห็นทันที แล้วค่อยโหลดข้อมูลจริงซ้ำ
+    REORD.keys.forEach((key, i) => {
+      const j = S.jobs[key];
+      if (j){ j.orderNum = i + 1; j.orderLabel = 'งานที่ ' + (i + 1); }
+    });
+    const team = REORD.team;
+    REORD = null;
+    renderAll();
+    openTeam(team);
+    setStatus('✓ บันทึกลำดับแล้ว ' + r.updated + ' งาน — ช่างเห็นลำดับใหม่ทันทีที่เปิด/รีเฟรชแอป');
+    loadDay();
+  } catch(e){
+    setStatus('บันทึกลำดับไม่สำเร็จ: ' + e, true);
+    if (btn){ btn.disabled = false; btn.textContent = '💾 บันทึกลำดับ'; }
+  }
 }
 
 // ══ detail panel ══
