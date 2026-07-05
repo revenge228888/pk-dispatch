@@ -4554,19 +4554,17 @@ document.getElementById('teamDetailModal').addEventListener('click', e => {
   if (e.target === e.currentTarget) e.currentTarget.classList.remove('on');
 });
 
-// ─── 📅 ลงวันต่องาน — กดจากการ์ดงานใน team detail modal ───
-let _contJob = null;
-function tdmContinueOpen(jobId){
-  const j = (window._tdmJobs||[]).find(x => x.id === jobId);
-  if (!j) return;
-  _contJob = j;
+// ─── 📅 ลงวันต่องาน — กดจากการ์ดงานใน team detail modal หรือการ์ดในปฏิทิน/ช่วงวันที่ ───
+let _contJob = null, _contFrom = 'tdm';   // 'tdm' = team detail modal · 'cal' = ปฏิทิน/ช่วงวันที่
+function contJobOpenCore(j, baseDate, teamLabel, from){
+  _contJob = j; _contFrom = from || 'tdm';
   document.getElementById('contJobTitle').textContent = `📅 ลงวันต่องาน · ${j.id}`;
   document.getElementById('contJobInfo').innerHTML =
-    `<b>${j.name||'-'}</b> · ${window._tdmTeam||''}`+
+    `<b>${escHtml(j.name||'-')}</b>${teamLabel?' · '+escHtml(teamLabel):''}`+
     (j.amount?`<br>ยอดงานเดิม ฿${fmt(j.amount)} (คงอยู่ที่วันเดิม)`:'')+
-    (j.continueNote?`<br>📝 โน้ตต่องาน: ${j.continueNote}`:'');
-  // default = วันถัดไปของวันที่กำลังดู
-  let d = window._tdmDate || document.getElementById('dashDate').value || '';
+    (j.continueNote?`<br>📝 โน้ตต่องาน: ${escHtml(j.continueNote)}`:'');
+  // default = วันถัดไปของวันงานเดิม
+  let d = baseDate || '';
   if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
     const dt = new Date(d+'T00:00:00'); dt.setDate(dt.getDate()+1);
     d = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
@@ -4574,6 +4572,11 @@ function tdmContinueOpen(jobId){
   document.getElementById('contJobDate').value = d;
   document.getElementById('contJobAmt').value = '0';
   document.getElementById('contJobModal').classList.add('on');
+}
+function tdmContinueOpen(jobId){
+  const j = (window._tdmJobs||[]).find(x => x.id === jobId);
+  if (!j) return;
+  contJobOpenCore(j, window._tdmDate || document.getElementById('dashDate').value || '', window._tdmTeam || '', 'tdm');
 }
 async function tdmContinueSave(){
   if (!_contJob) return;
@@ -4588,8 +4591,16 @@ async function tdmContinueSave(){
       toast(`➡ ต่องาน ${_contJob.id} → ${r.id} วันที่ ${fmtD(date)}${r.team?' · '+r.team:''}`);
       document.getElementById('contJobModal').classList.remove('on');
       clearCache('pk_dashboard'); clearCache('pk_installMonth');
-      if (window._tdmTeam && window._tdmDate) showTeamDetail(window._tdmTeam, window._tdmDate);
-      loadDashboard(); if (typeof dashCalLoad === 'function') dashCalLoad();
+      if (_contFrom === 'cal') {
+        // refresh ปฏิทิน/ช่วงวันที่ (pattern เดียวกับ jobEditSave)
+        _dashRangeJobs = [];
+        if (document.getElementById('dashCalGrid')) await dashCalReload();
+        if (_dashInstallView === 'range') await dashRangeRun();
+        loadDashboard();
+      } else {
+        if (window._tdmTeam && window._tdmDate) showTeamDetail(window._tdmTeam, window._tdmDate);
+        loadDashboard(); if (typeof dashCalLoad === 'function') dashCalLoad();
+      }
     } else toast((r && r.error) || 'ผิดพลาด');
   } catch(e) { /* call() toast ให้แล้ว */ }
   btn.disabled = false; btn.textContent = '➡ สร้างงานต่อ';
@@ -7091,6 +7102,7 @@ function dashJobCardFull_(j, none){
     + dashMapBtn_(j)
     + dashShowAmtBtn(j)
     + jobEditBtn_(j.id)
+    + jobContBtn_(j.id)
     + '</div>';
 }
 
@@ -7314,6 +7326,7 @@ function dashRangeCard_(j, none){
       + '<span style="color:var(--acc);font-weight:800;">★ '+(Number(j.score)||0)+'</span>'
       + '<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount||0)+'</span></div>'
     + jobEditBtn_(j.id)
+    + jobContBtn_(j.id)
     + '</div>';
 }
 function pkThaiDateFull_(ds){
@@ -7324,6 +7337,15 @@ function pkThaiDateFull_(ds){
 // ── แก้ไขงานติดตั้ง (office/manager) — ก้อน A · write single-row ──
 let _jobEditCur = null;
 function jobEditBtn_(id){ return isOfficeLevel() ? '<button class="btn btn-g btn-sm" style="margin-top:9px;" onclick="jobEditOpen(\''+id+'\')">✏️ แก้ไขงาน</button>' : ''; }
+// ปุ่มลงวันต่องานบนการ์ดปฏิทิน/ช่วงวันที่ — ใช้ modal contJobModal ตัวเดียวกับ team detail
+function jobContBtn_(id){ return isOfficeLevel() ? ' <button class="btn btn-g btn-sm" style="margin-top:9px;" onclick="jobContOpen(\''+id+'\')">📅 ลงวันต่องาน</button>' : ''; }
+function jobContOpen(id){
+  if (!isOfficeLevel()) return;
+  const pool = (_dashRangeJobs||[]).concat(_dashCalJobs||[]);
+  const j = pool.find(x => String(x.id)===String(id));
+  if (!j){ toast('ไม่พบงาน'); return; }
+  contJobOpenCore({ id:j.id, name:j.name, amount:j.amount, continueNote:'' }, j.date, j.team||'', 'cal');
+}
 function jobEditOpen(id){
   if (!isOfficeLevel()) return;
   const pool = (_dashRangeJobs||[]).concat(_dashCalJobs||[]);
