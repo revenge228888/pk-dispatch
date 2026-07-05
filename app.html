@@ -533,6 +533,29 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
   </div>
 </div>
 
+<!-- ✏️ JOB EDIT MODAL — แก้ไขงานติดตั้ง/วัดงาน (ต้องอยู่ระดับบนสุด ไม่งั้นโดน display:none ของ view ครอบ) -->
+<div class="modal-bg" id="jobEditModal">
+  <div class="modal">
+    <div class="card-head"><span id="jeTitle">✏️ แก้ไขงานติดตั้ง</span></div>
+    <div style="padding:14px 16px;">
+      <div class="fg"><label class="fl">ชื่อลูกค้า</label><input class="fi" id="jeName"></div>
+      <div class="fg"><label class="fl">วันที่</label><input class="fi" id="jeDate" type="date"></div>
+      <div class="fg"><label class="fl">ที่อยู่</label><textarea class="fi" id="jeAddr" rows="2"></textarea></div>
+      <div class="fg"><label class="fl">รายการงาน</label><textarea class="fi" id="jeJob" rows="2"></textarea></div>
+      <div class="row-form">
+        <div class="fg"><label class="fl">ยอด (บาท)</label><input class="fi" id="jeAmount" type="number" inputmode="decimal"></div>
+        <div class="fg"><label class="fl">คะแนน</label><input class="fi" id="jeScore" type="number" inputmode="decimal"></div>
+        <div class="fg"><label class="fl">ลำดับคิว</label><input class="fi" id="jeOrder" type="number" inputmode="numeric"></div>
+      </div>
+      <div class="fg"><label class="fl">ทีม</label><input class="fi" id="jeTeam" list="jeTeamList" autocomplete="off"><datalist id="jeTeamList"></datalist></div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn btn-g" style="flex:1;" onclick="jobEditClose()">ยกเลิก</button>
+        <button class="btn btn-p" style="flex:1;" id="jeSaveBtn" onclick="jobEditSave()">บันทึก</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 📐 RECORD FORM MODAL -->
 <div class="modal-bg" id="empModal">
   <div class="modal" style="padding:18px;max-height:88vh;overflow-y:auto;">
@@ -1151,7 +1174,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       const m = document.getElementById(id);
       if (m && m.classList.contains('on')) { m.classList.remove('on'); return; }
     }
-    const others = ['contJobModal','teamDetailModal','tDoneModal','mapModal'];
+    const others = ['jobEditModal','contJobModal','teamDetailModal','tDoneModal','mapModal'];
     for (const id of others) {
       const m = document.getElementById(id);
       if (m && m.classList.contains('on')) { m.classList.remove('on'); return; }
@@ -1386,27 +1409,6 @@ function renderOfficeShell(){
             <input class="fi" id="dashRangeSearch" placeholder="🔍 ค้นหา ชื่อ/ที่อยู่ (ในช่วงที่โหลด)" oninput="dashRangeRender()">
           </div>
           <div class="section-pad" id="dashRangeList"><div class="loading-row">เลือกช่วงวันที่แล้วกด "ดูงาน"</div></div>
-        </div>
-        <div class="modal-bg" id="jobEditModal">
-          <div class="modal">
-            <div class="card-head"><span id="jeTitle">✏️ แก้ไขงานติดตั้ง</span></div>
-            <div style="padding:14px 16px;">
-              <div class="fg"><label class="fl">ชื่อลูกค้า</label><input class="fi" id="jeName"></div>
-              <div class="fg"><label class="fl">วันที่</label><input class="fi" id="jeDate" type="date"></div>
-              <div class="fg"><label class="fl">ที่อยู่</label><textarea class="fi" id="jeAddr" rows="2"></textarea></div>
-              <div class="fg"><label class="fl">รายการงาน</label><textarea class="fi" id="jeJob" rows="2"></textarea></div>
-              <div class="row-form">
-                <div class="fg"><label class="fl">ยอด (บาท)</label><input class="fi" id="jeAmount" type="number" inputmode="decimal"></div>
-                <div class="fg"><label class="fl">คะแนน</label><input class="fi" id="jeScore" type="number" inputmode="decimal"></div>
-                <div class="fg"><label class="fl">ลำดับคิว</label><input class="fi" id="jeOrder" type="number" inputmode="numeric"></div>
-              </div>
-              <div class="fg"><label class="fl">ทีม</label><input class="fi" id="jeTeam" list="jeTeamList" autocomplete="off"><datalist id="jeTeamList"></datalist></div>
-              <div style="display:flex;gap:8px;margin-top:8px;">
-                <button class="btn btn-g" style="flex:1;" onclick="jobEditClose()">ยกเลิก</button>
-                <button class="btn btn-p" style="flex:1;" id="jeSaveBtn" onclick="jobEditSave()">บันทึก</button>
-              </div>
-            </div>
-          </div>
         </div>
         </div><!-- /dashInstallView -->
         <!-- 📏 วัดงาน VIEW — Feature 1.1 -->
