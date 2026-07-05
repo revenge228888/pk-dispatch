@@ -4150,6 +4150,7 @@ function bkRenderSuggest(r){
        +   bkTeamMetersHtml(s)
        +   '<div style="font-size:11px;color:var(--mu);margin-top:3px;line-height:1.5;">' + s.reasons.join('<br>') + '</div>'
        +   '<div style="font-size:11px;margin-top:3px;color:var(--acc);">ถัง: ' + s.pool + '</div>'
+       +   (s.dayNote ? '<div style="font-size:11px;margin-top:4px;background:rgba(245,166,35,.12);border-left:3px solid var(--acc);padding:3px 7px;border-radius:0 4px 4px 0;color:var(--acc);font-weight:600;">📝 ' + escHtml(s.dayNote) + '</div>' : '')
        + '</div>';
   });
   h += '</div>';
@@ -7009,6 +7010,35 @@ function pkDashGroupTeam_(js){
 let _dashCalJobs = [], _dashCalY = null, _dashCalM = null, _dashCalSel = '', _dashCalClicked = false, _dashCalLoading = false;
 let _dashCalCache = {};
 let _dashCmpMode = false, _dashCmpA = '', _dashCmpB = '';   // โหมดเทียบ 2 วัน   // SWR cache ปฏิทินต่อเดือน (in-memory)
+// ── 📝 หมายเหตุรายวัน (DayNotes) — โชว์ในปฏิทิน + แก้จาก panel วัน · ฝั่งวันแนะนำแนบมากับ pk_queueSuggest ──
+let _dayNotes = {}, _dayNotesLoading = false;
+async function dashNotesLoad(){
+  if (_dayNotesLoading) return;
+  _dayNotesLoading = true;
+  try {
+    const r = await call({ action:'pk_dayNoteList' });
+    if (r && r.ok){ _dayNotes = r.notes || {}; dashCalRender(); }
+  } catch(e){} finally { _dayNotesLoading = false; }
+}
+async function dashDayNoteEdit(ds){
+  const cur = _dayNotes[ds] || '';
+  const txt = prompt('📝 หมายเหตุของวัน ' + ds + '\n(เว้นว่างแล้วกดตกลง = ลบหมายเหตุ)', cur);
+  if (txt == null) return;
+  const r = await call({ action:'pk_dayNoteSet', date: ds, note: txt.trim() });
+  if (r && r.ok){
+    if (r.note) _dayNotes[ds] = r.note; else delete _dayNotes[ds];
+    toast(r.note ? '📝 บันทึกหมายเหตุแล้ว — จะขึ้นในวันแนะนำตอนลงคิวด้วย' : 'ลบหมายเหตุแล้ว');
+    dashCalRender();
+  } else toast((r && r.error) || 'ผิดพลาด');
+}
+function dashDayNoteHtml_(ds){
+  const n = _dayNotes[ds];
+  const btn = isOfficeLevel() ? ' <button class="btn btn-g btn-sm" onclick="dashDayNoteEdit(\'' + ds + '\')">' + (n ? '✏️ แก้หมายเหตุ' : '📝 เพิ่มหมายเหตุวันนี้') + '</button>' : '';
+  if (!n && !btn) return '';
+  return '<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;' + (n ? 'background:rgba(245,166,35,.10);border-left:3px solid var(--acc);border-radius:0 8px 8px 0;padding:8px 10px;' : '') + '">'
+    + (n ? '<span style="color:var(--acc);font-size:13px;font-weight:600;">📝 ' + escHtml(n) + '</span>' : '')
+    + btn + '</div>';
+}
 async function dashCalLoad(){
   if (!document.getElementById('dashCalGrid')) return;
   if (_dashCalY === null){ const t = new Date(); _dashCalY = t.getFullYear(); _dashCalM = t.getMonth(); }
@@ -7017,6 +7047,7 @@ async function dashCalLoad(){
   await dashCalReload();
 }
 async function dashCalReload(){
+  dashNotesLoad();   // โหลดหมายเหตุรายวันคู่ขนาน (มาแล้ววาดทับ — ไม่บล็อกปฏิทิน)
   const month = _dashCalY + '-' + String(_dashCalM+1).padStart(2,'0');
   const cached = _dashCalCache[month];
   if (cached) {
@@ -7084,8 +7115,9 @@ function dashCalRender(){
     } else if (ds===_dashCalSel) st += 'box-shadow:inset 0 0 0 2px var(--acc);background:rgba(181,101,63,.14);';
     const cnt = js.length ? '<span style="position:absolute;top:5px;right:6px;font-size:10px;background:var(--acc);color:#fff;border-radius:9px;padding:1px 6px;font-weight:800;">'+js.length+'</span>' : '';
     const sc  = js.length ? '<span style="position:absolute;top:24px;right:6px;font-size:10px;color:var(--acc);font-weight:700;">★'+pkDashSumScore_(js)+'</span>' : '';
+    const noteMark = _dayNotes[ds] ? '<span title="'+escHtml(_dayNotes[ds])+'" style="position:absolute;bottom:4px;right:6px;font-size:10px;">📝</span>' : '';
     const dots = js.slice(0,6).map(j => '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;margin:1px;background:'+pkDashTone_(j.status||j.sheetStatus)+';"></span>').join('');
-    html += '<div onclick="dashCalPick(\''+ds+'\')" style="'+st+'"><span style="font-size:13px;font-weight:700;">'+d+'</span>'+cnt+sc+'<div style="margin-top:22px;">'+dots+'</div></div>';
+    html += '<div onclick="dashCalPick(\''+ds+'\')" style="'+st+'"><span style="font-size:13px;font-weight:700;">'+d+'</span>'+cnt+sc+noteMark+'<div style="margin-top:22px;">'+dots+'</div></div>';
   }
   html += '</div>';
   grid.innerHTML = html;
@@ -7116,6 +7148,7 @@ function dashRenderDayFull_(ds){
   const thd = (function(){ const x = ds.split('-'); return Number(x[2])+' '+PK_DASH_TH_M[Number(x[1])-1]+' '+(Number(x[0])+543); })();
   let html = '<div style="margin-bottom:10px;"><div style="font-size:15px;font-weight:800;">📅 '+thd+(ds===today?' · วันนี้':'')+'</div>'
     + '<div style="font-size:12px;color:var(--mu);">'+js.length+' งาน · <b style="color:var(--acc);">★ รวม '+pkDashSumScore_(js)+'</b></div></div>';
+  html += dashDayNoteHtml_(ds);
   if (!js.length) return html + '<div class="loading-row">ไม่มีงานในวันนี้</div>';
   const grp = pkDashGroupTeam_(js);
   grp.order.forEach(tm => {
@@ -7168,6 +7201,7 @@ function dashCalRenderPanel(){
     + '<div><div style="font-size:15px;font-weight:800;">📅 '+thd+(ds===today?' · วันนี้':'')+'</div>'
     + '<div style="font-size:12px;color:var(--mu);">'+js.length+' งาน · <b style="color:var(--acc);">★ คะแนนรวม '+pkDashSumScore_(js)+'</b></div></div>'
     + '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;'+(full?'background:#2a2410;color:var(--acc);':'background:#1d2740;color:var(--blu);')+'">'+(full?'รายละเอียดเต็ม':'มุมมองย่อ — กดวันเพื่อดูเต็ม')+'</span></div>';
+  html += dashDayNoteHtml_(ds);
   if (!js.length){ p.innerHTML = html + '<div class="loading-row">ไม่มีงานในวันนี้</div>'; return; }
   const grp = pkDashGroupTeam_(js);
   grp.order.forEach(tm => {
