@@ -11692,7 +11692,7 @@ function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.
 
 // ── ENGINE (verified — ตรงกับ Code_Production.gs) ──
 function pkpScreenCalc(type, W, H){
-  var SKIP=['มุ้งบานเปิด','มุ้งบานเปิดแยกกลาง','มุ้งบานเลื่อน','มุ้งบานเลื่อนแยกกลาง','มุ้งบานตาย','มุ้งบานเลื่อน UPVC','มุ้งบานเลื่อนแยกกลาง UPVC'];
+  var SKIP=['มุ้งบานเปิด','มุ้งบานเปิดแยกกลาง','มุ้งบานเลื่อน','มุ้งบานเลื่อนแยกกลาง','มุ้งบานตาย','มุ้งบานเลื่อน UPVC','มุ้งบานเลื่อนแยกกลาง UPVC','มุ้งบานเลื่อน เสริมกล่อง 3 ด้าน','มุ้งบานเลื่อน เสริมกล่อง 4 ด้าน','มุ้งหน้าต่างบานเปิด','มุ้งประตูบานเปิด'];
   var RT=['มุ้งจีบมีรางธรรมดาบานเดี่ยว','มุ้งจีบมีรางธรรมดาบานคู่','มุ้งจีบมีรางธรรมดาบานอิสระ'];
   var SL=['มุ้งจีบมีรางธรรมดาสลิงบานเดี่ยว','มุ้งจีบมีรางธรรมดาสลิงบานคู่','มุ้งจีบมีรางธรรมดาสลิงบานอิสระ'];
   var JS_=RT.concat(SL);
@@ -12065,6 +12065,125 @@ function pkpCutDocHTML(pieces, ids, set, mode){
     +'<div class="bar2"><button onclick="window.print()">🖨 พิมพ์ / บันทึก PDF</button></div>'
     +'<div class="sheet">'+head+body+'</div></body></html>';
 }
+// ════════ มุ้งบานเลื่อน/บานเปิด — ใบผลิตแยก + ใบตัดราง (สูตรจาก pk_screen_multi_cut.html · frontend-only ไม่แตะ stock) ════════
+// key = ชื่อชนิดใน dropdown ใบผลิต · 'มุ้งบานเลื่อนแยกกลาง UPVC' ใช้สูตร "มุ้งบานเลื่อน UPVC แยกกลาง" ของ tool (ชื่อฟอร์มเดิม)
+var PKP_SCUT_ORDER=['กล่อง 1x1','ราง T','ราง U','เส้นมุ้งบานเลื่อน','เส้นมุ้งบานเลื่อน UPVC','เส้นหน้าต่าง','เส้นประตู','เส้นกลาง','เส้นกลาง UPVC','ประกบกลางบานเลื่อน','ประกบกลางบานเลื่อน UPVC'];
+var PKP_SCUT_SEGC=['#f0c84a','#8fc1f0','#7fd6ab','#ec9ec5','#b9a7e8','#f2a25c','#7fd0d6','#c9d67f','#e8a7a7','#a7c8e8','#d6b97f'];
+var PKP_SCUT={
+ 'มุ้งบานเลื่อน':[
+  {profile:'เส้นมุ้งบานเลื่อน',label:'บน/ล่าง (กว้าง+0.6)',fn:function(w,h){return w+0.6;},qty:2},
+  {profile:'เส้นมุ้งบานเลื่อน',label:'ข้าง (สูง+0.6)',fn:function(w,h){return h+0.6;},qty:2},
+  {profile:'เส้นกลาง',label:'กลาง (กว้าง-7)',fn:function(w,h){return w-7;},qty:1}],
+ 'มุ้งบานเลื่อน เสริมกล่อง 3 ด้าน':[
+  {profile:'กล่อง 1x1',label:'บน (กว้าง+0.6)',fn:function(w,h){return w+0.6;},qty:1},
+  {profile:'กล่อง 1x1',label:'ข้าง (สูง+0.3)',fn:function(w,h){return h+0.3;},qty:2},
+  {profile:'ราง T',label:'ราง T (กว้าง-2.5)',fn:function(w,h){return w-2.5;},qty:2},
+  {profile:'ราง U',label:'ราง U (กว้าง-2.5)',fn:function(w,h){return w-2.5;},qty:1},
+  {profile:'เส้นมุ้งบานเลื่อน',label:'บน/ล่างบาน ((กว้าง-5)/2+2.3)',fn:function(w,h){return (w-5)/2+2.3;},qty:2},
+  {profile:'เส้นมุ้งบานเลื่อน',label:'ข้างบาน (สูง-4.3)',fn:function(w,h){return h-2.5-1.6-0.2;},qty:2},
+  {profile:'เส้นกลาง',label:'เส้นกลาง ((กว้าง-5)/2-7)',fn:function(w,h){return (w-5)/2-7;},qty:2}],
+ 'มุ้งบานเลื่อน เสริมกล่อง 4 ด้าน':[
+  {profile:'กล่อง 1x1',label:'บน/ล่าง (กว้าง+0.6)',fn:function(w,h){return w+0.6;},qty:2},
+  {profile:'กล่อง 1x1',label:'ข้าง (สูง+0.6)',fn:function(w,h){return h+0.6;},qty:2},
+  {profile:'ราง T',label:'ราง T (กว้าง-2.5)',fn:function(w,h){return w-2.5;},qty:2},
+  {profile:'ราง U',label:'ราง U (กว้าง-2.5)',fn:function(w,h){return w-2.5;},qty:1},
+  {profile:'เส้นมุ้งบานเลื่อน',label:'บน/ล่างบาน ((กว้าง-5)/2+2.3)',fn:function(w,h){return (w-5)/2+2.3;},qty:2},
+  {profile:'เส้นมุ้งบานเลื่อน',label:'ข้างบาน (สูง-6.8)',fn:function(w,h){return h-5-1.6-0.2;},qty:2},
+  {profile:'เส้นกลาง',label:'เส้นกลาง ((กว้าง-5)/2-7)',fn:function(w,h){return (w-5)/2-7;},qty:2}],
+ 'มุ้งบานเลื่อนแยกกลาง':[
+  {profile:'เส้นมุ้งบานเลื่อน',label:'บน/ล่าง (กว้าง/2+0.6)',fn:function(w,h){return w/2+0.6;},qty:4},
+  {profile:'เส้นมุ้งบานเลื่อน',label:'ข้าง (สูง+0.6)',fn:function(w,h){return h+0.6;},qty:4},
+  {profile:'เส้นกลาง',label:'กลาง (กว้าง/2-7)',fn:function(w,h){return w/2-7;},qty:4},
+  {profile:'ประกบกลางบานเลื่อน',label:'ประกบกลาง (สูง)',fn:function(w,h){return h;},qty:1}],
+ 'มุ้งบานเลื่อน UPVC':[
+  {profile:'เส้นมุ้งบานเลื่อน UPVC',label:'บน/ล่าง (กว้าง+2.1)',fn:function(w,h){return w+2.1;},qty:2},
+  {profile:'เส้นมุ้งบานเลื่อน UPVC',label:'ข้าง (สูง+2.1)',fn:function(w,h){return h+2.1;},qty:2},
+  {profile:'เส้นกลาง UPVC',label:'กลาง (กว้าง-7)',fn:function(w,h){return w-7;},qty:2}],
+ 'มุ้งบานเลื่อนแยกกลาง UPVC':[
+  {profile:'เส้นมุ้งบานเลื่อน UPVC',label:'บน/ล่าง (กว้าง/2+0.4)',fn:function(w,h){return w/2+0.4;},qty:4},
+  {profile:'เส้นมุ้งบานเลื่อน UPVC',label:'ข้าง (สูง+2.1)',fn:function(w,h){return h+2.1;},qty:4},
+  {profile:'เส้นกลาง UPVC',label:'กลาง (กว้าง/2+0.4-7)',fn:function(w,h){return w/2+0.4-7;},qty:4},
+  {profile:'ประกบกลางบานเลื่อน UPVC',label:'ประกบกลาง (สูง)',fn:function(w,h){return h;},qty:1}],
+ 'มุ้งหน้าต่างบานเปิด':[
+  {profile:'เส้นหน้าต่าง',label:'บน/ล่าง (กว้าง+1.7)',fn:function(w,h){return w+1.7;},qty:2},
+  {profile:'เส้นหน้าต่าง',label:'ข้าง (สูง+1.7)',fn:function(w,h){return h+1.7;},qty:2},
+  {profile:'เส้นหน้าต่าง',label:'คาดกลาง (ด้านสั้น · จำนวน=ด้านยาว/70 ปัดลง)',fn:function(w,h){return Math.min(w,h);},qty:function(w,h){return Math.floor(Math.max(w,h)/70);}}],
+ 'มุ้งประตูบานเปิด':[
+  {profile:'เส้นประตู',label:'บน/ล่าง (กว้าง+2.4)',fn:function(w,h){return w+2.4;},qty:2},
+  {profile:'เส้นประตู',label:'ข้าง (สูง+2.4)',fn:function(w,h){return h+2.4;},qty:2},
+  {profile:'เส้นประตู',label:'คาดกลาง (ด้านสั้น · จำนวน=ด้านยาว/70 ปัดลง)',fn:function(w,h){return Math.min(w,h);},qty:function(w,h){return Math.floor(Math.max(w,h)/70);}}]
+};
+function pkpScutIs(t){ return !!PKP_SCUT[t]; }
+// ชิ้นตัดของ 1 บาน — ปัด 1 ตำแหน่ง · qty เป็นเลขหรือฟังก์ชัน (คาดกลางบานเปิด) · qty<=0 = ข้ามแถว
+function pkpScutPieces(it){
+  var w=parseFloat(it.w),h=parseFloat(it.h),out=[];
+  var rows=PKP_SCUT[it.type];
+  if(!rows||isNaN(w)||isNaN(h)||w<=0||h<=0) return out;
+  rows.forEach(function(r){
+    var rq=(typeof r.qty==='function')?r.qty(w,h):r.qty;
+    var len=Math.round(r.fn(w,h)*10)/10;
+    if(rq>0&&len>0) out.push({profile:r.profile,label:r.label,len:len,qty:rq});
+  });
+  return out;
+}
+// รวมชิ้นตัดจากรายการ WO — setNo = ลำดับบานใน "ใบผลิตบานเลื่อน/บานเปิด" (นับเฉพาะรายการกลุ่มนี้)
+function pkpScutCollect(items, mainAlu, meta){
+  meta=meta||{}; var out=[], sn=0;
+  (items||[]).forEach(function(it){
+    if(!it.type||!pkpScutIs(it.type)) return;
+    sn++;
+    var col=String(it.cAlu||mainAlu||'').trim()||'(ไม่ระบุสี)';
+    pkpScutPieces(it).forEach(function(p){
+      out.push({rail:p.profile,profile:p.profile,len:p.len,qty:p.qty,color:col,wo:meta.wo||'',name:meta.name||'',setNo:sn,type:it.type});
+    });
+  });
+  return out;
+}
+// ใบตัดราง (optimize FFD ต่อ หน้าตัด×สีอลู — สีต่างกันไม่ตัดรวมเส้น) — คืน .sheet ต่อกลุ่ม ใช้ใน doc เดียวกับใบผลิต
+function pkpScutCutSheetsHTML_(pieces, set, opt){
+  opt=opt||{};
+  var esc=function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
+  var r2=function(x){return Math.round(x*100)/100;};
+  var stock=set.stock||600, kerf=(set.kerf!=null&&!isNaN(set.kerf))?set.kerf:0.3;
+  var fnName=String(opt.fn||'ใบตัดราง').replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim();
+  var byPC={};
+  pieces.forEach(function(p){ var k=p.profile+'||'+p.color; (byPC[k]=byPC[k]||[]).push(p); });
+  var keys=Object.keys(byPC).sort(function(a,b){
+    var pa=a.split('||'), pb=b.split('||');
+    var ia=PKP_SCUT_ORDER.indexOf(pa[0]), ib=PKP_SCUT_ORDER.indexOf(pb[0]);
+    return (ia-ib)||(pa[1]<pb[1]?-1:pa[1]>pb[1]?1:0);
+  });
+  var sheets='';
+  keys.forEach(function(k){
+    var pp=k.split('||'), profile=pp[0], color=pp[1];
+    var res=pkpCutFFD(byPC[k], stock, kerf);
+    var segColor=PKP_SCUT_SEGC[Math.max(0,PKP_SCUT_ORDER.indexOf(profile))%PKP_SCUT_SEGC.length];
+    var util=res.usedStock?r2(res.totalLen/(res.usedStock*stock)*100):0;
+    var bars=res.bars.map(function(b,i){
+      var lo=Math.max(0,stock-b.used), lpct=lo/stock*100;
+      var segs=b.pieces.map(function(pc,si){ return '<div class="scut-seg" style="width:'+Math.max(1.5,pc.len/stock*100)+'%;background:'+segColor+'">'+(si+1)+'</div>'; }).join('');
+      var waste=(lo>0.05&&!b.over)?'<div class="scut-w" style="width:'+lpct+'%">เศษ '+r2(lo)+'</div>':'';
+      var rows=b.pieces.map(function(pc,si){ return '<tr><td>'+(si+1)+'</td><td style="text-align:left">'+esc(pc.name||pc.wo||'-')+'</td><td>บานที่ '+pc.setNo+'</td><td style="text-align:left">'+esc(pc.type||'')+'</td><td><b>'+pc.len+'</b></td></tr>'; }).join('');
+      return '<div class="scut-bk"><div class="scut-bh"><span><b>เส้นที่ '+(i+1)+'</b>'+(b.over?' ⚠ ยาวเกิน stock':'')+'</span><span>ใช้ '+r2(b.used)+' / '+stock+' ซม.</span></div>'
+        +'<div class="scut-vbar">'+segs+waste+'</div>'
+        +'<table class="scut-t"><thead><tr><th>#</th><th>งาน</th><th>ชุด</th><th>ชนิดมุ้ง</th><th>ยาว (ซม.)</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+    }).join('');
+    sheets+='<div class="sheet" data-wo="ใบตัดราง" data-fn="'+esc(fnName)+'">'
+      +'<div class="head"><div class="mark">PK</div><div><div class="co">PK มุ้งจีบ</div><div class="doc">Cutting Plan · ใบตัดราง บานเลื่อน/บานเปิด</div></div><div class="sp"></div>'
+      +'<div class="wo"><span class="lab">หน้าตัด</span><span class="no">'+esc(profile)+'</span></div></div>'
+      +'<div class="info"><div class="f w"><div class="k">สีอลู</div><div class="v">'+esc(color)+'</div></div>'
+      +'<div class="f"><div class="k">Stock/เส้น</div><div class="v">'+stock+' ซม.</div></div>'
+      +'<div class="f"><div class="k">เผื่อรอยตัด</div><div class="v">'+kerf+' ซม.</div></div>'
+      +'<div class="f"><div class="k">ใช้</div><div class="v">'+res.usedStock+' เส้น</div></div>'
+      +'<div class="f"><div class="k">เศษรวม</div><div class="v">'+r2(res.waste)+' ซม.</div></div>'
+      +'<div class="f"><div class="k">ใช้เนื้อ</div><div class="v">'+util+'%</div></div>'
+      +(opt.ref?'<div class="f w"><div class="k">อ้างอิง</div><div class="v">'+esc(opt.ref)+'</div></div>':'')+'</div>'
+      +'<div class="scut-cols">'+bars+'</div>'
+      +'<div class="foot"><span>PK Queue System · ใบตัดราง บานเลื่อน/บานเปิด (ไม่ตัด stock)</span><span>ชิ้นทั้งหมด '+res.count+' ชิ้น</span></div></div>';
+  });
+  return sheets;
+}
+
 function pkpReqColorDot(c){var m={'อบขาว':'#f3f4f6','ดำ':'#2b2b2b','NA':'#cbd3da','น้ำตาลแดง':'#7c3b28','น้ำตาลเข้ม':'#3e2a1e','เทาเข้มซาฮาร่า':'#555','เทาเงินซาฮาร่า':'#9aa0a6','ดำซาฮาร่า':'#222','ลายไม้สักแดง':'#8a4b32','ลายไม้สักทอง':'#9c6b34'};return m[c]||'#9aa0a6';}
 // สีอลูที่นอกเหนือ อบขาว/ดำ (distinct) — เก็บเป็น flag ไว้ highlight ในรายการ
 function pkpSpecialColors(items, mainAlu){
@@ -12216,8 +12335,10 @@ var pkpTYPES=[
  {g:'รางธรรมดา', items:['มุ้งจีบมีรางธรรมดาบานเดี่ยว','มุ้งจีบมีรางธรรมดาบานคู่','มุ้งจีบมีรางธรรมดาบานอิสระ','มุ้งจีบมีรางธรรมดาบานอิสระ 4 มือจับ','มุ้งจีบมีรางธรรมดาบานอิสระ 6 มือจับ','มุ้งจีบมีรางธรรมดาแยกกลางไม่เท่ากัน']},
  {g:'สลิง',       items:['มุ้งจีบมีรางธรรมดาสลิงบานเดี่ยว','มุ้งจีบมีรางธรรมดาสลิงบานคู่','มุ้งจีบมีรางธรรมดาสลิงบานอิสระ','มุ้งจีบมีรางธรรมดาสลิงบานอิสระ 4 มือจับ','มุ้งจีบมีรางธรรมดาสลิงบานอิสระ 6 มือจับ','มุ้งจีบมีรางธรรมดาสลิงแยกกลางไม่เท่ากัน']},
  {g:'รางเตี้ย',   items:['มุ้งจีบรางเตี้ยบานเดี่ยวซ้าย','มุ้งจีบรางเตี้ยบานเดี่ยวขวา','มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ','มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ 4 มือจับ','มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ 6 มือจับ','มุ้งจีบรางเตี้ยบานคู่','มุ้งจีบรางเตี้ยแยกกลางไม่เท่ากัน']},
- {g:'บานเลื่อน UPVC (บันทึกขนาด/สี — ไม่มีค่าตัด)', items:['มุ้งบานเลื่อน UPVC','มุ้งบานเลื่อนแยกกลาง UPVC']},
- {g:'อื่นๆ (ไม่มีค่าตัด)', items:['มุ้งบานเปิด','มุ้งบานเปิดแยกกลาง','มุ้งบานเลื่อน','มุ้งบานเลื่อนแยกกลาง','มุ้งบานตาย']}
+ {g:'บานเลื่อน (แยกใบผลิต + ใบตัดราง)', items:['มุ้งบานเลื่อน','มุ้งบานเลื่อนแยกกลาง','มุ้งบานเลื่อน เสริมกล่อง 3 ด้าน','มุ้งบานเลื่อน เสริมกล่อง 4 ด้าน']},
+ {g:'บานเลื่อน UPVC (แยกใบผลิต + ใบตัดราง)', items:['มุ้งบานเลื่อน UPVC','มุ้งบานเลื่อนแยกกลาง UPVC']},
+ {g:'บานเปิด (แยกใบผลิต + ใบตัดราง)', items:['มุ้งหน้าต่างบานเปิด','มุ้งประตูบานเปิด']},
+ {g:'อื่นๆ (ไม่มีค่าตัด)', items:['มุ้งบานเปิด','มุ้งบานเปิดแยกกลาง','มุ้งบานตาย']}
 ];
 var pkpARROWS=['→','←','↑','↓','↔','↕'];
 
@@ -12635,14 +12756,17 @@ function pkpProdSheetsHTML_(o){
     return rows;
   }
   function emptyRow(no){ var c='<td class="b">'+no+'</td>'; for(var i=0;i<18;i++)c+='<td></td>'; return '<tr class="grpstart empty">'+c+'</tr>'; }
+  // แยกรายการ: มุ้งจีบ/อื่นๆ อยู่ใบผลิตหลัก · บานเลื่อน/บานเปิด (มีสูตรตัดราง) แยกใบผลิตของตัวเอง
+  var scutItems=[], jeebItems=[];
+  (o.items||[]).forEach(function(it){ (pkpScutIs(it.type)?scutItems:jeebItems).push(it); });
   var PER=10, pages=[], cur=[], n=0;
-  o.items.forEach(function(it){ n++; cur.push(rowsForItem(it,n)); if(cur.length>=PER){pages.push(cur);cur=[];} });
-  if(cur.length||!pages.length) pages.push(cur);
+  jeebItems.forEach(function(it){ n++; cur.push(rowsForItem(it,n)); if(cur.length>=PER){pages.push(cur);cur=[];} });
+  if(jeebItems.length && cur.length) pages.push(cur);
   var THEAD='<colgroup><col class="colNo"><col class="colNm"><col class="colPt"><col class="colWH"><col class="colWH"><col class="colC"><col class="colC"><col><col><col><col><col><col><col><col><col><col><col class="colPv"><col class="colHl"></colgroup>'
     +'<thead><tr><th rowspan="2">No.</th><th rowspan="2">รายการ</th><th rowspan="2">แบบ</th><th rowspan="2">กว้าง</th><th rowspan="2">สูง</th><th rowspan="2">สีอลู</th><th rowspan="2">สีผ้ามุ้ง</th><th colspan="4">ขนาดตัดอลูมิเนียม</th><th colspan="2">ขนาดตัดมุ้ง</th><th colspan="2">ขนาดตัดเชือก</th><th colspan="2">ขนาดตัดสลิง</th><th rowspan="2">PVC</th><th rowspan="2">ระยะ<br>เจาะรู</th></tr>'
     +'<tr><th>มือจับ</th><th>รางข้าง</th><th>รางบน-ล่าง</th><th>รางเตี้ย</th><th>ความยาว</th><th>จีบ</th><th>ความยาว</th><th>เส้น</th><th>ความยาว</th><th>เส้น</th></tr></thead>';
-  var headHTML=function(){
-    return '<div class="head"><div class="mark">PK</div><div><div class="co">PK มุ้งจีบ</div><div class="doc">Production Order · ใบผลิต</div></div>'
+  var headHTML=function(docLabel){
+    return '<div class="head"><div class="mark">PK</div><div><div class="co">PK มุ้งจีบ</div><div class="doc">'+(docLabel||'Production Order · ใบผลิต')+'</div></div>'
       +'<div class="sp"></div><div class="wo"><span class="lab">เลขที่ใบผลิต</span><span class="no">'+esc(o.woId)+'</span><span class="stat">'+esc(o.status)+'</span></div></div>'
       +'<div class="info"><div class="f w"><div class="k">ชื่อลูกค้า</div><div class="v">'+esc(o.customer)+'</div></div>'
       +'<div class="f"><div class="k">วันที่ออกใบผลิต</div><div class="v">'+thDate(o.issueDate)+'</div></div>'
@@ -12666,6 +12790,34 @@ function pkpProdSheetsHTML_(o){
     sheets+='<div class="sheet" data-wo="'+esc(o.woId)+'" data-fn="'+esc(pkpWoFileName_(o.woId,o.customer))+'">'+headHTML()+'<table>'+THEAD+'<tbody>'+body+'</tbody></table>'+signHTML
       +'<div class="foot"><span>PK Queue System · ใบผลิต</span><span>หน้า '+(pi+1)+'/'+pages.length+' · พิมพ์ '+thDate(new Date().toISOString().slice(0,10))+'</span></div></div>';
   });
+  // ── ใบผลิตแยก: บานเลื่อน/บานเปิด (แสดงชิ้นตัดต่อบาน — คู่กับใบตัดรางท้ายเอกสาร) ──
+  if(scutItems.length){
+    var SPACER10='<tr class="spc"><td colspan="10"></td></tr>';
+    var srows=[];
+    scutItems.forEach(function(it,si){
+      var pcs=pkpScutPieces(it), alu=esc(it.cAlu||o.mainAlu||''), mesh=esc(it.cMesh||o.mainMesh||''), g=[];
+      var first=pcs.length
+        ? td(esc(pcs[0].profile),'nme')+td(esc(pcs[0].label),'nme')+td(V(pcs[0].len))+td(pcs[0].qty)
+        : '<td colspan="4" style="color:#9aa7b6;font-style:italic;">— กรอกขนาดไม่ครบ (ไม่มีชิ้นตัด) —</td>';
+      g.push('<tr class="grpstart">'+td('<b>'+(si+1)+'</b>')+td(esc(it.type),'nme')+td(V(it.w))+td(V(it.h))+td(alu)+td(mesh)+first+'</tr>');
+      for(var pi2=1;pi2<pcs.length;pi2++){
+        var p=pcs[pi2];
+        g.push('<tr class="sub">'+td('')+td('')+td('')+td('')+td('')+td('')+td(esc(p.profile),'nme')+td(esc(p.label),'nme')+td(V(p.len))+td(p.qty)+'</tr>');
+      }
+      if(it.note&&it.note.trim()) g.push('<tr class="noterow"><td colspan="10">📝 หมายเหตุ: '+esc(it.note)+'</td></tr>');
+      srows.push(g);
+    });
+    var spages=[], scur=[], scnt=0, SROWMAX=22;
+    srows.forEach(function(g){ if(scnt+g.length>SROWMAX && scur.length){ spages.push(scur); scur=[]; scnt=0; } scur.push(g); scnt+=g.length; });
+    if(scur.length) spages.push(scur);
+    var STHEAD='<colgroup><col class="colNo"><col style="width:150px"><col class="colWH"><col class="colWH"><col class="colC"><col class="colC"><col style="width:128px"><col><col style="width:58px"><col style="width:46px"></colgroup>'
+      +'<thead><tr><th>No.</th><th>รายการ</th><th>กว้าง</th><th>สูง</th><th>สีอลู</th><th>สีผ้ามุ้ง</th><th>หน้าตัด</th><th>ตำแหน่ง (สูตร)</th><th>ยาว (ซม.)</th><th>จำนวน</th></tr></thead>';
+    spages.forEach(function(pg,pi){
+      var body=pg.map(function(g){ return g.join(''); }).join(SPACER10);
+      sheets+='<div class="sheet" data-wo="'+esc(o.woId)+'" data-fn="'+esc(pkpWoFileName_(o.woId,o.customer))+'">'+headHTML('Production Order · ใบผลิต บานเลื่อน/บานเปิด')+'<table>'+STHEAD+'<tbody>'+body+'</tbody></table>'+signHTML
+        +'<div class="foot"><span>PK Queue System · ใบผลิต บานเลื่อน/บานเปิด — ตัดรางตาม "ใบตัดราง" ท้ายเอกสาร</span><span>หน้า '+(pi+1)+'/'+spages.length+' · พิมพ์ '+thDate(new Date().toISOString().slice(0,10))+'</span></div></div>';
+    });
+  }
   return sheets;
 }
 // ── ใบผลิต: ห่อ .sheet ทั้งหมดเป็นเอกสาร HTML พร้อมพิมพ์/บันทึก PDF (ใช้ร่วม) ──
@@ -12686,6 +12838,13 @@ function pkpProdDocWrap_(sheets, fn){
     +'.colNo{width:24px}.colNm{width:192px}.colPt{width:26px}.colWH{width:48px}.colC{width:56px}.colPv{width:42px}.colHl{width:40px}'
     +'.sign{display:grid;grid-template-columns:1fr 1fr;gap:50px;margin-top:12mm;padding-top:0}.sg{text-align:center}.sgimg{max-height:5mm;max-width:32mm;object-fit:contain;display:block;margin:0 auto 2px}.sg .ln{border-bottom:1.4px dotted var(--ink);height:26px;margin:0 16px}.sg .rl{font-size:11.5px;font-weight:700;margin-top:5px}.sg .dt{font-size:10px;color:var(--mut);margin-top:1px}'
     +'.foot{display:flex;justify-content:space-between;margin-top:9px;padding-top:6px;border-top:1px solid var(--line2);font-size:9.5px;color:var(--mut)}'
+    +'.scut-cols{column-count:2;column-gap:10px;margin-top:8px}'
+    +'.scut-bk{break-inside:avoid;border:1px solid var(--line2);border-radius:6px;padding:5px 8px;margin-bottom:8px;background:#fafbfc}'
+    +'.scut-bh{display:flex;justify-content:space-between;font-size:11px;color:var(--mut);margin-bottom:3px}.scut-bh b{color:var(--ink)}'
+    +'.scut-vbar{display:flex;height:14px;border:1px solid #888;border-radius:2px;overflow:hidden;background:#fff;margin-bottom:4px}'
+    +'.scut-seg{display:flex;align-items:center;justify-content:center;border-right:1px solid #fff;min-width:0;font-size:9px;font-weight:800;color:#12202e;overflow:hidden}'
+    +'.scut-w{display:flex;align-items:center;justify-content:center;min-width:0;font-size:8.5px;color:#666;background:repeating-linear-gradient(45deg,#e6e6e6,#e6e6e6 4px,#f5f5f5 4px,#f5f5f5 8px)}'
+    +'.scut-t{table-layout:auto;margin-top:2px}.scut-t th{font-size:9px;padding:1px 4px;white-space:normal}.scut-t td{height:auto;font-size:10px;padding:1px 4px;white-space:normal}'
     +'@media print{@page{size:A4 landscape;margin:0}body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;margin:0;page-break-after:always}.sheet:last-child{page-break-after:auto}}';
   var AUTOFIT='function fit(){var MIN=6.5;document.querySelectorAll("tbody td").forEach(function(td){if(td.closest(".noterow"))return;if(!td.textContent.trim())return;td.style.fontSize="";var fs=parseFloat(getComputedStyle(td).fontSize)||10,g=0;while(td.scrollWidth>td.clientWidth+0.5&&fs>MIN&&g<40){fs-=0.5;td.style.fontSize=fs+"px";g++;}});}if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit);}window.addEventListener("load",fit);setTimeout(fit,400);';
   var SAVEPDF='function savePDF(){var b=document.getElementById("pdfBtn"),t=b.textContent;if(!window.jspdf||!window.html2canvas){alert("โหลดตัวสร้าง PDF ไม่ทัน ลองใหม่อีกครั้ง หรือใช้ปุ่มพิมพ์แล้วเลือก Save as PDF");return;}b.disabled=true;b.textContent="กำลังสร้าง PDF...";var sh=document.querySelectorAll(".sheet");var pdf=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:"a4"});(function nx(i){if(i>=sh.length){pdf.save(FN+".pdf");b.disabled=false;b.textContent=t;return;}window.html2canvas(sh[i],{scale:2,backgroundColor:"#ffffff"}).then(function(cv){var img=cv.toDataURL("image/jpeg",0.95);var pw=297,ph=210,m=4,iw=pw-2*m,ih=cv.height*(iw/cv.width);if(ih>ph-2*m)ih=ph-2*m;if(i>0)pdf.addPage();pdf.addImage(img,"JPEG",m,m,iw,ih);nx(i+1);}).catch(function(e){alert("สร้าง PDF ไม่ได้: "+e.message);b.disabled=false;b.textContent=t;});})(0);}';
@@ -12718,7 +12877,11 @@ function pkpPrint(){
   };
   if(!o.items.length){ toast('⚠️ ยังไม่มีรายการให้พิมพ์'); return; }
   var fn=('ใบผลิต '+((o.customer&&o.customer!=='-')?o.customer:'')).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim();
-  pkpReqOpenDoc_(pkpProdDocWrap_(pkpProdSheetsHTML_(o), fn));
+  var sheets=pkpProdSheetsHTML_(o);
+  // บานเลื่อน/บานเปิด → ต่อท้ายด้วยใบตัดราง optimize (FFD ต่อหน้าตัด×สี)
+  var scutPieces=pkpScutCollect(o.items, o.mainAlu, { wo:o.woId, name:(o.customer!=='-'?o.customer:'') });
+  if(scutPieces.length) sheets+=pkpScutCutSheetsHTML_(scutPieces, pkpCutSet_(), { ref:o.woId, fn:'ใบตัดราง '+((o.customer&&o.customer!=='-')?o.customer:'') });
+  pkpReqOpenDoc_(pkpProdDocWrap_(sheets, fn));
 }
 // ── งาน B: พิมพ์/บันทึก PDF ใบผลิตหลายใบที่เลือก (รวมเอกสารเดียว · แยกหน้าต่อใบ) ──
 async function pkpPrintMulti(){
@@ -12727,7 +12890,7 @@ async function pkpPrintMulti(){
   ids.forEach(function(id){ delete pkpWoCache[id]; });   // ดึงสด — ลายเซ็น/สถานะต้องล่าสุดบนใบพิมพ์
   showLoad('กำลังสร้างใบผลิต '+ids.length+' ใบ...');
   try{
-    var sheets='';
+    var sheets='', scutAll=[];
     for(var i=0;i<ids.length;i++){
       var wo=await pkpFetchWO(ids[i]); if(!wo)continue;
       var o={ woId:wo.woId, status:wo.status||'', customer:(wo.customer&&wo.customer.name)||'-',
@@ -12737,8 +12900,11 @@ async function pkpPrintMulti(){
         items:(wo.items||[]).filter(function(it){return it.type;}) };
       if(!o.items.length) continue;
       sheets+=pkpProdSheetsHTML_(o);
+      scutAll=scutAll.concat(pkpScutCollect(o.items, o.mainAlu, { wo:o.woId, name:(o.customer!=='-'?o.customer:'') }));
     }
     if(!sheets){ toast('ไม่มีรายการให้พิมพ์'); return; }
+    // ใบตัดรางรวมทุก WO ที่เลือก (ตัดรวมกันประหยัดเส้น — ชิ้นระบุชื่องาน/WO กำกับ)
+    if(scutAll.length) sheets+=pkpScutCutSheetsHTML_(scutAll, pkpCutSet_(), { ref:ids.join(', '), fn:'ใบตัดราง รวม' });
     pkpReqOpenDoc_(pkpProdDocWrap_(sheets, 'ใบผลิตรวม '+ids.length+' ใบ'));
   } finally { hideLoad(); }
 }
