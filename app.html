@@ -509,6 +509,30 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
   </div>
 </div>
 
+<!-- 📅 CONTINUE JOB MODAL — ลงวันต่องานจากการ์ดงานใน Dashboard -->
+<div class="modal-bg" id="contJobModal" style="z-index:1200;">
+  <div class="modal" style="max-width:420px;width:94vw;">
+    <div class="card-head">
+      <span id="contJobTitle">📅 ลงวันต่องาน</span>
+      <button onclick="document.getElementById('contJobModal').classList.remove('on')" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button>
+    </div>
+    <div class="card-body">
+      <div id="contJobInfo" style="font-size:12px;color:var(--mu);margin-bottom:10px;"></div>
+      <div class="fg" style="margin-bottom:10px;"><label class="fl">วันที่ต่องาน</label>
+        <input class="fi" id="contJobDate" type="date">
+      </div>
+      <div class="fg" style="margin-bottom:10px;"><label class="fl">ยอดเงินงานวันใหม่ (บาท)</label>
+        <input class="fi" id="contJobAmt" type="text" inputmode="numeric" value="0">
+        <div style="font-size:11px;color:var(--mu);margin-top:4px;">ค่าเริ่มต้น 0 กันนับยอดซ้ำ — ยอดของงานวันเดิมยังอยู่ที่วันเดิม</div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+        <button class="btn btn-g" onclick="document.getElementById('contJobModal').classList.remove('on')">ยกเลิก</button>
+        <button class="btn btn-p" id="contJobSaveBtn" onclick="tdmContinueSave()">➡ สร้างงานต่อ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 📐 RECORD FORM MODAL -->
 <div class="modal-bg" id="empModal">
   <div class="modal" style="padding:18px;max-height:88vh;overflow-y:auto;">
@@ -1127,7 +1151,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       const m = document.getElementById(id);
       if (m && m.classList.contains('on')) { m.classList.remove('on'); return; }
     }
-    const others = ['teamDetailModal','tDoneModal','mapModal'];
+    const others = ['contJobModal','teamDetailModal','tDoneModal','mapModal'];
     for (const id of others) {
       const m = document.getElementById(id);
       if (m && m.classList.contains('on')) { m.classList.remove('on'); return; }
@@ -4434,6 +4458,7 @@ async function loadDashboard(){
 
 // ─── Team Detail Modal — กด card ทีมใน Dashboard → ดูงานของทีมนั้น ───
 async function showTeamDetail(team, date){
+  window._tdmTeam = team; window._tdmDate = date;
   const m = document.getElementById('teamDetailModal');
   const b = document.getElementById('tdmBody');
   document.getElementById('tdmTitle').textContent = `👷 ${team} · ${fmtD(date)}`;
@@ -4482,6 +4507,7 @@ async function showTeamDetail(team, date){
 
       g.list.forEach(j => {
         const doneTime = j.doneAt ? new Date(Number(j.doneAt)).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}) : '';
+        const hasGeo = /\[geo:-?\d{1,2}\.\d{3,},\s*-?\d{1,3}\.\d{3,}\]/.test(j.note||'');
         html += `<div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;margin-bottom:6px;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
             <div style="flex:1;min-width:200px;">
@@ -4498,6 +4524,10 @@ async function showTeamDetail(team, date){
           </div>
           ${j.continueNote?`<div style="background:rgba(245,166,35,.1);border-left:3px solid var(--acc);padding:5px 8px;font-size:11px;color:var(--acc);margin-top:6px;border-radius:0 4px 4px 0;">📝 ${j.continueNote}</div>`:''}
           ${j.photos&&j.photos.length?`<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;">${j.photos.map((p,i)=>`<img src="${fixDriveUrl(p)}" referrerpolicy="no-referrer" style="width:42px;height:42px;object-fit:cover;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;" onclick="showTdmPhoto('${j.id}',${i})" onerror="this.style.opacity='.3'">`).join('')}</div>`:''}
+          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+            <button class="btn btn-g btn-sm" onclick="tdmContinueOpen('${j.id}')">📅 ลงวันต่องาน</button>
+            ${!hasGeo?`<button class="btn btn-g btn-sm" onclick="tdmPinGeo('${j.id}')">📌 ปักพิกัด</button>`:''}
+          </div>
         </div>`;
       });
       html += '</div>';
@@ -4523,6 +4553,93 @@ function showTdmPhoto(jobId, photoIdx){
 document.getElementById('teamDetailModal').addEventListener('click', e => {
   if (e.target === e.currentTarget) e.currentTarget.classList.remove('on');
 });
+
+// ─── 📅 ลงวันต่องาน — กดจากการ์ดงานใน team detail modal ───
+let _contJob = null;
+function tdmContinueOpen(jobId){
+  const j = (window._tdmJobs||[]).find(x => x.id === jobId);
+  if (!j) return;
+  _contJob = j;
+  document.getElementById('contJobTitle').textContent = `📅 ลงวันต่องาน · ${j.id}`;
+  document.getElementById('contJobInfo').innerHTML =
+    `<b>${j.name||'-'}</b> · ${window._tdmTeam||''}`+
+    (j.amount?`<br>ยอดงานเดิม ฿${fmt(j.amount)} (คงอยู่ที่วันเดิม)`:'')+
+    (j.continueNote?`<br>📝 โน้ตต่องาน: ${j.continueNote}`:'');
+  // default = วันถัดไปของวันที่กำลังดู
+  let d = window._tdmDate || document.getElementById('dashDate').value || '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    const dt = new Date(d+'T00:00:00'); dt.setDate(dt.getDate()+1);
+    d = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+  }
+  document.getElementById('contJobDate').value = d;
+  document.getElementById('contJobAmt').value = '0';
+  document.getElementById('contJobModal').classList.add('on');
+}
+async function tdmContinueSave(){
+  if (!_contJob) return;
+  const date = document.getElementById('contJobDate').value;
+  const amt = document.getElementById('contJobAmt').value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { toast('เลือกวันที่ก่อน'); return; }
+  const btn = document.getElementById('contJobSaveBtn');
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+  try {
+    const r = await call({ action:'pk_continueJob', id:_contJob.id, date:date, amount:amt });
+    if (r && r.ok) {
+      toast(`➡ ต่องาน ${_contJob.id} → ${r.id} วันที่ ${fmtD(date)}${r.team?' · '+r.team:''}`);
+      document.getElementById('contJobModal').classList.remove('on');
+      clearCache('pk_dashboard'); clearCache('pk_installMonth');
+      if (window._tdmTeam && window._tdmDate) showTeamDetail(window._tdmTeam, window._tdmDate);
+      loadDashboard(); if (typeof dashCalLoad === 'function') dashCalLoad();
+    } else toast((r && r.error) || 'ผิดพลาด');
+  } catch(e) { /* call() toast ให้แล้ว */ }
+  btn.disabled = false; btn.textContent = '➡ สร้างงานต่อ';
+}
+document.getElementById('contJobModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('on');
+});
+
+// ─── 📌 ปักพิกัดงานที่ไม่มี geo tag — วางลิงก์ Google Maps หรือพิมพ์ lat,lng ───
+function _parseLatLngText(txt){
+  txt = String(txt||'').trim();
+  if (!txt) return null;
+  // พิกัดตรง ๆ "13.7563, 100.5018"
+  let m = /^(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)$/.exec(txt);
+  if (m) return { lat:Number(m[1]), lng:Number(m[2]) };
+  // URL Google Maps: @lat,lng · q=lat,lng · !3dlat!4dlng
+  m = /@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/.exec(txt) ||
+      /[?&]q=(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/.exec(txt) ||
+      /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/.exec(txt);
+  if (m) return { lat:Number(m[1]), lng:Number(m[2]) };
+  return null;
+}
+async function tdmPinGeo(jobId){
+  const j = (window._tdmJobs||[]).find(x => x.id === jobId);
+  if (!j) return;
+  const txt = prompt(`📌 ปักพิกัดให้ "${j.name||j.id}"\n\nวางลิงก์ Google Maps (รวมลิงก์ย่อ maps.app.goo.gl)\nหรือพิมพ์พิกัด เช่น 13.7563, 100.5018`);
+  if (txt == null || !String(txt).trim()) return;
+  let c = _parseLatLngText(txt);
+  // ลิงก์ย่อ / ลิงก์ที่ไม่มีพิกัดใน URL → ให้ worker ตามลิงก์ให้ (/resolve-link)
+  if (!c && /^https?:\/\//i.test(String(txt).trim())) {
+    toast('กำลังตามลิงก์หาพิกัด...');
+    try {
+      const res = await fetch(API.replace(/\/api$/, '/resolve-link'), {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ url:String(txt).trim(), username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const d = await res.json();
+      if (d && d.ok) c = { lat:d.lat, lng:d.lng };
+      else { toast((d && d.error) || 'ตามลิงก์ไม่สำเร็จ'); return; }
+    } catch(e) { toast('ตามลิงก์ไม่สำเร็จ'); return; }
+  }
+  if (!c) { toast('อ่านพิกัดไม่ได้ — วางลิงก์ Google Maps หรือ lat,lng'); return; }
+  if (!(c.lat >= 5 && c.lat <= 21 && c.lng >= 95 && c.lng <= 106)) { toast('พิกัดไม่อยู่ในกรอบประเทศไทย'); return; }
+  if (!confirm(`ปักพิกัดให้ "${j.name||j.id}"\nที่ ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)} ?`)) return;
+  const r = await call({ action:'pk_setJobGeo', id:j.id, sheet:'install', lat:c.lat, lng:c.lng });
+  if (r && r.ok) {
+    toast('📌 ปักพิกัดแล้ว — ขึ้นบนแผนที่ทันที');
+    if (window._tdmTeam && window._tdmDate) showTeamDetail(window._tdmTeam, window._tdmDate);
+  } else toast((r && r.error) || 'ผิดพลาด');
+}
 
 // ─── ACCESS + MEMBERS ───
 function addMemChip(){
