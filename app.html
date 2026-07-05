@@ -1422,6 +1422,7 @@ function renderOfficeShell(){
               <span style="font-size:17px;font-weight:800;" id="measCalTitle">ปฏิทินคิววัดงาน</span>
               <button class="btn btn-g btn-sm" onclick="measCalToday()">วันนี้</button>
               <button class="btn btn-g btn-sm" onclick="measCalNext()">›</button>
+              <button class="btn btn-g btn-sm" onclick="measCalRefresh()" title="ดึงข้อมูลล่าสุดจากชีต">↻</button>
             </div>
             <div id="measCalGrid"><div class="loading-row">กำลังโหลด...</div></div>
             <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin:10px 2px 0;">
@@ -7219,6 +7220,7 @@ function dashSetMode(mode){
   if (bi) bi.classList.toggle('on', !measure);
   if (bm) bm.classList.toggle('on', measure);
   if (measure && !_measCalLoaded) measCalLoad();
+  else if (measure) measCalReload(true);   // เข้าแท็บวัดงานซ้ำ → revalidate เบื้องหลัง (เห็นค่าที่แก้ในชีต)
 }
 // ══ Dashboard: view ช่วงวันที่ (range list, READ-ONLY) — ก้อน B ══
 let _dashInstallView = 'cal';   // 'cal' | 'range'
@@ -7349,9 +7351,9 @@ function jobContOpen(id){
 function jobEditOpen(id, sheet){
   if (!isOfficeLevel()) return;
   const isMeas = (sheet === 'measure');
-  const pool = isMeas ? (_measAllJobs||[]) : (_dashRangeJobs||[]).concat(_dashCalJobs||[]);
+  const pool = isMeas ? (_measAllJobs||[]).concat(_measRangeJobs||[]) : (_dashRangeJobs||[]).concat(_dashCalJobs||[]);
   const j = pool.find(x => String(x.id)===String(id));
-  if (!j){ toast('ไม่พบงาน'); return; }
+  if (!j){ toast((isMeas && _measCalLoading) ? '⏳ กำลังโหลดข้อมูลวัดงาน — รอสักครู่แล้วกดอีกครั้ง' : 'ไม่พบงาน'); return; }
   _jobEditCur = j;
   _jobEditSheet = isMeas ? 'measure' : 'install';
   const jt = document.getElementById('jeTitle');
@@ -7405,9 +7407,8 @@ async function jobEditSave(){
     const wasMeasure = (_jobEditSheet === 'measure');
     jobEditClose();
     if (wasMeasure){
-      // refresh ปฏิทิน/ช่วงวันที่ฝั่งวัดงาน
-      _measAllJobs = null; _measCalLoaded = false;
-      await measCalReload();
+      // refresh ฝั่งวัดงานแบบ SWR — ข้อมูลเดิมยังโชว์/กดได้ระหว่างโหลด
+      await measCalReload(true);
       if (_measView === 'range') await measRangeRun();
     } else {
       _dashRangeJobs = [];
@@ -7480,7 +7481,8 @@ function measRangeCard_(j){
     + '<div style="font-size:15px;font-weight:800;margin-bottom:5px;">'+dot+escHtml(j.name||'-')+map+'</div>'
     + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:30px;">🔧</span><span>'+escHtml(j.job||'-')+'</span></div>'
     + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:30px;">📍</span><span>'+escHtml(j.address||'-')+'</span></div>'
-    + '<div style="margin-top:6px;font-size:12px;color:'+measTone_(j.status)+';font-weight:700;">'+measStatusLabel_(j.status)+'</div>'
+    + '<div style="margin-top:6px;font-size:12px;color:'+measTone_(j.status)+';font-weight:700;">'+measStatusLabel_(j.status)
+      + (j.team ? ' <span style="color:var(--blu);">· 🚗 '+escHtml(j.team)+'</span>' : ' <span style="color:var(--rd);">· ⚠ ยังไม่จัดทีม</span>')+'</div>'
     + jobEditBtn_(j.id, 'measure')
     + '</div>';
 }
@@ -7491,24 +7493,34 @@ async function measCalLoad(){
   measCalRender();
   await measCalReload();
 }
-async function measCalReload(){
-  const panel = document.getElementById('measCalPanel'); if (panel) panel.innerHTML = '<div class="loading-row">กำลังโหลดงาน...</div>';
-  try { await measCalFetch(); if (_measAllJobs && _measAllJobs.length) _measCalLoaded = true; }
+async function measCalReload(force){
+  // SWR: มีข้อมูลเดิม → โชว์ไว้ก่อน refetch เบื้องหลัง (ไม่ล้างทิ้ง — ปุ่มบนการ์ดกดได้ตลอด)
+  if (_measAllJobs === null){
+    const panel = document.getElementById('measCalPanel'); if (panel) panel.innerHTML = '<div class="loading-row">กำลังโหลดงาน...</div>';
+  }
+  try { await measCalFetch(force); if (_measAllJobs && _measAllJobs.length) _measCalLoaded = true; }
   catch(e){ _measAllJobs = _measAllJobs || []; console.warn('[measCal] fetch error:', e && e.message); }
   measCalRender();
 }
-async function measCalFetch(){
-  if (_measAllJobs !== null) return;   // ดึงครั้งเดียว แล้ว cache ในหน่วยความจำ
+async function measCalFetch(force){
+  if (_measAllJobs !== null && !force) return;   // ไม่ force = ดึงครั้งเดียวแล้วใช้ cache
+  if (_measCalLoading) return;                    // กันยิงซ้อน
   _measCalLoading = true;
   try {
     const r = await Promise.race([
       call({ action:'pk_officeMeasureQueue' }),
       new Promise(res => setTimeout(() => res({ ok:false, error:'GAS timeout' }), 15000))
     ]);
-    _measAllJobs = (r && r.ok) ? (r.jobs || []) : [];
-    if (!(r && r.ok)) console.warn('[measCalFetch] pk_officeMeasureQueue:', r && r.error);
-  } catch(e){ _measAllJobs = []; console.warn('[measCalFetch] error:', e && e.message); }
+    if (r && r.ok) _measAllJobs = r.jobs || [];
+    else { _measAllJobs = _measAllJobs || []; console.warn('[measCalFetch] pk_officeMeasureQueue:', r && r.error); }
+  } catch(e){ _measAllJobs = _measAllJobs || []; console.warn('[measCalFetch] error:', e && e.message); }
   _measCalLoading = false;
+}
+// ปุ่ม ↻ รีเฟรช + revalidate ตอนสลับเข้าแท็บวัดงาน — ดึงข้อมูลล่าสุดจากชีต
+async function measCalRefresh(){
+  await measCalReload(true);
+  if (_measView === 'range') measRangeRun();
+  toast('↻ อัปเดตข้อมูลวัดงานล่าสุดแล้ว');
 }
 function measMonthJobs_(){
   const pfx = _measCalY + '-' + String(_measCalM+1).padStart(2,'0');
@@ -7549,7 +7561,8 @@ function measCalRenderPanel(){
   if (!js.length){ p.innerHTML = html + '<div class="loading-row">ไม่มีงานวัดในวันนี้</div>'; return; }
   js.forEach(j => {
     const tone = measTone_(j.status), lbl = measStatusLabel_(j.status);
-    const worker = j.worker ? '👷 '+escHtml(j.worker) : '<span style="color:var(--mu);">— ยังไม่มีผู้รับ</span>';
+    const teamTag = j.team ? '<span style="color:var(--blu);font-weight:700;">🚗 '+escHtml(j.team)+'</span>' : '<span style="color:var(--rd);font-weight:700;">⚠ ยังไม่จัดทีม</span>';
+    const worker = (j.worker ? '👷 '+escHtml(j.worker) : '<span style="color:var(--mu);">— ยังไม่มีผู้รับในแอป</span>') + ' · ' + teamTag;
     const mapBtn = j.mapLink ? '<a href="'+j.mapLink+'" target="_blank" style="color:var(--blu);text-decoration:none;font-weight:700;">🗺 แผนที่</a>' : '';
     const sheetSt = j.sheetStatus ? '<span style="font-size:11px;color:var(--mu);">'+escHtml(j.sheetStatus)+'</span>' : '';
     html += '<div style="background:var(--surf2);border:1px solid var(--bdr);border-left:4px solid '+tone+';border-radius:10px;padding:12px 14px;margin-bottom:10px;">'
