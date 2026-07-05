@@ -12126,15 +12126,14 @@ function pkpScutPieces(it){
   });
   return out;
 }
-// รวมชิ้นตัดจากรายการ WO — setNo = ลำดับบานใน "ใบผลิตบานเลื่อน/บานเปิด" (นับเฉพาะรายการกลุ่มนี้)
+// รวมชิ้นตัดจากรายการ WO — setNo = เลขลำดับที่กรอกใน WO (idx+1) ตรงกับเลขบนใบผลิตทุกใบ ไม่รันใหม่
 function pkpScutCollect(items, mainAlu, meta){
-  meta=meta||{}; var out=[], sn=0;
-  (items||[]).forEach(function(it){
+  meta=meta||{}; var out=[];
+  (items||[]).forEach(function(it,idx){
     if(!it.type||!pkpScutIs(it.type)) return;
-    sn++;
     var col=String(it.cAlu||mainAlu||'').trim()||'(ไม่ระบุสี)';
     pkpScutPieces(it).forEach(function(p){
-      out.push({rail:p.profile,profile:p.profile,len:p.len,qty:p.qty,color:col,wo:meta.wo||'',name:meta.name||'',setNo:sn,type:it.type});
+      out.push({rail:p.profile,profile:p.profile,len:p.len,qty:p.qty,color:col,wo:meta.wo||'',name:meta.name||'',setNo:idx+1,type:it.type});
     });
   });
   return out;
@@ -12757,10 +12756,11 @@ function pkpProdSheetsHTML_(o){
   }
   function emptyRow(no){ var c='<td class="b">'+no+'</td>'; for(var i=0;i<18;i++)c+='<td></td>'; return '<tr class="grpstart empty">'+c+'</tr>'; }
   // แยกรายการ: มุ้งจีบ/อื่นๆ อยู่ใบผลิตหลัก · บานเลื่อน/บานเปิด (มีสูตรตัดราง) แยกใบผลิตของตัวเอง
+  // เลข No. ยึดตามลำดับที่กรอกใน WO (ไม่รันใหม่) — เลขเดียวกันทั้งใบหลัก/ใบแยก/ใบตัดราง
   var scutItems=[], jeebItems=[];
-  (o.items||[]).forEach(function(it){ (pkpScutIs(it.type)?scutItems:jeebItems).push(it); });
-  var PER=10, pages=[], cur=[], n=0;
-  jeebItems.forEach(function(it){ n++; cur.push(rowsForItem(it,n)); if(cur.length>=PER){pages.push(cur);cur=[];} });
+  (o.items||[]).forEach(function(it,idx){ (pkpScutIs(it.type)?scutItems:jeebItems).push({it:it,no:idx+1}); });
+  var PER=10, pages=[], cur=[];
+  jeebItems.forEach(function(e){ cur.push(rowsForItem(e.it,e.no)); if(cur.length>=PER){pages.push(cur);cur=[];} });
   if(jeebItems.length && cur.length) pages.push(cur);
   var THEAD='<colgroup><col class="colNo"><col class="colNm"><col class="colPt"><col class="colWH"><col class="colWH"><col class="colC"><col class="colC"><col><col><col><col><col><col><col><col><col><col><col class="colPv"><col class="colHl"></colgroup>'
     +'<thead><tr><th rowspan="2">No.</th><th rowspan="2">รายการ</th><th rowspan="2">แบบ</th><th rowspan="2">กว้าง</th><th rowspan="2">สูง</th><th rowspan="2">สีอลู</th><th rowspan="2">สีผ้ามุ้ง</th><th colspan="4">ขนาดตัดอลูมิเนียม</th><th colspan="2">ขนาดตัดมุ้ง</th><th colspan="2">ขนาดตัดเชือก</th><th colspan="2">ขนาดตัดสลิง</th><th rowspan="2">PVC</th><th rowspan="2">ระยะ<br>เจาะรู</th></tr>'
@@ -12785,37 +12785,34 @@ function pkpProdSheetsHTML_(o){
   var sheets='';
   pages.forEach(function(pg,pi){
     var blocks=pg.map(function(rws){ return rws.join(''); });
-    for(var k=pg.length;k<PER;k++) blocks.push(emptyRow((pi*PER)+k+1));
+    for(var k=pg.length;k<PER;k++) blocks.push(emptyRow(''));   // แถวเปล่าไม่ใส่เลข — เลขจริงยึดตามที่กรอก
     var body=blocks.join(SPACER);
     sheets+='<div class="sheet" data-wo="'+esc(o.woId)+'" data-fn="'+esc(pkpWoFileName_(o.woId,o.customer))+'">'+headHTML()+'<table>'+THEAD+'<tbody>'+body+'</tbody></table>'+signHTML
       +'<div class="foot"><span>PK Queue System · ใบผลิต</span><span>หน้า '+(pi+1)+'/'+pages.length+' · พิมพ์ '+thDate(new Date().toISOString().slice(0,10))+'</span></div></div>';
   });
-  // ── ใบผลิตแยก: บานเลื่อน/บานเปิด (แสดงชิ้นตัดต่อบาน — คู่กับใบตัดรางท้ายเอกสาร) ──
+  // ── ใบผลิตแยก: บานเลื่อน/บานเปิด — เลย์เอาต์การ์ดต่อบาน (อ่านง่ายสำหรับงานประกอบ ไม่ใช้ตารางมุ้งจีบ) ──
   if(scutItems.length){
-    var SPACER10='<tr class="spc"><td colspan="10"></td></tr>';
-    var srows=[];
-    scutItems.forEach(function(it,si){
-      var pcs=pkpScutPieces(it), alu=esc(it.cAlu||o.mainAlu||''), mesh=esc(it.cMesh||o.mainMesh||''), g=[];
-      var first=pcs.length
-        ? td(esc(pcs[0].profile),'nme')+td(esc(pcs[0].label),'nme')+td(V(pcs[0].len))+td(pcs[0].qty)
-        : '<td colspan="4" style="color:#9aa7b6;font-style:italic;">— กรอกขนาดไม่ครบ (ไม่มีชิ้นตัด) —</td>';
-      g.push('<tr class="grpstart">'+td('<b>'+(si+1)+'</b>')+td(esc(it.type),'nme')+td(V(it.w))+td(V(it.h))+td(alu)+td(mesh)+first+'</tr>');
-      for(var pi2=1;pi2<pcs.length;pi2++){
-        var p=pcs[pi2];
-        g.push('<tr class="sub">'+td('')+td('')+td('')+td('')+td('')+td('')+td(esc(p.profile),'nme')+td(esc(p.label),'nme')+td(V(p.len))+td(p.qty)+'</tr>');
-      }
-      if(it.note&&it.note.trim()) g.push('<tr class="noterow"><td colspan="10">📝 หมายเหตุ: '+esc(it.note)+'</td></tr>');
-      srows.push(g);
+    var cards=scutItems.map(function(e){
+      var it=e.it, pcs=pkpScutPieces(it), alu=esc(it.cAlu||o.mainAlu||'-'), mesh=esc(it.cMesh||o.mainMesh||'-');
+      var prows=pcs.map(function(p,i){ return '<tr><td class="c">'+(i+1)+'</td><td class="l">'+esc(p.profile)+'</td><td class="l sm">'+esc(p.label)+'</td><td class="n">'+V(p.len)+'</td><td class="c">'+p.qty+'</td></tr>'; }).join('');
+      var tbl=pcs.length
+        ? '<table class="scp-t"><thead><tr><th class="c">#</th><th class="l">หน้าตัด</th><th class="l">ตำแหน่ง (สูตร)</th><th class="n">ยาว (ซม.)</th><th class="c">จำนวน</th></tr></thead><tbody>'+prows+'</tbody></table>'
+        : '<div class="scp-warn">⚠ กรอกขนาดไม่ครบ — ไม่มีชิ้นตัด</div>';
+      var html='<div class="scp-card">'
+        +'<div class="scp-hd"><span class="scp-no">'+e.no+'</span><span class="scp-type">'+esc(it.type)+'</span><span class="scp-size">'+V(it.w)+' × '+V(it.h)+' <small>ซม.</small></span></div>'
+        +'<div class="scp-meta"><span class="scp-chip">สีอลู <b>'+alu+'</b></span><span class="scp-chip">ผ้ามุ้ง <b>'+mesh+'</b></span>'+(pcs.length?'<span class="scp-chip">ชิ้นตัด <b>'+pcs.reduce(function(s,p){return s+p.qty;},0)+'</b> ชิ้น</span>':'')+'</div>'
+        +tbl
+        +(it.note&&it.note.trim()?'<div class="scp-note">📝 '+esc(it.note)+'</div>':'')
+        +'</div>';
+      return { w: 3+Math.max(1,pcs.length), html: html };
     });
-    var spages=[], scur=[], scnt=0, SROWMAX=22;
-    srows.forEach(function(g){ if(scnt+g.length>SROWMAX && scur.length){ spages.push(scur); scur=[]; scnt=0; } scur.push(g); scnt+=g.length; });
+    var spages=[], scur=[], sw=0, SWMAX=40;   // น้ำหนัก ~แถวต่อหน้า (2 คอลัมน์)
+    cards.forEach(function(c){ if(sw+c.w>SWMAX && scur.length){ spages.push(scur); scur=[]; sw=0; } scur.push(c.html); sw+=c.w; });
     if(scur.length) spages.push(scur);
-    var STHEAD='<colgroup><col class="colNo"><col style="width:150px"><col class="colWH"><col class="colWH"><col class="colC"><col class="colC"><col style="width:128px"><col><col style="width:58px"><col style="width:46px"></colgroup>'
-      +'<thead><tr><th>No.</th><th>รายการ</th><th>กว้าง</th><th>สูง</th><th>สีอลู</th><th>สีผ้ามุ้ง</th><th>หน้าตัด</th><th>ตำแหน่ง (สูตร)</th><th>ยาว (ซม.)</th><th>จำนวน</th></tr></thead>';
     spages.forEach(function(pg,pi){
-      var body=pg.map(function(g){ return g.join(''); }).join(SPACER10);
-      sheets+='<div class="sheet" data-wo="'+esc(o.woId)+'" data-fn="'+esc(pkpWoFileName_(o.woId,o.customer))+'">'+headHTML('Production Order · ใบผลิต บานเลื่อน/บานเปิด')+'<table>'+STHEAD+'<tbody>'+body+'</tbody></table>'+signHTML
-        +'<div class="foot"><span>PK Queue System · ใบผลิต บานเลื่อน/บานเปิด — ตัดรางตาม "ใบตัดราง" ท้ายเอกสาร</span><span>หน้า '+(pi+1)+'/'+spages.length+' · พิมพ์ '+thDate(new Date().toISOString().slice(0,10))+'</span></div></div>';
+      sheets+='<div class="sheet" data-wo="'+esc(o.woId)+'" data-fn="'+esc(pkpWoFileName_(o.woId,o.customer))+'">'+headHTML('Production Order · ใบผลิตมุ้งบานเลื่อน/บานเปิด')
+        +'<div class="scp-grid">'+pg.join('')+'</div>'+signHTML
+        +'<div class="foot"><span>PK Queue System · ใบผลิตมุ้งบานเลื่อน/บานเปิด — แผนตัดดู "ใบตัดราง" ท้ายเอกสาร · เลขบานตรงตามลำดับที่กรอก</span><span>หน้า '+(pi+1)+'/'+spages.length+' · พิมพ์ '+thDate(new Date().toISOString().slice(0,10))+'</span></div></div>';
     });
   }
   return sheets;
@@ -12845,6 +12842,17 @@ function pkpProdDocWrap_(sheets, fn){
     +'.scut-seg{display:flex;align-items:center;justify-content:center;border-right:1px solid #fff;min-width:0;font-size:9px;font-weight:800;color:#12202e;overflow:hidden}'
     +'.scut-w{display:flex;align-items:center;justify-content:center;min-width:0;font-size:8.5px;color:#666;background:repeating-linear-gradient(45deg,#e6e6e6,#e6e6e6 4px,#f5f5f5 4px,#f5f5f5 8px)}'
     +'.scut-t{table-layout:auto;margin-top:2px}.scut-t th{font-size:9px;padding:1px 4px;white-space:normal}.scut-t td{height:auto;font-size:10px;padding:1px 4px;white-space:normal}'
+    +'.scp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px;align-items:start}'
+    +'.scp-card{border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:#fff}'
+    +'.scp-hd{display:flex;align-items:baseline;gap:8px;border-bottom:1.6px solid var(--slate);padding-bottom:4px}'
+    +'.scp-no{min-width:24px;border-radius:6px;background:var(--slate);color:#fff;font-weight:800;font-size:13px;display:inline-flex;align-items:center;justify-content:center;padding:2px 7px}'
+    +'.scp-type{font-weight:800;font-size:13px}'
+    +'.scp-size{margin-left:auto;font-size:15px;font-weight:800;color:var(--acc);white-space:nowrap}.scp-size small{font-size:9px;color:var(--mut);font-weight:600}'
+    +'.scp-meta{display:flex;gap:6px;flex-wrap:wrap;margin:5px 0 4px}'
+    +'.scp-chip{font-size:10px;border:1px solid var(--line2);border-radius:12px;padding:1px 8px;color:var(--mut)}.scp-chip b{color:var(--ink)}'
+    +'.scp-t{table-layout:auto;margin-top:2px;width:100%}.scp-t th{font-size:9px;padding:2px 5px;white-space:normal}.scp-t td{height:auto;font-size:10.5px;padding:2px 5px;white-space:normal}.scp-t th.l,.scp-t td.l{text-align:left}.scp-t th.n,.scp-t td.n{text-align:right}.scp-t td.n{font-weight:800}.scp-t th.c,.scp-t td.c{text-align:center}.scp-t td.sm{font-size:9px;color:var(--mut)}'
+    +'.scp-warn{font-size:10.5px;color:#a05a00;background:#fff7ec;border-radius:6px;padding:5px 8px;margin-top:4px}'
+    +'.scp-note{font-size:9.5px;color:#7a4a07;background:#fff7ec;border-radius:5px;padding:3px 7px;margin-top:5px}'
     +'@media print{@page{size:A4 landscape;margin:0}body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;margin:0;page-break-after:always}.sheet:last-child{page-break-after:auto}}';
   var AUTOFIT='function fit(){var MIN=6.5;document.querySelectorAll("tbody td").forEach(function(td){if(td.closest(".noterow"))return;if(!td.textContent.trim())return;td.style.fontSize="";var fs=parseFloat(getComputedStyle(td).fontSize)||10,g=0;while(td.scrollWidth>td.clientWidth+0.5&&fs>MIN&&g<40){fs-=0.5;td.style.fontSize=fs+"px";g++;}});}if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit);}window.addEventListener("load",fit);setTimeout(fit,400);';
   var SAVEPDF='function savePDF(){var b=document.getElementById("pdfBtn"),t=b.textContent;if(!window.jspdf||!window.html2canvas){alert("โหลดตัวสร้าง PDF ไม่ทัน ลองใหม่อีกครั้ง หรือใช้ปุ่มพิมพ์แล้วเลือก Save as PDF");return;}b.disabled=true;b.textContent="กำลังสร้าง PDF...";var sh=document.querySelectorAll(".sheet");var pdf=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:"a4"});(function nx(i){if(i>=sh.length){pdf.save(FN+".pdf");b.disabled=false;b.textContent=t;return;}window.html2canvas(sh[i],{scale:2,backgroundColor:"#ffffff"}).then(function(cv){var img=cv.toDataURL("image/jpeg",0.95);var pw=297,ph=210,m=4,iw=pw-2*m,ih=cv.height*(iw/cv.width);if(ih>ph-2*m)ih=ph-2*m;if(i>0)pdf.addPage();pdf.addImage(img,"JPEG",m,m,iw,ih);nx(i+1);}).catch(function(e){alert("สร้าง PDF ไม่ได้: "+e.message);b.disabled=false;b.textContent=t;});})(0);}';
