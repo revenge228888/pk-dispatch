@@ -1023,8 +1023,12 @@ function renderWps(){
     const mk = L.marker([wp.lat, wp.lng], { icon, draggable: true }).addTo(S.wpLayer);
     mk.bindPopup('<div class="wp-pop"><b>' + esc(wp.name) + '</b><br>' +
       '<span class="pop-team" style="background:' + c + '">' + esc(wp.team || 'ไม่ผูกทีม') + '</span>' +
-      '<div class="pop-btns"><button class="btn" onclick="delWp(\'' + esc(wp.id) + '\')">🗑 ลบ</button></div>' +
-      '<div class="muted">ลากหมุดเพื่อย้ายตำแหน่ง</div></div>');
+      '<div class="pop-btns">' +
+        (wp.team ? '<button class="btn acc" onclick="wpToJob(\'' + esc(wp.id) + '\')">🚐 ส่งเข้าคิวทีม</button> ' : '') +
+        '<button class="btn" onclick="delWp(\'' + esc(wp.id) + '\')">🗑 ลบ</button></div>' +
+      '<div class="muted">' + (wp.team
+        ? 'ส่งเข้าคิว = ขึ้นเป็นงานในแอปของทีมวันที่เลือก · ลากหมุดเพื่อย้าย'
+        : 'ผูกทีมก่อนจึงส่งเข้าคิวได้ (ลบแล้วเพิ่มใหม่เลือกทีม) · ลากหมุดเพื่อย้าย') + '</div></div>');
     mk.on('dragend', () => {
       const ll = mk.getLatLng();
       const list = loadWps();
@@ -1037,6 +1041,26 @@ function delWp(id){
   saveWps(loadWps().filter(x => x.id !== id));
   S.map.closePopup();
   renderWps(); buildRoutes();
+}
+// ── ส่งจุดแวะเข้าคิวทีม: สร้างงานจริงในชีต (ช่าง→ติดตั้ง · เซลล์→วัดงาน) → ขึ้นในแอปทีมวันที่เลือก ──
+async function wpToJob(id){
+  const wp = loadWps().find(x => x.id === id);
+  if (!wp) return;
+  if (!wp.team){ setStatus('จุดแวะนี้ยังไม่ผูกทีม — ผูกทีมก่อนจึงส่งเข้าคิวได้', true); return; }
+  if (!confirm('ส่งจุดแวะ "' + (wp.name || 'จุดแวะ') + '"\nเข้าคิว ' + wp.team + ' วันที่ ' + thaiDate(S.date) + ' ?\n\n' +
+    '• จะขึ้นเป็นงานในแอปของทีมทันที (ยอด 0 บาท สถานะ "จุดแวะ")\n• หมุดจุดแวะเดิมจะถูกลบ (เปลี่ยนเป็นหมุดงานแทน)')) return;
+  S.map.closePopup();
+  setStatus('กำลังส่งจุดแวะเข้าคิว ' + wp.team + ' ...');
+  try {
+    const r = await apiGas('pk_addStopJob', { date: S.date, team: wp.team, name: wp.name || 'จุดแวะ', lat: wp.lat, lng: wp.lng });
+    if (!r || !r.ok){ setStatus('ส่งเข้าคิวไม่สำเร็จ: ' + ((r && r.error) || 'ไม่ทราบสาเหตุ'), true); return; }
+    saveWps(loadWps().filter(x => x.id !== id));   // ลบจุดแวะเดิม — เดี๋ยวขึ้นเป็นหมุดงานจาก loadDay แทน
+    renderWps();
+    setStatus('✓ ส่งเข้าคิวแล้ว: ' + r.id + ' · ' + wp.team + ' — ทีมเห็นในแอปทันที · จัดลำดับได้จากปุ่ม ↕ ในการ์ดทีม');
+    await loadDay();
+  } catch (e) {
+    setStatus('ส่งเข้าคิวไม่สำเร็จ: ' + e, true);
+  }
 }
 function setFactory(lat, lng){
   S.factory = { lat, lng };
