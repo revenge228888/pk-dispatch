@@ -4866,6 +4866,7 @@ function openCreateRecordForJob(jobIdx){
   if (!j) return;
   recordOpenNew({
     customerName: j.name || '',
+    customerAddress: j.address || '',
     linkedJobId: j.id
   });
 }
@@ -5502,6 +5503,7 @@ async function salesMeasureOpenRecord(j){
     recordOpenNew({
       customerName: j.name || '',
       customerPhone: '',
+      customerAddress: j.address || '',
       linkedJobId: j.id
     });
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
@@ -6206,6 +6208,7 @@ async function techOpenRecord(j){
     recordOpenNew({
       customerName: j.name || '',
       customerPhone: '',
+      customerAddress: j.address || '',
       linkedJobId: j.id
     });
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
@@ -8693,7 +8696,7 @@ async function recordOpenNew(prefill){
     prefill = prefill || {};
     _recForm = {
       mode: 'new', id: null,
-      customer: { name: prefill.customerName || '', phone: prefill.customerPhone || '' },
+      customer: { name: prefill.customerName || '', phone: prefill.customerPhone || '', address: prefill.customerAddress || '' },
       linkedJobId: prefill.linkedJobId || '',
       entries: [ recordEmptyEntry(1) ],
       recentJobs: [], draftKey: 'pk_record_draft_new',
@@ -8887,6 +8890,10 @@ function recordRenderForm(){
         <label class="fl">📞 เบอร์โทร</label>
         <input class="fi" id="recmCustPhone" type="tel" value="${escAttr(c.phone)}" oninput="recordOnChange()">
       </div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label class="fl">📍 ที่อยู่</label>
+        <textarea class="fi" id="recmCustAddr" rows="2" placeholder="ที่อยู่หน้างาน (เปิดจากการ์ดงานจะเติมให้อัตโนมัติ)" oninput="recordOnChange()"${ro?' readonly':''}>${escHtml(c.address||'')}</textarea>
+      </div>
       <div class="fg">
         <label class="fl">🔗 ผูกกับงาน (Optional)</label>
         <select class="fi" id="recmLinkedJob" onchange="recordOnChange()">${jobOptions.join('')}</select>
@@ -9016,6 +9023,7 @@ function escHtml(s){ return String(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt
 function recordOnChange(){
   _recForm.customer.name = document.getElementById('recmCustName').value;
   _recForm.customer.phone = document.getElementById('recmCustPhone').value;
+  var _adr = document.getElementById('recmCustAddr'); if (_adr) _recForm.customer.address = _adr.value;
   _recForm.linkedJobId = document.getElementById('recmLinkedJob').value;
   const _mc = document.getElementById('recmMainColor'); if (_mc) _recForm.mainColor = _mc.value;
   const _nt = document.getElementById('recmNote'); if (_nt) _recForm.note = _nt.value;
@@ -9254,7 +9262,8 @@ function renderA4Page(entriesInPage, pageNum, totalPages, customer, dateStr){
     + '<div style="font-size:10px;color:#999;letter-spacing:2px;">MEASUREMENT</div></div></div>';
   var meta = '<div style="display:flex;justify-content:space-between;gap:20px;font-size:12px;margin-bottom:13px;">'
     + '<div style="flex:1;line-height:1.7;"><div><b style="color:#1e3a5f;">ลูกค้า:</b> ' + (escHtml(cust.name)||'-') + '</div>'
-    + '<div><b style="color:#1e3a5f;">โทร:</b> ' + (escHtml(cust.phone)||'-') + '</div></div>'
+    + '<div><b style="color:#1e3a5f;">โทร:</b> ' + (escHtml(cust.phone)||'-') + '</div>'
+    + (cust.address ? '<div><b style="color:#1e3a5f;">ที่อยู่:</b> ' + escHtml(cust.address) + '</div>' : '') + '</div>'
     + '<div style="flex:1;text-align:right;line-height:1.7;"><div><b style="color:#1e3a5f;">เลขที่:</b> ' + (escHtml((_recForm&&_recForm.id)||'')||'-') + '</div>'
     + '<div><b style="color:#1e3a5f;">วันที่:</b> ' + dateStr + '</div>'
     + '<div><b style="color:#1e3a5f;">ผู้บันทึก:</b> ' + (escHtml(CURRENT_USER.username)||'-') + '</div>'
