@@ -1014,6 +1014,43 @@ async function loadConfig(){
   $('factBtn').textContent = S.factory ? '🏭 ย้ายโรงงาน' : '🏭 ตั้งโรงงาน';
   renderWps(); renderFactory(); buildRoutes();
 }
+// ลิงก์ Google Maps จากพิกัด (ใช้ทั้ง popup และช่องที่อยู่ตอนส่งเข้าคิว)
+function gmapsUrl(lat, lng){ return 'https://www.google.com/maps/search/?api=1&query=' + Number(lat).toFixed(6) + ',' + Number(lng).toFixed(6); }
+// reverse geocode พิกัด → ที่อยู่ (Nominatim ฟรี — fail-soft คืน '')
+async function revGeo(lat, lng){
+  try {
+    const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=th&lat=' + lat + '&lon=' + lng);
+    const d = await res.json();
+    return String((d && d.display_name) || '').trim();
+  } catch (e) { return ''; }
+}
+function wpPopupHtml(wp){
+  const c = wp.team ? teamColor(wp.team) : '#B5653F';
+  return '<div class="wp-pop"><b>' + esc(wp.name) + '</b><br>' +
+    '<span class="pop-team" style="background:' + c + '">' + esc(wp.team || 'ไม่ผูกทีม') + '</span>' +
+    '<div class="muted" style="margin-top:5px">📍 ' + esc(wp.addr || ('พิกัด ' + Number(wp.lat).toFixed(5) + ', ' + Number(wp.lng).toFixed(5))) + '</div>' +
+    '<div style="margin-top:4px"><a href="' + gmapsUrl(wp.lat, wp.lng) + '" target="_blank" rel="noopener" style="color:var(--blu);font-weight:700;text-decoration:none;">🗺 เปิดใน Google Maps</a></div>' +
+    '<div class="pop-btns">' +
+      (wp.team ? '<button class="btn acc" onclick="wpToJob(\'' + esc(wp.id) + '\')">🚐 ส่งเข้าคิวทีม</button> ' : '') +
+      '<button class="btn" onclick="delWp(\'' + esc(wp.id) + '\')">🗑 ลบ</button></div>' +
+    '<div class="muted">' + (wp.team
+      ? 'ส่งเข้าคิว = ขึ้นเป็นงานในแอปของทีมวันที่เลือก (ทีมกดเปิด Google Maps ได้) · ลากหมุดเพื่อย้าย'
+      : 'ผูกทีมก่อนจึงส่งเข้าคิวได้ (ลบแล้วเพิ่มใหม่เลือกทีม) · ลากหมุดเพื่อย้าย') + '</div></div>';
+}
+// เติมที่อยู่ให้จุดแวะที่ยังไม่มี (เรียกตอนเพิ่ม/เปิด popup/ลากย้าย — fire-and-forget)
+async function wpFillAddr(id, mk){
+  const wp = loadWps().find(x => x.id === id);
+  if (!wp || wp.addr) return;
+  const addr = await revGeo(wp.lat, wp.lng);
+  if (!addr) return;
+  const list = loadWps();
+  const it = list.find(x => x.id === id);
+  if (it && !it.addr){
+    it.addr = addr;
+    saveWps(list);
+    if (mk && mk.isPopupOpen && mk.isPopupOpen()) mk.setPopupContent(wpPopupHtml(it));
+  }
+}
 function renderWps(){
   S.wpLayer.clearLayers();
   for (const wp of loadWps()){
@@ -1021,19 +1058,13 @@ function renderWps(){
     const c = wp.team ? teamColor(wp.team) : '#B5653F';
     const icon = L.divIcon({ className:'', html:'<div class="wpin" style="--c:' + c + '">' + esc(wp.icon || '📌') + '</div>', iconSize:[28,28], iconAnchor:[14,14] });
     const mk = L.marker([wp.lat, wp.lng], { icon, draggable: true }).addTo(S.wpLayer);
-    mk.bindPopup('<div class="wp-pop"><b>' + esc(wp.name) + '</b><br>' +
-      '<span class="pop-team" style="background:' + c + '">' + esc(wp.team || 'ไม่ผูกทีม') + '</span>' +
-      '<div class="pop-btns">' +
-        (wp.team ? '<button class="btn acc" onclick="wpToJob(\'' + esc(wp.id) + '\')">🚐 ส่งเข้าคิวทีม</button> ' : '') +
-        '<button class="btn" onclick="delWp(\'' + esc(wp.id) + '\')">🗑 ลบ</button></div>' +
-      '<div class="muted">' + (wp.team
-        ? 'ส่งเข้าคิว = ขึ้นเป็นงานในแอปของทีมวันที่เลือก · ลากหมุดเพื่อย้าย'
-        : 'ผูกทีมก่อนจึงส่งเข้าคิวได้ (ลบแล้วเพิ่มใหม่เลือกทีม) · ลากหมุดเพื่อย้าย') + '</div></div>');
+    mk.bindPopup(wpPopupHtml(wp));
+    mk.on('popupopen', () => { const cur = loadWps().find(x => x.id === wp.id); if (cur){ mk.setPopupContent(wpPopupHtml(cur)); if (!cur.addr) wpFillAddr(wp.id, mk); } });
     mk.on('dragend', () => {
       const ll = mk.getLatLng();
       const list = loadWps();
       const it = list.find(x => x.id === wp.id);
-      if (it){ it.lat = ll.lat; it.lng = ll.lng; saveWps(list); buildRoutes(); }
+      if (it){ it.lat = ll.lat; it.lng = ll.lng; it.addr = ''; saveWps(list); buildRoutes(); wpFillAddr(wp.id, mk); }
     });
   }
 }
@@ -1052,7 +1083,7 @@ async function wpToJob(id){
   S.map.closePopup();
   setStatus('กำลังส่งจุดแวะเข้าคิว ' + wp.team + ' ...');
   try {
-    const r = await apiGas('pk_addStopJob', { date: S.date, team: wp.team, name: wp.name || 'จุดแวะ', lat: wp.lat, lng: wp.lng });
+    const r = await apiGas('pk_addStopJob', { date: S.date, team: wp.team, name: wp.name || 'จุดแวะ', lat: wp.lat, lng: wp.lng, address: wp.addr || '' });
     if (!r || !r.ok){ setStatus('ส่งเข้าคิวไม่สำเร็จ: ' + ((r && r.error) || 'ไม่ทราบสาเหตุ'), true); return; }
     saveWps(loadWps().filter(x => x.id !== id));   // ลบจุดแวะเดิม — เดี๋ยวขึ้นเป็นหมุดงานจาก loadDay แทน
     renderWps();
@@ -1193,18 +1224,21 @@ function hideWpForm(){ $('wpForm').style.display = 'none'; S.pendingLL = null; }
 function saveWpForm(){
   if (!S.pendingLL) { hideWpForm(); return; }
   const list = loadWps();
+  const wpId = 'wp' + Date.now();
   list.push({
-    id: 'wp' + Date.now(),
+    id: wpId,
     name: $('wpName').value.trim() || 'จุดแวะ',
     team: $('wpTeam').value,
     icon: '📌',
     lat: S.pendingLL.lat, lng: S.pendingLL.lng,
+    addr: '',
     after: $('wpTeam').value ? $('wpAfter').value : ''
   });
   saveWps(list);
   hideWpForm();
   if (S.pickMode === 'wp') togglePickMode('wp');
   renderWps(); buildRoutes();
+  wpFillAddr(wpId, null);   // หา "ที่อยู่" จากพิกัดเบื้องหลัง — โชว์ใน popup + ติดไปกับงานตอนส่งเข้าคิว
 }
 
 // ══ ค้นหา: พิกัด/ลิงก์เต็ม → ตรง ๆ · ลิงก์ย่อ → worker /resolve-link ตาม redirect ให้ · ข้อความ → Nominatim (OSM ฟรี) ══
