@@ -1455,10 +1455,14 @@ function renderOfficeShell(){
           <div class="row-form" style="margin-bottom:10px;align-items:center;">
             <div style="font-weight:800;font-size:16px;">🏭 ใบผลิต</div>
             <div style="font-size:13px;color:var(--mu,#6b7a94);">เลขใบ: <b id="pkpWoLabel">(ใบใหม่ — เลขออกตอนบันทึก)</b></div>
-            <button class="btn btn-g btn-sm" onclick="pkpPrint()" style="margin-left:auto;">🖨 พิมพ์</button>
+            <button class="btn btn-g btn-sm" id="pkpSandboxBtn" onclick="pkpSandboxToggle()" style="margin-left:auto;">🧮 ทดคำนวณ</button>
+            <button class="btn btn-g btn-sm" onclick="pkpPrint()">🖨 พิมพ์</button>
             <button class="btn btn-g btn-sm" onclick="pkpReqPrint()">📋 ใบเบิก</button>
             <button class="btn btn-g btn-sm" onclick="pkpNew()">+ ใบใหม่</button>
             <button class="btn btn-g btn-sm" onclick="pkpClearForm()" style="color:var(--rd,#ff453a);">🗑 ล้าง</button>
+          </div>
+          <div id="pkpSandboxBanner" style="display:none;background:rgba(245,166,35,.12);border:1px solid var(--acc,#f5a623);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--acc,#f5a623);">
+            🧮 <b>โหมดทดคำนวณ — ไม่บันทึก ไม่รันเลขใบ</b> · กรอกรายการเพื่อดูค่าตัด/สรุปวัสดุ กด 💵 คำนวณต้นทุน หรือ 🖨 พิมพ์/📋 ใบเบิกได้ตามปกติ · ใบจริงที่ค้างไว้จะกลับมาเมื่อกด "↩ กลับใบผลิตจริง" (กระดาษทดถูกจำไว้ให้ครั้งหน้า)
           </div>
           <div class="row-form" style="margin-bottom:10px;">
             <div class="fg" style="flex:1;min-width:180px;"><label class="fl">ชื่อลูกค้า</label><input class="fi" id="pkpCust" type="text" placeholder="ชื่อลูกค้า" oninput="pkpAutosave()"></div>
@@ -12530,6 +12534,7 @@ function pkpNew(skipRender){
   if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
   if(!skipRender) pkpRenderRows();
   pkpRenderSig();
+  if(_pkpSandbox) pkpSandboxUiApply();   // "+ ใบใหม่"/ล้าง ระหว่างทดคำนวณ → คงป้าย/ปุ่มโหมดทดไว้
 }
 
 // ── autosave ใบผลิตที่กรอกค้าง (เฉพาะใบใหม่ · localStorage) ──
@@ -12542,6 +12547,14 @@ function pkpDraftHasData(raw){
   try{ var d=JSON.parse(raw); return !!(d.cust||d.ref||d.note||d.mainAlu||d.mainMesh||(d.items&&d.items.some(function(it){return it.type||it.w||it.h||it.wl||it.wr||it.cAlu||it.cMesh||it.note;}))); }catch(e){ return false; }
 }
 function pkpAutosave(){
+  if(_pkpSandbox){   // โหมดทดคำนวณ → จำลง key กระดาษทด ไม่แตะร่างใบจริง
+    try{
+      var sraw=JSON.stringify(pkpCollectDraft());
+      if(pkpDraftHasData(sraw)) localStorage.setItem(PKP_SANDBOX_KEY,sraw);
+      else localStorage.removeItem(PKP_SANDBOX_KEY);
+    }catch(e){}
+    return;
+  }
   if(pkpEditingWO) return;   // ไม่ autosave ตอนแก้ใบเดิม (กันทับ)
   try{
     var raw=JSON.stringify(pkpCollectDraft());
@@ -12549,21 +12562,81 @@ function pkpAutosave(){
     else localStorage.removeItem(PKP_DRAFT_KEY);
   }catch(e){}
 }
-function pkpRestoreDraft(raw){
+function pkpRestoreDraft(raw, silent){
   try{
     var d=JSON.parse(raw); var s=function(id,v){var e=document.getElementById(id);if(e)e.value=v||'';};
     s('pkpCust',d.cust); s('pkpIssue',d.issue); s('pkpInstall',d.install); s('pkpRef',d.ref); s('pkpNote',d.note); s('pkpMainAlu',d.mainAlu); s('pkpMainMesh',d.mainMesh);
     pkpItems=(d.items&&d.items.length)?d.items:[pkpBlankItem()];
     if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
     pkpRenderRows();
-    toast('กู้คืนใบที่ค้างไว้แล้ว');
+    if(!silent) toast('กู้คืนใบที่ค้างไว้แล้ว');
   }catch(e){}
 }
 function pkpClearForm(){
+  if(_pkpSandbox){
+    if(!confirm('ล้างกระดาษทดทั้งหมด?')) return;
+    try{localStorage.removeItem(PKP_SANDBOX_KEY);}catch(e){}
+    pkpNew();
+    toast('ล้างกระดาษทดแล้ว');
+    return;
+  }
   if(!confirm('ล้างข้อมูลที่กรอกทั้งหมด? (กู้คืนไม่ได้)')) return;
   try{localStorage.removeItem(PKP_DRAFT_KEY);}catch(e){}
   pkpNew();
   toast('ล้างข้อมูลแล้ว');
+}
+
+// ════════ 🧮 โหมดทดคำนวณ (sandbox) — คิดค่าตัด/สรุปวัสดุ/ใบเบิก/ต้นทุน โดยไม่บันทึก ไม่รันเลข WO ════════
+// สลับ state กับใบจริง: ใบจริงที่ค้าง (รวมใบที่กำลังแก้) ถูก stash ไว้ครบ กลับมาเหมือนเดิม · กระดาษทดจำใน localStorage แยก key
+var _pkpSandbox=false, _pkpRealStash=null;
+var PKP_SANDBOX_KEY='pk_prod_sandbox';
+function pkpSandboxToggle(){ if(_pkpSandbox) pkpSandboxExit(); else pkpSandboxEnter(); }
+function pkpSandboxEnter(){
+  if(_pkpSandbox) return;
+  _pkpRealStash={
+    draft: pkpCollectDraft(), editingWO: pkpEditingWO, loadedStatus: pkpLoadedStatus,
+    sigCheck: pkpSigCheck, sigApprove: pkpSigApprove, costResult: _pkpCostResult,
+    woLabel: (document.getElementById('pkpWoLabel')||{}).textContent||'',
+    saveLabel: (document.getElementById('pkpSaveBtn')||{}).textContent||'💾 บันทึกใบผลิต',
+    costHtml: (document.getElementById('pkpCostWrap')||{}).innerHTML||''
+  };
+  _pkpSandbox=true;
+  pkpEditingWO=null; pkpLoadedStatus=''; pkpSigCheck=null; pkpSigApprove=null; _pkpCostResult=null;
+  var cw=document.getElementById('pkpCostWrap'); if(cw)cw.innerHTML='';
+  var raw=''; try{ raw=localStorage.getItem(PKP_SANDBOX_KEY)||''; }catch(e){}
+  if(raw && pkpDraftHasData(raw)){ pkpRestoreDraft(raw, true); }
+  else { pkpNew(); }
+  pkpSandboxUiApply();
+  toast('🧮 โหมดทดคำนวณ — ไม่บันทึก ไม่รันเลขใบ');
+}
+function pkpSandboxExit(){
+  if(!_pkpSandbox) return;
+  try{
+    var raw=JSON.stringify(pkpCollectDraft());
+    if(pkpDraftHasData(raw)) localStorage.setItem(PKP_SANDBOX_KEY,raw); else localStorage.removeItem(PKP_SANDBOX_KEY);
+  }catch(e){}
+  _pkpSandbox=false;
+  var st=_pkpRealStash; _pkpRealStash=null;
+  if(st){
+    pkpEditingWO=st.editingWO; pkpLoadedStatus=st.loadedStatus;
+    pkpSigCheck=st.sigCheck; pkpSigApprove=st.sigApprove; _pkpCostResult=st.costResult;
+    pkpRestoreDraft(JSON.stringify(st.draft), true);
+    var wo=document.getElementById('pkpWoLabel'); if(wo)wo.textContent=st.woLabel;
+    var sv=document.getElementById('pkpSaveBtn'); if(sv)sv.textContent=st.saveLabel;
+    var cw2=document.getElementById('pkpCostWrap'); if(cw2)cw2.innerHTML=st.costHtml;
+    pkpRenderSig();
+  }
+  pkpSandboxUiApply();
+  toast('↩ กลับสู่ใบผลิตจริงแล้ว');
+}
+function pkpSandboxUiApply(){
+  var on=_pkpSandbox;
+  var sv=document.getElementById('pkpSaveBtn'); if(sv) sv.style.display=on?'none':'';
+  var sig=document.getElementById('pkpSigWrap'); if(sig) sig.style.display=on?'none':'';
+  var banner=document.getElementById('pkpSandboxBanner'); if(banner) banner.style.display=on?'':'none';
+  if(on){ var wo=document.getElementById('pkpWoLabel'); if(wo)wo.textContent='🧮 ทดคำนวณ — ไม่รันเลข'; }
+  var btn=document.getElementById('pkpSandboxBtn');
+  if(btn){ btn.textContent=on?'↩ กลับใบผลิตจริง':'🧮 ทดคำนวณ'; btn.style.color=on?'var(--acc,#f5a623)':''; btn.style.borderColor=on?'var(--acc,#f5a623)':''; }
 }
 
 // ── items CRUD ──
@@ -12674,6 +12747,7 @@ function pkpEquipNeed_(eq){
   return L.filter(function(x){return (Number(x[2])||0)>0;}).map(function(x){return {name:x[0],color:x[1],qty:Number(x[2])||0};});
 }
 async function pkpSave(){
+  if(_pkpSandbox){ toast('🧮 โหมดทดคำนวณ — ไม่บันทึก ไม่รันเลข · กด "↩ กลับใบผลิตจริง" ก่อนถ้าจะบันทึก'); return; }
   var b=pkpBody(); if(_pkpCostResult) b.costSnapshot=_pkpCostResult; var err=pkpValidate(b);
   try{ b.equipNeed = JSON.stringify(pkpEquipNeed_(pkpRequisition(pkpItems, b.mainColorAlu||'').eq)); }catch(e){ b.equipNeed='[]'; }
   if(err){ toast('⚠️ '+err); return; }
@@ -12739,6 +12813,7 @@ async function pkpLoadList(){
 
 // ── เปิดใบมาแก้ ──
 async function pkpOpen(woId){
+  if(_pkpSandbox) pkpSandboxExit();   // เปิดใบจริงระหว่างทดคำนวณ → ออกจากโหมดทดก่อน (กระดาษทดถูกจำไว้แล้ว)
   showLoad('กำลังเปิดใบผลิต...');
   try{
     var r=await getProdGetFast(woId);
