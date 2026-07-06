@@ -608,13 +608,21 @@ function drawTeamLegs(group, seq, curIdx, color, roadLegs){
   group.clearLayers();
   for (let i = 1; i < seq.length; i++){
     const passed = seq[i].done;
+    const cur = (i === curIdx);
     const coords = (roadLegs && roadLegs[i-1] && roadLegs[i-1].coords.length > 1)
       ? roadLegs[i-1].coords
       : [[seq[i-1].lat, seq[i-1].lng], [seq[i].lat, seq[i].lng]];
+    // เส้นรองพื้นสีครีม (casing) — ยกเส้นสีให้ลอยเด่นจากพื้นถนน/ตึกของแผนที่
     L.polyline(coords, {
-      color: color, weight: 3,
-      opacity: passed ? .85 : (i === curIdx ? .8 : .4),
-      dashArray: passed ? null : '7 6'
+      color: '#FFFDF9', weight: cur ? 11 : 9,
+      opacity: (passed || cur) ? .95 : .75, lineCap: 'round', lineJoin: 'round'
+    }).addTo(group);
+    // เส้นสีทีม: ทึบ=ผ่านแล้ว · ประ=ยังไม่ถึง · ช่วงที่กำลังวิ่ง หนา+เข้มสุด
+    L.polyline(coords, {
+      color: color, weight: cur ? 6 : 4.5,
+      opacity: passed ? .95 : (cur ? .95 : .7),
+      dashArray: passed ? null : (cur ? '12 9' : '8 8'),
+      lineCap: passed ? 'round' : 'butt', lineJoin: 'round'
     }).addTo(group);
   }
 }
