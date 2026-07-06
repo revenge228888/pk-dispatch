@@ -9026,7 +9026,11 @@ function recordRenderEntry(e, idx, ro){
     <div class="recm-entry">
       <div class="recm-entry-head">
         <div class="recm-entry-num">รายการที่ ${num}</div>
-        ${!ro?`<button class="recm-rm-entry" onclick="recordRemoveEntry(${idx})">× ลบ</button>`:''}
+        ${!ro?`<div style="display:flex;gap:6px;align-items:center;">
+          <button class="recm-rm-entry" style="color:var(--tx);border-color:var(--bdr);${idx===0?'opacity:.35;':''}" ${idx===0?'disabled':''} onclick="recordMoveEntry(${idx},-1)" title="เลื่อนขึ้น">▲</button>
+          <button class="recm-rm-entry" style="color:var(--tx);border-color:var(--bdr);${idx===_recForm.entries.length-1?'opacity:.35;':''}" ${idx===_recForm.entries.length-1?'disabled':''} onclick="recordMoveEntry(${idx},1)" title="เลื่อนลง">▼</button>
+          <button class="recm-rm-entry" onclick="recordRemoveEntry(${idx})">× ลบ</button>
+        </div>`:''}
       </div>
       <div class="fg" style="margin-bottom:10px;">
         <label class="fl">📍 ตำแหน่ง</label>
@@ -9161,6 +9165,15 @@ function recordAddEntry(){
   }, 50);
 }
 
+// สลับลำดับรายการ (▲▼) — โครงเดียวกับฝั่งใบเสนอราคา · ลำดับใหม่ไหลไปใบเสนอราคาตอนแปลงด้วย
+function recordMoveEntry(idx, dir){
+  const es = _recForm.entries, ni = idx + dir;
+  if (ni < 0 || ni >= es.length) return;
+  const t = es[idx]; es[idx] = es[ni]; es[ni] = t;
+  es.forEach((e, i) => e.no = i + 1);
+  _recForm.dirty = true;
+  recordRenderForm();
+}
 function recordRemoveEntry(idx){
   if (_recForm.entries.length <= 1) { toast('ต้องมีอย่างน้อย 1 รายการ'); return; }
   if (!confirm('ลบรายการที่ ' + (idx+1) + '?')) return;
@@ -10366,7 +10379,11 @@ function quoteRenderEntry(e, idx, ro){
     <div class="quom-entry ${cls}">
       <div class="quom-entry-head">
         <div class="quom-entry-num">รายการที่ ${num}</div>
-        ${!ro?`<button class="quom-rm-entry" onclick="quoteRemoveEntry(${idx})">× ลบ</button>`:''}
+        ${!ro?`<div style="display:flex;gap:6px;align-items:center;">
+          <button class="quom-rm-entry" style="color:var(--tx);border-color:var(--bdr);${idx===0?'opacity:.35;':''}" ${idx===0?'disabled':''} onclick="quoteMoveEntry(${idx},-1)" title="เลื่อนขึ้น">▲</button>
+          <button class="quom-rm-entry" style="color:var(--tx);border-color:var(--bdr);${idx===_quoForm.entries.length-1?'opacity:.35;':''}" ${idx===_quoForm.entries.length-1?'disabled':''} onclick="quoteMoveEntry(${idx},1)" title="เลื่อนลง">▼</button>
+          <button class="quom-rm-entry" onclick="quoteRemoveEntry(${idx})">× ลบ</button>
+        </div>`:''}
       </div>
       <div class="fg" style="margin-bottom:10px;">
         <label class="fl">📍 ตำแหน่ง</label>
@@ -10639,6 +10656,15 @@ function quoteAddEntry(){
   setTimeout(() => { document.getElementById('quomModal').scrollTop = 99999; }, 50);
 }
 
+// สลับลำดับรายการ (▲▼) — reorder array + renumber no ให้ฟอร์ม/PDF เลขตรงกันเสมอ
+function quoteMoveEntry(idx, dir){
+  const es = _quoForm.entries, ni = idx + dir;
+  if (ni < 0 || ni >= es.length) return;
+  const t = es[idx]; es[idx] = es[ni]; es[ni] = t;
+  es.forEach((e, i) => e.no = i + 1);
+  _quoForm.dirty = true;
+  quoteRenderForm();
+}
 function quoteRemoveEntry(idx){
   if (_quoForm.entries.length <= 1) { toast('ต้องมีอย่างน้อย 1 รายการ'); return; }
   if (!confirm('ลบรายการที่ ' + (idx+1) + '?')) return;
