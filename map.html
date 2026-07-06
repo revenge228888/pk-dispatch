@@ -80,6 +80,9 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
   display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(56,44,35,.4);position:relative;}
 .veh::before{content:'';position:absolute;inset:-3px;border-radius:50%;border:2px solid var(--c);opacity:.6;animation:vpulse 2.2s ease-out infinite;}
 @keyframes vpulse{0%{transform:scale(.7);opacity:.6;}100%{transform:scale(2.1);opacity:0;}}
+.veh.live{border-color:var(--grn);}
+.veh.live::before{border-color:var(--grn);animation-duration:1.4s;}
+.veh.live::after{content:'📡';position:absolute;top:-11px;right:-9px;font-size:11px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));}
 @media (prefers-reduced-motion: reduce){ .veh::before{animation:none;opacity:.25;} }
 
 /* การ์ดสรุปทีม */
@@ -543,6 +546,7 @@ function computeRouteSeq(stops, wps, factory){
 function buildRoutes(){
   S.routeLayer.clearLayers();
   S.anims = [];
+  S.vehMks = {};
   S.roadInfo = {};
   S.teamRoutes = {};
   const token = ++S.routeToken;
@@ -570,12 +574,14 @@ function buildRoutes(){
       const icon = L.divIcon({ className:'', html:'<div class="veh" style="--c:' + c + '">' + teamEmoji(team) + '</div>', iconSize:[30,30], iconAnchor:[15,15] });
       const at = veh.mode === 'go' ? veh.from : veh.at;
       const mk = L.marker(at, { icon, zIndexOffset: 500, interactive: false }).addTo(S.routeLayer);
+      S.vehMks[team] = mk;
       if (veh.mode === 'go'){ anim = makeAnim(mk, [veh.from, veh.to]); S.anims.push(anim); }
     }
     teamJobs.push({ team: team, seq: seq, curIdx: curIdx, color: c, group: group, anim: anim });
   }
   startAnimLoop();
   enhanceRoads(teamJobs, token);
+  if (typeof applyLiveLoc === 'function') applyLiveLoc();   // 📡 ทับด้วยตำแหน่งจริงถ้ามีสัญญาณสด
 }
 // ระยะห่างสองจุดหน่วยกม. (equirect — สำหรับเทียบ/ประมาณเท่านั้น)
 function distKm(a, b){
@@ -700,6 +706,37 @@ function startAnimLoop(){
   requestAnimationFrame(tick);
 }
 
+// ══ 📡 ตำแหน่งสดทีม (ส่งจากแอปช่าง/เซลล์ช่วงเวลาทำงาน) — poll ทุก 45 วิ · สด ≤10 นาที = หมุดจริงแทนรถจำลอง ══
+const LOC_POLL_MS = 45000, LOC_FRESH_MIN = 10;
+function locAgeMin(l){ const t = Date.parse((l && l.ts) || ''); return isNaN(t) ? null : (Date.now() - t) / 60000; }
+function locFresh(l){ const a = locAgeMin(l); return a != null && a >= -5 && a <= LOC_FRESH_MIN; }
+function locAgeTxt(l){ const a = locAgeMin(l); if (a == null) return ''; return a < 1.5 ? 'เมื่อครู่' : Math.round(a) + ' นาทีที่แล้ว'; }
+async function pollLoc(){
+  try {
+    const r = await api('/loc-list', {});
+    if (r && r.ok){
+      S.liveLoc = {};
+      (r.locs || []).forEach(l => { S.liveLoc[l.team] = l; });
+      applyLiveLoc();
+      renderTeamCards();
+    }
+  } catch (e) {}
+}
+function applyLiveLoc(){
+  if (!S.liveLayer) return;
+  S.liveLayer.clearLayers();
+  for (const [team, mk0] of Object.entries(S.vehMks || {})) mk0.setOpacity(1);
+  for (const [team, l] of Object.entries(S.liveLoc || {})){
+    if (!locFresh(l) || S.teamOn[team] === false) continue;
+    const mk0 = (S.vehMks || {})[team];
+    if (mk0) mk0.setOpacity(0);   // สดอยู่ → ซ่อนรถจำลอง ใช้ตำแหน่งจริงแทน
+    const c = teamColor(team);
+    const icon = L.divIcon({ className:'', html:'<div class="veh live" style="--c:' + c + '">' + teamEmoji(team) + '</div>', iconSize:[30,30], iconAnchor:[15,15] });
+    const mk = L.marker([l.lat, l.lng], { icon, zIndexOffset: 600 }).addTo(S.liveLayer);
+    mk.bindTooltip('📡 ' + team + ' · ตำแหน่งจริง ' + locAgeTxt(l) + (l.username ? ' · ' + l.username : ''), { direction:'top', offset:[0,-16] });
+  }
+}
+
 function renderTeamCards(){
   const byTeam = {};
   for (const j of Object.values(S.jobs)){
@@ -725,6 +762,12 @@ function renderTeamCards(){
       '<div class="tstat">' + (cur
         ? head + '<b>' + esc((cur.orderLabel || '') + ' · ' + cur.name) + '</b>'
         : '<b>จบครบทุกงานแล้ว ✓</b>') + '</div>' +
+      (function(){
+        const lv = (S.liveLoc || {})[team];
+        if (lv && locFresh(lv)) return '<div class="checkin" style="background:rgba(31,164,99,.14);color:var(--grn)">📡 ตำแหน่งจริง · ' + locAgeTxt(lv) + '</div>';
+        if (lv) return '<div class="checkin">📡 ขาดสัญญาณ ' + locAgeTxt(lv) + ' — แสดงตำแหน่งจำลอง</div>';
+        return '';
+      })() +
       (lastCk ? '<div class="checkin">✓ อัปเดตล่าสุด ' + lastCk + ' · ' + esc(lastLabel) + '</div>' : '') +
       (S.roadInfo[team] && cur && cur.status !== 'working'
         ? '<div class="checkin" style="background:rgba(47,115,230,.10);color:var(--blu)">🛣 ช่วงถัดไป ~' + fmtKm(S.roadInfo[team].dist) + ' · ~' + Math.max(1, Math.round(S.roadInfo[team].dur / 60)) + ' นาที</div>'
@@ -1339,10 +1382,13 @@ function boot(){
   S.jobLayer = L.layerGroup().addTo(S.map);
   S.wpLayer = L.layerGroup().addTo(S.map);
   S.routeLayer = L.layerGroup().addTo(S.map);
+  S.liveLayer = L.layerGroup().addTo(S.map);
   S.searchLayer = L.layerGroup().addTo(S.map);
+  S.liveLoc = {}; S.vehMks = {};
   S.map.on('click', onMapClick);
   S.date = ymdToday();
   loadConfig().then(loadDay);
+  pollLoc(); setInterval(pollLoc, LOC_POLL_MS);   // 📡 ตำแหน่งสดทีมภาคสนาม
 }
 async function refreshAll(){ await loadConfig(); loadDay(); }
 boot();
