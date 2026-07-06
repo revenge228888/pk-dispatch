@@ -4929,7 +4929,8 @@ function openCreateQuoteForJob(jobIdx){
   const j = window._officeJobs[jobIdx];
   if (!j) return;
   quoteOpenNew({
-    customer: { name: j.name || '', phone: '' },
+    customer: { name: j.name || '', phone: '', address: j.address || '' },
+    doc: j.address ? { installAddress: j.address } : undefined,
     linkedJobId: j.id
   });
 }
@@ -5530,6 +5531,7 @@ async function salesMeasureQuote(j){
     hideLoad();
     let quoteEntries = [];
     let linkedRecordId = '';
+    let recCust = null;   // ลูกค้าจากใบจดขนาด (มีที่อยู่/เบอร์ที่จดไว้)
     if (rr.ok && rr.records && rr.records.length > 0) {
       const latest = rr.records.sort((a,b) => b.updatedAt - a.updatedAt)[0];
       showLoad('กำลังโหลดขนาด...');
@@ -5538,11 +5540,14 @@ async function salesMeasureQuote(j){
       if (rg.ok && rg.record) {
         quoteEntries = pkRecordEntriesToQuote(rg.record.entries);
         linkedRecordId = latest.id;
+        recCust = rg.record.customer || null;
       }
     }
 
+    const addr = (recCust && recCust.address) || j.address || '';
     quoteOpenNew({
-      customer: { name: j.name || '', phone: '' },
+      customer: { name: (recCust && recCust.name) || j.name || '', phone: (recCust && recCust.phone) || '', address: addr },
+      doc: addr ? { installAddress: addr } : undefined,
       linkedJobId: j.id,
       linkedRecordId,
       entries: quoteEntries.length ? quoteEntries : undefined
@@ -9381,7 +9386,8 @@ async function recordHandoffToQuote(){
     quoteOpenNew({
       customer: _recForm.customer,
       mainColor: _recForm.mainColor,
-      doc: { note: _recForm.note, showNote: _recForm.showNote },
+      doc: { note: _recForm.note, showNote: _recForm.showNote,
+             installAddress: (_recForm.customer && _recForm.customer.address) || '' },   // ที่อยู่จากใบจดขนาด → ที่อยู่หน้างานบนใบเสนอราคา
       linkedJobId: _recForm.linkedJobId,
       linkedRecordId: _recForm.id,
       entries: quoteEntries
