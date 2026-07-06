@@ -3065,7 +3065,10 @@ function expenseDetailOpen(id){
         '<button class="btn btn-p" style="flex:1;" onclick="expenseDetailApprove(\'' + it.id + '\')">✅ อนุมัติ</button>' +
         '<button class="btn btn-d" style="flex:1;" onclick="expenseRejectOpen(\'' + it.id + '\')">↩️ ตีกลับ</button></div>';
     } else if (it.status === 'อนุมัติแล้ว'){
-      actions = '<button class="btn btn-p" style="width:100%;margin-top:14px;" onclick="expensePayOpen(\'' + it.id + '\')">💸 ยืนยันจ่าย + แนบสลิป</button>';
+      actions = '<button class="btn btn-p" style="width:100%;margin-top:14px;" onclick="expensePayOpen(\'' + it.id + '\')">💸 ยืนยันจ่าย + แนบสลิป</button>' +
+        '<div style="display:flex;gap:8px;margin-top:8px;">' +
+        '<button class="btn btn-g" style="flex:1;" onclick="expenseUnapprove(\'' + it.id + '\')">⏪ ยกเลิกอนุมัติ</button>' +
+        '<button class="btn btn-d" style="flex:1;" onclick="expenseRejectOpen(\'' + it.id + '\')">↩️ ตีกลับ</button></div>';
     }
   }
   // ปุ่มรับทราบ — เจ้าของใบที่ถูกตีกลับ และยังไม่รับทราบ
@@ -3790,6 +3793,21 @@ async function expenseDoApprove(id){
   } catch(e){ hideLoad(); }
 }
 
+// ── ⏪ ยกเลิกอนุมัติ (ใบรอจ่าย → กลับไปรออนุมัติ) — เหตุผลใส่หรือไม่ก็ได้ ──
+async function expenseUnapprove(id){
+  const reason = prompt('⏪ ยกเลิกอนุมัติใบ ' + id + '\nใบจะกลับไปสถานะ "รออนุมัติ" (ผู้ตรวจ/เวลาอนุมัติถูกล้าง)\n\nเหตุผล (เว้นว่างได้):');
+  if (reason == null) return;
+  showLoad('กำลังยกเลิกอนุมัติ...');
+  try {
+    const r = await call({ action:'pk_expenseUnapprove', id: id, reason: reason.trim() });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'ยกเลิกอนุมัติไม่ได้')); return; }
+    toast('⏪ ยกเลิกอนุมัติแล้ว ' + id + ' — กลับไปรออนุมัติ');
+    expenseDetailClose();
+    expenseReloadActive();
+  } catch(e){ hideLoad(); }
+}
+
 let _expRejectId = '';
 function expenseRejectOpen(id){
   _expRejectId = id;
@@ -4173,7 +4191,10 @@ function bkTeamMetersHtml(s){
     var badge = s.recommendedTeam
       ? '<div style="font-size:11px;color:var(--acc);margin-top:3px;font-weight:600;">\u2b50 แนะนำ: ทีม '+(s.recommendedTeam||'').replace(/[^A-Za-z]/g,'')+(s.usedBackup?' \u00b7 ต้องใช้สำรอง':'')+'</div>'
       : '<div style="font-size:11px;color:var(--rd);margin-top:3px;">\u26a0 ทุกทีมเต็มวันนี้</div>';
-    return '<div style="margin:7px 0 2px;">'+rows+badge+'</div>';
+    var extra = '';
+    if (s.unplacedCount) extra += '<div style="font-size:10.5px;color:var(--rd);margin-top:2px;">⚠ จัดไม่ลงอีก '+s.unplacedCount+' งาน (★'+s.unplacedScore+') — ไม่รวมในแถบทีม</div>';
+    if (s.measureByTech) extra += '<div style="font-size:10.5px;color:var(--mu);margin-top:2px;">👷 ช่างรับงานวัดวันนี้ ★'+s.measureByTech+' (ไม่อยู่ในแถบเซลล์)</div>';
+    return '<div style="margin:7px 0 2px;">'+rows+badge+extra+'</div>';
   }
   if (s.capacity>0){
     var p=Math.min(100,Math.round(s.loadBefore/s.capacity*100));
