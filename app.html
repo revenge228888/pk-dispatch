@@ -5354,6 +5354,7 @@ async function salesMeasureLoad(){
     if (!r.ok) { w.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
     _smJobs = r.jobs || [];
     salesMeasureRender();
+    if (date === pkpToday()) locAutoStartFromJobs(_smJobs);   // 📡 มีงานรับไว้แล้ววันนี้ → เริ่มส่งตำแหน่งต่อเลย
   } catch(e) { w.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
 }
 
@@ -5429,6 +5430,7 @@ async function salesMeasureAccept(id){
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast('✅ รับงานแล้ว');
+    locMarkWorkStarted();   // 📡 เริ่มส่งตำแหน่งช่วงทำงาน (ถึง 19:00)
     salesMeasureLoad();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
@@ -6111,6 +6113,7 @@ async function techLoadJobs(){
     }
     _techJobs = r.jobs || [];
     techRenderJobs();
+    if (_techDate === pkpToday()) locAutoStartFromJobs(_techJobs);   // 📡 มีงานรับไว้แล้ววันนี้ → เริ่มส่งตำแหน่งต่อเลย
   } catch(e) {
     document.getElementById('tJobsList').innerHTML = '<div class="loading-row">โหลดไม่ได้</div>';
   }
@@ -6253,6 +6256,75 @@ function getQuickGps(timeoutMs){
   });
 }
 
+// ════════ 📡 LOC WATCHER — ส่งตำแหน่งทีมภาคสนาม (ช่าง/เซลล์) แบบช่วงเวลา ════════
+// กติกา: เริ่มส่งเมื่อ "รับงานแรกของวัน" (หรือเปิดแอปแล้วพบว่ามีงานรับไว้แล้ววันนี้) · หยุดอัตโนมัติ 19:00
+// ส่งทุก 90 วิ เฉพาะตอนหน้าแอปเปิดอยู่ (ข้อจำกัดเบราว์เซอร์ — ปิดจอ/สลับแอป = หยุด) · fail-soft ทุกจุด
+let _locTimer = null, _locDenied = false, _locLastPing = 0, _locVisHooked = false;
+const LOC_PING_MS = 90000, LOC_END_HOUR = 19;
+function locFlagKey(){ const d = new Date(); return 'pk_loc_on_' + d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function locRoleOk(){ return CURRENT_USER && (CURRENT_USER.role === 'tech' || CURRENT_USER.role === 'sales'); }
+function locWindowActive(){
+  if (new Date().getHours() >= LOC_END_HOUR) return false;   // เลย 19:00 = หยุดส่ง
+  try { return localStorage.getItem(locFlagKey()) === '1'; } catch(e){ return false; }
+}
+// เรียกตอนกดรับงาน (ช่าง/เซลล์) — เปิดหน้าต่างเวลาส่งของวันนี้
+function locMarkWorkStarted(){
+  if (!locRoleOk()) return;
+  try { localStorage.setItem(locFlagKey(), '1'); } catch(e){}
+  locEnsure();
+}
+function locPingOnce(){
+  if (!locRoleOk() || !navigator.geolocation || !locWindowActive()) return;
+  navigator.geolocation.getCurrentPosition(function(pos){
+    _locDenied = false; locHideBanner();
+    _locLastPing = Date.now();
+    try {
+      fetch(API.replace(/\/api$/, '/loc-ping'), {
+        method:'POST', headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ username: CURRENT_USER.username, token: CURRENT_USER.token,
+          lat: pos.coords.latitude, lng: pos.coords.longitude, acc: Math.round(pos.coords.accuracy || 0) })
+      }).catch(function(){});
+    } catch(e){}
+  }, function(err){
+    if (err && err.code === 1){ _locDenied = true; locShowBanner(); }   // PERMISSION_DENIED
+  }, { enableHighAccuracy:false, timeout:15000, maximumAge:60000 });
+}
+// เริ่ม watcher (เรียกซ้ำได้ ไม่ซ้อน) — interval เดินตลอดแต่ ping จริงเฉพาะในช่วงเวลา+หน้าเปิด
+function locEnsure(){
+  if (!locRoleOk()) return;
+  if (!_locVisHooked){
+    _locVisHooked = true;
+    document.addEventListener('visibilitychange', function(){
+      if (!document.hidden && Date.now() - _locLastPing > LOC_PING_MS) locPingOnce();   // กลับมาที่แอป → ส่งทันทีถ้าเว้นนาน
+    });
+  }
+  if (_locTimer) return;
+  _locTimer = setInterval(function(){ if (!document.hidden) locPingOnce(); }, LOC_PING_MS);
+  locPingOnce();
+}
+// เปิดแอปแล้วพบว่ามีงานที่รับไว้แล้ววันนี้ (เช่นรับจากเครื่องอื่น/reload) → เปิดหน้าต่างส่งให้เลย
+function locAutoStartFromJobs(jobs){
+  if (!locRoleOk() || !Array.isArray(jobs)) return;
+  if (jobs.some(function(j){ return j && (j.status === 'working' || j.status === 'done'); })) locMarkWorkStarted();
+  else locEnsure();   // ยังไม่รับงาน → watcher standby (จะเริ่มส่งเมื่อ flag เปิด)
+}
+// ── แถบเตือนตอนโดนปฏิเสธ permission + วิธีเปิดตามเครื่อง ──
+function locShowBanner(){
+  var b = document.getElementById('locBanner');
+  if (b){ b.style.display = ''; return; }
+  b = document.createElement('div');
+  b.id = 'locBanner';
+  b.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:900;background:#3a2228;color:#ffc9c3;border-top:2px solid #E23B3B;padding:10px 14px;font-size:12.5px;line-height:1.65;';
+  b.innerHTML = '<b>📡 การแชร์ตำแหน่งถูกปิดอยู่</b> — ออฟฟิศจะไม่เห็นตำแหน่งทีมบนแผนที่ (ระบบอื่นใช้ได้ปกติ)<br>'
+    + 'วิธีเปิด: <b>Android/Chrome</b> แตะไอคอน 🔒 ข้างที่อยู่เว็บ → การอนุญาต → ตำแหน่ง → อนุญาต · '
+    + '<b>iPhone/Safari</b> แตะปุ่ม "aA" หน้าที่อยู่เว็บ → การตั้งค่าเว็บไซต์ → ตำแหน่ง → อนุญาต (ถ้าไม่เจอ: ตั้งค่า → Safari → ตำแหน่ง)'
+    + '<div style="margin-top:7px;display:flex;gap:8px;">'
+    + '<button onclick="locPingOnce()" style="background:#E23B3B;border:none;color:#fff;border-radius:8px;padding:6px 14px;font-weight:700;cursor:pointer;font-family:inherit;">ลองอีกครั้ง</button>'
+    + '<button onclick="document.getElementById(\'locBanner\').style.display=\'none\'" style="background:transparent;border:1px solid #7a5a5a;color:#ffc9c3;border-radius:8px;padding:6px 14px;cursor:pointer;font-family:inherit;">ปิดไว้ก่อน</button></div>';
+  document.body.appendChild(b);
+}
+function locHideBanner(){ var b = document.getElementById('locBanner'); if (b) b.style.display = 'none'; }
+
 // ── รับงาน ──
 async function techAcceptJob(id){
   if (!confirm('รับงานนี้?')) return;
@@ -6271,6 +6343,7 @@ async function techAcceptJob(id){
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast('✅ รับงานแล้ว');
+    locMarkWorkStarted();   // 📡 เริ่มส่งตำแหน่งช่วงทำงาน (ถึง 19:00)
     techLoadJobs();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
