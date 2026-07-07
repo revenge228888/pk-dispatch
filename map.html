@@ -561,7 +561,8 @@ function buildRoutes(){
   for (const [team, jobs] of Object.entries(byTeam)){
     jobs.sort((a,b) => (a.orderNum||999) - (b.orderNum||999));
     const stops = jobs.map(j => ({ lat:j.glat, lng:j.glng, done:j.status === 'done', working:j.status === 'working',
-      label:j.orderLabel || '', id:j.id, key:j.kind + ':' + j.id, name:j.name || '', status:j.status }));
+      label:j.orderLabel || '', id:j.id, key:j.kind + ':' + j.id, name:j.name || '', status:j.status,
+      desc:(j.description || '').trim() }));
     const wps = allWps.filter(w => w.team === team && geoOk(w.lat, w.lng))
       .map(w => ({ lat:w.lat, lng:w.lng, done:false, working:false, wp:true, label:w.name, after:w.after || '' }));
     const { seq, curIdx, veh } = computeRouteSeq(stops, wps, S.factory);
@@ -840,7 +841,10 @@ function openTeam(team){
         : '<span class="tp-st">รอคิว</span>';
       const text = s.factory ? 'โรงงาน (จุดเริ่ม)' : s.wp ? s.label : ((s.label ? s.label + ' · ' : '') + (s.name || ''));
       const click = s.key ? ' onclick="openJob(\'' + esc(s.key) + '\')"' : '';
-      rows.push('<div class="tp-row' + (s.key ? ' link' : '') + '"' + click + '>' + icon + '<span class="tp-name">' + esc(text) + '</span>' + st + '</div>');
+      const descLine = (s.desc)
+        ? '<small style="display:block;color:var(--mu);font-weight:400;line-height:1.35;">🔧 ' + esc(s.desc.length > 80 ? s.desc.slice(0, 80) + '…' : s.desc) + '</small>'
+        : '';
+      rows.push('<div class="tp-row' + (s.key ? ' link' : '') + '"' + click + '>' + icon + '<span class="tp-name">' + esc(text) + descLine + '</span>' + st + '</div>');
     }
     h += '<div class="pn-sec">เส้นทางวันนี้ (ตามลำดับคิว)</div><div class="tp">' + rows.join('') + '</div>' +
       '<div class="pn-meta" style="margin-top:4px">' +
@@ -855,9 +859,12 @@ function openTeam(team){
   }
   const misses = Object.entries(S.jobs).filter(([, j]) => j.team === team && j.glat === undefined);
   if (misses.length){
-    h += '<div class="pn-sec">ไม่มีพิกัด (' + misses.length + ')</div>' + misses.map(([key, j]) =>
-      '<div class="tp-row link" onclick="openJob(\'' + esc(key) + '\')">⚠<span class="tp-name">' + esc((j.orderLabel ? j.orderLabel + ' · ' : '') + (j.name || j.id)) + '</span>' +
-      '<button class="btn ng-pin" onclick="event.stopPropagation();startGeoPin(\'' + esc(key) + '\')">📌 ปักพิกัด</button></div>').join('');
+    h += '<div class="pn-sec">ไม่มีพิกัด (' + misses.length + ')</div>' + misses.map(([key, j]) => {
+      const d = String(j.description || '').trim();
+      const dl = d ? '<small style="display:block;color:var(--mu);font-weight:400;line-height:1.35;">🔧 ' + esc(d.length > 80 ? d.slice(0, 80) + '…' : d) + '</small>' : '';
+      return '<div class="tp-row link" onclick="openJob(\'' + esc(key) + '\')">⚠<span class="tp-name">' + esc((j.orderLabel ? j.orderLabel + ' · ' : '') + (j.name || j.id)) + dl + '</span>' +
+      '<button class="btn ng-pin" onclick="event.stopPropagation();startGeoPin(\'' + esc(key) + '\')">📌 ปักพิกัด</button></div>';
+    }).join('');
   }
   $('panel').innerHTML = h;
 }
@@ -937,6 +944,39 @@ async function saveReorder(){
   }
 }
 
+// ══ 🔁 ย้ายงานข้ามทีม (จาก panel งาน) — งานวัดย้ายได้ทุกทีม (ช่าง/เซลล์) · งานติดตั้งเฉพาะทีมช่าง ══
+function teamOptionsFor(j){
+  const set = new Set(['ช่างทีม A', 'ช่างทีม B', 'ช่างทีม C']);
+  if (j.kind === 'measure') ['เซลล์ทีม A', 'เซลล์ทีม B', 'เซลล์ทีม C'].forEach(t => set.add(t));
+  for (const x of Object.values(S.jobs)){
+    if (!x.team || x.team === '(ไม่ระบุทีม)') continue;
+    if (j.kind === 'measure' || /ช่าง/.test(x.team)) set.add(x.team);
+  }
+  return [...set].sort();
+}
+async function moveJobTeam(key){
+  const j = S.jobs[key];
+  if (!j) return;
+  const sel = $('jobTeamSel');
+  const team = sel ? sel.value : '';
+  if (!team) return;
+  if (team === j.team){ setStatus('งานนี้อยู่ทีม ' + team + ' อยู่แล้ว'); return; }
+  if (j.kind !== 'measure' && team.indexOf('เซลล์') !== -1){ setStatus('งานติดตั้งย้ายให้ทีมเซลล์ไม่ได้ — เซลล์ทำได้เฉพาะงานวัด', true); return; }
+  if (!confirm('ย้าย "' + (j.orderLabel ? j.orderLabel + ' · ' : '') + (j.name || j.id) + '"\nจาก ' + j.team + ' → ' + team + ' ?\n\nทีมใหม่จะเห็นงานนี้ในแอปทันที')) return;
+  setStatus('กำลังย้ายทีม...');
+  try {
+    const body = { id: j.id, team: team };
+    if (j.kind === 'measure') body.sheet = 'measure';
+    const r = await apiGas('pk_editJob', body);
+    if (!r || !r.ok){ setStatus('ย้ายทีมไม่สำเร็จ: ' + ((r && r.error) || 'ไม่ทราบสาเหตุ'), true); return; }
+    setStatus('✓ ย้าย "' + (j.name || j.id) + '" ไป ' + team + ' แล้ว — จัดลำดับคิวทีมใหม่ได้จากปุ่ม ↕');
+    closePanel();
+    await loadDay();
+  } catch (e) {
+    setStatus('ย้ายทีมไม่สำเร็จ: ' + e, true);
+  }
+}
+
 // ══ detail panel ══
 function openJob(key){
   const j = S.jobs[key];
@@ -973,6 +1013,14 @@ function openJob(key){
       (j.amount ? '<div>ยอด<b>฿' + Number(j.amount).toLocaleString() + '</b></div>' : '') +
       (j.worker ? '<div>ผู้ทำ<b>' + esc(j.worker) + '</b></div>' : '') +
     '</div>' +
+    '<div class="pn-sec">ย้ายทีม</div>' +
+    '<div style="display:flex;gap:6px;align-items:center;">' +
+      '<select id="jobTeamSel" style="flex:1;font-family:var(--sans);font-size:12.5px;padding:6px 8px;border:1px solid var(--bdr);border-radius:8px;background:var(--surf2);color:var(--tx);">' +
+        teamOptionsFor(j).map(function(t){ return '<option value="' + esc(t) + '"' + (t === j.team ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join('') +
+      '</select>' +
+      '<button class="btn acc" onclick="moveJobTeam(\'' + esc(key) + '\')">🔁 ย้าย</button>' +
+    '</div>' +
+    (j.kind !== 'measure' ? '<div class="muted" style="margin-top:3px;">งานติดตั้งย้ายได้เฉพาะทีมช่าง (เซลล์ทำได้เฉพาะงานวัด)</div>' : '') +
     '<div class="pn-sec">รายการงาน</div>' +
     '<div class="pn-items">' + esc(j.description || '-') + (j.sheetStatus ? '\n\nสถานะชีท: ' + esc(j.sheetStatus) : '') + '</div>' +
     '<div class="pn-sec">TIMELINE</div><div class="tl">' + tl + '</div>' +
