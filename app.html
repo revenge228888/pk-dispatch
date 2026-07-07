@@ -552,6 +552,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
         <button class="btn btn-g" style="flex:1;" onclick="jobEditClose()">ยกเลิก</button>
         <button class="btn btn-p" style="flex:1;" id="jeSaveBtn" onclick="jobEditSave()">บันทึก</button>
       </div>
+      <button class="btn btn-g" id="jeConvertBtn" style="width:100%;margin-top:8px;color:var(--acc);border-color:var(--acc);" onclick="jobConvertToMeasure()">📏 แปลงเป็นงานวัด (ย้ายไปคิววัดงาน)</button>
     </div>
   </div>
 </div>
@@ -5085,6 +5086,16 @@ function renderSalesStub(){
       <!-- BOOKING -->
       <div id="sTabBooking">
         <div class="section-pad">
+          <!-- ประเภทงาน -->
+          <div class="row-form" style="margin-bottom:10px;">
+            <div class="fg" style="flex:1;">
+              <label class="fl">ประเภทงาน</label>
+              <div style="display:flex;gap:8px;">
+                <button class="bk-mode-btn on" id="sBkTypeInstall" onclick="setSalesBkType('install')">🔧 ลงคิวติดตั้ง</button>
+                <button class="bk-mode-btn" id="sBkTypeMeasure" onclick="setSalesBkType('measure')">📏 ลงคิววัดงาน</button>
+              </div>
+            </div>
+          </div>
           <!-- รูปแบบ -->
           <div class="row-form" style="margin-bottom:14px;">
             <div class="fg" style="flex:1;">
@@ -5631,6 +5642,14 @@ function setSalesBkMode(m){
   document.getElementById('sBkRaw').style.display = (m==='raw') ? 'block' : 'none';
 }
 
+// ── ประเภทงานที่ลงคิว: install (ชีตติดตั้ง เดิม) | measure (ชีตวัดงาน — ID M####) ──
+let _sBkType = 'install';
+function setSalesBkType(t){
+  _sBkType = (t === 'measure') ? 'measure' : 'install';
+  document.getElementById('sBkTypeInstall').classList.toggle('on', _sBkType === 'install');
+  document.getElementById('sBkTypeMeasure').classList.toggle('on', _sBkType === 'measure');
+}
+
 // debounce slot check
 async function salesCheckSlot(){
   clearTimeout(_sSlotTimer);
@@ -5660,6 +5679,7 @@ async function salesCheckSlot(){
 
 async function salesSubmitBooking(){
   const body = { action:'pk_salesAddBooking', username: CURRENT_USER.username };
+  if (_sBkType === 'measure') body.type = 'measure';   // ไม่ส่ง = ติดตั้งเดิม
 
   if (_sBkMode === 'form') {
     const date     = document.getElementById('sBkDate').value;
@@ -5689,7 +5709,7 @@ async function salesSubmitBooking(){
     const r = await call(body);
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error || 'ผิดพลาด')); return; }
-    toast(`✅ ลงคิวสำเร็จ #${r.id} — รอ CF`);
+    toast(`✅ ลงคิว${r.kind === 'measure' ? 'วัดงาน' : 'ติดตั้ง'}สำเร็จ #${r.id} — รอ CF`);
     clearMeasureLink();  // ล้าง banner + measure link
     salesClearForm();
     document.getElementById('sSlotIndicator').innerHTML = '';
@@ -5731,7 +5751,7 @@ async function salesLoadMy(){
       </tr></thead>
       <tbody>
         ${r.items.map(j => `<tr>
-          <td style="font-family:var(--mono);font-size:11px;color:var(--mu);">${j.id}</td>
+          <td style="font-family:var(--mono);font-size:11px;color:var(--mu);">${(j.kind==='measure'||/^M\d+$/i.test(j.id))?'📏':'🔧'} ${j.id}</td>
           <td style="font-family:var(--mono);font-size:12px;">${j.date}</td>
           <td><div style="font-weight:600;font-size:13px;">${j.customer}</div>
               <div style="font-size:11px;color:var(--mu);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${j.address}">${j.address}${j.mapLink?` <a class="lnk" href="${j.mapLink}" target="_blank">🗺</a>`:''}</div></td>
@@ -7500,6 +7520,8 @@ function jobEditOpen(id, sheet){
   _jobEditSheet = isMeas ? 'measure' : 'install';
   const jt = document.getElementById('jeTitle');
   if (jt) jt.textContent = isMeas ? '✏️ แก้ไขงานวัด' : '✏️ แก้ไขงานติดตั้ง';
+  const jc = document.getElementById('jeConvertBtn');
+  if (jc) jc.style.display = isMeas ? 'none' : '';   // แปลงได้เฉพาะงานติดตั้ง
   document.getElementById('jeName').value   = j.name||'';
   document.getElementById('jeDate').value   = j.date||'';
   document.getElementById('jeAddr').value   = j.rawAddr||'';
@@ -7513,6 +7535,30 @@ function jobEditOpen(id, sheet){
   document.getElementById('jobEditModal').classList.add('on');
 }
 function jobEditClose(){ const m=document.getElementById('jobEditModal'); if(m) m.classList.remove('on'); _jobEditCur=null; }
+// ── 📏 แปลงงานติดตั้ง → งานวัด (ย้ายข้ามชีต ได้เลข M ใหม่ แถวติดตั้งถูกลบ) ──
+//  ทีมงานวัดใหม่ = ค่าในช่อง "ทีม" ของ modal (ใส่เซลล์ทีมได้เพราะปลายทางคืองานวัด · ว่าง = รอจัดทีม)
+async function jobConvertToMeasure(){
+  if (!_jobEditCur || _jobEditSheet === 'measure') return;
+  const cur = _jobEditCur;
+  const team = (document.getElementById('jeTeam')||{}).value ? document.getElementById('jeTeam').value.trim() : '';
+  if (!confirm('📏 แปลง "' + (cur.name||cur.id) + '" เป็นงานวัด?\n\n' +
+    '• งานจะย้ายไปคิววัดงาน (ได้เลขใหม่ M####)\n' +
+    '• แถวในคิวติดตั้งจะถูกลบ\n' +
+    '• ทีมงานวัด: ' + (team || '(ว่าง — รอจัดทีม)'))) return;
+  showLoad('กำลังแปลงเป็นงานวัด...');
+  let r;
+  try { r = await call({ action:'pk_convertToMeasure', id: cur.id, team: team }); }
+  catch(e){ r = { ok:false, error:'เชื่อมต่อไม่ได้' }; }
+  hideLoad();
+  if (!r || !r.ok){ toast('❌ ' + ((r&&r.error)||'แปลงไม่สำเร็จ')); return; }
+  toast('📏 แปลงแล้ว: ' + cur.id + ' → ' + r.id + (r.team ? ' · ' + r.team : ' · รอจัดทีม'));
+  jobEditClose();
+  // refresh ทั้งฝั่งติดตั้ง (งานหาย) และฝั่งวัดงาน (งานใหม่โผล่)
+  _dashRangeJobs = [];
+  if (document.getElementById('dashCalGrid')) await dashCalReload();
+  if (_dashInstallView === 'range') await dashRangeRun();
+  measCalReload(true);
+}
 async function jobEditSave(){
   if (!_jobEditCur) return;
   const cur = _jobEditCur;
