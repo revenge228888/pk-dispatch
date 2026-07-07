@@ -4142,8 +4142,11 @@ async function bkSuggestDates(){
   } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
-function bkRenderSuggest(r){
-  const box = document.getElementById('bkSuggest');
+function bkRenderSuggest(r, opts){
+  opts = opts || {};
+  const box = document.getElementById(opts.boxId || 'bkSuggest');
+  const pickFn = opts.pick || 'bkPickDate';
+  if (!box) return;
   if (!r.suggestions || !r.suggestions.length){
     box.innerHTML = '<div style="font-size:13px;color:var(--rd);padding:6px 0;">ไม่มีวันว่างในกรอบเวลา (คิวเต็ม / ติด buffer 15%) — ลองลดคะแนน หรือกรอกวันเอง</div>';
     return;
@@ -4168,7 +4171,7 @@ function bkRenderSuggest(r){
       bc = 'var(--mu)'; tag = '';
     }
     const bw = isMax ? '2px' : '1.5px';
-    h += '<div onclick="bkPickDate(\'' + s.dateKey + '\')" style="cursor:pointer;border:' + bw + ' solid ' + bc + ';border-radius:8px;padding:8px 12px;min-width:196px;">'
+    h += '<div onclick="' + pickFn + '(\'' + s.dateKey + '\',\'' + String(s.recommendedTeam||'').replace(/'/g,'') + '\')" style="cursor:pointer;border:' + bw + ' solid ' + bc + ';border-radius:8px;padding:8px 12px;min-width:196px;">'
        +   '<div style="font-size:15px;font-weight:600;">' + s.dateKey + tag + '</div>'
        +   bkTeamMetersHtml(s)
        +   '<div style="font-size:11px;color:var(--mu);margin-top:3px;line-height:1.5;">' + s.reasons.join('<br>') + '</div>'
@@ -5143,6 +5146,15 @@ function renderSalesStub(){
                 <label class="fl">ยอดเงิน</label>
                 <input class="fi" id="sBkAmount" type="number" min="0" placeholder="0" step="100">
               </div>
+              <div class="fg" style="min-width:170px;">
+                <label class="fl">ทีม (ไม่บังคับ)</label>
+                <select class="fi" id="sBkTeam"></select>
+              </div>
+            </div>
+            <div style="margin-bottom:10px;">
+              <button class="btn btn-g" onclick="salesSuggestDates()">📅 ดูวันแนะนำ</button>
+              <span style="font-size:11px;color:var(--mu);margin-left:6px;">ระบบเช็คคิว/โซนให้ · กดการ์ดวัน = เติมวันที่+ทีมแนะนำอัตโนมัติ</span>
+              <div id="sBkSuggest"></div>
             </div>
           </div>
 
@@ -5648,7 +5660,46 @@ function setSalesBkType(t){
   _sBkType = (t === 'measure') ? 'measure' : 'install';
   document.getElementById('sBkTypeInstall').classList.toggle('on', _sBkType === 'install');
   document.getElementById('sBkTypeMeasure').classList.toggle('on', _sBkType === 'measure');
+  salesFillTeamOptions();
+  const sb = document.querySelector('#sTabBooking .btn.btn-p');
+  if (sb) sb.textContent = _sBkType === 'measure' ? '💾 ขอคิววัดงาน (รอ CF)' : '💾 ขอคิวติดตั้ง (รอ CF)';
+  const box = document.getElementById('sBkSuggest'); if (box) box.innerHTML = '';   // สลับประเภท → ล้างวันแนะนำเก่า
 }
+// ตัวเลือกทีมตามประเภท: ติดตั้ง = ช่างเท่านั้น (กติกา) · วัดงาน = ช่าง+เซลล์
+function salesFillTeamOptions(keep){
+  const sel = document.getElementById('sBkTeam');
+  if (!sel) return;
+  const cur = (keep !== undefined) ? keep : sel.value;
+  let teams = ['ช่างทีม A', 'ช่างทีม B', 'ช่างทีม C'];
+  if (_sBkType === 'measure') teams = teams.concat(['เซลล์ทีม A', 'เซลล์ทีม B', 'เซลล์ทีม C']);
+  sel.innerHTML = '<option value="">— ให้ออฟฟิศจัดทีม —</option>' + teams.map(t => '<option value="' + t + '"' + (t === cur ? ' selected' : '') + '>' + t + '</option>').join('');
+}
+// ── 📅 วันแนะนำสำหรับเซลล์ (pk_queueSuggest เปิดสิทธิ์ sales อยู่แล้ว) ──
+async function salesSuggestDates(){
+  const type = _sBkType === 'measure' ? 'วัดงาน' : 'ติดตั้ง';
+  const address = (document.getElementById('sBkAddress')||{}).value || '';
+  const score = (document.getElementById('sBkScore')||{}).value || 1;
+  showLoad('กำลังหาวันแนะนำ...');
+  try {
+    const r = await call({ action:'pk_queueSuggest', type, address: address.trim(), score });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error || 'ผิดพลาด')); return; }
+    bkRenderSuggest(r, { boxId:'sBkSuggest', pick:'salesPickSuggest' });
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+// กดการ์ดวันแนะนำ → เติมวันที่ + ทีมแนะนำลงฟอร์ม
+function salesPickSuggest(dateKey, team){
+  const p = String(dateKey).split('/');
+  if (p.length === 3){
+    const iso = p[2] + '-' + p[1].padStart(2, '0') + '-' + p[0].padStart(2, '0');
+    const dt = document.getElementById('sBkDate');
+    if (dt){ dt.value = iso; updateDateDisplay(dt); }
+    salesCheckSlot();
+  }
+  if (team) salesFillTeamOptions(team);
+  toast('เลือกวัน ' + dateKey + (team ? ' · ทีมแนะนำ: ' + team.replace(/[^A-Za-zก-๙ ]/g, '') : '') + ' แล้ว — กดบันทึกคิว');
+}
+if (document.getElementById('sBkTeam')) salesFillTeamOptions();   // เติมตัวเลือกทีมตอนโหลดหน้า
 
 // debounce slot check
 async function salesCheckSlot(){
@@ -5680,6 +5731,8 @@ async function salesCheckSlot(){
 async function salesSubmitBooking(){
   const body = { action:'pk_salesAddBooking', username: CURRENT_USER.username };
   if (_sBkType === 'measure') body.type = 'measure';   // ไม่ส่ง = ติดตั้งเดิม
+  const _tm = (document.getElementById('sBkTeam')||{}).value || '';
+  if (_tm) body.team = _tm;   // เซลล์ระบุทีมได้ (ว่าง = ให้ออฟฟิศจัด)
 
   if (_sBkMode === 'form') {
     const date     = document.getElementById('sBkDate').value;
@@ -5709,7 +5762,7 @@ async function salesSubmitBooking(){
     const r = await call(body);
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error || 'ผิดพลาด')); return; }
-    toast(`✅ ลงคิว${r.kind === 'measure' ? 'วัดงาน' : 'ติดตั้ง'}สำเร็จ #${r.id} — รอ CF`);
+    toast(`✅ ลงคิว${r.kind === 'measure' ? 'วัดงาน' : 'ติดตั้ง'}สำเร็จ #${r.id}${r.team ? ' · ' + r.team : ''} — รอ CF`);
     clearMeasureLink();  // ล้าง banner + measure link
     salesClearForm();
     document.getElementById('sSlotIndicator').innerHTML = '';
@@ -5726,6 +5779,8 @@ function salesClearForm(){
   } else {
     document.getElementById('sBkRawText').value = '';
   }
+  salesFillTeamOptions('');   // ล้างทีมที่เลือก
+  const _sg = document.getElementById('sBkSuggest'); if (_sg) _sg.innerHTML = '';
 }
 
 // ════════════════════════════════════════
