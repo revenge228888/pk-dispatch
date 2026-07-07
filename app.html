@@ -1251,7 +1251,7 @@ function enterApp(){
   const wrapEl = c.closest('.wrap');
   if (wrapEl) wrapEl.classList.remove('wrap-sidebar');
   if (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'manager') { if(wrapEl) wrapEl.classList.add('wrap-sidebar'); c.innerHTML = renderOfficeShell(); officeInit(); }
-  else if (CURRENT_USER.role === 'sales')  { if(wrapEl) wrapEl.classList.add('wrap-sidebar'); c.innerHTML = renderSalesStub();   _showRefreshForSales(); restoreSidebarState(); }
+  else if (CURRENT_USER.role === 'sales')  { if(wrapEl) wrapEl.classList.add('wrap-sidebar'); c.innerHTML = renderSalesStub();   _showRefreshForSales(); restoreSidebarState(); setSalesBkType('install'); }
   else if (CURRENT_USER.role === 'quote')  { if(wrapEl) wrapEl.classList.add('wrap-sidebar'); c.innerHTML = renderQuoteShell(); restoreSidebarState(); quotesInit(); }
   else if (CURRENT_USER.role === 'tech')   {
     c.innerHTML = renderTechStub();
@@ -4505,7 +4505,7 @@ function cfRender(){
           + '<b style="font-size:14px;">' + escHtml(it.customer || '-') + '</b>'
           + '<span style="font-family:var(--mono);font-size:10px;color:var(--mu);">' + it.id + '</span>'
           + '<span style="font-size:12px;font-weight:700;color:' + dateCol + ';">📅 ' + escHtml(it.date || '-') + (late ? ' · เลยมาแล้ว!' : (isToday ? ' · วันนี้!' : '')) + '</span></div>'
-        + (it.address ? '<div style="font-size:11px;color:var(--mu);margin-top:2px;">📍 ' + escHtml(it.address) + (it.mapLink ? ' <a class="lnk" href="' + it.mapLink + '" target="_blank">🗺</a>' : '') + '</div>' : '')
+        + (it.address ? '<div style="font-size:11px;color:var(--mu);margin-top:2px;">📍 ' + escHtml(it.address) + (it.mapLink ? ' <a class="lnk" href="' + escAttr(it.mapLink) + '" target="_blank">🗺</a>' : '') + '</div>' : '')
         + (it.job ? '<div style="font-size:11px;color:var(--blu);margin-top:2px;">🔧 ' + escHtml(it.job) + '</div>' : '')
         + '<div style="font-size:11px;color:var(--mu);margin-top:3px;">★' + it.score + (it.amount ? ' · <span style="color:var(--acc);">฿' + fmt(it.amount) + '</span>' : '')
           + ' · ' + (it.team ? '👷 ' + escHtml(it.team) : '<span style="color:var(--rd);">ยังไม่จัดทีม</span>')
@@ -5683,6 +5683,7 @@ async function salesMeasureQuote(j){
 function salesMeasureToInstall(j){
   _salesBookingMeasureId = j.id;
   _fromMeasureBtn = true;  // กัน initSalesBooking ล้าง measure link
+  setSalesBkType('install');   // ลงคิว "ติดตั้ง" จากงานวัดเสมอ — กัน toggle ค้างที่วัดงานแล้วสร้างใบวัดซ้ำ
   const btn = document.querySelector('#salesSidebar .sidebar-item[data-tab="booking"]');
   setSalesTab('booking', btn);
   setTimeout(() => {
@@ -6481,7 +6482,9 @@ function locAutoStartFromJobs(jobs){
   else locEnsure();   // ยังไม่รับงาน → watcher standby (จะเริ่มส่งเมื่อ flag เปิด)
 }
 // ── แถบเตือนตอนโดนปฏิเสธ permission + วิธีเปิดตามเครื่อง ──
+let _locBannerDismissed = false;   // กด "ปิดไว้ก่อน" แล้วไม่เด้งซ้ำทุก 90 วิ (จนกว่าจะเปิดแอปใหม่)
 function locShowBanner(){
+  if (_locBannerDismissed) return;
   var b = document.getElementById('locBanner');
   if (b){ b.style.display = ''; return; }
   b = document.createElement('div');
@@ -6492,7 +6495,7 @@ function locShowBanner(){
     + '<b>iPhone/Safari</b> แตะปุ่ม "aA" หน้าที่อยู่เว็บ → การตั้งค่าเว็บไซต์ → ตำแหน่ง → อนุญาต (ถ้าไม่เจอ: ตั้งค่า → Safari → ตำแหน่ง)'
     + '<div style="margin-top:7px;display:flex;gap:8px;">'
     + '<button onclick="locPingOnce()" style="background:#E23B3B;border:none;color:#fff;border-radius:8px;padding:6px 14px;font-weight:700;cursor:pointer;font-family:inherit;">ลองอีกครั้ง</button>'
-    + '<button onclick="document.getElementById(\'locBanner\').style.display=\'none\'" style="background:transparent;border:1px solid #7a5a5a;color:#ffc9c3;border-radius:8px;padding:6px 14px;cursor:pointer;font-family:inherit;">ปิดไว้ก่อน</button></div>';
+    + '<button onclick="_locBannerDismissed=true;document.getElementById(\'locBanner\').style.display=\'none\'" style="background:transparent;border:1px solid #7a5a5a;color:#ffc9c3;border-radius:8px;padding:6px 14px;cursor:pointer;font-family:inherit;">ปิดไว้ก่อน</button></div>';
   document.body.appendChild(b);
 }
 function locHideBanner(){ var b = document.getElementById('locBanner'); if (b) b.style.display = 'none'; }
@@ -9297,7 +9300,7 @@ function recmPreviewHtml(e){
 }
 
 function escAttr(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-function escHtml(s){ return String(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ── Event Handlers ──
 function recordOnChange(){
@@ -12321,6 +12324,7 @@ function pkpCutSetSave(){ var st=parseFloat((document.getElementById('pkp_stock'
 async function pkpCutOptimize(){
   var ids=Object.keys(pkpSelWOs).filter(function(k){return pkpSelWOs[k];});
   if(!ids.length){ toast('ติ๊กเลือก WO ก่อน'); return; }
+  ids.forEach(function(id){ delete pkpWoCache[id]; });   // ดึงสด — กันแผนตัดใช้ขนาดเก่าหลังแก้ใบ
   showLoad('กำลังจัดตัดราง '+ids.length+' ใบ...');
   try{
     var pieces=[], scut=[];
@@ -12709,7 +12713,7 @@ var pkpSigCheck=null, pkpSigApprove=null;   // ลายเซ็นดิจิ
 var pkpEditingWO=null;   // null = ใบใหม่ / 'WO-xxxx' = กำลังแก้
 var pkpLoadedStatus='';
 
-function pkpToday(){ return new Date().toISOString().slice(0,10); }
+function pkpToday(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }   // เวลาท้องถิ่น (เดิม UTC — ช่วง 0:00-7:00 ได้วันเมื่อวาน)
 function pkpBlankItem(){ return { type:'', patt:'→', w:'', h:'', wl:'', wr:'', cAlu:'', cMesh:'', note:'' }; }
 
 // ── ลายเซ็นดิจิทัล (แนบรูป) ──
@@ -12978,10 +12982,10 @@ function pkpRenderRows(){
         +'<button type="button" class="btn btn-g" onclick="pkpDelItem('+i+')" title="ลบ" style="color:var(--rd,#ff453a);">✕</button>'
       +'</div>'
       +'<div class="row-form" style="gap:8px;margin-bottom:8px;">'+dims
-        +'<div class="fg" style="width:120px"><label class="fl">สีอลู (ว่าง=ตามหลัก)</label><input class="fi" type="text" list="pkpColorList" value="'+(it.cAlu||'')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cAlu\',this.value)"></div>'
-        +'<div class="fg" style="width:120px"><label class="fl">สีผ้ามุ้ง (ว่าง=ตามหลัก)</label><input class="fi" type="text" list="pkpColorList" value="'+(it.cMesh||'')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cMesh\',this.value)"></div>'
+        +'<div class="fg" style="width:120px"><label class="fl">สีอลู (ว่าง=ตามหลัก)</label><input class="fi" type="text" list="pkpColorList" value="'+String(it.cAlu||'').replace(/"/g,'&quot;')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cAlu\',this.value)"></div>'
+        +'<div class="fg" style="width:120px"><label class="fl">สีผ้ามุ้ง (ว่าง=ตามหลัก)</label><input class="fi" type="text" list="pkpColorList" value="'+String(it.cMesh||'').replace(/"/g,'&quot;')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cMesh\',this.value)"></div>'
       +'</div>'
-      +'<div class="row-form" style="gap:8px;margin-bottom:8px;"><div class="fg" style="flex:1;min-width:220px"><label class="fl">หมายเหตุชุดนี้ (พิมพ์เฉพาะที่กรอก)</label><input class="fi" type="text" value="'+(it.note||'')+'" placeholder="(ถ้ามี — จะโชว์ใต้รายการบนใบพิมพ์)" oninput="pkpOnField('+i+',\'note\',this.value)"></div></div>'
+      +'<div class="row-form" style="gap:8px;margin-bottom:8px;"><div class="fg" style="flex:1;min-width:220px"><label class="fl">หมายเหตุชุดนี้ (พิมพ์เฉพาะที่กรอก)</label><input class="fi" type="text" value="'+String(it.note||'').replace(/"/g,'&quot;')+'" placeholder="(ถ้ามี — จะโชว์ใต้รายการบนใบพิมพ์)" oninput="pkpOnField('+i+',\'note\',this.value)"></div></div>'
       +'<div id="pkpCalc'+i+'" style="font-size:12px;color:var(--mu,#6b7a94);line-height:1.7;border-top:1px dashed var(--line,#2a3344);padding-top:7px;"></div>'
     +'</div>';
   });
@@ -13060,6 +13064,7 @@ async function pkpSave(){
     if(pkpEditingWO){ b.woId=pkpEditingWO; if(pkpLoadedStatus)b.status=pkpLoadedStatus; r=await call({ action:'pk_prodUpdate', ...b }); }
     else { r=await call({ action:'pk_prodCreate', ...b }); }
     if(!r.ok){ toast('❌ '+(r.error||'บันทึกไม่สำเร็จ')); return; }
+    delete pkpWoCache[r.woId];   // ล้าง cache ใบนี้ — กันพิมพ์/จัดตัดรางได้ข้อมูลก่อนแก้
     pkpEditingWO=r.woId;
     if(r.status) pkpLoadedStatus=r.status;
     var woEl=document.getElementById('pkpWoLabel'); if(woEl)woEl.textContent=r.woId+(pkpLoadedStatus?' · '+pkpLoadedStatus:'');
