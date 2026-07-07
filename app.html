@@ -1307,6 +1307,7 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="access" onclick="setTab('access',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg></span><span class="sidebar-label">กำหนดคิว + สมาชิก</span></button>
           <button class="sidebar-item" data-tab="booking" onclick="setTab('booking',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M12 13v4M10 15h4"/></svg></span><span class="sidebar-label">ลงคิวใหม่</span></button>
           <button class="sidebar-item" data-tab="jobs" onclick="setTab('jobs',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 3h6v3H9zM9 11h6M9 15h6"/></svg></span><span class="sidebar-label">รายการงาน</span></button>
+          <button class="sidebar-item" data-tab="cfqueue" onclick="setTab('cfqueue',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9zM8.5 13l2.5 2.5 4.5-5"/></svg></span><span class="sidebar-label">ยืนยันคิว</span><span id="cfBadge" class="exp-badge"></span></button>
           <button class="sidebar-item" data-tab="assign" onclick="setTab('assign',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg></span><span class="sidebar-label">จัดทีม</span></button>
           <button class="sidebar-item" data-tab="outstanding" onclick="setTab('outstanding',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M15 14h3"/></svg></span><span class="sidebar-label">ตามยอดคงค้าง</span></button>
           <button class="sidebar-item" data-tab="mytasks" onclick="setTab('mytasks',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></span><span class="sidebar-label">งานของฉัน</span></button>
@@ -1762,6 +1763,20 @@ function renderOfficeShell(){
       </div>
 
       <!-- ASSIGN (🚚 จัดทีมวันที่ X · จังหวะ2 preview) -->
+      <!-- CFQUEUE (ยืนยันคิว — งานรอ CF ทั้งติดตั้ง/วัดงาน) -->
+      <div id="tabCfqueue" style="display:none;">
+        <div class="section-pad">
+          <div class="row-form" style="align-items:center;margin-bottom:10px;">
+            <div style="font-weight:800;font-size:16px;">✅ ยืนยันคิว (รอ CF)</div>
+            <div id="cfCounts" style="font-size:12px;color:var(--mu);"></div>
+            <button class="btn btn-g btn-sm" style="margin-left:auto;" onclick="cfLoad()">↻ รีเฟรช</button>
+            <button class="btn btn-p btn-sm" id="cfConfirmSelBtn" onclick="cfConfirmSelected()" disabled style="opacity:.5;">✅ ยืนยันที่เลือก</button>
+          </div>
+          <div style="font-size:12px;color:var(--mu);margin-bottom:10px;">ติ๊กหลายใบแล้วกด "ยืนยันที่เลือก" หรือกดยืนยันรายใบ · ยืนยันแล้วช่าง/เซลล์เห็นงานตามปกติ (ค่าเดียวกับ CF ทาง LINE)</div>
+          <div id="cfList"><div class="loading-row">กด ↻ เพื่อโหลด</div></div>
+        </div>
+      </div>
+
       <div id="tabAssign" style="display:none;">
         <div class="section-pad row-form">
           <div class="fg"><label class="fl">วันที่จัดทีม</label>
@@ -2230,6 +2245,7 @@ function officeInit(){
   try { initSidebarGroups(); } catch(e){}
   reloadAll();
   expenseBadgeRefresh();
+  cfBadgeRefresh();   // badge จำนวนงานรอยืนยัน (รอ CF)
 }
 
 // ════════════════════════════════════════
@@ -3887,7 +3903,7 @@ function initSidebarGroups(){
 }
 
 function setTab(t, btn){
-  ['Dash','Access','Booking','Jobs','Assign','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po'].forEach(x => {
+  ['Dash','Access','Booking','Jobs','Assign','Cfqueue','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -3907,6 +3923,7 @@ function setTab(t, btn){
   if (t === 'dash') { loadDashboard(); dashCalLoad(); }
   if (t === 'booking') initBookingTab();
   if (t === 'assign') assignInit();
+  if (t === 'cfqueue') cfLoad();
   if (t === 'outstanding') outstandingInit();
   if (t === 'mytasks') myTasksLoad();
   if (t === 'taskmgr') taskMgrInit();
@@ -4450,6 +4467,86 @@ function clearBookingForm_impl(){
   const _bs = document.getElementById('bkSuggest'); if (_bs) _bs.innerHTML = '';
   const _bu = document.getElementById('bkUrgent'); if (_bu) _bu.checked = false;
   const _bg = document.getElementById('bkGlass'); if (_bg) _bg.checked = false;
+}
+
+// ─── ✅ ยืนยันคิว (CF) — งานรอยืนยันทั้งติดตั้ง/วัดงาน + คนลงคิว ───
+let _cfItems = [];
+function cfSetBadge(n){ const el = document.getElementById('cfBadge'); if (el) el.textContent = (n > 0) ? n : ''; }
+async function cfBadgeRefresh(){
+  if (!CURRENT_USER || (CURRENT_USER.role !== 'office' && CURRENT_USER.role !== 'manager')) return;
+  try { const r = await call({ action:'pk_cfPendingList' }); if (r && r.ok) cfSetBadge(r.items.length); } catch(e){}
+}
+async function cfLoad(){
+  const box = document.getElementById('cfList'); if (!box) return;
+  box.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  try {
+    const r = await call({ action:'pk_cfPendingList' });
+    if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
+    _cfItems = r.items || [];
+    cfSetBadge(_cfItems.length);
+    const c = document.getElementById('cfCounts');
+    if (c) c.textContent = _cfItems.length ? ('รวม ' + _cfItems.length + ' ใบ · 🔧 ติดตั้ง ' + r.counts.install + ' · 📏 วัดงาน ' + r.counts.measure) : '';
+    cfRender();
+  } catch(e){ box.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
+}
+function cfRender(){
+  const box = document.getElementById('cfList'); if (!box) return;
+  if (!_cfItems.length){ box.innerHTML = '<div class="loading-row">🎉 ไม่มีงานรอยืนยัน</div>'; cfUpdateSelBtn(); return; }
+  const today = pkTodayStr_();
+  const todayTS = new Date(today + 'T00:00:00').getTime();
+  const card = it => {
+    const late = it.dateSortable && it.dateSortable < todayTS;
+    const isToday = it.dateSortable === todayTS;
+    const dateCol = late ? 'var(--rd)' : (isToday ? 'var(--acc)' : 'var(--tx)');
+    return '<div style="background:var(--surf2);border:1px solid var(--bdr);border-left:4px solid ' + (it.kind === 'measure' ? 'var(--blu)' : 'var(--acc)') + ';border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start;">'
+      + '<input type="checkbox" class="cfChk" data-id="' + it.id + '" onchange="cfUpdateSelBtn()" style="width:16px;height:16px;margin-top:3px;cursor:pointer;">'
+      + '<div style="flex:1;min-width:0;">'
+        + '<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;">'
+          + '<b style="font-size:14px;">' + escHtml(it.customer || '-') + '</b>'
+          + '<span style="font-family:var(--mono);font-size:10px;color:var(--mu);">' + it.id + '</span>'
+          + '<span style="font-size:12px;font-weight:700;color:' + dateCol + ';">📅 ' + escHtml(it.date || '-') + (late ? ' · เลยมาแล้ว!' : (isToday ? ' · วันนี้!' : '')) + '</span></div>'
+        + (it.address ? '<div style="font-size:11px;color:var(--mu);margin-top:2px;">📍 ' + escHtml(it.address) + (it.mapLink ? ' <a class="lnk" href="' + it.mapLink + '" target="_blank">🗺</a>' : '') + '</div>' : '')
+        + (it.job ? '<div style="font-size:11px;color:var(--blu);margin-top:2px;">🔧 ' + escHtml(it.job) + '</div>' : '')
+        + '<div style="font-size:11px;color:var(--mu);margin-top:3px;">★' + it.score + (it.amount ? ' · <span style="color:var(--acc);">฿' + fmt(it.amount) + '</span>' : '')
+          + ' · ' + (it.team ? '👷 ' + escHtml(it.team) : '<span style="color:var(--rd);">ยังไม่จัดทีม</span>')
+          + ' · 👤 ลงคิวโดย <b>' + escHtml(it.by || 'LINE/ออฟฟิศ') + '</b></div>'
+      + '</div>'
+      + '<button class="btn btn-p btn-sm" onclick="cfConfirmIds([\'' + it.id + '\'])">✅ ยืนยัน</button>'
+    + '</div>';
+  };
+  let h = '';
+  [['measure', '📏 วัดงาน', 'var(--blu)'], ['install', '🔧 ติดตั้ง', 'var(--acc)']].forEach(g => {
+    const list = _cfItems.filter(x => x.kind === g[0]);
+    if (!list.length) return;
+    h += '<div style="font-size:12px;font-weight:800;color:' + g[2] + ';border-left:3px solid ' + g[2] + ';padding-left:8px;margin:14px 0 8px;">' + g[1] + ' (' + list.length + ')</div>'
+      + list.map(card).join('');
+  });
+  box.innerHTML = h;
+  cfUpdateSelBtn();
+}
+function cfUpdateSelBtn(){
+  const n = document.querySelectorAll('#cfList .cfChk:checked').length;
+  const b = document.getElementById('cfConfirmSelBtn');
+  if (b){ b.textContent = '✅ ยืนยันที่เลือก' + (n ? ' (' + n + ')' : ''); b.disabled = !n; b.style.opacity = n ? '1' : '.5'; }
+}
+function cfConfirmSelected(){
+  const ids = [...document.querySelectorAll('#cfList .cfChk:checked')].map(c => c.getAttribute('data-id'));
+  if (!ids.length) return;
+  cfConfirmIds(ids);
+}
+async function cfConfirmIds(ids){
+  if (!confirm('ยืนยันคิว ' + ids.length + ' ใบ?\n(' + ids.join(', ') + ')\n\nสถานะจะเปลี่ยนเป็น "ยืนยันแล้ว" — ทีมเห็นงานตามปกติ')) return;
+  showLoad('กำลังยืนยัน...');
+  try {
+    const r = await call({ action:'pk_cfConfirm', ids: ids });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'ยืนยันไม่ได้')); return; }
+    let msg = '✅ ยืนยันแล้ว ' + r.confirmed.length + ' ใบ';
+    if (r.skipped && r.skipped.length) msg += ' · ข้าม ' + r.skipped.length;
+    toast(msg);
+    if (r.skipped && r.skipped.length) alert('ข้าม:\n' + r.skipped.map(s => '• ' + s.id + ' — ' + s.reason).join('\n'));
+    cfLoad();
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
 // ─── DASHBOARD ───
