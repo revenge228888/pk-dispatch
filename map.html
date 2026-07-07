@@ -500,7 +500,7 @@ function renderMarkers(){
       iconSize: [26, 26], iconAnchor: [13, 13]
     });
     const mk = L.marker([j.glat, j.glng], { icon }).addTo(S.jobLayer);
-    mk.bindTooltip(j.team + ' · ' + (j.orderLabel || '') + ' ' + (j.name || ''), { direction:'top', offset:[0,-14] });
+    mk.bindTooltip(esc(j.team) + ' · ' + esc(j.orderLabel || '') + ' ' + esc(j.name || ''), { direction:'top', offset:[0,-14] });
     mk.on('click', () => openJob(key));
     S.markers[key] = mk;
     pts.push([j.glat, j.glng]);
@@ -692,7 +692,7 @@ async function enhanceRoads(teamJobs, token){
   }
   if (token === S.routeToken){
     if (gotInfo) renderTeamCards();
-    if (S.openTeamName && S.teamRoutes[S.openTeamName]) openTeam(S.openTeamName);   // เติมเวลาเดินทางลง panel ทีมที่เปิดค้าง
+    if (S.openTeamName && S.teamRoutes[S.openTeamName] && !REORD) openTeam(S.openTeamName);   // เติมเวลาเดินทางลง panel ทีมที่เปิดค้าง (ห้ามทับโหมดจัดลำดับที่กำลังแก้อยู่)
   }
 }
 function fmtKm(m){ return m < 950 ? Math.round(m) + ' ม.' : (m/1000).toFixed(m < 10000 ? 1 : 0) + ' กม.'; }
@@ -742,7 +742,7 @@ function applyLiveLoc(){
     const c = teamColor(team);
     const icon = L.divIcon({ className:'', html:'<div class="veh live" style="--c:' + c + '">' + teamEmoji(team) + '</div>', iconSize:[30,30], iconAnchor:[15,15] });
     const mk = L.marker([l.lat, l.lng], { icon, zIndexOffset: 600 }).addTo(S.liveLayer);
-    mk.bindTooltip('📡 ' + team + ' · ตำแหน่งจริง ' + locAgeTxt(l) + (l.username ? ' · ' + l.username : ''), { direction:'top', offset:[0,-16] });
+    mk.bindTooltip('📡 ' + esc(team) + ' · ตำแหน่งจริง ' + locAgeTxt(l) + (l.username ? ' · ' + esc(l.username) : ''), { direction:'top', offset:[0,-16] });
   }
 }
 
@@ -817,7 +817,7 @@ function openTeam(team){
   let h = '<button class="pn-close" onclick="closePanel()">ปิด ✕</button>' +
     '<div class="pn-head"><h3>' + teamEmoji(team) + ' ' + esc(team) + '</h3>' +
     '<span class="pn-team" style="background:' + c + '">' + done + '/' + all.length + ' งาน</span></div>' +
-    '<button class="btn" style="margin:2px 0 8px" onclick="startReorder(\'' + esc(team) + '\')">↕ จัดลำดับงาน</button>';
+    '<button class="btn" style="margin:2px 0 8px" data-team="' + esc(team) + '" onclick="startReorder(this.dataset.team)">↕ จัดลำดับงาน</button>';
   if (tr && tr.seq.length){
     const legs = tr.legs;
     let totM = 0, totS = 0, remM = 0, remS = 0;
@@ -917,6 +917,13 @@ function cancelReorder(){
 }
 async function saveReorder(){
   if (!REORD) return;
+  // กันเคสงานเปลี่ยนไประหว่างจัด (เปลี่ยนวัน/รีเฟรช/งานถูกย้าย) — key เก่าจะหาไม่เจอใน S.jobs
+  REORD.keys = REORD.keys.filter(k => S.jobs[k]);
+  if (!REORD.keys.length){
+    setStatus('รายการงานเปลี่ยนไปแล้ว (เปลี่ยนวัน/รีเฟรช) — เปิดจัดลำดับใหม่อีกครั้ง', true);
+    cancelReorder();
+    return;
+  }
   const items = REORD.keys.map(key => ({ id: S.jobs[key].id, sheet: S.jobs[key].kind }));
   const btn = $('reordSave');
   if (btn){ btn.disabled = true; btn.textContent = 'กำลังบันทึก...'; }
@@ -927,7 +934,7 @@ async function saveReorder(){
       if (btn){ btn.disabled = false; btn.textContent = '💾 บันทึกลำดับ'; }
       return;
     }
-    // อัปเดต local ให้เห็นทันที แล้วค่อยโหลดข้อมูลจริงซ้ำ
+    // อัปเดต local ให้เห็นทันที แล้วโหลดข้อมูลจริงซ้ำก่อนสรุปผล (กัน setStatus โดนทับ)
     REORD.keys.forEach((key, i) => {
       const j = S.jobs[key];
       if (j){ j.orderNum = i + 1; j.orderLabel = 'งานที่ ' + (i + 1); }
@@ -935,9 +942,9 @@ async function saveReorder(){
     const team = REORD.team;
     REORD = null;
     renderAll();
+    await loadDay();
     openTeam(team);
     setStatus('✓ บันทึกลำดับแล้ว ' + r.updated + ' งาน — ช่างเห็นลำดับใหม่ทันทีที่เปิด/รีเฟรชแอป');
-    loadDay();
   } catch(e){
     setStatus('บันทึกลำดับไม่สำเร็จ: ' + e, true);
     if (btn){ btn.disabled = false; btn.textContent = '💾 บันทึกลำดับ'; }
@@ -969,9 +976,9 @@ async function moveJobTeam(key){
     if (j.kind === 'measure') body.sheet = 'measure';
     const r = await apiGas('pk_editJob', body);
     if (!r || !r.ok){ setStatus('ย้ายทีมไม่สำเร็จ: ' + ((r && r.error) || 'ไม่ทราบสาเหตุ'), true); return; }
-    setStatus('✓ ย้าย "' + (j.name || j.id) + '" ไป ' + team + ' แล้ว — จัดลำดับคิวทีมใหม่ได้จากปุ่ม ↕');
     closePanel();
     await loadDay();
+    setStatus('✓ ย้าย "' + (j.name || j.id) + '" ไป ' + team + ' แล้ว — จัดลำดับคิวทีมใหม่ได้จากปุ่ม ↕');
   } catch (e) {
     setStatus('ย้ายทีมไม่สำเร็จ: ' + e, true);
   }
@@ -988,9 +995,9 @@ async function convertToMeasure(key){
   try {
     const r = await apiGas('pk_convertToMeasure', { id: j.id });
     if (!r || !r.ok){ setStatus('แปลงไม่สำเร็จ: ' + ((r && r.error) || 'ไม่ทราบสาเหตุ'), true); return; }
-    setStatus('✓ แปลงแล้ว: ' + j.id + ' → ' + r.id + ' (งานวัด · รอจัดทีม) — กดหมุดใหม่เพื่อย้ายทีมได้');
     closePanel();
     await loadDay();
+    setStatus('✓ แปลงแล้ว: ' + j.id + ' → ' + r.id + ' (งานวัด · รอจัดทีม) — กดหมุดใหม่เพื่อย้ายทีมได้');
   } catch (e) {
     setStatus('แปลงไม่สำเร็จ: ' + e, true);
   }
@@ -1035,6 +1042,7 @@ function openJob(key){
     '<div class="pn-sec">ย้ายทีม</div>' +
     '<div style="display:flex;gap:6px;align-items:center;">' +
       '<select id="jobTeamSel" style="flex:1;font-family:var(--sans);font-size:12.5px;padding:6px 8px;border:1px solid var(--bdr);border-radius:8px;background:var(--surf2);color:var(--tx);">' +
+        (teamOptionsFor(j).indexOf(j.team) === -1 ? '<option value="" selected>— เลือกทีมปลายทาง —</option>' : '') +
         teamOptionsFor(j).map(function(t){ return '<option value="' + esc(t) + '"' + (t === j.team ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join('') +
       '</select>' +
       '<button class="btn acc" onclick="moveJobTeam(\'' + esc(key) + '\')">🔁 ย้าย</button>' +
@@ -1160,11 +1168,12 @@ function wpPopupHtml(wp){
 async function wpFillAddr(id, mk){
   const wp = loadWps().find(x => x.id === id);
   if (!wp || wp.addr) return;
-  const addr = await revGeo(wp.lat, wp.lng);
+  const reqLat = wp.lat, reqLng = wp.lng;   // จำพิกัดตอนยิง — กันลากซ้ำเร็ว ๆ แล้วที่อยู่เก่ามาทับตำแหน่งใหม่
+  const addr = await revGeo(reqLat, reqLng);
   if (!addr) return;
   const list = loadWps();
   const it = list.find(x => x.id === id);
-  if (it && !it.addr){
+  if (it && !it.addr && it.lat === reqLat && it.lng === reqLng){
     it.addr = addr;
     saveWps(list);
     if (mk && mk.isPopupOpen && mk.isPopupOpen()) mk.setPopupContent(wpPopupHtml(it));
@@ -1206,8 +1215,8 @@ async function wpToJob(id){
     if (!r || !r.ok){ setStatus('ส่งเข้าคิวไม่สำเร็จ: ' + ((r && r.error) || 'ไม่ทราบสาเหตุ'), true); return; }
     saveWps(loadWps().filter(x => x.id !== id));   // ลบจุดแวะเดิม — เดี๋ยวขึ้นเป็นหมุดงานจาก loadDay แทน
     renderWps();
-    setStatus('✓ ส่งเข้าคิวแล้ว: ' + r.id + ' · ' + wp.team + ' — ทีมเห็นในแอปทันที · จัดลำดับได้จากปุ่ม ↕ ในการ์ดทีม');
     await loadDay();
+    setStatus('✓ ส่งเข้าคิวแล้ว: ' + r.id + ' · ' + wp.team + ' — ทีมเห็นในแอปทันที · จัดลำดับได้จากปุ่ม ↕ ในการ์ดทีม');
   } catch (e) {
     setStatus('ส่งเข้าคิวไม่สำเร็จ: ' + e, true);
   }
