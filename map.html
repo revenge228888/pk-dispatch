@@ -977,6 +977,25 @@ async function moveJobTeam(key){
   }
 }
 
+// ══ 📏 แปลงงานติดตั้ง → งานวัด (ย้ายข้ามชีต — ทีมว่างรอจัดทีม แล้วย้ายทีมต่อจากหมุดใหม่ได้) ══
+async function convertToMeasure(key){
+  const j = S.jobs[key];
+  if (!j || j.kind === 'measure') return;
+  if (!confirm('📏 แปลง "' + (j.name || j.id) + '" เป็นงานวัด?\n\n' +
+    '• ย้ายไปคิววัดงาน (ได้เลขใหม่ M####) · แถวคิวติดตั้งถูกลบ\n' +
+    '• ทีมงานวัดใหม่: (ว่าง — รอจัดทีม · ย้ายทีมจากหมุดได้ทีหลัง)')) return;
+  setStatus('กำลังแปลงเป็นงานวัด...');
+  try {
+    const r = await apiGas('pk_convertToMeasure', { id: j.id });
+    if (!r || !r.ok){ setStatus('แปลงไม่สำเร็จ: ' + ((r && r.error) || 'ไม่ทราบสาเหตุ'), true); return; }
+    setStatus('✓ แปลงแล้ว: ' + j.id + ' → ' + r.id + ' (งานวัด · รอจัดทีม) — กดหมุดใหม่เพื่อย้ายทีมได้');
+    closePanel();
+    await loadDay();
+  } catch (e) {
+    setStatus('แปลงไม่สำเร็จ: ' + e, true);
+  }
+}
+
 // ══ detail panel ══
 function openJob(key){
   const j = S.jobs[key];
@@ -1020,7 +1039,8 @@ function openJob(key){
       '</select>' +
       '<button class="btn acc" onclick="moveJobTeam(\'' + esc(key) + '\')">🔁 ย้าย</button>' +
     '</div>' +
-    (j.kind !== 'measure' ? '<div class="muted" style="margin-top:3px;">งานติดตั้งย้ายได้เฉพาะทีมช่าง (เซลล์ทำได้เฉพาะงานวัด)</div>' : '') +
+    (j.kind !== 'measure' ? '<div class="muted" style="margin-top:3px;">งานติดตั้งย้ายได้เฉพาะทีมช่าง (เซลล์ทำได้เฉพาะงานวัด)</div>' +
+      '<div style="margin-top:6px;"><button class="btn" style="color:var(--acc);border-color:var(--acc);" onclick="convertToMeasure(\'' + esc(key) + '\')">📏 แปลงเป็นงานวัด</button></div>' : '') +
     '<div class="pn-sec">รายการงาน</div>' +
     '<div class="pn-items">' + esc(j.description || '-') + (j.sheetStatus ? '\n\nสถานะชีท: ' + esc(j.sheetStatus) : '') + '</div>' +
     '<div class="pn-sec">TIMELINE</div><div class="tl">' + tl + '</div>' +
