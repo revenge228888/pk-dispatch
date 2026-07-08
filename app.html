@@ -1788,6 +1788,7 @@ function renderOfficeShell(){
           <div class="row-form" style="align-items:center;margin-bottom:10px;">
             <div style="font-weight:800;font-size:16px;">📄 ติดตามใบเสนอราคา -- วัดเสร็จแล้ว ยังไม่มีใบเสนอ</div>
             <button class="btn btn-g btn-sm" style="margin-left:auto;" onclick="qtLoad(true)">↻ รีเฟรช</button>
+            <button class="btn btn-g btn-sm" id="qtSkipSelBtn" onclick="qtSkipSelected()" disabled style="opacity:.5;color:var(--rd);border-color:var(--rd);">🚫 ข้ามที่เลือก</button>
           </div>
           <div id="qtCounts" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;"></div>
           <div id="qtList"><div class="loading-row">กด ↻ เพื่อโหลด</div></div>
@@ -4612,8 +4613,9 @@ function qtRender(){
       '<div class="dstat"><div class="dstat-num" style="color:var(--rd)">' + _qtItems.length + '</div><div class="dstat-lbl">ค้างทั้งหมด</div></div>'
     + '<div class="dstat"><div class="dstat-num">' + recCount + '</div><div class="dstat-lbl">มีใบจดขนาดแล้ว</div></div>'
     + '<div class="dstat"><div class="dstat-num">' + calcCount + '</div><div class="dstat-lbl">มีใบคำนวณแล้ว</div></div>';
-  if (!_qtItems.length){ box.innerHTML = '<div class="loading-row">🎉 ไม่มีงานค้างทำใบเสนอ</div>'; return; }
+  if (!_qtItems.length){ box.innerHTML = '<div class="loading-row">🎉 ไม่มีงานค้างทำใบเสนอ</div>'; qtUpdateSelBtn(); return; }
   box.innerHTML = _qtItems.map(qtCard).join('');
+  qtUpdateSelBtn();
 }
 function qtCard(j){
   const doneMs = Number(j.doneAt) || 0;
@@ -4626,7 +4628,9 @@ function qtCard(j){
   const mainBtn = j.hasCalc
     ? '<button class="btn btn-p btn-sm" onclick="qtOpenCalc(\'' + escAttr(j.calcQuoteId) + '\')">✏️ เปิดใบคำนวณ</button>'
     : (canCreate ? '<button class="btn btn-p btn-sm" onclick="qtOpenCreate(\'' + escAttr(j.id) + '\')">📄 ทำใบเสนอราคา</button>' : '');
-  return '<div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--bdr);border-radius:10px;">'
+  return '<div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--bdr);border-radius:10px;display:flex;gap:10px;align-items:flex-start;">'
+    + '<input type="checkbox" class="qtChk" data-id="' + escAttr(j.id) + '" onchange="qtUpdateSelBtn()" style="width:16px;height:16px;margin-top:3px;cursor:pointer;">'
+    + '<div style="flex:1;min-width:0;">'
     + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
       + '<div style="min-width:0;flex:1;">'
         + '<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;">'
@@ -4646,6 +4650,7 @@ function qtCard(j){
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">'
       + mainBtn
       + '<button class="btn btn-g btn-sm" style="color:var(--rd);border-color:var(--rd);" onclick="qtSkip(\'' + escAttr(j.id) + '\')">🚫 ไม่ต้องทำใบเสนอ</button>'
+    + '</div>'
     + '</div>'
   + '</div>';
 }
@@ -4667,6 +4672,30 @@ async function qtSkip(id){
     hideLoad();
     if (!r.ok){ toast('❌ ' + (r.error||'บันทึกไม่ได้')); return; }
     toast('🚫 ปิดการติดตามใบเสนอแล้ว');
+    qtLoad(true);
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
+function qtUpdateSelBtn(){
+  const n = document.querySelectorAll('#qtList .qtChk:checked').length;
+  const b = document.getElementById('qtSkipSelBtn');
+  if (b){ b.textContent = '🚫 ข้ามที่เลือก' + (n ? ' (' + n + ')' : ''); b.disabled = !n; b.style.opacity = n ? '1' : '.5'; }
+}
+function qtSkipSelected(){
+  const ids = [...document.querySelectorAll('#qtList .qtChk:checked')].map(c => c.getAttribute('data-id'));
+  if (!ids.length) return;
+  qtSkipIds(ids);
+}
+async function qtSkipIds(ids){
+  if (!confirm('ไม่ต้องทำใบเสนอราคา ' + ids.length + ' ใบ?\n(' + ids.join(', ') + ')\n\nรายการที่เลือกจะหายจากแท็บติดตามใบเสนอ')) return;
+  showLoad('กำลังบันทึก...');
+  try {
+    const r = await call({ action:'pk_quoteTrackSkipBulk', ids: ids });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'บันทึกไม่ได้')); return; }
+    let msg = '🚫 ปิดการติดตามใบเสนอแล้ว ' + r.done.length + ' ใบ';
+    if (r.skipped && r.skipped.length) msg += ' · ข้าม ' + r.skipped.length;
+    toast(msg);
+    if (r.skipped && r.skipped.length) alert('ข้าม:\n' + r.skipped.map(s => '• ' + s.id + ' — ' + s.reason).join('\n'));
     qtLoad(true);
   } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
@@ -5431,6 +5460,7 @@ function renderSalesStub(){
           <div class="row-form" style="align-items:center;margin-bottom:10px;">
             <div style="font-weight:800;font-size:16px;">📄 ติดตามใบเสนอราคา -- วัดเสร็จแล้ว ยังไม่มีใบเสนอ</div>
             <button class="btn btn-g btn-sm" style="margin-left:auto;" onclick="qtLoad(true)">↻ รีเฟรช</button>
+            <button class="btn btn-g btn-sm" id="qtSkipSelBtn" onclick="qtSkipSelected()" disabled style="opacity:.5;color:var(--rd);border-color:var(--rd);">🚫 ข้ามที่เลือก</button>
           </div>
           <div id="qtCounts" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;"></div>
           <div id="qtList"><div class="loading-row">กด ↻ เพื่อโหลด</div></div>
