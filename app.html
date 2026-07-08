@@ -4642,7 +4642,9 @@ function qtCard(j){
   const refMs = doneMs || (j.date ? new Date(j.date + 'T00:00:00').getTime() : 0);
   const old = refMs && (Date.now() - refMs > 7 * 24 * 3600 * 1000);
   const doneColor = old ? 'var(--rd)' : 'var(--mu)';
-  const statusText = j.isDone ? ('✅ วัดเสร็จ ' + doneText + (old ? ' · เกิน 7 วัน' : '')) : ('📐 จดขนาดแล้ว ' + doneText + ' · รอกดจบงาน' + (old ? ' · เกิน 7 วัน' : ''));
+  const statusText = j.srcInstall
+    ? ('🔧 งานติดตั้ง · ระบุเป็นงานวัด' + (j.isDone ? ' · เสร็จแล้ว' : '') + (doneText && doneText !== '-' ? ' · ' + doneText : ''))
+    : (j.isDone ? ('✅ วัดเสร็จ ' + doneText + (old ? ' · เกิน 7 วัน' : '')) : ('📐 จดขนาดแล้ว ' + doneText + ' · รอกดจบงาน' + (old ? ' · เกิน 7 วัน' : '')));
   const canCreate = CURRENT_USER && ['sales','office','quote'].includes(CURRENT_USER.role);
   const teamLine = (j.team ? '👷 ' + escHtml(j.team) : '') + (j.worker ? (j.team ? ' · ' : '') + '👤 ' + escHtml(j.worker) : '');
   const mainBtn = j.hasCalc
@@ -7604,6 +7606,7 @@ function dashJobCardFull_(j, none){
       + '<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount||0)+'</span></div>'
     + dashMapBtn_(j)
     + dashShowAmtBtn(j)
+    + jobMarkMeasBtn_(j)
     + jobEditBtn_(j.id)
     + jobContBtn_(j.id)
     + jobDelBtn_(j.id)
@@ -7832,6 +7835,7 @@ function dashRangeCard_(j, none){
     + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:7px;padding-top:7px;border-top:1px solid var(--bdr);">'
       + '<span style="color:var(--acc);font-weight:800;">★ '+(Number(j.score)||0)+'</span>'
       + '<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount||0)+'</span></div>'
+    + jobMarkMeasBtn_(j)
     + jobEditBtn_(j.id)
     + jobContBtn_(j.id)
     + jobDelBtn_(j.id)
@@ -7850,6 +7854,30 @@ function jobContBtn_(id){ return isOfficeLevel() ? ' <button class="btn btn-g bt
 // ปุ่มลบงานบนการ์ดปฏิทิน/ช่วงวันที่ (งานที่ช่างรับ/จบแล้ว server จะไม่ให้ลบ)
 function jobDelBtn_(id, sheet){ return isOfficeLevel() ? ' <button class="btn btn-g btn-sm" style="margin-top:9px;color:var(--rd);border-color:var(--rd);" onclick="jobDeleteFromCal(\''+id+'\',\''+(sheet==='measure'?'measure':'install')+'\')">🗑 ลบงาน</button>' : ''; }
 function jobRecordBtn_(id){ if (!isOfficeLevel()) return ''; return '<button class="btn btn-g btn-sm" style="margin-top:9px;" onclick="officeMeasureRecord(\'' + id + '\')">📐 จดขนาด</button> '; }
+// ปุ่มติดธง "งานติดตั้งนี้เป็นงานวัด" [qtmeasure] → เข้าแท็บติดตามใบเสนอ (office/manager)
+function jobMarkMeasBtn_(j){
+  if (!isOfficeLevel()) return '';
+  const flagged = String(j.note||'').indexOf('[qtmeasure]') !== -1;
+  return flagged
+    ? '<button class="btn btn-g btn-sm" style="margin-top:9px;color:var(--rd);border-color:var(--rd);" onclick="qtMarkMeasure(\'' + j.id + '\',false)">↩️ ยกเลิกงานวัด</button> '
+    : '<button class="btn btn-g btn-sm" style="margin-top:9px;color:var(--blu);border-color:var(--blu);" onclick="qtMarkMeasure(\'' + j.id + '\',true)">📐 ระบุเป็นงานวัด</button> ';
+}
+async function qtMarkMeasure(id, mark){
+  if (mark && !confirm('ระบุงานติดตั้ง ' + id + ' เป็นงานวัด?\n\nจะเข้าแท็บติดตามใบเสนอราคาเพื่อตามการออกใบเสนอ')) return;
+  if (!mark && !confirm('ยกเลิกการระบุงานวัดของ ' + id + ' ?')) return;
+  showLoad('กำลังบันทึก...');
+  try {
+    const r = await call({ action:'pk_quoteTrackMark', id:id, undo: !mark });
+    hideLoad();
+    if (!r || !r.ok){ toast('❌ ' + ((r && r.error) || 'บันทึกไม่ได้')); return; }
+    toast(mark ? '📐 ระบุเป็นงานวัดแล้ว' : '↩️ ยกเลิกแล้ว');
+    _dashRangeJobs = [];
+    if (document.getElementById('dashCalGrid')) await dashCalReload();
+    if (_dashInstallView === 'range') await dashRangeRun();
+    loadDashboard();
+    qtBadgeRefresh();
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
 function jobMeasDoneBtn_(j){
   if (!isOfficeLevel()) return '';
   const done = (j.status === 'done');
