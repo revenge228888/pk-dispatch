@@ -523,8 +523,12 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
       </div>
       <div class="fg" style="margin-bottom:10px;"><label class="fl">ยอดเงินงานวันใหม่ (บาท)</label>
         <input class="fi" id="contJobAmt" type="text" inputmode="numeric" value="0">
-        <div style="font-size:11px;color:var(--mu);margin-top:4px;">ค่าเริ่มต้น 0 กันนับยอดซ้ำ — ยอดของงานวันเดิมยังอยู่ที่วันเดิม</div>
+        <div style="font-size:11px;color:var(--mu);margin-top:4px;">ค่าเริ่มต้น = ยอดเต็มของใบเดิม — ช่างจะเห็นยอดถูกต้องตอนกดจบงาน ไม่ต้องกรอกเอง</div>
       </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;font-size:12.5px;cursor:pointer;line-height:1.5;">
+        <input type="checkbox" id="contJobMove" checked style="width:16px;height:16px;margin-top:2px;cursor:pointer;">
+        <span><b>ย้ายยอดมาใบนี้</b> — ล้างยอดใบเดิมเป็น 0<br><span style="color:var(--mu);font-size:11px;">แนะนำให้ติ๊กไว้: ยอดคงค้าง/Dashboard นับครั้งเดียวที่วันจบงานจริง ไม่นับซ้ำ ไม่ตกหล่น</span></span>
+      </label>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
         <button class="btn btn-g" onclick="document.getElementById('contJobModal').classList.remove('on')">ยกเลิก</button>
         <button class="btn btn-p" id="contJobSaveBtn" onclick="tdmContinueSave()">➡ สร้างงานต่อ</button>
@@ -4717,7 +4721,8 @@ function contJobOpenCore(j, baseDate, teamLabel, from){
     d = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
   }
   document.getElementById('contJobDate').value = d;
-  document.getElementById('contJobAmt').value = '0';
+  document.getElementById('contJobAmt').value = String((j.amount != null && j.amount !== '') ? j.amount : 0);   // default = ยอดเต็มใบเดิม
+  const mv = document.getElementById('contJobMove'); if (mv) mv.checked = true;
   document.getElementById('contJobModal').classList.add('on');
 }
 function tdmContinueOpen(jobId){
@@ -4733,9 +4738,10 @@ async function tdmContinueSave(){
   const btn = document.getElementById('contJobSaveBtn');
   btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
   try {
-    const r = await call({ action:'pk_continueJob', id:_contJob.id, date:date, amount:amt });
+    const mv = document.getElementById('contJobMove');
+    const r = await call({ action:'pk_continueJob', id:_contJob.id, date:date, amount:amt, clearOldAmount: !!(mv && mv.checked) });
     if (r && r.ok) {
-      toast(`➡ ต่องาน ${_contJob.id} → ${r.id} วันที่ ${fmtD(date)}${r.team?' · '+r.team:''}`);
+      toast(`➡ ต่องาน ${_contJob.id} → ${r.id} วันที่ ${fmtD(date)}${r.team?' · '+r.team:''}${r.clearedOld?' · ย้ายยอดมาใบใหม่แล้ว':''}`);
       document.getElementById('contJobModal').classList.remove('on');
       clearCache('pk_dashboard'); clearCache('pk_installMonth');
       if (_contFrom === 'cal') {
