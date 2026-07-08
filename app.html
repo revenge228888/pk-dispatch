@@ -886,6 +886,24 @@ async function getQuoteListFast(opts, cacheOpts){
   return result;
 }
 
+let USE_SHEETS_QTRACK = true;
+async function getQuoteTrackFast(opts, cacheOpts){
+  opts = opts || {}; cacheOpts = cacheOpts || {};
+  if (USE_SHEETS_QTRACK && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/qtrack-list'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.items)) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getQuoteTrackFast] /qtrack-list ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e){ console.warn('[getQuoteTrackFast] error → fallback GAS:', e.message); }
+  }
+  const _g = await call({ action:'pk_quoteTrackList' }); _markJobSource('gas'); return _g;
+}
+
 // ── [Part B] เปิดดู 1 ใบ ผ่าน Drive API — flag แยก + fallback GAS อัตโนมัติ ──
 let USE_SHEETS_RECORD_GET = true;
 async function getRecordGetFast(id){
@@ -4591,13 +4609,13 @@ let _qtItems = [];
 function qtSetBadge(n){ const el = document.getElementById('qtBadge'); if (el) el.textContent = (n > 0) ? n : ''; }
 async function qtBadgeRefresh(){
   if (!CURRENT_USER || !['sales','office','manager'].includes(CURRENT_USER.role)) return;
-  try { const r = await call({ action:'pk_quoteTrackList' }); if (r && r.ok) qtSetBadge((r.items || []).length); } catch(e){}
+  try { const r = await getQuoteTrackFast(); if (r && r.ok) qtSetBadge((r.items || []).length); } catch(e){}
 }
 async function qtLoad(force){
   const box = document.getElementById('qtList'); if (!box) return;
   box.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
   try {
-    const r = await call({ action:'pk_quoteTrackList' });
+    const r = await getQuoteTrackFast();
     if (!r.ok){ box.innerHTML = '<div class="loading-row">' + escHtml(r.error||'โหลดไม่ได้') + '</div>'; return; }
     _qtItems = r.items || [];
     qtSetBadge(_qtItems.length);
@@ -7832,6 +7850,30 @@ function jobContBtn_(id){ return isOfficeLevel() ? ' <button class="btn btn-g bt
 // ปุ่มลบงานบนการ์ดปฏิทิน/ช่วงวันที่ (งานที่ช่างรับ/จบแล้ว server จะไม่ให้ลบ)
 function jobDelBtn_(id, sheet){ return isOfficeLevel() ? ' <button class="btn btn-g btn-sm" style="margin-top:9px;color:var(--rd);border-color:var(--rd);" onclick="jobDeleteFromCal(\''+id+'\',\''+(sheet==='measure'?'measure':'install')+'\')">🗑 ลบงาน</button>' : ''; }
 function jobRecordBtn_(id){ if (!isOfficeLevel()) return ''; return '<button class="btn btn-g btn-sm" style="margin-top:9px;" onclick="officeMeasureRecord(\'' + id + '\')">📐 จดขนาด</button> '; }
+function jobMeasDoneBtn_(j){
+  if (!isOfficeLevel()) return '';
+  const done = (j.status === 'done');
+  return done
+    ? '<button class="btn btn-g btn-sm" style="margin-top:9px;color:var(--rd);border-color:var(--rd);" onclick="officeMeasureToggle(\'' + j.id + '\',false)">↩️ ยกเลิกจบงานวัด</button> '
+    : '<button class="btn btn-g btn-sm" style="margin-top:9px;color:var(--grn);border-color:var(--grn);" onclick="officeMeasureToggle(\'' + j.id + '\',true)">✅ จบงานวัด</button> ';
+}
+async function officeMeasureToggle(id, markDone){
+  if (markDone && !confirm('✅ ยืนยันจบงานวัด ' + id + ' ?\n\nงานนี้จะขึ้นสถานะวัดเสร็จและเข้าแท็บติดตามใบเสนอราคา')) return;
+  if (!markDone && !confirm('↩️ ยกเลิกสถานะจบงานวัด ' + id + ' ?')) return;
+  showLoad('กำลังบันทึก...');
+  try {
+    const body = markDone
+      ? { action:'pk_updateJobStatus', id:id, status:'done', doneAt: Date.now() }
+      : { action:'pk_updateJobStatus', id:id, status:'pending', startAt:'', doneAt:'', worker:'', lat:'', lng:'' };
+    const r = await call(body);
+    hideLoad();
+    if (!r || !r.ok){ toast('❌ บันทึกไม่สำเร็จ: ' + ((r && r.error) || 'unknown')); return; }
+    toast(markDone ? '✅ จบงานวัดแล้ว' : '↩️ ยกเลิกจบงานวัดแล้ว');
+    await measCalReload(true);
+    if (typeof _measView !== 'undefined' && _measView === 'range' && typeof measRangeRun === 'function') measRangeRun();
+    if (typeof qtBadgeRefresh === 'function') qtBadgeRefresh();
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
 function officeMeasureRecord(id){
   const j = (_measAllJobs||[]).concat(_measRangeJobs||[]).find(x => String(x.id) === String(id));
   if (!j){ toast('❌ หาข้อมูลงานวัดไม่เจอ ลองรีเฟรชปฏิทิน'); return; }
@@ -8025,8 +8067,9 @@ function measRangeCard_(j){
     + '<div style="font-size:15px;font-weight:800;margin-bottom:5px;">'+dot+escHtml(j.name||'-')+map+'</div>'
     + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:30px;">🔧</span><span>'+escHtml(j.job||'-')+'</span></div>'
     + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:30px;">📍</span><span>'+escHtml(j.address||'-')+'</span></div>'
-    + '<div style="margin-top:6px;font-size:12px;color:'+measTone_(j.status)+';font-weight:700;">'+measStatusLabel_(j.status)
-      + (j.team ? ' <span style="color:var(--blu);">· 🚗 '+escHtml(j.team)+'</span>' : ' <span style="color:var(--rd);">· ⚠ ยังไม่จัดทีม</span>')+'</div>'
+      + '<div style="margin-top:6px;font-size:12px;color:'+measTone_(j.status)+';font-weight:700;">'+measStatusLabel_(j.status)
+        + (j.team ? ' <span style="color:var(--blu);">· 🚗 '+escHtml(j.team)+'</span>' : ' <span style="color:var(--rd);">· ⚠ ยังไม่จัดทีม</span>')+'</div>'
+    + jobMeasDoneBtn_(j)
     + jobRecordBtn_(j.id)
     + jobEditBtn_(j.id, 'measure')
     + jobDelBtn_(j.id, 'measure')
@@ -8119,6 +8162,7 @@ function measCalRenderPanel(){
       + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:54px;">📍 ที่อยู่</span><span>'+escHtml(j.address||'-')+'</span></div>'
       + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);align-items:center;font-size:13px;">'
         + '<span style="font-weight:700;">'+worker+'</span>'+mapBtn+sheetSt+'</div>'
+      + jobMeasDoneBtn_(j)
       + jobRecordBtn_(j.id)
       + jobEditBtn_(j.id, 'measure')
       + jobDelBtn_(j.id, 'measure')
