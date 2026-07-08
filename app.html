@@ -4621,8 +4621,10 @@ function qtCard(j){
   const doneMs = Number(j.doneAt) || 0;
   const doneDate = doneMs ? new Date(doneMs) : (j.date ? new Date(j.date + 'T00:00:00') : null);
   const doneText = doneDate ? doneDate.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' }) : '-';
-  const old = doneMs && (Date.now() - doneMs > 7 * 24 * 3600 * 1000);
+  const refMs = doneMs || (j.date ? new Date(j.date + 'T00:00:00').getTime() : 0);
+  const old = refMs && (Date.now() - refMs > 7 * 24 * 3600 * 1000);
   const doneColor = old ? 'var(--rd)' : 'var(--mu)';
+  const statusText = j.isDone ? ('✅ วัดเสร็จ ' + doneText + (old ? ' · เกิน 7 วัน' : '')) : ('📐 จดขนาดแล้ว ' + doneText + ' · รอกดจบงาน' + (old ? ' · เกิน 7 วัน' : ''));
   const canCreate = CURRENT_USER && ['sales','office','quote'].includes(CURRENT_USER.role);
   const teamLine = (j.team ? '👷 ' + escHtml(j.team) : '') + (j.worker ? (j.team ? ' · ' : '') + '👤 ' + escHtml(j.worker) : '');
   const mainBtn = j.hasCalc
@@ -4636,7 +4638,7 @@ function qtCard(j){
         + '<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;">'
           + '<div style="font-weight:700;">' + escHtml(j.name || '-') + '</div>'
           + '<span style="font-family:var(--mono);font-size:11px;color:var(--mu);">' + escHtml(j.id) + '</span>'
-          + '<span style="font-size:12px;font-weight:700;color:' + doneColor + ';">✅ วัดเสร็จ ' + escHtml(doneText) + (old ? ' · เกิน 7 วัน' : '') + '</span>'
+          + '<span style="font-size:12px;font-weight:700;color:' + doneColor + ';">' + escHtml(statusText) + '</span>'
         + '</div>'
         + '<div style="font-size:12px;color:var(--mu);margin-top:2px;">📍 ' + escHtml(j.address || '') + (j.mapLink ? ' <a class="lnk" href="' + escAttr(j.mapLink) + '" target="_blank">🗺 แผนที่</a>' : '') + '</div>'
         + (j.job ? '<div style="font-size:12px;color:var(--blu);margin-top:2px;">🔧 ' + escHtml(j.job) + '</div>' : '')
@@ -7829,6 +7831,12 @@ function jobEditBtn_(id, sheet){ return isOfficeLevel() ? '<button class="btn bt
 function jobContBtn_(id){ return isOfficeLevel() ? ' <button class="btn btn-g btn-sm" style="margin-top:9px;" onclick="jobContOpen(\''+id+'\')">📅 ลงวันต่องาน</button>' : ''; }
 // ปุ่มลบงานบนการ์ดปฏิทิน/ช่วงวันที่ (งานที่ช่างรับ/จบแล้ว server จะไม่ให้ลบ)
 function jobDelBtn_(id, sheet){ return isOfficeLevel() ? ' <button class="btn btn-g btn-sm" style="margin-top:9px;color:var(--rd);border-color:var(--rd);" onclick="jobDeleteFromCal(\''+id+'\',\''+(sheet==='measure'?'measure':'install')+'\')">🗑 ลบงาน</button>' : ''; }
+function jobRecordBtn_(id){ if (!isOfficeLevel()) return ''; return '<button class="btn btn-g btn-sm" style="margin-top:9px;" onclick="officeMeasureRecord(\'' + id + '\')">📐 จดขนาด</button> '; }
+function officeMeasureRecord(id){
+  const j = (_measAllJobs||[]).concat(_measRangeJobs||[]).find(x => String(x.id) === String(id));
+  if (!j){ toast('❌ หาข้อมูลงานวัดไม่เจอ ลองรีเฟรชปฏิทิน'); return; }
+  recordOpenNew({ customerName:j.name||'', customerPhone:'', customerAddress:j.address||'', linkedJobId:j.id });
+}
 async function jobDeleteFromCal(id, sheet){
   if (!isOfficeLevel()) return;
   const pool = sheet === 'measure' ? (_measAllJobs||[]).concat(_measRangeJobs||[]) : (_dashRangeJobs||[]).concat(_dashCalJobs||[]);
@@ -8019,6 +8027,7 @@ function measRangeCard_(j){
     + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:30px;">📍</span><span>'+escHtml(j.address||'-')+'</span></div>'
     + '<div style="margin-top:6px;font-size:12px;color:'+measTone_(j.status)+';font-weight:700;">'+measStatusLabel_(j.status)
       + (j.team ? ' <span style="color:var(--blu);">· 🚗 '+escHtml(j.team)+'</span>' : ' <span style="color:var(--rd);">· ⚠ ยังไม่จัดทีม</span>')+'</div>'
+    + jobRecordBtn_(j.id)
     + jobEditBtn_(j.id, 'measure')
     + jobDelBtn_(j.id, 'measure')
     + '</div>';
@@ -8110,6 +8119,7 @@ function measCalRenderPanel(){
       + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:54px;">📍 ที่อยู่</span><span>'+escHtml(j.address||'-')+'</span></div>'
       + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);align-items:center;font-size:13px;">'
         + '<span style="font-weight:700;">'+worker+'</span>'+mapBtn+sheetSt+'</div>'
+      + jobRecordBtn_(j.id)
       + jobEditBtn_(j.id, 'measure')
       + jobDelBtn_(j.id, 'measure')
       + '</div>';
