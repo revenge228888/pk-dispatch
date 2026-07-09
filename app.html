@@ -12433,6 +12433,7 @@ function pkpRequisition(items, mainAlu){
   var byColor={}, rails={}, totalSets=0, nonScreen=[], incomplete=0;
   (items||[]).forEach(function(it){
     var t=it.type; if(!t) return;
+    if(it.noReq) return;
     if(!pkpIsReqScreen(t)){ nonScreen.push(it); return; }
     var c=pkpCalcItem(it); if(!c.calculable){ incomplete++; return; }
     var f=c.fields, R=pkpREQ[t];
@@ -12564,6 +12565,7 @@ function pkpRailPieces(items, mainAlu, meta){
   meta=meta||{}; var out=[];
   (items||[]).forEach(function(it, idx){
     var t=it.type; if(!t||!pkpIsReqScreen(t)) return;
+    if(it.noReq) return;
     var c=pkpCalcItem(it); if(!c.calculable) return;
     var f=c.fields, rc=pkpRailCount(t), col=(it.cAlu||mainAlu||'(ไม่ระบุสี)');
     function P(rail,len,qty){ len=Math.round((len||0)*100)/100; if(len>0&&qty>0) out.push({rail:rail,len:len,qty:qty,color:col,wo:meta.wo||'',name:meta.name||'',setNo:idx+1,type:t}); }
@@ -12922,7 +12924,7 @@ async function pkpFetchWO(woId){
 function pkpWoResolvedItems(o){
   var ma=o.mainColorAlu||'';
   return (o.items||[]).filter(function(it){return it.type;}).map(function(it){
-    return { type:it.type, w:it.w, h:it.h, wl:it.wl, wr:it.wr, cAlu:(it.cAlu||ma), cMesh:it.cMesh, note:it.note };
+    return { type:it.type, w:it.w, h:it.h, wl:it.wl, wr:it.wr, cAlu:(it.cAlu||ma), cMesh:it.cMesh, note:it.note, noReq:!!it.noReq };
   });
 }
 // ── เลือกหลายใบ + รวม export ──
@@ -12991,7 +12993,7 @@ var pkpEditingWO=null;   // null = ใบใหม่ / 'WO-xxxx' = กำลั
 var pkpLoadedStatus='';
 
 function pkpToday(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }   // เวลาท้องถิ่น (เดิม UTC — ช่วง 0:00-7:00 ได้วันเมื่อวาน)
-function pkpBlankItem(){ return { type:'', patt:'→', w:'', h:'', wl:'', wr:'', cAlu:'', cMesh:'', note:'' }; }
+function pkpBlankItem(){ return { type:'', patt:'→', w:'', h:'', wl:'', wr:'', cAlu:'', cMesh:'', note:'', noReq:false }; }
 
 // ── ลายเซ็นดิจิทัล (แนบรูป) ──
 function pkpRenderSig(){
@@ -13262,7 +13264,8 @@ function pkpRenderRows(){
         +'<div class="fg" style="width:120px"><label class="fl">สีอลู (ว่าง=ตามหลัก)</label><input class="fi" type="text" list="pkpColorList" value="'+String(it.cAlu||'').replace(/"/g,'&quot;')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cAlu\',this.value)"></div>'
         +'<div class="fg" style="width:120px"><label class="fl">สีผ้ามุ้ง (ว่าง=ตามหลัก)</label><input class="fi" type="text" list="pkpColorList" value="'+String(it.cMesh||'').replace(/"/g,'&quot;')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cMesh\',this.value)"></div>'
       +'</div>'
-      +'<div class="row-form" style="gap:8px;margin-bottom:8px;"><div class="fg" style="flex:1;min-width:220px"><label class="fl">หมายเหตุชุดนี้ (พิมพ์เฉพาะที่กรอก)</label><input class="fi" type="text" value="'+String(it.note||'').replace(/"/g,'&quot;')+'" placeholder="(ถ้ามี — จะโชว์ใต้รายการบนใบพิมพ์)" oninput="pkpOnField('+i+',\'note\',this.value)"></div></div>'
+      +'<div class="row-form" style="gap:8px;margin-bottom:8px;"><div class="fg" style="flex:1;min-width:220px"><label class="fl">หมายเหตุชุดนี้ (พิมพ์เฉพาะที่กรอก)</label><input class="fi" type="text" value="'+String(it.note||'').replace(/"/g,'&quot;')+'" placeholder="(ถ้ามี — จะโชว์ใต้รายการบนใบพิมพ์)" oninput="pkpOnField('+i+',\'note\',this.value)"></div>'
+        +'<div class="fg" style="width:auto;"><label class="fl">&nbsp;</label><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap;padding:7px 0;color:'+(it.noReq?'var(--rd,#ff453a)':'var(--tx,#e6edf6)')+';"><input type="checkbox" '+(it.noReq?'':'checked')+' onchange="pkpOnField('+i+',\'noReq\',!this.checked)" style="width:16px;height:16px;cursor:pointer;">'+(it.noReq?'ไม่เบิกอุปกรณ์ (วัสดุมาเอง)':'เบิกอุปกรณ์')+'</label></div></div>'
       +'<div id="pkpCalc'+i+'" style="font-size:12px;color:var(--mu,#6b7a94);line-height:1.7;border-top:1px dashed var(--line,#2a3344);padding-top:7px;"></div>'
     +'</div>';
   });
@@ -13303,7 +13306,7 @@ function pkpBody(){
     items: pkpItems.filter(function(it){return it.type;}).map(function(it){return {
       type:it.type, patt:it.patt||'',
       w:it.w, h:it.h, wl:it.wl, wr:it.wr,
-      cAlu:it.cAlu, cMesh:it.cMesh, note:it.note||''
+      cAlu:it.cAlu, cMesh:it.cMesh, note:it.note||'', noReq:!!it.noReq
     };}),
     sigCheck: pkpSigCheck,
     sigApprove: pkpSigApprove,
@@ -13409,7 +13412,7 @@ async function pkpOpen(woId){
     set('pkpCust',(o.customer&&o.customer.name)||''); set('pkpIssue',o.issueDate); set('pkpInstall',o.installDate);
     set('pkpRef',o.refNo); set('pkpNote',o.note); set('pkpMainAlu',o.mainColorAlu); set('pkpMainMesh',o.mainColorMesh);
     pkpItems=(o.items&&o.items.length?o.items:[pkpBlankItem()]).map(function(it){return {
-      type:it.type||'', patt:it.patt||'→', w:it.w||'', h:it.h||'', wl:it.wl||'', wr:it.wr||'', cAlu:it.cAlu||'', cMesh:it.cMesh||'', note:it.note||''
+      type:it.type||'', patt:it.patt||'→', w:it.w||'', h:it.h||'', wl:it.wl||'', wr:it.wr||'', cAlu:it.cAlu||'', cMesh:it.cMesh||'', note:it.note||'', noReq:!!it.noReq
     };});
     pkpSigCheck=o.sigCheck||null; pkpSigApprove=o.sigApprove||null;
     var woEl=document.getElementById('pkpWoLabel'); if(woEl)woEl.textContent=o.woId+(o.status?' · '+o.status:'');
@@ -13466,6 +13469,7 @@ function pkpProdSheetsHTML_(o){
         : '<td colspan="12" style="color:#9aa7b6;font-style:italic;">— ไม่มีค่าตัด (บันทึกขนาด/สี) —</td>';
       rows.push('<tr class="grpstart">'+td('<b>'+no+'</b>')+td(esc(it.type),'nme')+td('<span class="arrow">'+esc(it.patt||'')+'</span>')+td(V(it.w))+td(V(it.h))+td(alu)+td(mesh)+cut+'</tr>');
     }
+    if(it.noReq) rows.push('<tr class="noterow"><td colspan="19">🔒 ไม่เบิกอุปกรณ์ (วัสดุมาเอง)</td></tr>');
     if(it.note && it.note.trim()) rows.push('<tr class="noterow"><td colspan="19">📝 หมายเหตุ: '+esc(it.note)+'</td></tr>');
     return rows;
   }
@@ -13517,6 +13521,7 @@ function pkpProdSheetsHTML_(o){
         +'<div class="scp-hd"><span class="scp-no">'+e.no+'</span><span class="scp-type">'+esc(it.type)+'</span><span class="scp-size">'+V(it.w)+' × '+V(it.h)+' <small>ซม.</small></span></div>'
         +'<div class="scp-meta"><span class="scp-chip">สีอลู <b>'+alu+'</b></span><span class="scp-chip">ผ้ามุ้ง <b>'+mesh+'</b></span>'+(pcs.length?'<span class="scp-chip">ชิ้นตัด <b>'+pcs.reduce(function(s,p){return s+p.qty;},0)+'</b> ชิ้น</span>':'')+'</div>'
         +tbl
+        +(it.noReq?'<div class="scp-note">🔒 ไม่เบิกอุปกรณ์ (วัสดุมาเอง)</div>':'')
         +(it.note&&it.note.trim()?'<div class="scp-note">📝 '+esc(it.note)+'</div>':'')
         +'</div>';
       return { w: 3+Math.max(1,pcs.length), html: html };
