@@ -12506,7 +12506,7 @@ async function pkpCostCalc(){
   add('PVC',     R2(eq.pvcLen/100),  P('PVC'),'เมตร');
   // สลิง — ไม่อยู่ใน eq ดึงจาก engine โดยตรง
   var slingCm=0;
-  (pkpItems||[]).forEach(function(it){ if(!it.type||!pkpIsReqScreen(it.type))return; var c=pkpCalcItem(it); if(!c.calculable)return; var f=c.fields; if(f.cutSling&&f.nSling) slingCm+=f.cutSling*f.nSling; });
+  (pkpItems||[]).forEach(function(it){ if(!it.type||it.noReq||!pkpIsReqScreen(it.type))return; var c=pkpCalcItem(it); if(!c.calculable)return; var f=c.fields; if(f.cutSling&&f.nSling) slingCm+=f.cutSling*f.nSling; });
   add('สลิง', R2(slingCm/100), P('สลิง'),'เมตร');
   // ราง — ใช้ขนาดที่เลือก (6 หรือ 6.4) · ถ้าสีนั้นไม่มีขนาดที่เลือก → fallback ขนาดที่มี
   var railSize=parseFloat((document.getElementById('pkpRailSize')||{}).value)||6;
@@ -12821,6 +12821,7 @@ function pkpScutCollect(items, mainAlu, meta){
   meta=meta||{}; var out=[];
   (items||[]).forEach(function(it,idx){
     if(!it.type||!pkpScutIs(it.type)) return;
+    if(it.noReq) return;   // ไม่เบิกอุปกรณ์ = ไม่เข้าแผนจัดตัดราง (เหมือน pkpRailPieces)
     var col=String(it.cAlu||mainAlu||'').trim()||'(ไม่ระบุสี)';
     pkpScutPieces(it).forEach(function(p){
       out.push({rail:p.profile,profile:p.profile,len:p.len,qty:p.qty,color:col,wo:meta.wo||'',name:meta.name||'',setNo:idx+1,type:it.type});
@@ -12832,7 +12833,7 @@ function pkpReqColorDot(c){var m={'อบขาว':'#f3f4f6','ดำ':'#2b2b2b'
 // สีอลูที่นอกเหนือ อบขาว/ดำ (distinct) — เก็บเป็น flag ไว้ highlight ในรายการ
 function pkpSpecialColors(items, mainAlu){
   var seen={}, out=[]; mainAlu=String(mainAlu||'');
-  (items||[]).forEach(function(it){ if(!it.type)return; var c=String((it.cAlu||mainAlu)||'').trim();
+  (items||[]).forEach(function(it){ if(!it.type||it.noReq)return; var c=String((it.cAlu||mainAlu)||'').trim();
     if(c && c!=='อบขาว' && c!=='ดำ' && !seen[c]){ seen[c]=1; out.push(c); } });
   return out.join(', ');
 }
@@ -13237,6 +13238,7 @@ function pkpOnType(i,val){
 }
 function pkpOnPatt(i){ var a=pkpItems[i]; var idx=pkpARROWS.indexOf(a.patt); a.patt=pkpARROWS[(idx+1)%pkpARROWS.length]; var el=document.getElementById('pkpPatt'+i); if(el)el.textContent=a.patt; pkpAutosave(); }
 function pkpOnField(i,field,val){ pkpItems[i][field]=val; pkpRecalc(i); pkpRenderReqSummary(); pkpAutosave(); }   // ตัวเลข → คำนวณเฉพาะแถว (ไม่ re-render = ไม่เสีย focus)
+function pkpOnNoReq(i,checked){ pkpItems[i].noReq=!checked; pkpRenderRows(); pkpAutosave(); }   // ติ๊กเบิก/ไม่เบิก → re-render ให้ป้าย+สีอัปเดตทันที (checkbox ไม่ต้องรักษา focus)
 
 // ── render การ์ดทุกรายการ ──
 function pkpRenderRows(){
@@ -13265,7 +13267,7 @@ function pkpRenderRows(){
         +'<div class="fg" style="width:120px"><label class="fl">สีผ้ามุ้ง (ว่าง=ตามหลัก)</label><input class="fi" type="text" list="pkpColorList" value="'+String(it.cMesh||'').replace(/"/g,'&quot;')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cMesh\',this.value)"></div>'
       +'</div>'
       +'<div class="row-form" style="gap:8px;margin-bottom:8px;"><div class="fg" style="flex:1;min-width:220px"><label class="fl">หมายเหตุชุดนี้ (พิมพ์เฉพาะที่กรอก)</label><input class="fi" type="text" value="'+String(it.note||'').replace(/"/g,'&quot;')+'" placeholder="(ถ้ามี — จะโชว์ใต้รายการบนใบพิมพ์)" oninput="pkpOnField('+i+',\'note\',this.value)"></div>'
-        +'<div class="fg" style="width:auto;"><label class="fl">&nbsp;</label><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap;padding:7px 0;color:'+(it.noReq?'var(--rd,#ff453a)':'var(--tx,#e6edf6)')+';"><input type="checkbox" '+(it.noReq?'':'checked')+' onchange="pkpOnField('+i+',\'noReq\',!this.checked)" style="width:16px;height:16px;cursor:pointer;">'+(it.noReq?'ไม่เบิกอุปกรณ์ (วัสดุมาเอง)':'เบิกอุปกรณ์')+'</label></div></div>'
+        +'<div class="fg" style="width:auto;"><label class="fl">&nbsp;</label><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap;padding:7px 0;color:'+(it.noReq?'var(--rd,#ff453a)':'var(--tx,#e6edf6)')+';"><input type="checkbox" '+(it.noReq?'':'checked')+' onchange="pkpOnNoReq('+i+',this.checked)" style="width:16px;height:16px;cursor:pointer;">'+(it.noReq?'ไม่เบิกอุปกรณ์ (วัสดุมาเอง)':'เบิกอุปกรณ์')+'</label></div></div>'
       +'<div id="pkpCalc'+i+'" style="font-size:12px;color:var(--mu,#6b7a94);line-height:1.7;border-top:1px dashed var(--line,#2a3344);padding-top:7px;"></div>'
     +'</div>';
   });
