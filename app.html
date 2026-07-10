@@ -923,6 +923,25 @@ async function getQuoteTrackFast(opts, cacheOpts){
 }
 
 // ── [Part B] เปิดดู 1 ใบ ผ่าน Drive API — flag แยก + fallback GAS อัตโนมัติ ──
+let USE_SHEETS_TASK = true;
+async function getTaskListFast(opts){
+  opts = opts || {};
+  if (USE_SHEETS_TASK && CURRENT_USER) {
+    try {
+      const r = await fetch(API.replace(/\/api$/, '/task-list'), {
+        method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
+      });
+      const data = await r.json();
+      if (data && data.ok && Array.isArray(data.tasks)) { _markJobSource('sheets', data.ms); return data; }
+      console.warn('[getTaskListFast] /task-list ไม่ ok → fallback GAS:', data && data.error);
+    } catch(e){ console.warn('[getTaskListFast] error → fallback GAS:', e.message); }
+  }
+  const action = (CURRENT_USER && CURRENT_USER.role === 'manager') ? 'pk_taskListAll' : 'pk_taskListMine';
+  const _g = await call({ action:action, ...opts }); _markJobSource('gas'); return _g;
+}
+
 let USE_SHEETS_RECORD_GET = true;
 async function getRecordGetFast(id){
   if (USE_SHEETS_RECORD_GET && CURRENT_USER && id) {
@@ -1924,7 +1943,7 @@ function renderOfficeShell(){
             </div>
             <div class="card-body">
               <div class="fg" style="margin-bottom:10px;"><label class="fl">หัวข้องาน <span style="color:var(--rd)">*</span></label><input class="fi" id="tmgrFTitle" type="text"></div>
-              <div class="fg" style="margin-bottom:10px;"><label class="fl">รายละเอียด</label><textarea class="fi" id="tmgrFDetail" rows="3" style="resize:vertical;"></textarea></div>
+              <div class="fg" style="margin-bottom:10px;"><label class="fl">รายละเอียด</label>${taskToolbarHtml('tmgrFDetail')}<textarea class="fi" id="tmgrFDetail" rows="3" style="resize:vertical;"></textarea></div>
               <div class="fg" style="margin-bottom:10px;"><label class="fl">มอบให้ <span style="color:var(--rd)">*</span></label><select class="fi" id="tmgrFAssignee"><option value="">— เลือกผู้รับ —</option></select></div>
               <div class="row-form" style="gap:8px;">
                 <div class="fg" style="flex:1;"><label class="fl">กำหนดส่ง</label><input class="fi" id="tmgrFDue" type="date"></div>
@@ -4561,7 +4580,7 @@ function tmgrSetBadge(n){ const el = document.getElementById('tmgrBadge'); if (e
 async function tmgrBadgeRefresh(){
   if (!CURRENT_USER || CURRENT_USER.role !== 'manager') return;
   try {
-    const r = await call({ action:'pk_taskListAll' });
+    const r = await getTaskListFast();
     if (r && r.ok) tmgrSetBadge((r.tasks || []).filter(t => t.status === 'done').length);
   } catch(e){}
 }
@@ -7123,6 +7142,72 @@ async function outSettle(id){
 //  ✅ MY TASKS — งานที่ได้รับมอบหมาย (Feature #2 · assignee ทุก role)
 //  ใช้ร่วมทั้ง office/sales/tech (มี view เดียวใน DOM ต่อ role → id ไม่ชน)
 // ════════════════════════════════════════
+function taskFmtInline_(s){ return escHtml(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>'); }
+function taskFmtRich(text, tickCtx){
+  const lines = String(text || '').split(/\r?\n/);
+  let ord = -1;
+  return lines.map(function(line){
+    const cm = line.match(/^\s*\[( |x|X)?\]\s?(.*)$/);
+    if (cm){
+      ord++;
+      const done = (cm[1]||'').toLowerCase() === 'x';
+      const label = taskFmtInline_(cm[2]);
+      if (tickCtx && tickCtx.canTick)
+        return '<label onchange="mtTick(\''+escAttr(tickCtx.taskId)+'\','+ord+',this.querySelector(\'input\').checked)" style="display:flex;gap:8px;align-items:flex-start;margin:2px 0;cursor:pointer;"><input type="checkbox" '+(done?'checked':'')+' style="margin-top:4px;"> <span>'+label+'</span></label>';
+      return '<div style="display:flex;gap:8px;align-items:flex-start;margin:2px 0;"><span>'+(done?'☑':'☐')+'</span><span>'+label+'</span></div>';
+    }
+    const hm = line.match(/^\s*#\s+(.*)$/);
+    if (hm) return '<div style="font-weight:700;font-size:1.06em;margin:8px 0 3px;">'+taskFmtInline_(hm[1])+'</div>';
+    if (/^\s*---\s*$/.test(line)) return '<hr style="border:none;border-top:1px solid var(--bdr);margin:8px 0;">';
+    const bm = line.match(/^\s*-\s+(.*)$/);
+    if (bm) return '<div style="display:flex;gap:7px;margin:2px 0;"><span>•</span><span>'+taskFmtInline_(bm[1])+'</span></div>';
+    const nm = line.match(/^\s*(\d+)\.\s+(.*)$/);
+    if (nm) return '<div style="display:flex;gap:7px;margin:2px 0;"><span>'+escHtml(nm[1])+'.</span><span>'+taskFmtInline_(nm[2])+'</span></div>';
+    return '<div>'+taskFmtInline_(line)+'</div>';
+  }).join('');
+}
+function taskChecklistCount(text){
+  let total=0, done=0;
+  String(text||'').split(/\r?\n/).forEach(function(l){ const m=l.match(/^\s*\[( |x|X)?\]/); if(m){ total++; if((m[1]||'').toLowerCase()==='x') done++; } });
+  return { total: total, done: done };
+}
+function taskToolbarHtml(taId){
+  const b = function(label, fn, title){ return '<button type="button" class="btn btn-g btn-sm" onclick="'+fn+'" title="'+title+'">'+label+'</button>'; };
+  return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 6px;">'
+    + b('☑ รายการติ๊ก', "taskInsLine('"+taId+"','[] ')", 'เพิ่มข้อที่ติ๊กได้ — ผู้รับงานติ๊กความคืบหน้าได้')
+    + b('•', "taskInsLine('"+taId+"','- ')", 'หัวข้อย่อย')
+    + b('1.', "taskInsLine('"+taId+"','1. ')", 'ลำดับขั้น')
+    + b('<b>B</b>', "taskWrapSel('"+taId+"','**')", 'ตัวหนา (เลือกคำก่อนแล้วกด)')
+    + b('<b>H</b>', "taskInsLine('"+taId+"','# ')", 'หัวข้อใหญ่')
+    + b('─', "taskInsBlock('"+taId+"','---')", 'เส้นคั่น')
+    + '</div>';
+}
+function taskInsLine(id, prefix){
+  const ta = document.getElementById(id); if (!ta) return;
+  const p = ta.selectionStart, v = ta.value;
+  const lineStart = v.lastIndexOf('\n', p - 1) + 1;
+  const needNl = v.slice(lineStart, p).trim().length > 0;
+  const ins = (needNl ? '\n' : '') + prefix;
+  ta.value = v.slice(0, p) + ins + v.slice(ta.selectionEnd);
+  ta.selectionStart = ta.selectionEnd = p + ins.length; ta.focus();
+}
+function taskWrapSel(id, mark){
+  const ta = document.getElementById(id); if (!ta) return;
+  const s = ta.selectionStart, e = ta.selectionEnd, v = ta.value, sel = v.slice(s, e) || 'text';
+  ta.value = v.slice(0, s) + mark + sel + mark + v.slice(e);
+  ta.selectionStart = s + mark.length; ta.selectionEnd = s + mark.length + sel.length; ta.focus();
+}
+function taskInsBlock(id, block){
+  const ta = document.getElementById(id); if (!ta) return;
+  const p = ta.selectionStart, v = ta.value;
+  const ins = (p > 0 && v[p-1] !== '\n' ? '\n' : '') + block + '\n';
+  ta.value = v.slice(0, p) + ins + v.slice(ta.selectionEnd);
+  ta.selectionStart = ta.selectionEnd = p + ins.length; ta.focus();
+}
+function taskOldAccepted_(t){
+  return !!(t && t.status === 'accepted' && Number(t.reviewedAt || t.updatedAt || 0) < Date.now() - 7*86400000);
+}
+
 let _myTasks = [];
 let _mtSubmitId = null;
 let _mtPhotos = [];
@@ -7159,6 +7244,7 @@ function mtSubmitModalHTML(){
   +     '<div class="card-body" style="overflow-y:auto;flex:1;min-height:0;">'
   +       '<div class="fg" style="margin-bottom:12px;">'
   +         '<label class="fl">รายละเอียดผลงาน (เขียนแบบรายงานได้ · วางรูปด้วย Ctrl+V ได้)</label>'
+  +         taskToolbarHtml('mtResult')
   +         '<div style="background:var(--surf2);padding:14px;border-radius:6px;display:flex;justify-content:center;">'
   +           '<textarea class="fi" id="mtResult" rows="8" onpaste="mtResultPaste(event)" placeholder="พิมพ์รายงานผลการทำงานที่นี่...&#10;(วางรูปจาก clipboard ได้ — รูปจะไปอยู่ที่แนบรูปด้านล่าง)" style="resize:vertical;width:100%;max-width:720px;min-height:200px;background:#fff;color:#222;line-height:1.7;padding:32px 36px;font-family:Sarabun,sans-serif;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.3);border-radius:3px;border:none;"></textarea>'
   +         '</div>'
@@ -7178,7 +7264,10 @@ function mtSubmitModalHTML(){
 
 // ── จุดแดงแจ้งเตือนงานบนเมนู "งานของฉัน" (sidebar) ──
 function pkCountMyOpenTasks_(tasks){
-  return (tasks||[]).filter(function(t){ return ['pending','in_progress','rejected'].indexOf(t.status) !== -1; }).length;
+  return (tasks||[]).filter(function(t){
+    if (CURRENT_USER && CURRENT_USER.role === 'manager' && t.assignedTo !== CURRENT_USER.username) return false;
+    return ['pending','in_progress','rejected'].indexOf(t.status) !== -1;
+  }).length;
 }
 function pkSetMyTaskDot(n){
   var btns = document.querySelectorAll('[data-tab="mytasks"]');
@@ -7194,7 +7283,7 @@ function pkSetMyTaskDot(n){
 }
 async function pkRefreshMyTaskDot(){
   try {
-    var r = await call({ action:'pk_taskListMine' });
+    var r = await getTaskListFast();
     if (r && r.ok) pkSetMyTaskDot(pkCountMyOpenTasks_(r.tasks || []));
   } catch(e){}
 }
@@ -7203,9 +7292,9 @@ async function myTasksLoad(){
   if (!w) return;
   w.innerHTML = (typeof skelCards === 'function') ? skelCards(3) : '<div class="loading-row">กำลังโหลด...</div>';
   try {
-    const r = await call({ action:'pk_taskListMine' });
+    const r = await getTaskListFast();
     if (!r.ok){ w.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
-    _myTasks = r.tasks || [];
+    _myTasks = (r.tasks || []).filter(function(t){ return !CURRENT_USER || CURRENT_USER.role !== 'manager' || t.assignedTo === CURRENT_USER.username; });
     myTasksRender();
   } catch(e){ w.innerHTML = '<div class="loading-row">❌ เชื่อมต่อไม่ได้</div>'; }
 }
@@ -7268,6 +7357,9 @@ function mtCard(t){
   const pri = { 'สูง':'color:var(--rd);font-weight:700;', 'กลาง':'color:var(--amb);', 'ต่ำ':'color:var(--mu);' }[t.priority] || '';
   const overdue = taskIsOverdueOpen_(t);
   const due = t.dueDate ? '<span style="' + (overdue ? 'color:var(--rd);font-weight:700;' : '') + '">⏰ ส่ง ' + escHtml(t.dueDate) + (overdue ? ' · เลยมา ' + taskDaysOverdue_(t.dueDate) + ' วัน' : '') + '</span>' : '';
+  const ck = taskChecklistCount(t.detail);
+  const ckChip = ck.total ? ' <span style="display:inline-block;background:var(--surf2);border:1px solid var(--bdr);border-radius:999px;padding:1px 7px;font-family:var(--mono);font-size:11px;">'+ck.done+'/'+ck.total+'</span>' : '';
+  const detailBox = t.detail ? '<div style="border:1px solid var(--bdr);border-radius:8px;padding:8px 10px;margin:7px 0;background:var(--surf2);font-size:13px;line-height:1.55;">' + taskFmtRich(t.detail, { taskId:t.taskId, canTick:['pending','in_progress','rejected'].indexOf(t.status)!==-1 }) + '</div>' : '';
   let actions = '<button class="btn btn-g btn-sm" onclick="openTaskDetail(\'' + escAttr(t.taskId) + '\')">📄 ดู</button>';
   if (t.status === 'pending')          actions += '<button class="btn btn-p btn-sm" onclick="mtStart(\'' + escAttr(t.taskId) + '\')">▶ เริ่มงาน</button>';
   else if (t.status === 'in_progress') actions += '<button class="btn btn-p btn-sm" onclick="mtOpenSubmit(\'' + escAttr(t.taskId) + '\')">📤 ส่งผลงาน</button>';
@@ -7278,8 +7370,8 @@ function mtCard(t){
       + '<div style="font-weight:700;">' + escHtml(t.title) + '</div>'
       + '<div style="font-size:12px;' + pri + '">' + escHtml(t.priority||'') + '</div>'
     + '</div>'
-    + (t.detail ? '<div style="font-size:13px;color:var(--mu);margin:4px 0;white-space:pre-wrap;">' + escHtml(t.detail) + '</div>' : '')
-    + '<div style="font-size:12px;margin:6px 0;">' + mtStatusBadge(t.status) + (due ? ' · ' + due : '') + '</div>'
+    + '<div style="font-size:12px;margin:6px 0;">' + mtStatusBadge(t.status) + ckChip + (due ? ' · ' + due : '') + '</div>'
+    + detailBox
     + reject
     + (actions ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' + actions + '</div>' : '')
   + '</div>';
@@ -7293,6 +7385,19 @@ function mtStart(id){
     if (!r.ok){ toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast('▶ เริ่มงานแล้ว'); myTasksLoad();
   }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
+}
+
+async function mtTick(taskId, ord, checked){
+  try {
+    const r = await call({ action:'pk_taskTick', id:taskId, line:ord, checked:!!checked });
+    if (!r.ok){ toast('❌ ' + (r.error || 'อัปเดตไม่ได้')); myTasksRender(); return; }
+    const t = _myTasks.find(x => String(x.taskId) === String(taskId));
+    if (t) t.detail = r.detail || '';
+    myTasksRender();
+  } catch(e){
+    toast('❌ เชื่อมต่อไม่ได้');
+    myTasksRender();
+  }
 }
 
 // ย้าย modal ไป body + ลบตัวซ้ำ (myTasksScreenHTML render 3 view → id ซ้ำ) → modal เดียวที่ body ไม่โดน content-area clip
@@ -7400,9 +7505,9 @@ function taskA4HTML(t){
     + '<div style="font-size:12.5px;color:#555;margin-bottom:3px;">รหัส ' + escHtml(t.taskId) + ' · มอบให้ ' + escHtml(t.assignedToName || t.assignedTo) + ' · โดย ' + escHtml(t.assignedBy || '-') + '</div>'
     + '<div style="font-size:12.5px;color:#555;margin-bottom:3px;">ความสำคัญ ' + escHtml(t.priority || '-') + (t.dueDate ? ' · กำหนดส่ง ' + escHtml(t.dueDate) : '') + '</div>'
     + '<div style="font-size:12.5px;color:#555;margin-bottom:16px;">มอบหมาย ' + fmtDate(t.createdAt) + (t.resultAt ? ' · ส่งผล ' + fmtDate(t.resultAt) : '') + '</div>'
-    + (t.detail ? '<div style="margin-bottom:16px;"><b>โจทย์งาน</b><div style="white-space:pre-wrap;margin-top:5px;">' + escHtml(t.detail) + '</div></div>' : '')
+    + (t.detail ? '<div style="margin-bottom:16px;"><b>โจทย์งาน</b><div style="margin-top:5px;">' + taskFmtRich(t.detail) + '</div></div>' : '')
     + '<div style="border-top:1px dashed #bbb;padding-top:14px;"><b>ผลงานที่ส่ง</b>'
-    +   '<div style="white-space:pre-wrap;margin-top:6px;">' + (t.result ? escHtml(t.result) : '<span style="color:#999;">(ยังไม่ส่งผล)</span>') + '</div>'
+    +   '<div style="margin-top:6px;">' + (t.result ? taskFmtRich(t.result) : '<span style="color:#999;">(ยังไม่ส่งผล)</span>') + '</div>'
     +   (photos ? '<div style="margin-top:12px;">' + photos + '</div>' : '')
     + '</div>'
     + (t.review ? '<div style="border-top:1px dashed #bbb;margin-top:14px;padding-top:14px;color:#b00;"><b>หมายเหตุจากผู้ตรวจ</b><div style="white-space:pre-wrap;margin-top:5px;">' + escHtml(t.review) + '</div></div>' : '')
@@ -7465,7 +7570,7 @@ async function taskMgrLoadList(){
   const w = document.getElementById('tmgrList');
   if (w) w.innerHTML = (typeof skelCards === 'function') ? skelCards(3) : '<div class="loading-row">กำลังโหลด...</div>';
   try {
-    const r = await call({ action:'pk_taskListAll' });
+    const r = await getTaskListFast();
     if (!r.ok){ if (w) w.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
     _tmgrAll = r.tasks || [];
     _allTasks = _tmgrAll;
@@ -7533,6 +7638,8 @@ function taskMgrRenderList(){
 function tmgrCard(t){
   const overdue = taskIsOverdueMgr_(t);
   const due = t.dueDate ? '<span style="' + (overdue ? 'color:var(--rd);font-weight:700;' : '') + '">⏰ ' + escHtml(t.dueDate) + (overdue ? ' · เลยมา ' + taskDaysOverdue_(t.dueDate) + ' วัน' : '') + '</span>' : '';
+  const ck = taskChecklistCount(t.detail);
+  const ckChip = ck.total ? ' <span style="display:inline-block;background:var(--surf2);border:1px solid var(--bdr);border-radius:999px;padding:1px 7px;font-family:var(--mono);font-size:11px;">'+ck.done+'/'+ck.total+'</span>' : '';
   const photos = (t.resultPhotos || []).map(p => '<a href="'+fixDriveUrl(p)+'" target="_blank"><img src="'+fixDriveUrl(p)+'" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--bdr);" referrerpolicy="no-referrer"></a>').join('');
   const result = t.result ? '<div style="background:var(--surf2);border-radius:7px;padding:8px;margin:6px 0;font-size:13px;white-space:pre-wrap;">'+escHtml(t.result)+'</div>' : '';
   const review = t.review ? '<div style="font-size:12px;color:var(--mu);">📝 '+escHtml(t.review)+'</div>' : '';
@@ -7543,7 +7650,7 @@ function tmgrCard(t){
   return '<div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--bdr);border-radius:10px;">'
     + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
       + '<div style="font-weight:700;">'+escHtml(t.title)+' <span style="font-family:var(--mono);font-size:11px;color:var(--mu);">'+escHtml(t.taskId)+'</span></div>'
-      + '<div style="font-size:12px;">'+mtStatusBadge(t.status)+'</div>'
+      + '<div style="font-size:12px;">'+mtStatusBadge(t.status)+ckChip+'</div>'
     + '</div>'
     + '<div style="font-size:15px;font-weight:700;color:var(--tx);margin:5px 0 2px;">👤 '+escHtml(t.assignedToName||t.assignedTo)+'</div>'
     + ((due||t.priority) ? '<div style="font-size:12px;color:var(--mu);margin-bottom:4px;">'+[due, (t.priority?escHtml(t.priority):'')].filter(Boolean).join(' · ')+'</div>' : '')
@@ -9178,6 +9285,33 @@ function tmgrCancel(id){
 
 let _tmgrDrillUser = null, _tmgrDrillName = '';
 
+function taskDashboardFromTasks_(tasks){
+  const today = pkTodayStr_();
+  const map = {};
+  (tasks || []).forEach(function(o){
+    if (!o || !o.taskId || taskOldAccepted_(o)) return;
+    const key = o.assignedTo || '(ไม่ระบุ)';
+    if (!map[key]) map[key] = {
+      assignedTo: key, assignedToName: o.assignedToName || key,
+      total:0, pending:0, in_progress:0, done:0, accepted:0, rejected:0, cancelled:0, overdue:0
+    };
+    const s = map[key];
+    s.total++;
+    if (typeof s[o.status] !== 'undefined') s[o.status]++;
+    if (o.dueDate && o.dueDate < today && ['accepted','cancelled'].indexOf(o.status) === -1) s.overdue++;
+  });
+  const people = Object.keys(map).map(function(k){
+    const s = map[k];
+    s.pctDone = s.total ? Math.round((s.accepted / s.total) * 100) : 0;
+    return s;
+  }).sort(function(a,b){ return (b.overdue - a.overdue) || (b.total - a.total); });
+  const totals = people.reduce(function(t,s){
+    t.total += s.total; t.overdue += s.overdue; t.done += s.done; t.accepted += s.accepted;
+    return t;
+  }, { total:0, overdue:0, done:0, accepted:0 });
+  return { ok:true, people:people, totals:totals };
+}
+
 async function taskMgrLoadDashboard(){
   // กลับมุมมองรายคนเสมอเมื่อโหลด
   document.getElementById('tmgrPersonDrill').style.display = 'none';
@@ -9185,7 +9319,9 @@ async function taskMgrLoadDashboard(){
   const w = document.getElementById('tmgrDashList');
   if (w) w.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
   try {
-    const r = await call({ action:'pk_taskDashboard' });
+    const fr = await getTaskListFast();
+    if (fr && fr.ok && Array.isArray(fr.tasks)) { _tmgrAll = fr.tasks; _allTasks = _tmgrAll; }
+    const r = (fr && fr.ok && Array.isArray(fr.tasks)) ? taskDashboardFromTasks_(fr.tasks) : await call({ action:'pk_taskDashboard' });
     if (!r.ok){ if (w) w.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
     const sm = document.getElementById('tmgrDashSummary');
     const tot = r.totals || {};
@@ -9245,7 +9381,14 @@ async function tmgrShowPerson(username, name){
   const w = document.getElementById('tmgrPersonTasks');
   w.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
   try {
-    const r = await call({ action:'pk_taskListAll', assignee: username });
+    let tasks = _tmgrAll && _tmgrAll.length ? _tmgrAll : null;
+    if (!tasks){
+      const r = await getTaskListFast();
+      if (!r.ok){ w.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
+      tasks = r.tasks || [];
+      _tmgrAll = tasks;
+    }
+    const r = { ok:true, tasks: tasks.filter(function(t){ return t.assignedTo === username && !taskOldAccepted_(t); }) };
     if (!r.ok){ w.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
     _allTasks = r.tasks || [];   // ให้ tmgrCard/openTaskDetail หาเจอ
     w.innerHTML = _allTasks.length ? _allTasks.map(tmgrCard).join('') : '<div class="loading-row">ไม่มีงาน</div>';
