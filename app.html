@@ -1309,6 +1309,9 @@ function enterApp(){
   pkRefreshMyTaskDot();   // จุดแดงงานของฉันบน sidebar (ทุก role)
   qtBadgeRefresh();       // badge งานวัดเสร็จแล้วยังไม่มีใบเสนอ
 
+  if (window._pkTaskDotInterval) clearInterval(window._pkTaskDotInterval);
+  window._pkTaskDotInterval = setInterval(() => { try { pkRefreshMyTaskDot(); } catch(e){} }, 300000);
+
   if (window._pkSessionInterval) clearInterval(window._pkSessionInterval);
   window._pkSessionFails = 0;
   window._pkSessionInterval = setInterval(async () => {
@@ -1353,7 +1356,7 @@ function renderOfficeShell(){
           <button class="sidebar-item" data-tab="assign" onclick="setTab('assign',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg></span><span class="sidebar-label">จัดทีม</span></button>
           <button class="sidebar-item" data-tab="outstanding" onclick="setTab('outstanding',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M15 14h3"/></svg></span><span class="sidebar-label">ตามยอดคงค้าง</span></button>
           <button class="sidebar-item" data-tab="mytasks" onclick="setTab('mytasks',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></span><span class="sidebar-label">งานของฉัน</span></button>
-          ${CURRENT_USER.role === 'manager' ? `<button class="sidebar-item" data-tab="taskmgr" onclick="setTab('taskmgr',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 3h6v3H9zM9 13l2 2 4-4"/></svg></span><span class="sidebar-label">มอบหมายงาน</span></button>` : ''}
+          ${CURRENT_USER.role === 'manager' ? `<button class="sidebar-item" data-tab="taskmgr" onclick="setTab('taskmgr',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 3h6v3H9zM9 13l2 2 4-4"/></svg></span><span class="sidebar-label">มอบหมายงาน</span><span id="tmgrBadge" class="exp-badge"></span></button>` : ''}
 
           <div class="sidebar-group">วัด & เสนอราคา</div>
           <button class="sidebar-item" data-tab="records" onclick="setTab('records',this)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 17L17 3l4 4L7 21z"/><path d="M8 8l2 2M11 5l2 2M5 11l2 2"/></svg></span><span class="sidebar-label">จดขนาด</span></button>
@@ -1881,9 +1884,9 @@ function renderOfficeShell(){
           <div id="tmgrListWrap">
             <div class="row-form" style="gap:8px;align-items:flex-end;margin-bottom:10px;">
               <button class="btn btn-p" onclick="tmgrOpenForm('create')">+ มอบหมายงานใหม่</button>
-              <div class="fg" style="max-width:170px;"><label class="fl">ผู้รับ</label><select class="fi" id="tmgrFilterAssignee"><option value="">ทุกคน</option></select></div>
+              <div class="fg" style="max-width:170px;"><label class="fl">ผู้รับ</label><select class="fi" id="tmgrFilterAssignee" onchange="taskMgrRenderList()"><option value="">ทุกคน</option></select></div>
               <div class="fg" style="max-width:160px;"><label class="fl">สถานะ</label>
-                <select class="fi" id="tmgrFilterStatus">
+                <select class="fi" id="tmgrFilterStatus" onchange="taskMgrRenderList()">
                   <option value="">ทั้งหมด</option>
                   <option value="pending">รอเริ่ม</option>
                   <option value="in_progress">กำลังทำ</option>
@@ -1895,6 +1898,7 @@ function renderOfficeShell(){
               </div>
               <button class="btn btn-g" onclick="taskMgrLoadList()">🔄</button>
             </div>
+            <div id="tmgrChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>
             <div id="tmgrList"><div class="loading-row">กำลังโหลด...</div></div>
           </div>
           <div id="tmgrDashWrap" style="display:none;">
@@ -1927,6 +1931,20 @@ function renderOfficeShell(){
                 <div class="fg" style="flex:1;"><label class="fl">ความสำคัญ</label><select class="fi" id="tmgrFPriority"><option value="สูง">สูง</option><option value="กลาง" selected>กลาง</option><option value="ต่ำ">ต่ำ</option></select></div>
               </div>
               <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:10px;" onclick="tmgrSubmitForm()">💾 บันทึก</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-bg" id="tmgrRejectModal">
+          <div class="modal" style="max-width:560px;">
+            <div class="card-head"><span>↩ ตีกลับงาน</span>
+              <button onclick="tmgrRejectClose()" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button>
+            </div>
+            <div class="card-body">
+              <div class="fg" style="margin-bottom:10px;"><label class="fl">เหตุผล / สิ่งที่ต้องแก้ <span style="color:var(--rd)">*</span></label><textarea class="fi" id="tmgrRejectReason" rows="4" placeholder="เหตุผล / สิ่งที่ต้องแก้ไข (จำเป็น)" style="resize:vertical;"></textarea></div>
+              <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+                <button class="btn btn-g" onclick="tmgrRejectClose()">ยกเลิก</button>
+                <button class="btn btn-p" onclick="tmgrRejectSubmit()">ยืนยันตีกลับ</button>
+              </div>
             </div>
           </div>
         </div>
@@ -2300,6 +2318,7 @@ function officeInit(){
   reloadAll();
   expenseBadgeRefresh();
   cfBadgeRefresh();   // badge จำนวนงานรอยืนยัน (รอ CF)
+  tmgrBadgeRefresh(); // badge งานมอบหมายที่รอตรวจ
   qtBadgeRefresh();   // badge งานวัดเสร็จแล้วยังไม่มีใบเสนอ
 }
 
@@ -4537,6 +4556,14 @@ function cfSetBadge(n){ const el = document.getElementById('cfBadge'); if (el) e
 async function cfBadgeRefresh(){
   if (!CURRENT_USER || (CURRENT_USER.role !== 'office' && CURRENT_USER.role !== 'manager')) return;
   try { const r = await call({ action:'pk_cfPendingList' }); if (r && r.ok) cfSetBadge(r.items.length); } catch(e){}
+}
+function tmgrSetBadge(n){ const el = document.getElementById('tmgrBadge'); if (el) el.textContent = (n > 0) ? n : ''; }
+async function tmgrBadgeRefresh(){
+  if (!CURRENT_USER || CURRENT_USER.role !== 'manager') return;
+  try {
+    const r = await call({ action:'pk_taskListAll' });
+    if (r && r.ok) tmgrSetBadge((r.tasks || []).filter(t => t.status === 'done').length);
+  } catch(e){}
 }
 async function cfLoad(){
   const box = document.getElementById('cfList'); if (!box) return;
@@ -7239,7 +7266,8 @@ function myTasksCalToday(){ const t=new Date(); _myCalY=t.getFullYear(); _myCalM
 
 function mtCard(t){
   const pri = { 'สูง':'color:var(--rd);font-weight:700;', 'กลาง':'color:var(--amb);', 'ต่ำ':'color:var(--mu);' }[t.priority] || '';
-  const due = t.dueDate ? '⏰ ส่ง ' + escHtml(t.dueDate) : '';
+  const overdue = taskIsOverdueOpen_(t);
+  const due = t.dueDate ? '<span style="' + (overdue ? 'color:var(--rd);font-weight:700;' : '') + '">⏰ ส่ง ' + escHtml(t.dueDate) + (overdue ? ' · เลยมา ' + taskDaysOverdue_(t.dueDate) + ' วัน' : '') + '</span>' : '';
   let actions = '<button class="btn btn-g btn-sm" onclick="openTaskDetail(\'' + escAttr(t.taskId) + '\')">📄 ดู</button>';
   if (t.status === 'pending')          actions += '<button class="btn btn-p btn-sm" onclick="mtStart(\'' + escAttr(t.taskId) + '\')">▶ เริ่มงาน</button>';
   else if (t.status === 'in_progress') actions += '<button class="btn btn-p btn-sm" onclick="mtOpenSubmit(\'' + escAttr(t.taskId) + '\')">📤 ส่งผลงาน</button>';
@@ -7399,9 +7427,12 @@ async function mtSubmit(){
 //  📋 TASK MANAGER — มอบหมายงาน (Feature #2 · manager)
 // ════════════════════════════════════════
 let _allTasks = [];
+let _tmgrAll = [];
+let _tmgrChip = '';
 let _taskUsers = [];
 let _tmgrFormMode = 'create';
 let _tmgrEditId = null;
+let _tmgrRejectId = null;
 
 function taskMgrInit(){ taskMgrLoadUsers(); taskMgrSetSubtab('list'); taskMgrLoadList(); }
 
@@ -7433,23 +7464,80 @@ function taskMgrSetSubtab(which){
 async function taskMgrLoadList(){
   const w = document.getElementById('tmgrList');
   if (w) w.innerHTML = (typeof skelCards === 'function') ? skelCards(3) : '<div class="loading-row">กำลังโหลด...</div>';
-  const assignee = document.getElementById('tmgrFilterAssignee')?.value || '';
-  const status = document.getElementById('tmgrFilterStatus')?.value || '';
   try {
-    const r = await call({ action:'pk_taskListAll', assignee, status });
+    const r = await call({ action:'pk_taskListAll' });
     if (!r.ok){ if (w) w.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
-    _allTasks = r.tasks || [];
-    if (w) w.innerHTML = _allTasks.length ? _allTasks.map(tmgrCard).join('') : '<div class="loading-row">ไม่มีงาน</div>';
+    _tmgrAll = r.tasks || [];
+    _allTasks = _tmgrAll;
+    taskMgrRenderList();
+    tmgrBadgeRefresh();
   } catch(e){ if (w) w.innerHTML = '<div class="loading-row">❌ เชื่อมต่อไม่ได้</div>'; }
 }
 
+function taskIsOverdueMgr_(t){
+  return !!(t && t.dueDate && t.dueDate < pkTodayStr_() && ['accepted','cancelled'].indexOf(t.status) === -1);
+}
+function taskIsOverdueOpen_(t){
+  return !!(t && t.dueDate && t.dueDate < pkTodayStr_() && ['pending','in_progress','rejected'].indexOf(t.status) !== -1);
+}
+function taskDaysOverdue_(dueDate){
+  const today = new Date(pkTodayStr_() + 'T00:00:00');
+  const due = new Date(String(dueDate) + 'T00:00:00');
+  return Math.max(1, Math.floor((today.getTime() - due.getTime()) / 86400000));
+}
+function taskMgrSetChip(chip){
+  _tmgrChip = (_tmgrChip === chip) ? '' : chip;
+  taskMgrRenderList();
+}
+function taskMgrRenderChips(){
+  const box = document.getElementById('tmgrChips');
+  if (!box) return;
+  const counts = {
+    waiting: _tmgrAll.filter(t => t.status === 'done').length,
+    overdue: _tmgrAll.filter(taskIsOverdueMgr_).length,
+    pending: _tmgrAll.filter(t => t.status === 'pending').length
+  };
+  const chips = [
+    ['waiting', '📤 รอตรวจ (' + counts.waiting + ')'],
+    ['overdue', '🔴 เลยกำหนด (' + counts.overdue + ')'],
+    ['pending', '⏳ ยังไม่รับ (' + counts.pending + ')']
+  ];
+  box.innerHTML = chips.map(c => {
+    const on = _tmgrChip === c[0];
+    const st = 'border-radius:var(--r-pill);' + (on ? 'border-color:var(--acc);background:var(--acc-t);' : '');
+    return '<button class="btn btn-g btn-sm" style="' + st + '" onclick="taskMgrSetChip(\'' + c[0] + '\')">' + c[1] + '</button>';
+  }).join('');
+}
+function taskMgrRenderList(){
+  const w = document.getElementById('tmgrList');
+  const assignee = document.getElementById('tmgrFilterAssignee')?.value || '';
+  const status = document.getElementById('tmgrFilterStatus')?.value || '';
+  taskMgrRenderChips();
+  let list = (_tmgrAll || []).filter(t => {
+    if (assignee && t.assignedTo !== assignee) return false;
+    if (status && t.status !== status) return false;
+    if (_tmgrChip === 'waiting' && t.status !== 'done') return false;
+    if (_tmgrChip === 'overdue' && !taskIsOverdueMgr_(t)) return false;
+    if (_tmgrChip === 'pending' && t.status !== 'pending') return false;
+    return true;
+  });
+  list.sort((a,b) => {
+    const ga = (a.status === 'done') ? 0 : (taskIsOverdueMgr_(a) ? 1 : 2);
+    const gb = (b.status === 'done') ? 0 : (taskIsOverdueMgr_(b) ? 1 : 2);
+    return (ga - gb) || (Number(b.updatedAt||0) - Number(a.updatedAt||0));
+  });
+  _allTasks = list;
+  if (w) w.innerHTML = list.length ? list.map(tmgrCard).join('') : '<div class="loading-row">ไม่มีงาน</div>';
+}
+
 function tmgrCard(t){
-  const due = t.dueDate ? '⏰ ' + escHtml(t.dueDate) : '';
+  const overdue = taskIsOverdueMgr_(t);
+  const due = t.dueDate ? '<span style="' + (overdue ? 'color:var(--rd);font-weight:700;' : '') + '">⏰ ' + escHtml(t.dueDate) + (overdue ? ' · เลยมา ' + taskDaysOverdue_(t.dueDate) + ' วัน' : '') + '</span>' : '';
   const photos = (t.resultPhotos || []).map(p => '<a href="'+fixDriveUrl(p)+'" target="_blank"><img src="'+fixDriveUrl(p)+'" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--bdr);" referrerpolicy="no-referrer"></a>').join('');
   const result = t.result ? '<div style="background:var(--surf2);border-radius:7px;padding:8px;margin:6px 0;font-size:13px;white-space:pre-wrap;">'+escHtml(t.result)+'</div>' : '';
   const review = t.review ? '<div style="font-size:12px;color:var(--mu);">📝 '+escHtml(t.review)+'</div>' : '';
   let actions = '<button class="btn btn-g btn-sm" onclick="openTaskDetail(\''+escAttr(t.taskId)+'\')">📄 ดู</button>';
-  if (t.status === 'done') actions += '<button class="btn btn-p btn-sm" onclick="tmgrAccept(\''+escAttr(t.taskId)+'\')">✅ ผ่าน</button><button class="btn btn-g btn-sm" onclick="tmgrReject(\''+escAttr(t.taskId)+'\')">↩ ตีกลับ</button>';
+  if (t.status === 'done') actions += '<button class="btn btn-p btn-sm" onclick="tmgrAccept(\''+escAttr(t.taskId)+'\')">✅ ผ่าน</button><button class="btn btn-g btn-sm" onclick="tmgrRejectOpen(\''+escAttr(t.taskId)+'\')">↩ ตีกลับ</button>';
   if (['accepted','cancelled'].indexOf(t.status) === -1)
     actions += '<button class="btn btn-g btn-sm" onclick="tmgrOpenForm(\'edit\',\''+escAttr(t.taskId)+'\')">✏️ แก้</button><button class="btn btn-g btn-sm" onclick="tmgrCancel(\''+escAttr(t.taskId)+'\')">🚫 ยกเลิก</button>';
   return '<div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--bdr);border-radius:10px;">'
@@ -9048,26 +9136,44 @@ async function tmgrSubmitForm(){
     hideLoad();
     if (!r.ok){ toast('❌ '+(r.error||'ผิดพลาด')); return; }
     toast(_tmgrFormMode === 'edit' ? '✅ แก้ไขแล้ว' : '✅ มอบหมายแล้ว');
-    tmgrCloseForm(); tmgrRefresh();
+    tmgrCloseForm(); tmgrRefresh(); tmgrBadgeRefresh();
   } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
 function tmgrAccept(id){
   if (!confirm('อนุมัติงานนี้?')) return;
   showLoad('กำลังอัปเดต...');
-  call({ action:'pk_taskReview', id, decision:'accept' }).then(r => { hideLoad(); if (!r.ok){ toast('❌ '+(r.error||'')); return; } toast('🎉 อนุมัติแล้ว'); tmgrRefresh(); }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
+  call({ action:'pk_taskReview', id, decision:'accept' }).then(r => { hideLoad(); if (!r.ok){ toast('❌ '+(r.error||'')); return; } toast('🎉 อนุมัติแล้ว'); tmgrRefresh(); tmgrBadgeRefresh(); }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
 }
 function tmgrReject(id){
-  const reason = prompt('เหตุผลที่ตีกลับ:');
-  if (reason === null) return;
-  if (!reason.trim()){ toast('ต้องระบุเหตุผล'); return; }
+  tmgrRejectOpen(id);
+}
+function tmgrRejectOpen(id){
+  _tmgrRejectId = id;
+  const ta = document.getElementById('tmgrRejectReason');
+  if (ta) ta.value = '';
+  document.getElementById('tmgrRejectModal').classList.add('on');
+}
+function tmgrRejectClose(){
+  document.getElementById('tmgrRejectModal').classList.remove('on');
+  _tmgrRejectId = null;
+}
+async function tmgrRejectSubmit(){
+  const reason = (document.getElementById('tmgrRejectReason')?.value || '').trim();
+  if (!_tmgrRejectId) return;
+  if (!reason){ toast('ต้องระบุเหตุผล'); return; }
   showLoad('กำลังอัปเดต...');
-  call({ action:'pk_taskReview', id, decision:'reject', review:reason.trim() }).then(r => { hideLoad(); if (!r.ok){ toast('❌ '+(r.error||'')); return; } toast('↩ ตีกลับแล้ว'); tmgrRefresh(); }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
+  try {
+    const r = await call({ action:'pk_taskReview', id:_tmgrRejectId, decision:'reject', review:reason });
+    hideLoad();
+    if (!r.ok){ toast('❌ '+(r.error||'')); return; }
+    toast('↩ ตีกลับแล้ว'); tmgrRejectClose(); tmgrRefresh(); tmgrBadgeRefresh();
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 function tmgrCancel(id){
   if (!confirm('ยกเลิกงานนี้?')) return;
   showLoad('กำลังอัปเดต...');
-  call({ action:'pk_taskCancel', id }).then(r => { hideLoad(); if (!r.ok){ toast('❌ '+(r.error||'')); return; } toast('🚫 ยกเลิกแล้ว'); tmgrRefresh(); }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
+  call({ action:'pk_taskCancel', id }).then(r => { hideLoad(); if (!r.ok){ toast('❌ '+(r.error||'')); return; } toast('🚫 ยกเลิกแล้ว'); tmgrRefresh(); tmgrBadgeRefresh(); }).catch(() => { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); });
 }
 
 let _tmgrDrillUser = null, _tmgrDrillName = '';
