@@ -9300,14 +9300,14 @@ async function qhSave(i){
   var r = _qhRows[i]; if (!r) return;
   try {
     var res = await call({ action: 'pk_quoteHeaderSet', templateId: r.templateId, name: r.name, companyName: r.companyName, addressLines: r.addressLines, contact: r.contact, taxId: r.taxId, isDefault: r.isDefault ? 1 : 0 });
-    if (res && res.ok){ toast('บันทึกแล้ว'); qhLoad(); } else toast((res && res.error) || 'บันทึกไม่ได้');
+    if (res && res.ok){ toast('บันทึกแล้ว'); _quoteHeadersLoaded = false; qhLoad(); } else toast((res && res.error) || 'บันทึกไม่ได้');
   } catch (e) { toast('บันทึกไม่ได้'); }
 }
 async function qhSetDefault(i){
   var r = _qhRows[i]; if (!r) return;
   try {
     var res = await call({ action: 'pk_quoteHeaderSet', templateId: r.templateId, name: r.name, companyName: r.companyName, addressLines: r.addressLines, contact: r.contact, taxId: r.taxId, isDefault: 1 });
-    if (res && res.ok){ toast('ตั้งเป็นค่าเริ่มต้นแล้ว'); qhLoad(); } else toast((res && res.error) || 'ตั้งไม่ได้');
+    if (res && res.ok){ toast('ตั้งเป็นค่าเริ่มต้นแล้ว'); _quoteHeadersLoaded = false; qhLoad(); } else toast((res && res.error) || 'ตั้งไม่ได้');
   } catch (e) { toast('ตั้งไม่ได้'); }
 }
 async function qhDelete(i){
@@ -9316,7 +9316,7 @@ async function qhDelete(i){
   if (!confirm('ลบเทมเพลต "' + (r.name || r.templateId) + '"?')) return;
   try {
     var res = await call({ action: 'pk_quoteHeaderDelete', templateId: r.templateId });
-    if (res && res.ok){ toast('ลบแล้ว'); qhLoad(); } else toast((res && res.error) || 'ลบไม่ได้');
+    if (res && res.ok){ toast('ลบแล้ว'); _quoteHeadersLoaded = false; qhLoad(); } else toast((res && res.error) || 'ลบไม่ได้');
   } catch (e) { toast('ลบไม่ได้'); }
 }
 
@@ -10498,8 +10498,10 @@ async function quoteLoadMetadata(){
   } catch(e) {}
 }
 
+let _quoteHeadersLoaded = false;   // โหลดครั้งเดียวพอ — เดิมยิง GAS ทุกครั้งที่เปิดการ์ด = ช้า
 async function quoteLoadHeaders(){
-  try { const g = await call({ action: 'pk_quoteHeaderList' }); _quoteHeaders = (g && g.ok) ? (g.rows || []) : []; }
+  if (_quoteHeadersLoaded) return;
+  try { const g = await call({ action: 'pk_quoteHeaderList' }); _quoteHeaders = (g && g.ok) ? (g.rows || []) : []; _quoteHeadersLoaded = (g && g.ok); }
   catch (e) { _quoteHeaders = []; }
 }
 function quoteSelHeaderId(dc){
@@ -10710,6 +10712,8 @@ function quoteDefaultDoc(){
   };
 }
 
+// ตารางราคาที่ใช้กับใบปัจจุบัน: ใบที่บันทึกแล้วใช้ snapshot ณ วันบันทึก (ตรงกับยอดการ์ด+GAS) · ใบใหม่ใช้ราคาปัจจุบัน
+function quoPriceTable(){ return (_quoForm && _quoForm.priceSnap) || (_quoteMetadata && _quoteMetadata.priceTable) || {}; }
 async function quoteEnsureMetadata(){
   await quoteLoadHeaders();
   if (_quoteMetadata) return true;
@@ -10726,6 +10730,7 @@ async function quoteOpenNew(prefill){
     prefill = prefill || {};
     _quoForm = {
       mode: 'new', id: null,
+      priceSnap: null,   // ใบใหม่ = ราคาปัจจุบันเสมอ
       customer: prefill.customer || { name:'', phone:'' },
       priceType: prefill.priceType || 'HOME',
       mainColor: prefill.mainColor || 'white',
@@ -10780,13 +10785,15 @@ async function quoteOpenView(id){
   _modalOpening = true;
   showLoad('กำลังโหลด...');
   try {
-    if (!await quoteEnsureMetadata()) { return; }
-    const r = await getQuoteGetFast(id);
+    // โหลด metadata กับตัวใบพร้อมกัน (เดิมต่อคิวกัน = ช้า)
+    const [mOk, r] = await Promise.all([quoteEnsureMetadata(), getQuoteGetFast(id)]);
     hideLoad();
+    if (!mOk) { return; }
     if (!r.ok) { toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
     const q = r.quote;
     _quoForm = {
       mode: 'view', id,
+      priceSnap: (q.priceSnapshot && q.priceSnapshot.priceTable) ? q.priceSnapshot.priceTable : null,   // ราคา ณ วันบันทึก — ให้ตรงกับยอดบนการ์ด
       customer: q.customer || { name:'', phone:'' },
       priceType: q.priceType || 'HOME',
       mainColor: q.mainColor || 'white',
@@ -10815,13 +10822,14 @@ async function quoteOpenEdit(id){
   _modalOpening = true;
   showLoad('กำลังโหลด...');
   try {
-    if (!await quoteEnsureMetadata()) { return; }
-    const r = await getQuoteGetFast(id);
+    const [mOk, r] = await Promise.all([quoteEnsureMetadata(), getQuoteGetFast(id)]);
     hideLoad();
+    if (!mOk) { return; }
     if (!r.ok) { toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
     const q = r.quote;
     _quoForm = {
       mode: 'edit', id,
+      priceSnap: (q.priceSnapshot && q.priceSnapshot.priceTable) ? q.priceSnapshot.priceTable : null,   // ตอน save GAS ก็คิดด้วย snapshot เดียวกัน
       customer: q.customer || { name:'', phone:'' },
       priceType: q.priceType || 'HOME',
       mainColor: q.mainColor || 'white',
@@ -10962,7 +10970,7 @@ function quoteCalcEntry(entry){
     let note = '';
     let unit = '', uqty = 0, urate = 0;
     if (t.calc === 'area') {
-      const tbl = _quoteMetadata.priceTable[_quoForm.priceType] && _quoteMetadata.priceTable[_quoForm.priceType][group];
+      const tbl = quoPriceTable()[_quoForm.priceType] && quoPriceTable()[_quoForm.priceType][group];
       const ratePerSqm = tbl ? tbl[t.priceKey] : null;
       if (!ratePerSqm) { breakdown.push({ typeId, label:t.label, price:0, note:'⚠️ ไม่มีราคา' }); return; }
       let area = (w * h) / 10000;
@@ -10973,7 +10981,7 @@ function quoteCalcEntry(entry){
       unit = 'ตร.ม.'; uqty = area * qty; urate = ratePerSqm;
     } else if (t.calc === 'area_h4') {
       // h4 ใช้สูตรพิเศษ: rate_free × area × qty + (area<6 ? 2000×qty : 0)
-      const tbl = _quoteMetadata.priceTable[_quoForm.priceType] && _quoteMetadata.priceTable[_quoForm.priceType][group];
+      const tbl = quoPriceTable()[_quoForm.priceType] && quoPriceTable()[_quoForm.priceType][group];
       const ratePerSqm = tbl ? tbl[t.priceKey] : null;
       if (!ratePerSqm) { breakdown.push({ typeId, label:t.label, price:0, note:'⚠️ ไม่มีราคา' }); return; }
       let area = (w * h) / 10000;
@@ -11242,7 +11250,7 @@ function quoteRenderEntry(e, idx, ro){
       const colorId = e.colorId || _quoForm.mainColor;
       const color = (_quoteMetadata?.colors||[]).find(c => c.id === colorId);
       const group = color ? color.group : 'g1';
-      const tbl = _quoteMetadata.priceTable[_quoForm.priceType] && _quoteMetadata.priceTable[_quoForm.priceType][group];
+      const tbl = quoPriceTable()[_quoForm.priceType] && quoPriceTable()[_quoForm.priceType][group];
       if (!tbl || !tbl[t.priceKey]) unavailable = true;
     }
     return `<label class="quom-type${checked?' checked':''}${unavailable&&!checked?' unavailable':''}">
