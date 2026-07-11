@@ -1566,6 +1566,8 @@ function renderOfficeShell(){
             <div style="font-size:11px;font-weight:700;color:var(--mu,#6b7a94);text-transform:uppercase;letter-spacing:.8px;">ใบผลิตรายเดือน</div>
             <input class="fi" id="pkpListMonth" type="month" style="width:auto;" onchange="pkpLoadList()">
             <button class="btn btn-g btn-sm" onclick="pkpLoadList()">โหลด</button>
+            <input class="fi" id="pkpListSearch" type="text" style="flex:1;min-width:180px;" placeholder="🔍 ค้นหาใบผลิต: ลูกค้า / เลข WO / เลขอ้างอิง (ค้นทุกเดือน)" onkeydown="if(event.key==='Enter')pkpLoadList()">
+            <button class="btn btn-g btn-sm" onclick="pkpLoadList()">ค้นหา</button>
           </div>
           <div id="pkpListWrap"><div class="loading-row">กำลังโหลด...</div></div>
         </div>
@@ -2033,6 +2035,9 @@ function renderOfficeShell(){
           <div class="fg rec-search"><label class="fl">ค้นหา</label>
             <input class="fi" id="quoSearch" type="text" placeholder="ลูกค้า / เบอร์ / ID / Job">
           </div>
+          <div class="fg" style="max-width:150px;"><label class="fl">เดือน</label>
+            <select class="fi" id="quoMonth" onchange="quotesRender()"><option value="all">ทุกเดือน</option></select>
+          </div>
           <button class="btn btn-g" onclick="quotesLoad()">🔄 รีเฟรช</button>
           <button class="btn btn-p" id="quoNewBtn" onclick="quoteNewClick()">+ คำนวณใหม่</button>
           ${isOfficeLevel() ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;">
@@ -2052,6 +2057,9 @@ function renderOfficeShell(){
         <div class="rec-toolbar">
           <div class="fg rec-search"><label class="fl">ค้นหา</label>
             <input class="fi" id="poSearch" type="text" placeholder="ซัพพลายเออร์ / เบอร์ / ID / เลข PO">
+          </div>
+          <div class="fg" style="max-width:150px;"><label class="fl">เดือน</label>
+            <select class="fi" id="poMonth" onchange="poRenderCached()"><option value="all">ทุกเดือน</option></select>
           </div>
           <button class="btn btn-g" onclick="poLoad()">🔄 รีเฟรช</button>
           <button class="btn btn-g" onclick="poOpenHistory()">📜 ประวัติคลัง</button>
@@ -5522,6 +5530,9 @@ function renderQuoteShell(){
           <div class="fg rec-search"><label class="fl">ค้นหา</label>
             <input class="fi" id="quoSearch" type="text" placeholder="ลูกค้า / เบอร์ / ID / Job">
           </div>
+          <div class="fg" style="max-width:150px;"><label class="fl">เดือน</label>
+            <select class="fi" id="quoMonth" onchange="quotesRender()"><option value="all">ทุกเดือน</option></select>
+          </div>
           <button class="btn btn-g" onclick="quotesLoad()">🔄 รีเฟรช</button>
           <button class="btn btn-p" id="quoNewBtn" onclick="quoteNewClick()">+ คำนวณใหม่</button>
         </div>
@@ -5746,6 +5757,9 @@ function renderSalesStub(){
         <div class="rec-toolbar">
           <div class="fg rec-search"><label class="fl">ค้นหา</label>
             <input class="fi" id="quoSearch" type="text" placeholder="ลูกค้า / เบอร์ / ID / Job">
+          </div>
+          <div class="fg" style="max-width:150px;"><label class="fl">เดือน</label>
+            <select class="fi" id="quoMonth" onchange="quotesRender()"><option value="all">ทุกเดือน</option></select>
           </div>
           <button class="btn btn-g" onclick="quotesLoad()">🔄 รีเฟรช</button>
           <button class="btn btn-p" id="quoNewBtn" onclick="quoteNewClick()">+ คำนวณใหม่</button>
@@ -10554,6 +10568,19 @@ async function quoteRunNo(id){
   } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
+// ── ตัวกรองเดือนของลิสต์เอกสาร (ใบเสนอราคา/PO): เติม dropdown จากข้อมูล + กรอง ──
+function docMonthKey_(ts){ if (!ts) return ''; const d = new Date(Number(ts)||ts); return isNaN(d.getTime()) ? '' : d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function docMonthLabel_(key){ const [y,m] = key.split('-'); return new Date(+y, +m-1, 1).toLocaleDateString('th-TH',{month:'short',year:'numeric'}); }
+function docMonthApply_(selId, list, tsOf){
+  const sel = document.getElementById(selId);
+  if (!sel) return list;
+  const keys = [...new Set(list.map(x => docMonthKey_(tsOf(x))).filter(Boolean))].sort().reverse();
+  const cur = sel.value || '';
+  sel.innerHTML = '<option value="all">ทุกเดือน</option>' + keys.map(k => '<option value="'+k+'">'+docMonthLabel_(k)+'</option>').join('');
+  // ค่าเริ่มต้น = เดือนล่าสุดที่มีข้อมูล · คงค่าที่ผู้ใช้เลือกถ้ายังมีอยู่
+  sel.value = (cur && (cur === 'all' || keys.indexOf(cur) !== -1)) ? cur : (keys[0] || 'all');
+  return sel.value === 'all' ? list : list.filter(x => docMonthKey_(tsOf(x)) === sel.value);
+}
 function quotesRender(){
   const w = document.getElementById('quoList');
   if (!_quotes.length) {
@@ -10562,7 +10589,9 @@ function quotesRender(){
     return;
   }
   const isOffice = isOfficeLevel();
-  w.innerHTML = _quotes.map(q => {
+  const _qList = docMonthApply_('quoMonth', _quotes, q => q.updatedAt || q.createdAt);
+  if (!_qList.length){ w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">ไม่มีรายการในเดือนนี้</div>'; return; }
+  w.innerHTML = _qList.map(q => {
     const isDel = !!q.deletedAt;
     const updatedDate = new Date(q.updatedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'});
     const canEdit = !isDel && (isOfficeLevel() || q.createdBy === CURRENT_USER.username);
@@ -12536,10 +12565,14 @@ async function poLoad(){
   const includeDeleted = !!(document.getElementById('poShowDeleted')||{}).checked;
   const r = await getPOListFast({ search, includeDeleted, limit:200, category:_poCat });
   if (!r || !r.ok) { w.innerHTML = '<div class="loading-row" style="grid-column:1/-1;color:var(--red);">โหลดไม่สำเร็จ: '+escHtml((r&&r.error)||'?')+'</div>'; return; }
-  poRender(r.pos || []);
+  _poListCache = r.pos || [];
+  poRender(_poListCache);
 }
+let _poListCache = [];
+function poRenderCached(){ poRender(_poListCache); }   // เปลี่ยนเดือน → กรองจาก cache ไม่ยิงใหม่
 function poRender(list){
   const w = document.getElementById('poList'); if (!w) return;
+  list = docMonthApply_('poMonth', list || [], p => p.updatedAt || p.createdAt);
   if (!list.length){
     const m = (_poCat==='po') ? 'ยังไม่มีใบสั่งซื้อที่ออกเลข<br><small style="color:var(--mu);">ใบที่รันเลขแล้วจะแสดงที่นี่</small>'
                               : 'ยังไม่มีใบร่าง<br><small style="color:var(--mu);">กด "+ สร้างใบสั่งซื้อ" เพื่อเริ่ม</small>';
@@ -12569,6 +12602,7 @@ function poRender(list){
     +   (isOffice && p.createdBy !== CURRENT_USER.username ? '<div style="font-size:11px;color:var(--mu);margin-bottom:6px;">โดย '+escHtml(p.createdBy)+'</div>' : '')
     +   '<div class="rec-btns">'
     +     '<button class="btn btn-g" onclick="poOpenView(\''+p.id+'\')">👁 ดู</button>'
+    +     (!isDel ? '<button class="btn btn-g" onclick="poPdfCard(\''+p.id+'\')">📄 PDF</button>' : '')
     +     (!isDel ? '<button class="btn btn-p" onclick="poOpenEdit(\''+p.id+'\')">✏️ แก้</button>' : '')
     +     (!isDel && !p.poNo ? '<button class="btn" style="background:var(--acc);color:#fff;" onclick="poRunNo(\''+p.id+'\')">🏷 รันเลข</button>' : '')
     +     (!isDel ? '<button class="btn btn-d" onclick="poDelete(\''+p.id+'\')">🗑 ลบ</button>' : '')
@@ -12588,8 +12622,14 @@ function poOpenNew(){
 async function poOpenView(id){ await poOpenLoaded(id, 'view'); }
 async function poOpenEdit(id){ await poOpenLoaded(id, 'edit'); }
 async function poOpenLoaded(id, mode){
+  if (!await poLoadForm_(id, mode)) return;
+  poRenderModal();
+  document.getElementById('pomModal').classList.add('on');
+}
+// โหลดข้อมูล PO เข้า _poForm โดยไม่เปิด modal — ใช้ทั้งเปิดดูและปุ่ม PDF บนการ์ด
+async function poLoadForm_(id, mode){
   const r = await getPOGetFast(id);
-  if (!r || !r.ok) { toast('เปิดไม่ได้: '+((r&&r.error)||'?')); return; }
+  if (!r || !r.ok) { toast('เปิดไม่ได้: '+((r&&r.error)||'?')); return false; }
   const po = r.po || {};
   _poForm = {
     mode, id: po.id || id,
@@ -12604,8 +12644,17 @@ async function poOpenLoaded(id, mode){
     status: po.status||'draft',
     poNo: (po.doc&&po.doc.poNo)||po.poNo||''
   };
-  poRenderModal();
-  document.getElementById('pomModal').classList.add('on');
+  return true;
+}
+// 📄 PDF ตรงจากการ์ด — โหลดเข้า _poForm เงียบ ๆ แล้ว export เลย ไม่เปิด modal
+async function poPdfCard(id){
+  showLoad('กำลังเตรียมใบ PO...');
+  let ok = false;
+  try {
+    if (!_poHeader) await poFetchHeader();   // กันกดเร็วก่อนหัวกระดาษโหลดเสร็จ
+    ok = await poLoadForm_(id, 'view');
+  } finally { hideLoad(); }
+  if (ok) await poExportPdf();
 }
 function poCloseModal(){ document.getElementById('pomModal').classList.remove('on'); _poForm = null; }
 
@@ -13881,11 +13930,13 @@ async function pkpSave(){
 async function pkpLoadList(){
   var wrap=document.getElementById('pkpListWrap'); if(!wrap) return;
   var month=(document.getElementById('pkpListMonth')||{}).value||'';
+  var q=String((document.getElementById('pkpListSearch')||{}).value||'').trim();
   wrap.innerHTML='<div class="loading-row">กำลังโหลด...</div>';
   try{
-    var r=await getProdListFast({ month:month });
+    // มีคำค้น = ค้นทุกเดือน (ลูกค้า/WO/เลขอ้างอิง — worker กรองให้) · ไม่มี = รายเดือนตามเดิม
+    var r=await getProdListFast(q ? { search:q, limit:200 } : { month:month });
     if(!r.ok){ wrap.innerHTML='<div class="loading-row">'+(r.error||'โหลดไม่สำเร็จ')+'</div>'; return; }
-    if(!r.orders.length){ wrap.innerHTML='<div class="loading-row">ยังไม่มีใบผลิตในเดือนนี้</div>'; return; }
+    if(!r.orders.length){ wrap.innerHTML='<div class="loading-row">'+(q?('ไม่พบใบผลิตที่ตรงกับ "'+escHtml(q)+'" (ค้นทุกเดือน)'):'ยังไม่มีใบผลิตในเดือนนี้')+'</div>'; return; }
     pkpSelWOs={};
     var ids=[];
     var st=pkpCutSet_();
