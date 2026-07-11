@@ -26,6 +26,8 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
 .hdr-menu-btn{display:none;background:none;border:1px solid var(--bdr);color:var(--tx);font-size:18px;width:34px;height:34px;border-radius:var(--r-md);cursor:pointer;align-items:center;justify-content:center;line-height:1;flex-shrink:0;transition:all .15s;}
 .hdr-menu-btn:hover{border-color:var(--acc);color:var(--acc);}
 body.nav-hidden .hdr-menu-btn{display:inline-flex;}
+/* ตาข่ายกันตก: sidebar หุบ (width 0) เมื่อไหร่ ปุ่ม ☰ บน header ต้องโชว์เสมอ — ไม่พึ่งสถานะ JS (กันเคส state หลุด/role quote) */
+@media (min-width:769px){ body:has(.sidebar:not(.expanded)) .hdr-menu-btn{display:inline-flex;} }
 .logo{font-family:var(--mono);font-size:14px;color:var(--acc);letter-spacing:3px;}
 .logo span{color:var(--tx);}
 .logo small{color:var(--mu);font-size:11px;margin-left:8px;letter-spacing:1px;}
@@ -4042,8 +4044,9 @@ function setTab(t, btn){
 }
 
 // ── Sidebar toggle ──
+function pkSidebarEl_(){ return document.querySelector('.sidebar'); }   // จับทุก shell (office/sales/quote) — id ต่างกัน
 function toggleSidebar(){
-  const sb = document.getElementById('officeSidebar') || document.getElementById('salesSidebar');
+  const sb = pkSidebarEl_();
   if (!sb) return;
   // mobile: toggle drawer / desktop: expand-collapse
   if (window.innerWidth <= 768) {
@@ -4056,14 +4059,14 @@ function toggleSidebar(){
   }
 }
 function openSidebarMobile(){
-  const sb = document.getElementById('officeSidebar') || document.getElementById('salesSidebar');
+  const sb = pkSidebarEl_();
   if (!sb) return;
   sb.classList.add('expanded');
   document.getElementById('sidebarBackdrop').classList.add('on');
 }
 function closeSidebarMobile(){
   if (window.innerWidth > 768) return;
-  const sb = document.getElementById('officeSidebar') || document.getElementById('salesSidebar');
+  const sb = pkSidebarEl_();
   if (!sb) return;
   sb.classList.remove('expanded');
   const bd = document.getElementById('sidebarBackdrop');
@@ -4072,7 +4075,7 @@ function closeSidebarMobile(){
 // restore sidebar state (desktop)
 function restoreSidebarState(){
   if (window.innerWidth <= 768) return;
-  const sb = document.getElementById('officeSidebar') || document.getElementById('salesSidebar');
+  const sb = pkSidebarEl_();
   if (!sb) return;
   try {
     if (localStorage.getItem('pk_sidebar_expanded') !== '0') sb.classList.add('expanded');
@@ -8963,6 +8966,7 @@ function esRender(){
       h+='<tr style="border-bottom:1px solid var(--bdr);"><td style="padding:9px 8px;">'+(/[<]/.test(lbl)?lbl:escHtml(lbl))+'</td>'
         +'<td style="padding:9px 8px;text-align:right;font-weight:800;color:'+(low?'var(--rd)':'var(--tx)')+';">'+qn+'</td>'
         +'<td style="padding:9px 8px;text-align:right;white-space:nowrap;">'
+        +'<button class="btn btn-g btn-sm" onclick="poItemHistory(\''+escHtml(x.name)+'\',\''+escHtml(x.color)+'\')" title="ดูประวัติ เบิก/รับเข้า — เบิกโดยใบผลิตไหน วันไหน">📜</button> '
         +'<button class="btn btn-g btn-sm" onclick="esReceive(\''+escHtml(x.name)+'\',\''+escHtml(x.color)+'\')">+ รับเข้า</button> '
         +'<button class="btn btn-g btn-sm" onclick="esUse(\''+escHtml(x.name)+'\',\''+escHtml(x.color)+'\')">− หัก</button> '
         +'<button class="btn btn-g btn-sm" onclick="esSet(\''+escHtml(x.name)+'\',\''+escHtml(x.color)+'\')">แก้ยอด</button></td></tr>';
@@ -12182,10 +12186,18 @@ function poHistRender(moves, total){
       const ico = m.kind === 'rail' ? '🛤' : '🔩';
       const dCol = m.delta > 0 ? 'var(--grn)' : (m.delta < 0 ? 'var(--red,#e5484d)' : 'var(--mu)');
       const dTxt = (m.delta > 0 ? '+' : '') + m.delta;
+      // ป้ายที่มา: อิงข้อความ reason — มีเลข WO = เบิก/คืนจากใบผลิต · ไม่มี = รับเข้า/แก้ยอด/เบิกแยก
+      const woM = String(m.reason||'').match(/WO-\d{4}-\d{4}/);
+      const chip_ = function(txt, col){ return '<span style="border:1px solid '+col+';color:'+col+';border-radius:999px;padding:0 7px;font-size:10.5px;white-space:nowrap;">'+txt+'</span> '; };
+      let srcChip;
+      if (woM) srcChip = chip_('🏭 ใบผลิต '+woM[0], 'var(--acc)');
+      else if (/^รับเข้า/.test(m.reason||'')) srcChip = chip_('📥 รับเข้า', 'var(--grn)');
+      else if (/^แก้ยอด/.test(m.reason||'')) srcChip = chip_('✏️ แก้ยอด', 'var(--mu)');
+      else srcChip = chip_(m.delta < 0 ? '📤 เบิกแยก' : '📥 รับอื่น ๆ', 'var(--amb)');
       return '<div class="row-form" style="gap:8px;align-items:center;border-bottom:1px dashed var(--bdr);padding:7px 0;">'
         + '<div style="width:92px;font-size:11px;color:var(--mu);font-family:var(--mono);">'+dt+'</div>'
         + '<div style="flex:1;min-width:0;">'+ico+' <b style="cursor:pointer;color:var(--blu);" onclick="poItemHistory(this.dataset.m,this.dataset.c)" data-m="'+escAttr(m.material)+'" data-c="'+escAttr(m.color)+'">'+escHtml(m.material)+'</b>'+(m.color?' <span style="font-size:11px;color:var(--mu);">('+escHtml(m.color)+')</span>':'')
-          + '<div style="font-size:11px;color:var(--blu);">'+escHtml(m.reason||'-')+(m.by?(' · '+escHtml(m.by)):'')+'</div></div>'
+          + '<div style="font-size:11px;color:var(--blu);">'+srcChip+escHtml(m.reason||'-')+(m.by?(' · '+escHtml(m.by)):'')+'</div></div>'
         + '<div style="font-family:var(--mono);font-weight:700;color:'+dCol+';width:54px;text-align:right;">'+dTxt+'</div>'
         + '</div>';
     }).join('');
