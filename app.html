@@ -13329,6 +13329,97 @@ function pkpReqDocShell_(inners, title){
 }
 function pkpReqDocHTML(items, mainAlu, H){ return pkpReqDocShell_([pkpReqInnerHTML(items, mainAlu, H)], 'ใบเบิก '+((H&&H.customer)||'')); }
 function pkpReqOpenDoc_(docHtml){ var w=window.open('','_blank'); if(!w){ toast('เปิดหน้าต่างไม่ได้ (ตรวจป๊อปอัปบล็อก)'); return; } w.document.open(); w.document.write(docHtml); w.document.close(); }
+
+// ════════ 🏷 ใบปะหน้าของ — 1 ป้ายต่อชุด · A4 แนวนอน 12 ป้าย/แผ่น · shrink-to-fit ════════
+// รูปแบบย่อจากชื่อชนิด + ลูกศร: เดี่ยวซ้าย/ขวา · คู่ · อิสระ(4/6 มือจับ) · แยกกลาง + รางธรรมดา/รางเตี้ย/สลิง/บานเลื่อน/บานเปิด
+function pkpCoverStyleShort_(type, patt){
+  var t=String(type||'');
+  var rail='';
+  if(/รางเตี้ย/.test(t)) rail='รางเตี้ย';
+  else if(/สลิง/.test(t)) rail='รางธรรมดา สลิง';
+  else if(/รางธรรมดา/.test(t)) rail='รางธรรมดา';
+  else if(/บานเลื่อน/.test(t)) rail='บานเลื่อน'+(/UPVC/.test(t)?' UPVC':'')+(/เสริมกล่อง 3/.test(t)?' +กล่อง 3 ด้าน':(/เสริมกล่อง 4/.test(t)?' +กล่อง 4 ด้าน':''));
+  else if(/ประตูบานเปิด/.test(t)) rail='ประตูบานเปิด';
+  else if(/หน้าต่างบานเปิด/.test(t)) rail='หน้าต่างบานเปิด';
+  else if(/บานเปิด/.test(t)) rail='บานเปิด';
+  else if(/บานตาย/.test(t)) rail='บานตาย';
+  var pane='';
+  if(/แยกกลางไม่เท่ากัน/.test(t)) pane='แยกกลางไม่เท่ากัน';
+  else if(/แยกกลาง/.test(t)) pane='แยกกลาง';
+  else if(/บานเดี่ยวซ้าย/.test(t)) pane='เดี่ยวซ้าย';
+  else if(/บานเดี่ยวขวา/.test(t)) pane='เดี่ยวขวา';
+  else if(/อิสระ 4 มือจับ/.test(t)) pane='อิสระ 4 มือจับ';
+  else if(/อิสระ 6 มือจับ/.test(t)) pane='อิสระ 6 มือจับ';
+  else if(/อิสระ/.test(t)) pane='อิสระ';
+  else if(/บานคู่/.test(t)) pane='คู่';
+  else if(/บานเดี่ยว/.test(t)) pane='เดี่ยว'+(patt==='←'?'ซ้าย':(patt==='→'?'ขวา':''));
+  var s=[pane, rail].filter(Boolean).join(' · ');
+  return (s || t) + (patt ? ' ' + patt : '');
+}
+async function pkpCoverMulti(){
+  var ids=Object.keys(pkpSelWOs).filter(function(k){return pkpSelWOs[k];});
+  if(!ids.length){ toast('ติ๊กเลือก WO ก่อน'); return; }
+  ids.forEach(function(id){ delete pkpWoCache[id]; });   // ดึงสด — กันป้ายใช้ขนาดเก่าหลังแก้ใบ
+  showLoad('กำลังสร้างใบปะหน้า '+ids.length+' ใบ...');
+  try{
+    function nv(x){ var n=Number(x); return (isFinite(n)&&n)?(Math.round(n*100)/100):'-'; }
+    var labels=[];
+    for(var i=0;i<ids.length;i++){
+      var o=await pkpFetchWO(ids[i]); if(!o)continue;
+      var cust=(o.customer&&o.customer.name)||'-';
+      var items=(o.items||[]).filter(function(it){return it&&it.type;});
+      items.forEach(function(it,idx){
+        labels.push({
+          cust:cust, wo:o.woId||'', setNo:idx+1, total:items.length,
+          size: pkpIsSplit(it.type) ? (nv(it.wl)+'+'+nv(it.wr)+' × '+nv(it.h)) : (nv(it.w)+' × '+nv(it.h)),
+          style: pkpCoverStyleShort_(it.type, it.patt),
+          cAlu: (it.cAlu||o.mainColorAlu||'-'), cMesh: (it.cMesh||o.mainColorMesh||'-'),
+          note: String(it.note||'').trim() || String(o.note||'').trim()
+        });
+      });
+    }
+    if(!labels.length){ toast('ใบที่เลือกไม่มีรายการ'); return; }
+    pkpReqOpenDoc_(pkpCoverDocHTML_(labels));
+  } finally { hideLoad(); }
+}
+function pkpCoverDocHTML_(labels){
+  var esc=function(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+  var PER=12, pages=[];
+  for(var i=0;i<labels.length;i+=PER) pages.push(labels.slice(i,i+PER));
+  var lb=function(l){
+    return '<div class="lb"><div class="lbfit">'
+      + '<div class="top"><span class="cust">'+esc(l.cust)+'</span><span class="wo">'+esc(l.wo)+' · ชุด '+l.setNo+'/'+l.total+'</span></div>'
+      + '<div class="size">'+esc(l.size)+' <small>ซม.</small></div>'
+      + '<div class="style">'+esc(l.style)+'</div>'
+      + '<div class="colors">🎨 อลู: <b>'+esc(l.cAlu)+'</b> · มุ้ง: <b>'+esc(l.cMesh)+'</b></div>'
+      + (l.note ? '<div class="note">📝 '+esc(l.note)+'</div>' : '')
+      + '</div></div>';
+  };
+  var body=pages.map(function(pg){
+    var cells=pg.map(lb).join('');
+    for(var k=pg.length;k<PER;k++) cells+='<div class="lb empty"></div>';   // ช่องว่างให้กริดครบ ตัดเส้นตรงแนว
+    return '<div class="sheet">'+cells+'</div>';
+  }).join('');
+  var CSS='@page{size:A4 landscape;margin:0}*{box-sizing:border-box}body{margin:0;font-family:Sarabun,\'Anuphan\',sans-serif;color:#111;background:#666}'
+    +'.bar{padding:8px 12px;background:#1c2733;color:#fff;display:flex;gap:10px;align-items:center;font-size:13px}.bar button{font-size:13px;padding:5px 14px;border-radius:6px;border:none;background:#d4760f;color:#fff;cursor:pointer;font-family:inherit}'
+    +'.sheet{width:297mm;height:210mm;padding:4mm;background:#fff;margin:6px auto;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(3,1fr);gap:2mm;page-break-after:always}'
+    +'.lb{border:1.3px dashed #999;border-radius:2mm;padding:2.5mm 3mm;overflow:hidden;background:#fff}'
+    +'.lb.empty{border-style:dotted;border-color:#ddd}'
+    +'.lbfit{font-size:12px;height:100%;display:flex;flex-direction:column;line-height:1.35}'
+    +'.top{display:flex;justify-content:space-between;gap:2mm;align-items:baseline}'
+    +'.cust{font-weight:800;font-size:1.3em;min-width:0}'
+    +'.wo{font-size:.78em;color:#555;font-family:monospace;white-space:nowrap;flex-shrink:0}'
+    +'.size{font-size:1.9em;font-weight:800;margin:.5mm 0}.size small{font-size:.55em;font-weight:600;color:#555}'
+    +'.style{font-size:1.12em;font-weight:700;color:#1e40af}'
+    +'.colors{font-size:1em;margin-top:.5mm}'
+    +'.note{font-size:.9em;color:#7a4a07;background:#fff7ec;border-radius:1mm;padding:.6mm 1.5mm;margin-top:auto;white-space:pre-wrap}'
+    +'@media print{.bar{display:none}body{background:#fff}.sheet{margin:0}}';
+  // shrink-to-fit: ลด font ของป้ายที่ล้นจนพอดีช่อง (ต่ำสุด 7px)
+  var FIT='function fitAll(){document.querySelectorAll(".lbfit").forEach(function(el){var box=el.parentElement,fs=12,g=0;el.style.fontSize=fs+"px";while((el.scrollHeight>box.clientHeight-1||el.scrollWidth>box.clientWidth-1)&&fs>7&&g<24){fs-=0.5;el.style.fontSize=fs+"px";g++;}});}if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fitAll);}window.addEventListener("load",fitAll);setTimeout(fitAll,400);';
+  return '<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>ใบปะหน้าของ</title><style>'+CSS+'</style></head><body>'
+    +'<div class="bar"><b>🏷 ใบปะหน้าของ</b><span>'+labels.length+' ป้าย · '+pages.length+' แผ่น (12 ป้าย/แผ่น · ตัดตามเส้นประ)</span><button onclick="window.print()" style="margin-left:auto;">🖨 พิมพ์ / บันทึก PDF</button></div>'
+    +body+'<script>'+FIT+'<\/script></body></html>';
+}
 function pkpReqThDate_(s){ if(!s)return'-'; var p=String(s).split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):s; }
 // พิมพ์ใบเบิก — ใบที่เปิดอยู่ในหน้าแก้ไข
 function pkpReqPrint(){
@@ -13362,6 +13453,7 @@ function pkpUpdateExportBtn(){
   var bp=document.getElementById('pkpPrintSelBtn'); if(bp){ bp.textContent='🖨 พิมพ์ใบผลิต'+(n?' ('+n+')':''); bp.disabled=!n; bp.style.opacity=n?'1':'.5'; }
   var b1=document.getElementById('pkpExportSelBtn'); if(b1){ b1.textContent='📋 export ใบเบิกรวม'+(n?' ('+n+')':''); b1.disabled=!n; b1.style.opacity=n?'1':'.5'; }
   var b2=document.getElementById('pkpCutBtn'); if(b2){ b2.textContent='🪚 จัดตัดราง'+(n?' ('+n+')':''); b2.disabled=!n; b2.style.opacity=n?'1':'.5'; }
+  var b3=document.getElementById('pkpCoverBtn'); if(b3){ b3.textContent='🏷 ใบปะหน้า'+(n?' ('+n+')':''); b3.disabled=!n; b3.style.opacity=n?'1':'.5'; }
 }
 async function pkpReqExportMulti(){
   var ids=Object.keys(pkpSelWOs).filter(function(k){return pkpSelWOs[k];});
@@ -13801,7 +13893,8 @@ async function pkpLoadList(){
       +'<button class="btn btn-g btn-sm" id="pkpPrintSelBtn" onclick="pkpPrintMulti()" disabled style="opacity:.5;">🖨 พิมพ์ใบผลิต</button>'
       +'<button class="btn btn-g btn-sm" id="pkpExportSelBtn" onclick="pkpReqExportMulti()" disabled style="opacity:.5;">📋 export ใบเบิกรวม</button>'
       +'<button class="btn btn-g btn-sm" id="pkpCutBtn" onclick="pkpCutOptimize()" disabled style="opacity:.5;">🪚 จัดตัดราง</button>'
-      +'<span style="font-size:11px;color:var(--mu,#6b7a94);">ติ๊กเลือกหลายใบ → '+(isMgr?'อนุมัติ / ':'')+'พิมพ์ใบผลิต / รวมใบเบิก / จัดตัดราง</span></div>'
+      +'<button class="btn btn-g btn-sm" id="pkpCoverBtn" onclick="pkpCoverMulti()" disabled style="opacity:.5;">🏷 ใบปะหน้า</button>'
+      +'<span style="font-size:11px;color:var(--mu,#6b7a94);">ติ๊กเลือกหลายใบ → '+(isMgr?'อนุมัติ / ':'')+'พิมพ์ใบผลิต / รวมใบเบิก / จัดตัดราง / ใบปะหน้า</span></div>'
       +'<div style="display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;padding:7px 9px;border:1px solid var(--line,#2a3344);border-radius:8px;">'
         +'<span style="font-size:12px;color:var(--mu,#6b7a94);align-self:center;">⚙ ตั้งค่าตัดราง:</span>'
         +pkpCutField_('stock','ความยาวรางเต็มเส้น (cm)',st.stock)
