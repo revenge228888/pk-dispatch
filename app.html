@@ -1866,9 +1866,23 @@ function renderOfficeShell(){
           <div class="fg" style="max-width:120px;"><label class="fl">ทีมช่างวันนี้</label><input class="fi" id="asTech" type="number" min="0" max="26" placeholder="default"></div>
           <div class="fg" style="max-width:120px;"><label class="fl">ทีมเซลล์วันนี้</label><input class="fi" id="asSales" type="number" min="0" max="26" placeholder="default"></div>
           <button class="btn btn-p" onclick="assignPreview()">🚚 ดูแผนจัดทีม</button>
+          <button class="btn btn-g" onclick="gpsMapOpen()">🚗 รถ↔ทีม (GPS)</button>
           <span style="font-size:11px;color:var(--mu);align-self:center;">เว้นช่องทีม = ใช้ค่า default · จัดกลุ่มโซน + เรียงจุดแวะจาก depot</span>
         </div>
         <div id="asResult" class="section-pad"></div>
+      </div>
+
+      <!-- จับคู่รถ GPS ↔ ทีม (SIAMGPS) — ใช้ร่วมกับปุ่มบนแผนที่ -->
+      <div class="modal-bg" id="gpsMapModal">
+        <div class="modal" style="max-width:720px;">
+          <div class="card-head"><span>🚗 จับคู่รถ GPS ↔ ทีมช่าง</span>
+            <button onclick="document.getElementById('gpsMapModal').classList.remove('on')" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button>
+          </div>
+          <div class="card-body">
+            <div style="font-size:12px;color:var(--mu);margin-bottom:10px;">ตำแหน่งรถจะขึ้นบนแผนที่เป็นทีมที่เลือก · เอารถออกจากแผนที่ = เลือก "— ไม่ใช้ —"</div>
+            <div id="gpsMapBody"><div class="loading-row">กำลังโหลด...</div></div>
+          </div>
+        </div>
       </div>
 
       <!-- ★ OUTSTANDING (💰 ตามยอดคงค้าง) — Feature #1 -->
@@ -4579,6 +4593,52 @@ async function cfBadgeRefresh(){
   if (!CURRENT_USER || (CURRENT_USER.role !== 'office' && CURRENT_USER.role !== 'manager')) return;
   try { const r = await call({ action:'pk_cfPendingList' }); if (r && r.ok) cfSetBadge(r.items.length); } catch(e){}
 }
+// ── จับคู่รถ GPS (SIAMGPS) ↔ ทีม — เขียนชีต GpsVehicles ผ่าน worker (/gps-vehicles, /gps-assign) ──
+function gpsMapOpen(){
+  const m = document.getElementById('gpsMapModal');
+  if (m) m.classList.add('on');
+  gpsMapLoad();
+}
+async function gpsMapLoad(){
+  const body = document.getElementById('gpsMapBody');
+  if (!body) return;
+  body.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  try {
+    const res = await fetch(API.replace(/\/api$/, '/gps-vehicles'), {
+      method:'POST', redirect:'follow', headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token })
+    });
+    const r = await res.json();
+    if (!r.ok){ body.innerHTML = '<div class="loading-row">' + escHtml(r.error || 'โหลดไม่ได้') + '</div>'; return; }
+    if (!(r.vehicles || []).length){ body.innerHTML = '<div class="loading-row">ไม่พบรถในบัญชี GPS</div>'; return; }
+    const teams = new Set(r.teams || []);
+    (r.vehicles || []).forEach(v => { if (v.team) teams.add(v.team); });
+    const opts = [...teams].sort();
+    body.innerHTML = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">'
+      + '<tr><th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--bdr);">รถ</th><th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--bdr);">ทะเบียน</th><th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--bdr);">ทีม</th></tr>'
+      + r.vehicles.map(v =>
+          '<tr><td style="padding:6px;border-bottom:1px dashed var(--bdr);">' + escHtml(v.name) + '</td>'
+        + '<td style="padding:6px;border-bottom:1px dashed var(--bdr);font-family:var(--mono);">' + escHtml(v.plate) + '</td>'
+        + '<td style="padding:6px;border-bottom:1px dashed var(--bdr);"><select class="fi" style="padding:5px 8px;" onchange="gpsAssign(this, \'' + escAttr(v.id) + '\', this.value)" data-name="' + escAttr(v.name) + '" data-plate="' + escAttr(v.plate) + '">'
+        + '<option value="">— ไม่ใช้ —</option>'
+        + opts.map(t => '<option value="' + escAttr(t) + '"' + (t === v.team ? ' selected' : '') + '>' + escHtml(t) + '</option>').join('')
+        + '</select></td></tr>').join('')
+      + '</table></div>';
+  } catch(e){ body.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้</div>'; }
+}
+async function gpsAssign(sel, vehicleId, team){
+  sel.disabled = true;
+  try {
+    const res = await fetch(API.replace(/\/api$/, '/gps-assign'), {
+      method:'POST', redirect:'follow', headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ vehicleId: vehicleId, name: sel.dataset.name || '', plate: sel.dataset.plate || '', team: team, username:CURRENT_USER.username, token:CURRENT_USER.token })
+    });
+    const r = await res.json();
+    toast(r.ok ? ('🚗 ' + (sel.dataset.plate || vehicleId) + (team ? ' → ' + team : ' เอาออกแล้ว')) : ('❌ ' + (r.error || 'บันทึกไม่ได้')));
+  } catch(e){ toast('❌ เชื่อมต่อไม่ได้'); }
+  sel.disabled = false;
+}
+
 function tmgrSetBadge(n){ const el = document.getElementById('tmgrBadge'); if (el) el.textContent = (n > 0) ? n : ''; }
 async function tmgrBadgeRefresh(){
   if (!CURRENT_USER || CURRENT_USER.role !== 'manager') return;
