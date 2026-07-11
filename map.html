@@ -235,9 +235,23 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
   <div class="tb-group">
     <button class="btn" id="wpBtn" onclick="togglePickMode('wp')">📌 เพิ่มจุดแวะ</button>
     <button class="btn" id="factBtn" onclick="togglePickMode('factory')">🏭 ตั้งโรงงาน</button>
+    <button class="btn" onclick="gpsMapOpen()" title="จับคู่รถ GPS กับทีม — ตำแหน่งรถขึ้นบนแผนที่เป็นทีมนั้น">🚗 รถ↔ทีม</button>
   </div>
 </div>
 <div class="status-line" id="statusLine"></div>
+
+<!-- panel จับคู่รถ GPS ↔ ทีม (SIAMGPS) -->
+<div id="gpsPanel" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:flex-start;justify-content:center;padding:40px 12px;overflow:auto;">
+  <div style="background:var(--surf,#fff);border:1px solid var(--bdr,#ccc);border-radius:12px;max-width:720px;width:100%;padding:16px 18px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <b style="font-size:15px;">🚗 จับคู่รถ GPS ↔ ทีม</b>
+      <button class="btn" style="margin-left:auto;" onclick="gpsMapLoad()">↻</button>
+      <button class="btn" onclick="document.getElementById('gpsPanel').style.display='none'">✕ ปิด</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin-bottom:10px;">ตำแหน่งรถจะขึ้นบนแผนที่เป็นทีมที่เลือก · เอารถออกจากแผนที่ = เลือก "— ไม่ใช้ —"</div>
+    <div id="gpsPanelBody">กำลังโหลด...</div>
+  </div>
+</div>
 
 <div class="stage">
   <div class="map-wrap" id="mapWrap">
@@ -754,8 +768,49 @@ function applyLiveLoc(){
     const c = teamColor(team);
     const icon = L.divIcon({ className:'', html:'<div class="veh live" style="--c:' + c + '">' + teamEmoji(team) + '</div>', iconSize:[30,30], iconAnchor:[15,15] });
     const mk = L.marker([l.lat, l.lng], { icon, zIndexOffset: 600 }).addTo(S.liveLayer);
-    mk.bindTooltip('📡 ' + esc(team) + ' · ตำแหน่งจริง ' + locAgeTxt(l) + (l.username ? ' · ' + esc(l.username) : ''), { direction:'top', offset:[0,-16] });
+    const tip = (l.src === 'gps')
+      ? '🚗 ' + esc(team) + ' · ' + esc(l.plate || '') + (l.vstatus === 'PARK' ? ' · 🅿 จอด' : '') + ' · GPS รถ ' + locAgeTxt(l)
+      : '📡 ' + esc(team) + ' · ตำแหน่งจริง ' + locAgeTxt(l) + (l.username ? ' · ' + esc(l.username) : '');
+    mk.bindTooltip(tip, { direction:'top', offset:[0,-16] });
   }
+}
+
+// ── จับคู่รถ GPS (SIAMGPS) ↔ ทีม — แก้ได้จากแผนที่ · เขียนชีต GpsVehicles ผ่าน worker ──
+function gpsMapOpen(){
+  document.getElementById('gpsPanel').style.display = 'flex';
+  gpsMapLoad();
+}
+async function gpsMapLoad(){
+  const body = document.getElementById('gpsPanelBody');
+  body.textContent = 'กำลังโหลด...';
+  try {
+    const r = await api('/gps-vehicles', {});
+    if (!r.ok){ body.innerHTML = '<span class="muted">' + esc(r.error || 'โหลดไม่ได้') + '</span>'; return; }
+    if (!(r.vehicles || []).length){ body.innerHTML = '<span class="muted">ไม่พบรถในบัญชี GPS</span>'; return; }
+    // ทีมให้เลือก = ทีมที่เคยส่งตำแหน่ง + ทีมจากงานบนแผนที่ + ทีมที่จับคู่ไว้แล้ว
+    const teams = new Set(r.teams || []);
+    Object.values(S.jobs || {}).forEach(j => { if (j.team) teams.add(j.team); });
+    (r.vehicles || []).forEach(v => { if (v.team) teams.add(v.team); });
+    const opts = [...teams].sort();
+    body.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+      + '<tr><th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--bdr,#ccc);">รถ</th><th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--bdr,#ccc);">ทะเบียน</th><th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--bdr,#ccc);">ทีม</th></tr>'
+      + r.vehicles.map(v =>
+          '<tr><td style="padding:5px 6px;border-bottom:1px dashed var(--bdr,#ccc);">' + esc(v.name) + '</td>'
+        + '<td style="padding:5px 6px;border-bottom:1px dashed var(--bdr,#ccc);">' + esc(v.plate) + '</td>'
+        + '<td style="padding:5px 6px;border-bottom:1px dashed var(--bdr,#ccc);"><select onchange="gpsAssign(this, \'' + esc(v.id) + '\', this.value)" data-name="' + esc(v.name) + '" data-plate="' + esc(v.plate) + '">'
+        + '<option value="">— ไม่ใช้ —</option>'
+        + opts.map(t => '<option value="' + esc(t) + '"' + (t === v.team ? ' selected' : '') + '>' + esc(t) + '</option>').join('')
+        + '</select></td></tr>').join('')
+      + '</table>';
+  } catch(e){ body.textContent = 'เชื่อมต่อไม่ได้'; }
+}
+async function gpsAssign(sel, vehicleId, team){
+  sel.disabled = true;
+  try {
+    const r = await api('/gps-assign', { vehicleId: vehicleId, name: sel.dataset.name || '', plate: sel.dataset.plate || '', team: team });
+    setStatus(r.ok ? ('🚗 บันทึกแล้ว: ' + (sel.dataset.plate || vehicleId) + (team ? ' → ' + team : ' (เอาออก)')) : ('❌ ' + (r.error || 'บันทึกไม่ได้')));
+  } catch(e){ setStatus('❌ เชื่อมต่อไม่ได้'); }
+  sel.disabled = false;
 }
 
 function renderTeamCards(){
