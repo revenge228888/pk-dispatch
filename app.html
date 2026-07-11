@@ -13352,7 +13352,7 @@ function pkpCoverStyleShort_(type, patt){
   else if(/อิสระ 6 มือจับ/.test(t)) pane='อิสระ 6 มือจับ';
   else if(/อิสระ/.test(t)) pane='อิสระ';
   else if(/บานคู่/.test(t)) pane='คู่';
-  else if(/บานเดี่ยว/.test(t)) pane='เดี่ยว'+(patt==='←'?'ซ้าย':(patt==='→'?'ขวา':''));
+  else if(/บานเดี่ยว/.test(t)) pane='เดี่ยว';   // รางธรรมดา/สลิง ขึ้นแค่ "เดี่ยว" — ทิศดูจากลูกศรท้าย (รางเตี้ยระบุซ้าย/ขวาในชื่ออยู่แล้ว)
   var s=[pane, rail].filter(Boolean).join(' · ');
   return (s || t) + (patt ? ' ' + patt : '');
 }
@@ -13388,7 +13388,7 @@ function pkpCoverDocHTML_(labels){
   for(var i=0;i<labels.length;i+=PER) pages.push(labels.slice(i,i+PER));
   var lb=function(l){
     return '<div class="lb"><div class="lbfit">'
-      + '<div class="top"><span class="cust">'+esc(l.cust)+'</span><span class="wo">'+esc(l.wo)+' · ชุด '+l.setNo+'/'+l.total+'</span></div>'
+      + '<div class="top"><span class="cust">'+esc(l.cust)+'</span><span class="setwrap"><span class="setno">ชุด '+l.setNo+'/'+l.total+'</span><span class="wo">'+esc(l.wo)+'</span></span></div>'
       + '<div class="size">'+esc(l.size)+' <small>ซม.</small></div>'
       + '<div class="style">'+esc(l.style)+'</div>'
       + '<div class="colors">🎨 อลู: <b>'+esc(l.cAlu)+'</b> · มุ้ง: <b>'+esc(l.cMesh)+'</b></div>'
@@ -13407,11 +13407,13 @@ function pkpCoverDocHTML_(labels){
     +'.lb.empty{border-style:dotted;border-color:#ddd}'
     +'.lbfit{font-size:12px;height:100%;display:flex;flex-direction:column;line-height:1.35}'
     +'.top{display:flex;justify-content:space-between;gap:2mm;align-items:baseline}'
-    +'.cust{font-weight:800;font-size:1.3em;min-width:0}'
-    +'.wo{font-size:.78em;color:#555;font-family:monospace;white-space:nowrap;flex-shrink:0}'
+    +'.cust{font-weight:800;font-size:1.6em;min-width:0}'
+    +'.setwrap{display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;line-height:1.15}'
+    +'.setno{font-size:1.25em;font-weight:800}'
+    +'.wo{font-size:.78em;color:#555;font-family:monospace;white-space:nowrap}'
     +'.size{font-size:1.9em;font-weight:800;margin:.5mm 0}.size small{font-size:.55em;font-weight:600;color:#555}'
     +'.style{font-size:1.12em;font-weight:700;color:#1e40af}'
-    +'.colors{font-size:1em;margin-top:.5mm}'
+    +'.colors{font-size:1.25em;margin-top:.5mm}'
     +'.note{font-size:.9em;color:#7a4a07;background:#fff7ec;border-radius:1mm;padding:.6mm 1.5mm;margin-top:auto;white-space:pre-wrap}'
     +'@media print{.bar{display:none}body{background:#fff}.sheet{margin:0}}';
   // shrink-to-fit: ลด font ของป้ายที่ล้นจนพอดีช่อง (ต่ำสุด 7px)
