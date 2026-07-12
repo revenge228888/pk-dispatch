@@ -8859,7 +8859,12 @@ function ptBatchDone(){
   ids.forEach(function(id){ var j=_ptJobs.find(function(x){return x.woId===id;}); if(j){ snap[id]={prodStatus:j.prodStatus,doneDate:j.doneDate}; j.prodStatus='ผลิตเสร็จแล้ว'; j.doneDate=d; } });
   _ptSel={}; ptSetView(_ptView);
   call({action:'pk_prodBatchSetTrack',woIds:ids,prodStatus:'ผลิตเสร็จแล้ว',doneDate:d}).then(function(r){
-    if(r&&r.ok){ toast('จบงานแล้ว '+(r.count||ids.length)+' งาน'); }
+    if(r&&r.ok){
+      var m='จบงานแล้ว '+(r.count||ids.length)+' งาน';
+      if(r.equipIssuedCount) m+=' · 📦 หักอุปกรณ์ให้ '+r.equipIssuedCount+' ใบที่ยังไม่เคยหัก';
+      if(r.equipWarnings&&r.equipWarnings.length) m+=' · ⚠ สต็อกติดลบ: '+r.equipWarnings.join(', ');
+      toast(m);
+    }
     else { ids.forEach(function(id){ var j=_ptJobs.find(function(x){return x.woId===id;}); if(j&&snap[id]) Object.assign(j,snap[id]); }); ptSetView(_ptView); toast((r&&r.error)||'บันทึกไม่สำเร็จ'); }
   }).catch(function(e){ ids.forEach(function(id){ var j=_ptJobs.find(function(x){return x.woId===id;}); if(j&&snap[id]) Object.assign(j,snap[id]); }); ptSetView(_ptView); toast('บันทึกไม่สำเร็จ: '+(e&&e.message||e)); });
 }
@@ -13919,7 +13924,9 @@ async function pkpSave(){
     if(r.status) pkpLoadedStatus=r.status;
     var woEl=document.getElementById('pkpWoLabel'); if(woEl)woEl.textContent=r.woId+(pkpLoadedStatus?' · '+pkpLoadedStatus:'');
     if(sv)sv.textContent='💾 บันทึกการแก้ไข';
-    toast('✅ บันทึกแล้ว — '+r.woId+(r.status?' ('+r.status+')':''));
+    var _svMsg='✅ บันทึกแล้ว — '+r.woId+(r.status?' ('+r.status+')':'');
+    if(r.equip&&r.equip.adjusted) _svMsg+=' · 📦 ปรับสต็อกตามส่วนต่าง '+r.equip.adjusted+' รายการ'+(r.equip.warnings&&r.equip.warnings.length?' ⚠ ติดลบ: '+r.equip.warnings.join(', '):'');
+    toast(_svMsg);
     try{localStorage.removeItem(PKP_DRAFT_KEY);}catch(e){}   // บันทึกสำเร็จ → ล้าง draft ค้าง
     pkpLoadList();
   }catch(e){ toast('❌ เชื่อมต่อไม่ได้'); }
