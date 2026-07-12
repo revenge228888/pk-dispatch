@@ -758,6 +758,16 @@ tbody tr:nth-child(even){background:rgba(120,96,72,.04);}
     <div class="quom-save-bar"><span style="margin-left:auto;"></span><button class="btn btn-d" onclick="poCloseHistory()">ปิด</button></div>
   </div>
 </div>
+<div class="quom-bg" id="ptEqModal">
+  <div class="quom-wrap" style="max-width:460px;">
+    <div class="quom-head">
+      <div class="quom-title" id="ptEqTitle">📦 อุปกรณ์ของใบผลิต</div>
+      <button class="hbtn danger" onclick="ptEquipClose()">×</button>
+    </div>
+    <div class="quom-body" id="ptEqBody"></div>
+    <div class="quom-save-bar"><span style="margin-left:auto;"></span><button class="btn btn-d" onclick="ptEquipClose()">ปิด</button></div>
+  </div>
+</div>
 
 
 <div class="loading" id="loading"><div class="spinner"></div><span id="loadMsg">กำลังโหลด...</span></div>
@@ -8919,9 +8929,39 @@ function ptActBtns(j){
   }
   h+='<button class="btn btn-g btn-sm" onclick="ptEditEquip(\''+j.woId+'\')">🔧</button>';
   h+='<button class="btn btn-g btn-sm" onclick="ptEditGen(\''+j.woId+'\')">📌</button>';
+  h+='<button class="btn btn-g btn-sm" title="ดูอุปกรณ์ที่หักจากคลัง" onclick="ptEquipView(\''+j.woId+'\')">📦</button>';
   h+='</div>';
   return h;
 }
+// ── 📦 ดูอุปกรณ์ที่หัก/จะหักจากคลัง ของ WO นี้ (จากสแนปช็อต equipIssued/equipNeed ในลิสต์ ไม่ยิงเพิ่ม) ──
+function ptEquipView(woId){
+  var j=_ptJobs.find(function(x){return x.woId===woId;}); if(!j) return;
+  var parse=function(s){ try{ var a=JSON.parse(s||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } };
+  var iss=parse(j.equipIssued), need=parse(j.equipNeed);
+  var issued=iss.length>0, list=issued?iss:need;
+  var title=document.getElementById('ptEqTitle'), body=document.getElementById('ptEqBody');
+  if(!title||!body) return;
+  title.textContent='📦 '+woId+' · '+escHtml(j.customerName||'');
+  var h='';
+  if(!list.length){
+    h='<div class="loading-row">ใบนี้ไม่มีข้อมูลอุปกรณ์<br><small style="color:var(--mu);">ใบเก่าก่อนระบบหักอัตโนมัติ (เปิดใบผลิตแล้วกดบันทึกใหม่) หรือทุกงานติ๊กไม่เบิก</small></div>';
+  } else {
+    h+='<div style="font-size:12px;margin-bottom:10px;padding:7px 10px;border-radius:8px;'+(issued
+      ?'background:rgba(52,199,89,.10);border:1px solid rgba(52,199,89,.3);">✅ หักจากคลังแล้ว (ตอนถึงสถานะ "จัดอุปกรณ์แล้ว")'
+      :'background:var(--amb-t,rgba(180,83,9,.15));border:1px solid var(--bdr);">⏳ ยังไม่หัก — จะหักอัตโนมัติเมื่อสถานะถึง "จัดอุปกรณ์แล้ว"')+'</div>';
+    h+='<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="color:var(--mu);font-size:11px;"><th style="padding:6px 4px;text-align:left;">#</th><th style="padding:6px 4px;text-align:left;">อุปกรณ์</th><th style="padding:6px 4px;text-align:right;">จำนวน</th></tr></thead><tbody>';
+    list.forEach(function(x,k){
+      h+='<tr style="border-bottom:1px solid var(--bdr);"><td style="padding:7px 4px;color:var(--mu);">'+(k+1)+'</td>'
+        +'<td style="padding:7px 4px;">'+escHtml(x.name||'')+(x.color?' <span style="color:var(--mu);font-size:11px;">('+escHtml(x.color)+')</span>':'')+'</td>'
+        +'<td style="padding:7px 4px;text-align:right;font-weight:700;font-family:var(--mono);">'+(Number(x.qty)||0)+'</td></tr>';
+    });
+    h+='</tbody></table>';
+    h+='<div style="font-size:11px;color:var(--mu);margin-top:8px;">* เชือก/แม่เหล็ก/PVC/ราง ไม่อยู่ในการหักอัตโนมัติ (ดูจากใบเบิก) · ประวัติการเคลื่อนไหวดูได้ที่ 📜 ในคลังอุปกรณ์</div>';
+  }
+  body.innerHTML=h;
+  document.getElementById('ptEqModal').classList.add('on');
+}
+function ptEquipClose(){ document.getElementById('ptEqModal').classList.remove('on'); }
 function ptRenderKanban(){
   var byS={}; PT_STEPS.forEach(function(s){byS[s]=[];});
   _ptJobs.forEach(function(j,i){ if(!ptPass(j)) return; if(byS[j.prodStatus]) byS[j.prodStatus].push(i); else byS[PT_STEPS[0]].push(i); });
@@ -13846,10 +13886,20 @@ function pkpAddItem(){ pkpItems.push(pkpBlankItem()); pkpRenderRows(); pkpAutosa
 function pkpDelItem(i){ pkpItems.splice(i,1); if(!pkpItems.length)pkpItems.push(pkpBlankItem()); pkpRenderRows(); pkpAutosave(); }
 function pkpAllTypes(){ var a=[]; pkpTYPES.forEach(function(g){ a=a.concat(g.items); }); return a; }
 function pkpValidType(v){ return pkpAllTypes().indexOf(v)>=0; }
+// ── ลูกศรอัตโนมัติตามรูปแบบ (เฉพาะมุ้งจีบ · ตั้งให้ตอนเลือกชนิด แต่ยังกดปุ่มวนแก้ได้อิสระ) ──
+function pkpArrowFor_(t){
+  if(!pkpREQ[t]) return '';                                   // นอกสูตรจีบ (บานเลื่อน/บานเปิด/อื่น) — ไม่ยุ่ง
+  if(/เดี่ยวซ้าย/.test(t)) return '←';
+  if(/เดี่ยวขวา/.test(t)) return '→';
+  if(/บานคู่|อิสระ|แยกกลาง/.test(t)) return '↔';
+  return '';                                                   // เดี่ยวธรรมดา/สลิงไม่ระบุข้าง — คงค่าเดิม ให้เลือกทิศเอง
+}
 function pkpOnType(i,val){
   val=(val||'').trim();
   if(val && !pkpValidType(val)){ toast('"'+val+'" ไม่ตรงรายการชนิด — เลือกจากที่ระบบแนะนำ'); pkpRenderRows(); return; }  // บังคับให้ตรง dropdown
-  pkpItems[i].type=val; pkpRenderRows(); pkpAutosave();
+  pkpItems[i].type=val;
+  var ar=pkpArrowFor_(val); if(ar) pkpItems[i].patt=ar;
+  pkpRenderRows(); pkpAutosave();
 }
 function pkpOnPatt(i){ var a=pkpItems[i]; var idx=pkpARROWS.indexOf(a.patt); a.patt=pkpARROWS[(idx+1)%pkpARROWS.length]; var el=document.getElementById('pkpPatt'+i); if(el)el.textContent=a.patt; pkpAutosave(); }
 function pkpOnField(i,field,val){ pkpItems[i][field]=val; pkpRecalc(i); pkpRenderReqSummary(); pkpAutosave(); }   // ตัวเลข → คำนวณเฉพาะแถว (ไม่ re-render = ไม่เสีย focus)
