@@ -1578,7 +1578,10 @@ function renderOfficeShell(){
         <div class="section-pad">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
             <div style="font-weight:800;font-size:16px;">🔩 คลังอุปกรณ์</div>
-            <button class="btn btn-g btn-sm" onclick="esLoad()">↻ รีเฟรช</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-g btn-sm" id="esAuditBtn" onclick="esAuditRun()" style="display:none;">🧾 ตรวจตัดย้อนหลัง</button>
+              <button class="btn btn-g btn-sm" onclick="esLoad()">↻ รีเฟรช</button>
+            </div>
           </div>
           <div style="font-size:12px;color:var(--mu);margin-bottom:10px;">รายการดึงจากชีตราคาต้นทุน · ล้อ/ข้อต่อ แยกสี ขาว/ดำ · เพิ่มสีได้ที่เมนูแก้ไขทุน · หักเอง (เฟสถัดไปจะหักอัตโนมัติตามใบเบิก)</div>
           <input id="esSearchInput" class="fi" style="margin-bottom:12px;" oninput="esRender()" placeholder="🔍 ค้นหา ชื่อ / สี">
@@ -9095,7 +9098,21 @@ async function equipCatalogFetch(){
   });
   _equipCatalog=cat;
 }
-async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); }
+async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; var ab=document.getElementById('esAuditBtn'); if(ab&&CURRENT_USER&&CURRENT_USER.role==='manager')ab.style.display='inline-flex'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); }
+// ── ตรวจ/ซ่อมการตัด stock ย้อนหลัง (manager): dry-run โชว์รายงาน → ยืนยัน → ลงมือจริง ──
+async function esAuditRun(){
+  showLoad('กำลังตรวจการตัดย้อนหลัง...');
+  var r; try{ r=await call({action:'pk_equipAudit'}); } finally{ hideLoad(); }
+  if(!r||!r.ok){ toast('❌ '+((r&&r.error)||'ตรวจไม่สำเร็จ')); return; }
+  if(!r.found){ alert('✅ ตรวจแล้ว ไม่พบใบที่ตัด stock ขาด/เกิน'); return; }
+  var rep=(r.report||[]).join('\n');
+  if(!confirm('พบ '+r.found+' ใบที่ตัดไม่ครบ/ไม่ตรง:\n\n'+rep+'\n\nลงมือหัก/คืนตามรายงานนี้เลยไหม? (จดใน ledger ทุกการเคลื่อนไหว)')) return;
+  showLoad('กำลังหัก/คืนย้อนหลัง...');
+  var a; try{ a=await call({action:'pk_equipAudit', apply:true}); } finally{ hideLoad(); }
+  if(!a||!a.ok){ toast('❌ '+((a&&a.error)||'ซ่อมไม่สำเร็จ')); return; }
+  alert('✅ ปรับสต็อกย้อนหลังแล้ว '+a.fixed+' ใบ:\n\n'+((a.report||[]).join('\n')||'-'));
+  esLoad();
+}
 function esRender(){
   if(!document.getElementById('esBody'))return;
   var q=((document.getElementById('esSearchInput')||{}).value||'').trim().toLowerCase();
