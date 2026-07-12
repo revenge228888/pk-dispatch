@@ -9104,7 +9104,7 @@ async function esAuditRun(){
   showLoad('กำลังตรวจการตัดย้อนหลัง...');
   var r; try{ r=await call({action:'pk_equipAudit'}); } finally{ hideLoad(); }
   if(!r||!r.ok){ toast('❌ '+((r&&r.error)||'ตรวจไม่สำเร็จ')); return; }
-  if(!r.found){ alert('✅ ตรวจแล้ว ไม่พบใบที่ตัด stock ขาด/เกิน'); return; }
+  if(!r.found){ alert('✅ ตรวจแล้ว ไม่พบใบที่ตัด stock ขาด/เกิน'+((r.report&&r.report.length)?'\n\nแต่มีข้อสังเกต:\n'+r.report.join('\n'):'')); return; }
   var rep=(r.report||[]).join('\n');
   if(!confirm('พบ '+r.found+' ใบที่ตัดไม่ครบ/ไม่ตรง:\n\n'+rep+'\n\nลงมือหัก/คืนตามรายงานนี้เลยไหม? (จดใน ledger ทุกการเคลื่อนไหว)')) return;
   showLoad('กำลังหัก/คืนย้อนหลัง...');
