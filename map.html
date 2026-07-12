@@ -178,7 +178,8 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
 .gate-form.show{display:block;}
 
 .tools-btn{display:none;}
-@media (max-width:820px){
+/* 1080px: ครอบมือถือ + แท็บเล็ต/จอพับแนวตั้ง (จอคอม ≥1280 ไม่โดน) */
+@media (max-width:1080px){
   header{padding:0 10px;}
   .tools-btn{display:inline-block;}
   .count-badge{display:none;}
@@ -554,7 +555,9 @@ function renderMarkers(){
     pts.push([j.glat, j.glng]);
   }
   if (pts.length && S.fitted !== S.date){
-    S.map.fitBounds(L.latLngBounds(pts).pad(0.2), { maxZoom: 14 });
+    S.lastFit = L.latLngBounds(pts).pad(0.2);
+    S.map.invalidateSize();   // กันคำนวณซูมตอนกล่องยังไม่ได้ขนาดจริง (จอพับ/แท็บเล็ต → เคยค้างวิวทั้งโลก)
+    S.map.fitBounds(S.lastFit, { maxZoom: 14 });
     S.fitted = S.date;
   }
 }
@@ -1564,6 +1567,16 @@ function boot(){
   S.searchLayer = L.layerGroup().addTo(S.map);
   S.liveLoc = {}; S.vehMks = {};
   S.map.on('click', onMapClick);
+  // หมุนจอ/พับจอ → ขนาดกล่องเปลี่ยน: คำนวณ tile ใหม่ + ถ้าซูมค้างระดับโลก (สัญญาณว่า fit ตอนขนาดผิด) ให้ fit กลับไปที่งาน
+  var _rsT = null;
+  window.addEventListener('resize', function(){
+    clearTimeout(_rsT);
+    _rsT = setTimeout(function(){
+      if (!S.map) return;
+      S.map.invalidateSize();
+      if (S.lastFit && S.map.getZoom() <= 4) S.map.fitBounds(S.lastFit, { maxZoom: 14 });
+    }, 250);
+  });
   S.date = ymdToday();
   loadConfig().then(loadDay);
   pollLoc(); setInterval(pollLoc, LOC_POLL_MS);   // 📡 ตำแหน่งสดทีมภาคสนาม
