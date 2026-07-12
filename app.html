@@ -13640,7 +13640,7 @@ var pkpTYPES=[
  {g:'บานเปิด (แยกใบผลิต + ใบตัดราง)', items:['มุ้งหน้าต่างบานเปิด','มุ้งประตูบานเปิด']},
  {g:'อื่นๆ (ไม่มีค่าตัด)', items:['มุ้งบานเปิด','มุ้งบานเปิดแยกกลาง','มุ้งบานตาย']}
 ];
-var pkpARROWS=['→','←','↑','↓','↔','↕'];
+var pkpARROWS=['→','←','→←','↔','↑','↓','↕'];
 
 // ── STATE ──
 var pkpItems=[];
@@ -13887,12 +13887,15 @@ function pkpDelItem(i){ pkpItems.splice(i,1); if(!pkpItems.length)pkpItems.push(
 function pkpAllTypes(){ var a=[]; pkpTYPES.forEach(function(g){ a=a.concat(g.items); }); return a; }
 function pkpValidType(v){ return pkpAllTypes().indexOf(v)>=0; }
 // ── ลูกศรอัตโนมัติตามรูปแบบ (เฉพาะมุ้งจีบ · ตั้งให้ตอนเลือกชนิด แต่ยังกดปุ่มวนแก้ได้อิสระ) ──
+// กติกาหน้างาน (ผู้ใช้เคาะ 12 ก.ค.): เตี้ยซ้าย=→ เตี้ยขวา=← คู่/แยกกลาง=→← อิสระ/4-6มือจับ=↔ เดี่ยวธรรมดา=→
 function pkpArrowFor_(t){
   if(!pkpREQ[t]) return '';                                   // นอกสูตรจีบ (บานเลื่อน/บานเปิด/อื่น) — ไม่ยุ่ง
-  if(/เดี่ยวซ้าย/.test(t)) return '←';
-  if(/เดี่ยวขวา/.test(t)) return '→';
-  if(/บานคู่|อิสระ|แยกกลาง/.test(t)) return '↔';
-  return '';                                                   // เดี่ยวธรรมดา/สลิงไม่ระบุข้าง — คงค่าเดิม ให้เลือกทิศเอง
+  if(/อิสระ|มือจับ/.test(t)) return '↔';
+  if(/บานคู่|แยกกลาง/.test(t)) return '→←';
+  if(/เดี่ยวซ้าย/.test(t)) return '→';
+  if(/เดี่ยวขวา/.test(t)) return '←';
+  if(/บานเดี่ยว/.test(t)) return '→';                          // เดี่ยวธรรมดา/สลิง
+  return '';
 }
 function pkpOnType(i,val){
   val=(val||'').trim();
