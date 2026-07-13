@@ -10020,10 +10020,11 @@ function recordFillRecentJobs_(){
 
 // ── Render Form ──
 let _recColorLoading = false;
+let _recColors = null;   // fallback สำหรับ role ที่ไม่มีสิทธิ์ pk_quoteMetadata (tech/manager) — โหลดจาก pk_quoteColors
 // ตัวเลือกสีหลักในจดขนาด — ใช้ vocabulary เดียวกับคำนวณราคา (_quoteMetadata.colors)
 function recColorOptsHtml_(selectedId, emptyLabel){
   return ['<option value="">' + emptyLabel + '</option>']
-    .concat((_quoteMetadata?.colors||[]).map(c => {
+    .concat(((_quoteMetadata && _quoteMetadata.colors) || _recColors || []).map(c => {
       const sel = c.id === selectedId ? ' selected' : '';
       return `<option value="${c.id}"${sel}>${c.label} (${c.group})</option>`;
     })).join('');
@@ -10090,7 +10091,20 @@ function recordRenderForm(){
 
   body.innerHTML = html;
   recordUpdateSaveStatus();
-  if (!_quoteMetadata && !_recColorLoading){ _recColorLoading = true; quoteLoadMetadata().finally(() => { _recColorLoading = false; const _m = document.getElementById('recmMainColor'); if (_m) _m.innerHTML = recColorOptionsHtml(); _recForm.entries.forEach((e, i) => { const _e = document.getElementById('recmColor_' + i); if (_e) _e.innerHTML = recColorOptsHtml_(e.colorId||'', '— ตามสีหลัก —'); }); }); }
+  if (!_quoteMetadata && !_recColors && !_recColorLoading){
+    _recColorLoading = true;
+    (async () => {
+      // tech/manager ไม่มีสิทธิ์ pk_quoteMetadata (พ่วงตารางราคาขาย) → ข้ามไปขอเฉพาะรายการสี
+      const _canMeta = CURRENT_USER && ['sales','office','quote'].indexOf(CURRENT_USER.role) !== -1;
+      if (_canMeta) { try { await quoteLoadMetadata(); } catch(e){} }
+      if (!(_quoteMetadata && _quoteMetadata.colors)) {
+        try { const r = await call({ action:'pk_quoteColors' }, { cache: true }); if (r && r.ok) _recColors = r.colors || []; } catch(e){}
+      }
+      _recColorLoading = false;
+      const _m = document.getElementById('recmMainColor'); if (_m) _m.innerHTML = recColorOptionsHtml();
+      _recForm.entries.forEach((e, i) => { const _e = document.getElementById('recmColor_' + i); if (_e) _e.innerHTML = recColorOptsHtml_(e.colorId||'', '— ตามสีหลัก —'); });
+    })();
+  }
 }
 
 function recordRenderEntry(e, idx, ro){
