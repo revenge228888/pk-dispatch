@@ -13311,6 +13311,7 @@ function pkpLeftoverSuggest_(it, mainAlu){
   return out.slice(0,2);
 }
 function pkpLeftoverBandHTML_(i){
+  if(_pkpSandbox) return '';   // โหมดทดคำนวณ = ใบไม่จริง — ห้ามชวนจองชุดค้างจริง
   var it=pkpItems[i]; if(!it) return '';
   var mainAlu=(document.getElementById('pkpMainAlu')||{}).value||'';
   var sug;
@@ -13328,7 +13329,9 @@ function pkpLeftoverBandHTML_(i){
       +'<button type="button" class="btn btn-p btn-sm" onclick="pkpLeftoverUse('+i+',\''+escHtml(ls.id)+'\')">✓ ใช้ชุดนี้</button></div>';
   }).join('');
 }
+let _pkpBookedLS=[];   // ชุดที่จองระหว่างใบยังเป็นร่าง — บันทึกสำเร็จแล้วค่อย relink เป็นเลข WO จริง
 async function pkpLeftoverUse(i, id){
+  if(_pkpSandbox){ toast('🧮 โหมดทดคำนวณ — จองชุดค้างไม่ได้'); return; }
   var ls=null; for(var k=0;k<_leftoverSets.length;k++){ if(_leftoverSets[k].id===id){ ls=_leftoverSets[k]; break; } }
   if(!ls) return;
   if(!confirm('ใช้ชุดค้าง '+id+' ('+ls.type+' '+ls.w+'×'+ls.h+' '+ls.cAlu+') กับรายการที่ '+(i+1)+'?\nชุดจะถูกตัดออกจากคลังชุดค้าง (คืนได้จากหน้า ♻ ชุดค้าง stock)')) return;
@@ -13339,6 +13342,7 @@ async function pkpLeftoverUse(i, id){
   var tag='♻ ใช้ชุดค้าง '+id+' ('+ls.type+' '+ls.w+'×'+ls.h+' '+ls.cAlu+')';
   it.note=(it.note?it.note+' · ':'')+tag;   // ช่างเห็นในใบผลิต/ใบปะหน้า
   ls.status='ใช้แล้ว'; ls.usedWO=(pkpEditingWO||'(ร่าง)');
+  if(!pkpEditingWO && _pkpBookedLS.indexOf(id)===-1) _pkpBookedLS.push(id);   // ยังไม่มีเลข WO — รอ relink ตอนบันทึก
   toast('✅ จองชุด '+id+' แล้ว — จดไว้ในหมายเหตุรายการ');
   pkpRenderRows(); pkpAutosave(); lsBtnCount_();
 }
@@ -14031,6 +14035,7 @@ function pkpInit(){
 // ── ใบใหม่ (reset) ──
 function pkpNew(skipRender){
   pkpEditingWO=null; pkpLoadedStatus='';
+  _pkpBookedLS=[];   // ♻ ทิ้งร่าง = ตัดสาย relink (ชุดที่จองไว้ยังใช้แล้ว/(ร่าง) — คืนได้ที่หน้า ♻)
   pkpItems=[pkpBlankItem(),pkpBlankItem(),pkpBlankItem()];
   pkpSigCheck=null; pkpSigApprove=null;
   _pkpCostResult=null;
@@ -14285,6 +14290,15 @@ async function pkpSave(){
     if(!r.ok){ toast('❌ '+(r.error||'บันทึกไม่สำเร็จ')); return; }
     delete pkpWoCache[r.woId];   // ล้าง cache ใบนี้ — กันพิมพ์/จัดตัดรางได้ข้อมูลก่อนแก้
     pkpEditingWO=r.woId;
+    // ♻ ชุดค้างที่จองไว้ตอนยังเป็นร่าง → อัปเดต usedWO ในชีตเป็นเลข WO จริง (fail-soft)
+    if(_pkpBookedLS.length){
+      var _lsIds=_pkpBookedLS.slice(); _pkpBookedLS=[];
+      _lsIds.forEach(function(lid){
+        call({action:'pk_leftoverRelink', id:lid, usedWO:r.woId}).catch(function(){});
+        var _l=null; for(var q=0;q<_leftoverSets.length;q++){ if(_leftoverSets[q].id===lid){_l=_leftoverSets[q];break;} }
+        if(_l) _l.usedWO=r.woId;
+      });
+    }
     if(r.status) pkpLoadedStatus=r.status;
     var woEl=document.getElementById('pkpWoLabel'); if(woEl)woEl.textContent=r.woId+(pkpLoadedStatus?' · '+pkpLoadedStatus:'');
     if(sv)sv.textContent='💾 บันทึกการแก้ไข';
