@@ -768,6 +768,31 @@ tbody tr:nth-child(even){background:rgba(120,96,72,.04);}
     <div class="quom-save-bar"><span style="margin-left:auto;"></span><button class="btn btn-d" onclick="ptEquipClose()">ปิด</button></div>
   </div>
 </div>
+<div class="quom-bg" id="lsModal">
+  <div class="quom-wrap" style="max-width:680px;">
+    <div class="quom-head">
+      <div class="quom-title">♻ ชุดทำผิด ค้าง stock</div>
+      <button class="hbtn danger" onclick="lsClose()">×</button>
+    </div>
+    <div class="quom-body">
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px;">ลงทะเบียนชุดสำเร็จที่ทำพลาดไว้ที่นี่ — ตอนออกใบผลิต ระบบจะแนะนำอัตโนมัติถ้าตัดมาใช้กับงานใหม่ได้ (สีอลูตรงกัน + รางเสียไม่เกิน 30% ต่อเส้น)</div>
+      <div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+        <div style="font-weight:800;font-size:13px;margin-bottom:8px;">+ ลงทะเบียนชุดใหม่</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <select class="fi" id="lsType" style="flex:2;min-width:220px;"></select>
+          <input class="fi" id="lsW" type="number" placeholder="กว้าง (ซม.)" style="width:110px;">
+          <input class="fi" id="lsH" type="number" placeholder="สูง (ซม.)" style="width:100px;">
+          <input class="fi" id="lsAlu" placeholder="สีอลู เช่น ดำ" style="width:110px;">
+          <input class="fi" id="lsMesh" placeholder="สีมุ้ง" style="width:90px;">
+          <input class="fi" id="lsNote" placeholder="หมายเหตุ เช่น ทำผิดจาก WO-..." style="flex:1;min-width:170px;">
+          <button class="btn btn-p" onclick="lsAdd()">บันทึก</button>
+        </div>
+      </div>
+      <div id="lsBody"><div class="loading-row">กำลังโหลด...</div></div>
+    </div>
+    <div class="quom-save-bar"><span style="margin-left:auto;"></span><button class="btn btn-d" onclick="lsClose()">ปิด</button></div>
+  </div>
+</div>
 
 
 <div class="loading" id="loading"><div class="spinner"></div><span id="loadMsg">กำลังโหลด...</span></div>
@@ -1539,7 +1564,8 @@ function renderOfficeShell(){
           <div class="row-form" style="margin-bottom:10px;align-items:center;">
             <div style="font-weight:800;font-size:16px;">🏭 ใบผลิต</div>
             <div style="font-size:13px;color:var(--mu,#6b7a94);">เลขใบ: <b id="pkpWoLabel">(ใบใหม่ — เลขออกตอนบันทึก)</b></div>
-            <button class="btn btn-g btn-sm" id="pkpSandboxBtn" onclick="pkpSandboxToggle()" style="margin-left:auto;">🧮 ทดคำนวณ</button>
+            <button class="btn btn-g btn-sm" id="lsBtnProd" onclick="lsOpen()" style="margin-left:auto;">♻ ชุดค้าง stock</button>
+            <button class="btn btn-g btn-sm" id="pkpSandboxBtn" onclick="pkpSandboxToggle()">🧮 ทดคำนวณ</button>
             <button class="btn btn-g btn-sm" onclick="pkpPrint()">🖨 พิมพ์</button>
             <button class="btn btn-g btn-sm" onclick="pkpReqPrint()">📋 ใบเบิก</button>
             <button class="btn btn-g btn-sm" onclick="pkpNew()">+ ใบใหม่</button>
@@ -1668,7 +1694,10 @@ function renderOfficeShell(){
         <div class="section-pad">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
             <div style="font-weight:800;font-size:16px;">📈 ติดตามงานผลิต</div>
-            <button class="btn btn-g btn-sm" onclick="ptLoad()">↻ รีเฟรช</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-g btn-sm" id="lsBtnPt" onclick="lsOpen()">♻ ชุดค้าง stock</button>
+              <button class="btn btn-g btn-sm" onclick="ptLoad()">↻ รีเฟรช</button>
+            </div>
           </div>
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
             <button class="btn btn-g" id="ptTabKanban" onclick="ptSetView('kanban')">🗂 Kanban</button>
@@ -13213,6 +13242,150 @@ function pkpRailPieces(items, mainAlu, meta){
   });
   return out;
 }
+
+// ════════ ♻ ชุดทำผิดค้าง stock — จับคู่ย้อนสูตรราง (สีต้องตรง · เสียต่อเส้น ≤30% · เส้นขาด = ต้องเพิ่มราง) ════════
+let _leftoverSets=[];
+async function pkpLeftoverFetch(){
+  try{ var r=await call({action:'pk_leftoverList'}); _leftoverSets=(r&&r.ok)?(r.items||[]):[]; }
+  catch(e){ _leftoverSets=[]; }   // fail-soft: ไม่มีข้อมูล = ไม่แนะนำ ใบผลิตทำงานปกติ
+}
+// need/have = output pkpRailPieces ของชุดเดียว · จับคู่รายเส้นตาม rail key (ไม่สนชนิดมุ้ง — ตระกูลรางพอ)
+function pkpLeftoverMatch_(needPieces, havePieces){
+  var WASTE=0.30;
+  var have={};   // rail → ความยาวรายเส้น เรียงสั้น→ยาว (best fit: หยิบเส้นสั้นสุดที่พอ)
+  (havePieces||[]).forEach(function(p){ var a=have[p.rail]||(have[p.rail]=[]); for(var k=0;k<p.qty;k++) a.push(p.len); });
+  Object.keys(have).forEach(function(k){ have[k].sort(function(a,b){return a-b;}); });
+  var usable=[], add=[], wasteMax=0;
+  (needPieces||[]).forEach(function(p){
+    for(var k=0;k<p.qty;k++){
+      var pool=have[p.rail]||[], pick=-1;
+      for(var j=0;j<pool.length;j++){ if(pool[j]>=p.len && (pool[j]-p.len)/pool[j]<=WASTE){ pick=j; break; } }
+      if(pick>=0){
+        var hl=pool[pick]; pool.splice(pick,1);
+        var w=hl>0?(hl-p.len)/hl:0; if(w>wasteMax)wasteMax=w;
+        usable.push({rail:p.rail, need:p.len, have:hl, wastePct:Math.round(w*100)});
+      } else {
+        var ex=null; for(var m2=0;m2<add.length;m2++){ if(add[m2].rail===p.rail && add[m2].len===p.len){ ex=add[m2]; break; } }
+        if(ex) ex.qty++; else add.push({rail:p.rail, len:p.len, qty:1});
+      }
+    }
+  });
+  return { usable:usable, add:add, fullMatch:add.length===0 && usable.length>0, wasteMaxPct:Math.round(wasteMax*100) };
+}
+// หาชุดค้างที่เหมาะกับรายการใบผลิต — คืน [{ls, m}] เรียงดีสุดก่อน สูงสุด 2 ชุด
+function pkpLeftoverSuggest_(it, mainAlu){
+  if(!_leftoverSets.length || !it || !it.type || !pkpIsReqScreen(it.type) || it.noReq) return [];
+  var col=String((it.cAlu||mainAlu)||'').trim(); if(!col) return [];
+  var needPieces=pkpRailPieces([it], col, {});
+  if(!needPieces.length) return [];
+  var out=[];
+  _leftoverSets.forEach(function(ls){
+    if(ls.status!=='ว่าง') return;
+    if(String(ls.cAlu||'').trim()!==col) return;                 // สีอลูต้องเหมือนกันเป๊ะ
+    if(!pkpIsReqScreen(ls.type)) return;
+    var havePieces=pkpRailPieces([{type:ls.type, w:ls.w, h:ls.h, cAlu:ls.cAlu}], ls.cAlu, {});
+    if(!havePieces.length) return;
+    var m=pkpLeftoverMatch_(needPieces, havePieces);
+    if(!m.usable.length) return;                                 // ต้องถอดรางมาใช้ได้อย่างน้อย 1 เส้น
+    out.push({ls:ls, m:m});
+  });
+  out.sort(function(a,b){
+    if(a.m.fullMatch!==b.m.fullMatch) return a.m.fullMatch?-1:1;
+    if(a.m.fullMatch) return a.m.wasteMaxPct-b.m.wasteMaxPct;
+    return a.m.add.length-b.m.add.length;
+  });
+  return out.slice(0,2);
+}
+function pkpLeftoverBandHTML_(i){
+  var it=pkpItems[i]; if(!it) return '';
+  var mainAlu=(document.getElementById('pkpMainAlu')||{}).value||'';
+  var sug;
+  try{ sug=pkpLeftoverSuggest_(it, mainAlu); }catch(e){ return ''; }
+  if(!sug.length) return '';
+  return sug.map(function(s){
+    var ls=s.ls, m=s.m;
+    var head='♻ ชุดค้าง stock <b>'+escHtml(ls.id)+'</b> · '+escHtml(ls.type)+' '+ls.w+'×'+ls.h+' ('+escHtml(ls.cAlu)+')';
+    var body=m.fullMatch
+      ? '<span style="color:var(--grn);font-weight:700;">รางใช้ได้ครบ '+m.usable.length+' เส้น</span> · ตัดทิ้งสูงสุด '+m.wasteMaxPct+'%'
+      : 'รางใช้ได้ '+m.usable.length+' เส้น (ตัดทิ้งสูงสุด '+m.wasteMaxPct+'%) · <b style="color:var(--amb,#B45309);">⚠ ต้องเพิ่มราง:</b> '+m.add.map(function(a){return pkpRailName_(a.rail)+' '+pkpFmt(a.len)+' ซม. ×'+a.qty;}).join(', ');
+    var col=m.fullMatch?['rgba(31,164,99,.10)','rgba(31,164,99,.35)']:['var(--amb-t,rgba(180,83,9,.12))','rgba(180,83,9,.3)'];
+    return '<div style="margin-top:6px;font-size:12px;line-height:1.7;background:'+col[0]+';border:1px solid '+col[1]+';border-radius:7px;padding:6px 9px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+      +'<span style="flex:1;min-width:200px;">'+head+'<br>'+body+(ls.note?'<br><span style="color:var(--mu);">📝 '+escHtml(ls.note)+'</span>':'')+'</span>'
+      +'<button type="button" class="btn btn-p btn-sm" onclick="pkpLeftoverUse('+i+',\''+escHtml(ls.id)+'\')">✓ ใช้ชุดนี้</button></div>';
+  }).join('');
+}
+async function pkpLeftoverUse(i, id){
+  var ls=null; for(var k=0;k<_leftoverSets.length;k++){ if(_leftoverSets[k].id===id){ ls=_leftoverSets[k]; break; } }
+  if(!ls) return;
+  if(!confirm('ใช้ชุดค้าง '+id+' ('+ls.type+' '+ls.w+'×'+ls.h+' '+ls.cAlu+') กับรายการที่ '+(i+1)+'?\nชุดจะถูกตัดออกจากคลังชุดค้าง (คืนได้จากหน้า ♻ ชุดค้าง stock)')) return;
+  showLoad('กำลังจองชุดค้าง...');
+  var r; try{ r=await call({action:'pk_leftoverSetStatus', id:id, status:'ใช้แล้ว', usedWO:(pkpEditingWO||'(ร่าง)')}); } finally{ hideLoad(); }
+  if(!r||!r.ok){ toast('❌ '+((r&&r.error)||'จองไม่สำเร็จ')); pkpLeftoverFetch(); return; }
+  var it=pkpItems[i];
+  var tag='♻ ใช้ชุดค้าง '+id+' ('+ls.type+' '+ls.w+'×'+ls.h+' '+ls.cAlu+')';
+  it.note=(it.note?it.note+' · ':'')+tag;   // ช่างเห็นในใบผลิต/ใบปะหน้า
+  ls.status='ใช้แล้ว'; ls.usedWO=(pkpEditingWO||'(ร่าง)');
+  toast('✅ จองชุด '+id+' แล้ว — จดไว้ในหมายเหตุรายการ');
+  pkpRenderRows(); pkpAutosave(); lsBtnCount_();
+}
+// ── UI ทะเบียนชุดค้าง (lsModal · office+manager) ──
+function lsBtnCount_(){
+  var n=0; for(var k=0;k<_leftoverSets.length;k++){ if(_leftoverSets[k].status==='ว่าง') n++; }
+  ['lsBtnProd','lsBtnPt'].forEach(function(id){ var e=document.getElementById(id); if(e) e.textContent='♻ ชุดค้าง stock'+(n?' ('+n+')':''); });
+}
+function lsOpen(){
+  var sel=document.getElementById('lsType');
+  if(sel && sel.options.length<2) sel.innerHTML='<option value="">— ชนิดมุ้งจีบ —</option>'+Object.keys(pkpREQ).map(function(t){return '<option>'+escHtml(t)+'</option>';}).join('');
+  document.getElementById('lsModal').classList.add('on');
+  lsReload();
+}
+function lsClose(){ document.getElementById('lsModal').classList.remove('on'); }
+async function lsReload(){
+  var b=document.getElementById('lsBody'); if(b)b.innerHTML='<div class="loading-row">กำลังโหลด...</div>';
+  await pkpLeftoverFetch();
+  lsRender(); lsBtnCount_();
+  try{ if(document.getElementById('pkpItemsWrap') && pkpItems.length) pkpItems.forEach(function(_,i){ pkpRecalc(i); }); }catch(e){}
+}
+function lsRender(){
+  var b=document.getElementById('lsBody'); if(!b) return;
+  if(!_leftoverSets.length){ b.innerHTML='<div class="loading-row">ยังไม่มีชุดค้าง stock</div>'; return; }
+  var rows=_leftoverSets.slice().sort(function(a,b2){ if(a.status!==b2.status) return a.status==='ว่าง'?-1:1; return (b2.createdAt||0)-(a.createdAt||0); });
+  b.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="color:var(--mu);font-size:11px;"><th style="text-align:left;padding:6px 4px;">ชุด</th><th style="text-align:left;padding:6px 4px;">ขนาด / สี</th><th style="text-align:left;padding:6px 4px;">สถานะ</th><th></th></tr></thead><tbody>'
+    +rows.map(function(x){
+      var st=x.status==='ว่าง' ? '<span style="color:var(--grn);font-weight:700;">ว่าง</span>'
+        : '<span style="color:var(--mu);">ใช้แล้ว'+(x.usedWO?'<br><span style="font-size:11px;">'+escHtml(x.usedWO)+'</span>':'')+'</span>';
+      return '<tr style="border-bottom:1px solid var(--bdr);'+(x.status!=='ว่าง'?'opacity:.65;':'')+'">'
+        +'<td style="padding:8px 4px;"><b>'+escHtml(x.id)+'</b><br><span style="font-size:11px;color:var(--mu);">'+escHtml(x.type)+(x.note?' · 📝 '+escHtml(x.note):'')+'</span></td>'
+        +'<td style="padding:8px 4px;white-space:nowrap;">'+x.w+' × '+x.h+'<br><span style="font-size:11px;color:var(--mu);">'+escHtml(x.cAlu)+(x.cMesh?' / '+escHtml(x.cMesh):'')+'</span></td>'
+        +'<td style="padding:8px 4px;">'+st+'</td>'
+        +'<td style="padding:8px 4px;text-align:right;white-space:nowrap;">'
+          +(x.status!=='ว่าง'?'<button class="btn btn-g btn-sm" onclick="lsRestore(\''+escHtml(x.id)+'\')">↩ คืนว่าง</button> ':'')
+          +'<button class="btn btn-d btn-sm" onclick="lsDelete(\''+escHtml(x.id)+'\')">🗑</button></td></tr>';
+    }).join('')+'</tbody></table>';
+}
+async function lsAdd(){
+  var g=function(id){ return String((document.getElementById(id)||{}).value||''); };
+  var body={ action:'pk_leftoverAdd', type:g('lsType').trim(), w:Number(g('lsW')), h:Number(g('lsH')), cAlu:g('lsAlu').trim(), cMesh:g('lsMesh').trim(), note:g('lsNote').trim() };
+  if(!body.type){ toast('เลือกชนิดมุ้งจีบ'); return; }
+  if(!(body.w>0) || !(body.h>0)){ toast('กรอกขนาด กว้าง × สูง (ซม.)'); return; }
+  if(!body.cAlu){ toast('กรอกสีอลู — ใช้เป็นเงื่อนไขจับคู่'); return; }
+  showLoad('กำลังบันทึก...');
+  var r; try{ r=await call(body); } finally{ hideLoad(); }
+  if(!r||!r.ok){ toast('❌ '+((r&&r.error)||'บันทึกไม่สำเร็จ')); return; }
+  ['lsW','lsH','lsMesh','lsNote'].forEach(function(id){ var e=document.getElementById(id); if(e)e.value=''; });
+  toast('✅ ลงทะเบียน '+r.id+' แล้ว');
+  lsReload();
+}
+async function lsRestore(id){
+  if(!confirm('คืนสถานะ '+id+' เป็น "ว่าง"?')) return;
+  var r=await call({action:'pk_leftoverSetStatus', id:id, status:'ว่าง'});
+  if(r&&r.ok){ toast('↩ คืนสถานะแล้ว'); lsReload(); } else toast('❌ '+((r&&r.error)||'ไม่สำเร็จ'));
+}
+async function lsDelete(id){
+  if(!confirm('ลบ '+id+' ออกจากทะเบียนถาวร?')) return;
+  var r=await call({action:'pk_leftoverDelete', id:id});
+  if(r&&r.ok){ toast('🗑 ลบแล้ว'); lsReload(); } else toast('❌ '+((r&&r.error)||'ไม่สำเร็จ'));
+}
 // First-Fit-Decreasing 1D cutting-stock (เผื่อ kerf ระหว่างชิ้นในเส้นเดียวกัน)
 function pkpCutFFD(pieces, stockLen, kerf){
   var items=[]; pieces.forEach(function(p){ for(var k=0;k<p.qty;k++) items.push({len:p.len, wo:p.wo, name:p.name, setNo:p.setNo, rail:p.rail, type:p.type, pidx:k+1, ptot:p.qty}); });
@@ -13835,6 +14008,10 @@ function pkpInit(){
   if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
   pkpLoadSavedSig();   // โหลดลายเซ็นที่บันทึกไว้ (Drive · ข้ามเครื่อง)
   pkpLoadList();
+  // ♻ โหลดคลังชุดค้าง แล้วรีเฟรชแถบแนะนำใต้แต่ละรายการ + ตัวเลขบนปุ่ม
+  pkpLeftoverFetch().then(function(){
+    try{ pkpItems.forEach(function(_,i){ pkpRecalc(i); }); lsBtnCount_(); }catch(e){}
+  });
 }
 
 // ── ใบใหม่ (reset) ──
@@ -14037,6 +14214,7 @@ function pkpRecalc(i){
       +' · มุ้ง <b>'+V(f.cutScreen)+'</b> จีบ <b>'+f.jeeb+'</b> · เชือก <b>'+V(f.cutRope)+'</b>×'+V(f.nRope)+' เส้น'
       +' · สลิง <b>'+V(f.cutSling)+'</b>×'+V(f.nSling)+' · PVC <b>'+V(f.pvc)+'</b>×'+f.pvcCount+' · เจาะรู <b>'+V(f.holePitch)+'</b>';
   }
+  try{ el.innerHTML+=pkpLeftoverBandHTML_(i); }catch(e){}   // ♻ แนะนำชุดค้าง stock ที่ตัดใช้ได้ (สี+รางผ่านเกณฑ์)
 }
 
 // ── build payload ส่ง backend ──
