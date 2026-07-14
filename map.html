@@ -772,6 +772,12 @@ const LOC_POLL_MS = 45000, LOC_FRESH_MIN = 10;
 function locAgeMin(l){ const t = Date.parse((l && l.ts) || ''); return isNaN(t) ? null : (Date.now() - t) / 60000; }
 function locFresh(l){ const a = locAgeMin(l); return a != null && a >= -5 && a <= LOC_FRESH_MIN; }
 function locAgeTxt(l){ const a = locAgeMin(l); if (a == null) return ''; return a < 1.5 ? 'เมื่อครู่' : Math.round(a) + ' นาทีที่แล้ว'; }
+// ตำแหน่ง (มือถือช่าง/GPS รถ) เป็นข้อมูลของ "วันที่ ping" เท่านั้น — ดูวันอื่น/วันล่วงหน้าต้องไม่โผล่
+function locSameDay(l){
+  const t = Date.parse((l && l.ts) || ''); if (isNaN(t)) return false;
+  const d = new Date(t);
+  return (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')) === S.date;
+}
 async function pollLoc(){
   try {
     const r = await api('/loc-list', {});
@@ -788,7 +794,7 @@ function applyLiveLoc(){
   S.liveLayer.clearLayers();
   for (const [team, mk0] of Object.entries(S.vehMks || {})) mk0.setOpacity(1);
   for (const [team, l] of Object.entries(S.liveLoc || {})){
-    if (!locFresh(l) || S.teamOn[team] === false) continue;
+    if (!locFresh(l) || !locSameDay(l) || S.teamOn[team] === false) continue;
     const mk0 = (S.vehMks || {})[team];
     if (mk0) mk0.setOpacity(0);   // สดอยู่ → ซ่อนรถจำลอง ใช้ตำแหน่งจริงแทน
     const c = teamColor(team);
@@ -866,9 +872,9 @@ function renderTeamCards(){
         : '<b>จบครบทุกงานแล้ว ✓</b>') + '</div>' +
       (function(){
         const lv = (S.liveLoc || {})[team];
-        if (lv && locFresh(lv)) return '<div class="checkin" style="background:rgba(31,164,99,.14);color:var(--grn)">📡 ตำแหน่งจริง · ' + locAgeTxt(lv) + '</div>';
-        if (lv) return '<div class="checkin">📡 ขาดสัญญาณ ' + locAgeTxt(lv) + ' — แสดงตำแหน่งจำลอง</div>';
-        return '';
+        if (!lv || !locSameDay(lv)) return '';   // ข้อมูลตำแหน่งเป็นของวัน ping เท่านั้น — ดูวันอื่นไม่ต้องพูดถึงสัญญาณ
+        if (locFresh(lv)) return '<div class="checkin" style="background:rgba(31,164,99,.14);color:var(--grn)">📡 ตำแหน่งจริง · ' + locAgeTxt(lv) + '</div>';
+        return '<div class="checkin">📡 ขาดสัญญาณ ' + locAgeTxt(lv) + ' — แสดงตำแหน่งจำลอง</div>';
       })() +
       (lastCk ? '<div class="checkin">✓ อัปเดตล่าสุด ' + lastCk + ' · ' + esc(lastLabel) + '</div>' : '') +
       (S.roadInfo[team] && cur && cur.status !== 'working'
