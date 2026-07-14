@@ -779,6 +779,7 @@ tbody tr:nth-child(even){background:rgba(120,96,72,.04);}
       <div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:10px 12px;margin-bottom:12px;">
         <div style="font-weight:800;font-size:13px;margin-bottom:8px;">+ ลงทะเบียนชุดใหม่</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <input class="fi" id="lsCode" placeholder="รหัสของ (พิมพ์เอง เช่น A-01)" style="width:150px;font-weight:700;">
           <select class="fi" id="lsType" style="flex:2;min-width:220px;"></select>
           <input class="fi" id="lsW" type="number" placeholder="กว้าง (ซม.)" style="width:110px;">
           <input class="fi" id="lsH" type="number" placeholder="สูง (ซม.)" style="width:100px;">
@@ -788,6 +789,7 @@ tbody tr:nth-child(even){background:rgba(120,96,72,.04);}
           <button class="btn btn-p" onclick="lsAdd()">บันทึก</button>
         </div>
       </div>
+      <input class="fi" id="lsSearch" placeholder="🔍 ค้นหา รหัส / ชนิด / สี / เลขชุด" style="margin-bottom:10px;" oninput="lsRender()">
       <div id="lsBody"><div class="loading-row">กำลังโหลด...</div></div>
     </div>
     <div class="quom-save-bar"><span style="margin-left:auto;"></span><button class="btn btn-d" onclick="lsClose()">ปิด</button></div>
@@ -13311,7 +13313,6 @@ function pkpLeftoverSuggest_(it, mainAlu){
   return out.slice(0,2);
 }
 function pkpLeftoverBandHTML_(i){
-  if(_pkpSandbox) return '';   // โหมดทดคำนวณ = ใบไม่จริง — ห้ามชวนจองชุดค้างจริง
   var it=pkpItems[i]; if(!it) return '';
   var mainAlu=(document.getElementById('pkpMainAlu')||{}).value||'';
   var sug;
@@ -13319,14 +13320,18 @@ function pkpLeftoverBandHTML_(i){
   if(!sug.length) return '';
   return sug.map(function(s){
     var ls=s.ls, m=s.m;
-    var head='♻ ชุดค้าง stock <b>'+escHtml(ls.id)+'</b> · '+escHtml(ls.type)+' '+ls.w+'×'+ls.h+' ('+escHtml(ls.cAlu)+')';
+    var head='♻ ชุดค้าง stock '+(ls.code?'<b style="font-size:13px;">['+escHtml(ls.code)+']</b> ':'')+'<b>'+escHtml(ls.id)+'</b> · '+escHtml(ls.type)+' '+ls.w+'×'+ls.h+' ('+escHtml(ls.cAlu)+')';
     var body=m.fullMatch
       ? '<span style="color:var(--grn);font-weight:700;">รางใช้ได้ครบ '+m.usable.length+' เส้น</span> · ตัดทิ้งสูงสุด '+m.wasteMaxPct+'%'
       : 'รางใช้ได้ '+m.usable.length+' เส้น (ตัดทิ้งสูงสุด '+m.wasteMaxPct+'%) · <b style="color:var(--amb,#B45309);">⚠ ต้องเพิ่มราง:</b> '+m.add.map(function(a){return pkpRailName_(a.rail)+' '+pkpFmt(a.len)+' ซม. ×'+a.qty;}).join(', ');
     var col=m.fullMatch?['rgba(31,164,99,.10)','rgba(31,164,99,.35)']:['var(--amb-t,rgba(180,83,9,.12))','rgba(180,83,9,.3)'];
+    // โหมดทดคำนวณ: โชว์ผลจับคู่ราง (ตามที่ขอ) แต่จองไม่ได้ — ใบทดไม่ใช่ใบจริง
+    var act=_pkpSandbox
+      ? '<span style="font-size:11px;color:var(--mu);white-space:nowrap;">🧮 โหมดทด — ดูอย่างเดียว</span>'
+      : '<button type="button" class="btn btn-p btn-sm" onclick="pkpLeftoverUse('+i+',\''+escHtml(ls.id)+'\')">✓ ใช้ชุดนี้</button>';
     return '<div style="margin-top:6px;font-size:12px;line-height:1.7;background:'+col[0]+';border:1px solid '+col[1]+';border-radius:7px;padding:6px 9px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
       +'<span style="flex:1;min-width:200px;">'+head+'<br>'+body+(ls.note?'<br><span style="color:var(--mu);">📝 '+escHtml(ls.note)+'</span>':'')+'</span>'
-      +'<button type="button" class="btn btn-p btn-sm" onclick="pkpLeftoverUse('+i+',\''+escHtml(ls.id)+'\')">✓ ใช้ชุดนี้</button></div>';
+      +act+'</div>';
   }).join('');
 }
 let _pkpBookedLS=[];   // ชุดที่จองระหว่างใบยังเป็นร่าง — บันทึกสำเร็จแล้วค่อย relink เป็นเลข WO จริง
@@ -13334,12 +13339,12 @@ async function pkpLeftoverUse(i, id){
   if(_pkpSandbox){ toast('🧮 โหมดทดคำนวณ — จองชุดค้างไม่ได้'); return; }
   var ls=null; for(var k=0;k<_leftoverSets.length;k++){ if(_leftoverSets[k].id===id){ ls=_leftoverSets[k]; break; } }
   if(!ls) return;
-  if(!confirm('ใช้ชุดค้าง '+id+' ('+ls.type+' '+ls.w+'×'+ls.h+' '+ls.cAlu+') กับรายการที่ '+(i+1)+'?\nชุดจะถูกตัดออกจากคลังชุดค้าง (คืนได้จากหน้า ♻ ชุดค้าง stock)')) return;
+  if(!confirm('ใช้ชุดค้าง '+(ls.code?'['+ls.code+'] ':'')+id+' ('+ls.type+' '+ls.w+'×'+ls.h+' '+ls.cAlu+') กับรายการที่ '+(i+1)+'?\nชุดจะถูกตัดออกจากคลังชุดค้าง (คืนได้จากหน้า ♻ ชุดค้าง stock)')) return;
   showLoad('กำลังจองชุดค้าง...');
   var r; try{ r=await call({action:'pk_leftoverSetStatus', id:id, status:'ใช้แล้ว', usedWO:(pkpEditingWO||'(ร่าง)')}); } finally{ hideLoad(); }
   if(!r||!r.ok){ toast('❌ '+((r&&r.error)||'จองไม่สำเร็จ')); pkpLeftoverFetch(); return; }
   var it=pkpItems[i];
-  var tag='♻ ใช้ชุดค้าง '+id+' ('+ls.type+' '+ls.w+'×'+ls.h+' '+ls.cAlu+')';
+  var tag='♻ ใช้ชุดค้าง '+(ls.code?'['+ls.code+'] ':'')+id+' ('+ls.type+' '+ls.w+'×'+ls.h+' '+ls.cAlu+')';
   it.note=(it.note?it.note+' · ':'')+tag;   // ช่างเห็นในใบผลิต/ใบปะหน้า
   ls.status='ใช้แล้ว'; ls.usedWO=(pkpEditingWO||'(ร่าง)');
   if(!pkpEditingWO && _pkpBookedLS.indexOf(id)===-1) _pkpBookedLS.push(id);   // ยังไม่มีเลข WO — รอ relink ตอนบันทึก
@@ -13367,13 +13372,16 @@ async function lsReload(){
 function lsRender(){
   var b=document.getElementById('lsBody'); if(!b) return;
   if(!_leftoverSets.length){ b.innerHTML='<div class="loading-row">ยังไม่มีชุดค้าง stock</div>'; return; }
+  var q=String((document.getElementById('lsSearch')||{}).value||'').trim().toLowerCase();
   var rows=_leftoverSets.slice().sort(function(a,b2){ if(a.status!==b2.status) return a.status==='ว่าง'?-1:1; return (b2.createdAt||0)-(a.createdAt||0); });
+  if(q) rows=rows.filter(function(x){ return ((x.code||'')+' '+x.id+' '+x.type+' '+x.cAlu+' '+(x.cMesh||'')+' '+(x.note||'')).toLowerCase().indexOf(q)>=0; });
+  if(!rows.length){ b.innerHTML='<div class="loading-row">ไม่พบชุดที่ตรงกับ "'+escHtml(q)+'"</div>'; return; }
   b.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="color:var(--mu);font-size:11px;"><th style="text-align:left;padding:6px 4px;">ชุด</th><th style="text-align:left;padding:6px 4px;">ขนาด / สี</th><th style="text-align:left;padding:6px 4px;">สถานะ</th><th></th></tr></thead><tbody>'
     +rows.map(function(x){
       var st=x.status==='ว่าง' ? '<span style="color:var(--grn);font-weight:700;">ว่าง</span>'
         : '<span style="color:var(--mu);">ใช้แล้ว'+(x.usedWO?'<br><span style="font-size:11px;">'+escHtml(x.usedWO)+'</span>':'')+'</span>';
       return '<tr style="border-bottom:1px solid var(--bdr);'+(x.status!=='ว่าง'?'opacity:.65;':'')+'">'
-        +'<td style="padding:8px 4px;"><b>'+escHtml(x.id)+'</b><br><span style="font-size:11px;color:var(--mu);">'+escHtml(x.type)+(x.note?' · 📝 '+escHtml(x.note):'')+'</span></td>'
+        +'<td style="padding:8px 4px;">'+(x.code?'<span style="font-weight:800;font-size:14px;color:var(--acc);">['+escHtml(x.code)+']</span> ':'')+'<b>'+escHtml(x.id)+'</b> <button class="btn btn-g btn-sm" style="padding:2px 7px;font-size:11px;" onclick="lsEditCode(\''+escHtml(x.id)+'\')" title="แก้รหัสของ">✏</button><br><span style="font-size:11px;color:var(--mu);">'+escHtml(x.type)+(x.note?' · 📝 '+escHtml(x.note):'')+'</span></td>'
         +'<td style="padding:8px 4px;white-space:nowrap;">'+x.w+' × '+x.h+'<br><span style="font-size:11px;color:var(--mu);">'+escHtml(x.cAlu)+(x.cMesh?' / '+escHtml(x.cMesh):'')+'</span></td>'
         +'<td style="padding:8px 4px;">'+st+'</td>'
         +'<td style="padding:8px 4px;text-align:right;white-space:nowrap;">'
@@ -13383,16 +13391,24 @@ function lsRender(){
 }
 async function lsAdd(){
   var g=function(id){ return String((document.getElementById(id)||{}).value||''); };
-  var body={ action:'pk_leftoverAdd', type:g('lsType').trim(), w:Number(g('lsW')), h:Number(g('lsH')), cAlu:g('lsAlu').trim(), cMesh:g('lsMesh').trim(), note:g('lsNote').trim() };
+  var body={ action:'pk_leftoverAdd', code:g('lsCode').trim(), type:g('lsType').trim(), w:Number(g('lsW')), h:Number(g('lsH')), cAlu:g('lsAlu').trim(), cMesh:g('lsMesh').trim(), note:g('lsNote').trim() };
   if(!body.type){ toast('เลือกชนิดมุ้งจีบ'); return; }
   if(!(body.w>0) || !(body.h>0)){ toast('กรอกขนาด กว้าง × สูง (ซม.)'); return; }
   if(!body.cAlu){ toast('กรอกสีอลู — ใช้เป็นเงื่อนไขจับคู่'); return; }
   showLoad('กำลังบันทึก...');
   var r; try{ r=await call(body); } finally{ hideLoad(); }
   if(!r||!r.ok){ toast('❌ '+((r&&r.error)||'บันทึกไม่สำเร็จ')); return; }
-  ['lsW','lsH','lsMesh','lsNote'].forEach(function(id){ var e=document.getElementById(id); if(e)e.value=''; });
+  ['lsCode','lsW','lsH','lsMesh','lsNote'].forEach(function(id){ var e=document.getElementById(id); if(e)e.value=''; });
   toast('✅ ลงทะเบียน '+r.id+' แล้ว');
   lsReload();
+}
+async function lsEditCode(id){
+  var ls=null; for(var k=0;k<_leftoverSets.length;k++){ if(_leftoverSets[k].id===id){ ls=_leftoverSets[k]; break; } }
+  var v=prompt('รหัสของ (พิมพ์เอง เช่น A-01) — เว้นว่าง = ลบรหัส:', (ls&&ls.code)||'');
+  if(v===null) return;
+  var r=await call({action:'pk_leftoverSetCode', id:id, code:v.trim()});
+  if(r&&r.ok){ if(ls)ls.code=v.trim(); toast('✏ บันทึกรหัสแล้ว'); lsRender(); }
+  else toast('❌ '+((r&&r.error)||'ไม่สำเร็จ'));
 }
 async function lsRestore(id){
   if(!confirm('คืนสถานะ '+id+' เป็น "ว่าง"?')) return;
