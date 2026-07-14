@@ -1575,6 +1575,7 @@ function renderOfficeShell(){
           </div>
           <div id="pkpSandboxBanner" style="display:none;background:var(--acc-t);border:1px solid var(--acc,#B5653F);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--acc,#B5653F);">
             🧮 <b>โหมดทดคำนวณ — ไม่บันทึก ไม่รันเลขใบ</b> · กรอกรายการเพื่อดูค่าตัด/สรุปวัสดุ กด 💵 คำนวณต้นทุน หรือ 🖨 พิมพ์/📋 ใบเบิกได้ตามปกติ · ใบจริงที่ค้างไว้จะกลับมาเมื่อกด "↩ กลับใบผลิตจริง" (กระดาษทดถูกจำไว้ให้ครั้งหน้า)
+            <div style="margin-top:8px;"><button class="btn btn-p btn-sm" onclick="pkpCutFromSandbox()">🪚 จัดตัดรางจากใบทดนี้</button></div>
           </div>
           <div class="row-form" style="margin-bottom:10px;">
             <div class="fg" style="flex:1;min-width:180px;"><label class="fl">ชื่อลูกค้า</label><input class="fi" id="pkpCust" type="text" placeholder="ชื่อลูกค้า" oninput="pkpAutosave()"></div>
@@ -13444,6 +13445,19 @@ function pkpCutSet_(){ var d={stock:600,kerf:0.3};
   }catch(e){} return d; }
 function pkpCutField_(k,label,val){ return '<label style="display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--mu,#6b7a94);">'+label+'<input id="pkp_'+k+'" type="number" step="0.1" value="'+val+'" style="width:88px;padding:4px 6px;border:1px solid var(--line,#2a3344);border-radius:6px;background:var(--surf,#171d27);color:inherit;font-size:13px;"></label>'; }
 function pkpCutSetSave(){ var st=parseFloat((document.getElementById('pkp_stock')||{}).value)||600, kf=parseFloat((document.getElementById('pkp_kerf')||{}).value); if(isNaN(kf))kf=0.3; try{ localStorage.setItem('pkp_cut_set',JSON.stringify({stock:st,kerf:kf})); }catch(e){} toast('บันทึกค่าตัดแล้ว'); }
+// 🪚 ใบจัดตัดรางจากรายการในโหมดทดคำนวณ — ใช้ pipeline เดียวกับใบจริง (picker → FFD → เอกสาร) แต่ไม่ต้องบันทึก
+function pkpCutFromSandbox(){
+  if(!_pkpSandbox){ toast('ปุ่มนี้ใช้ในโหมดทดคำนวณ'); return; }
+  var items=pkpItems.filter(function(it){return it.type;});
+  if(!items.length){ toast('กรอกรายการก่อน (ชนิด + ขนาด)'); return; }
+  var mainAlu=(document.getElementById('pkpMainAlu')||{}).value||'';
+  var meta={ wo:'ทดคำนวณ', name:(document.getElementById('pkpCust')||{}).value||'' };
+  var pieces=pkpRailPieces(items, mainAlu, meta);
+  var scut=pkpScutCollect(items, mainAlu, meta);
+  if(!pieces.length && !scut.length){ toast('ไม่มีรางให้ตัด — ต้องมีมุ้งจีบ/บานเลื่อนที่กรอกขนาดครบ'); return; }
+  pkpCutPieces=pieces; pkpCutScut=scut; pkpCutIds=['ทดคำนวณ'];
+  pkpCutPicker_();
+}
 async function pkpCutOptimize(){
   var ids=Object.keys(pkpSelWOs).filter(function(k){return pkpSelWOs[k];});
   if(!ids.length){ toast('ติ๊กเลือก WO ก่อน'); return; }
