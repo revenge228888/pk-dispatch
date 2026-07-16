@@ -5092,7 +5092,7 @@ async function showTeamDetail(team, date){
 
       g.list.forEach(j => {
         const doneTime = j.doneAt ? new Date(Number(j.doneAt)).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}) : '';
-        const hasGeo = /\[geo:-?\d{1,2}\.\d{3,},\s*-?\d{1,3}\.\d{3,}\]/.test(j.note||'');
+        const hasGeo = /\[geo:-?\d{1,2}\.\d{3,},\s*-?\d{1,3}\.\d{3,}(?:,a)?\]/.test(j.note||'');
         html += `<div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;margin-bottom:6px;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
             <div style="flex:1;min-width:200px;">
@@ -10490,6 +10490,12 @@ function recA4Items_(e){
   if (e.krachok && e.krachok.length) parts.push('🪞 ' + e.krachok.map(escHtml).join(', '));
   return parts.length ? parts.join(' · ') : '—';
 }
+// สรุปรวมท้ายใบจดขนาด: จุด = รายการที่กรอกจริง · ชุด = รวมจำนวน (ว่าง = 1)
+function recA4Summary_(entries){
+  var pts = 0, sets = 0;
+  (entries || []).forEach(function(e){ if (e && !e.isEmpty) { pts++; sets += (Number(e.qty) || 1); } });
+  return { points: pts, sets: sets };
+}
 function renderA4Page(entriesInPage, pageNum, totalPages, customer, dateStr){
   var isLast = pageNum === totalPages;
   var cust = customer || { name:'', phone:'' };
@@ -10519,10 +10525,12 @@ function renderA4Page(entriesInPage, pageNum, totalPages, customer, dateStr){
   var colg = '<colgroup><col style="width:5%;"><col style="width:15%;"><col style="width:11%;"><col style="width:6%;"><col style="width:11%;"><col style="width:33%;"><col style="width:19%;"></colgroup>';
   var rows = entriesInPage.map(function(e){ return renderA4Entry(e); }).join('');
   var table = '<table style="width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed;">' + colg + thead + '<tbody>' + rows + '</tbody></table>';
+  var sumRow = '';
+  if (isLast) { var _s = recA4Summary_((_recForm && _recForm.entries) || []); sumRow = '<div style="margin-top:6px;text-align:right;font-size:11.5px;font-weight:700;color:#1e3a5f;">รวมทั้งหมด ' + _s.points + ' จุด · ' + _s.sets + ' ชุด</div>'; }
   var noteBox = (isLast && _recForm && _recForm.note) ? '<div style="margin-top:15px;border:1px solid #cfe0f2;background:#f6f9fc;border-radius:6px;padding:8px 11px;font-size:11.5px;"><b style="color:#1e3a5f;">📝 หมายเหตุรวมของงาน</b><div style="white-space:pre-wrap;margin-top:3px;color:#333;">' + escHtml(_recForm.note) + '</div></div>' : '';
   var sign = isLast ? '<div style="margin-top:28px;display:flex;justify-content:space-around;text-align:center;font-size:12px;color:#333;"><div><div style="border-top:1px solid #333;width:160px;margin:28px auto 4px;"></div>ผู้วัด / ผู้บันทึก</div><div><div style="border-top:1px solid #333;width:160px;margin:28px auto 4px;"></div>ลูกค้า</div></div>' : '';
   var footer = '<div style="margin-top:14px;display:flex;justify-content:space-between;font-size:10px;color:#aaa;border-top:1px dashed #ccc;padding-top:6px;"><span>' + escHtml((_recForm&&_recForm.id)||'') + '</span><span>หน้า ' + pageNum + ' / ' + totalPages + '</span></div>';
-  return '<div class="a4-page">' + header + meta + table + noteBox + '<div style="flex:1;"></div>' + sign + footer + '</div>';
+  return '<div class="a4-page">' + header + meta + table + sumRow + noteBox + '<div style="flex:1;"></div>' + sign + footer + '</div>';
 }
 function renderA4Entry(e){
   var w = (e.width != null && e.width !== '') ? e.width : '-';
@@ -11258,10 +11266,10 @@ function quoteCalcEntry(entry){
       const used = sqm > 0 ? Math.max(sqm, mn) : 0;   // ขั้นต่ำต่อรายการ
       const mt = Math.round(up * used * mq);
       const noteMin = (mn > 0 && sqm > 0 && sqm < mn) ? ' · คิดขั้นต่ำ ' + mn + ' ตร.ม.' : '';
-      return { total: mt, breakdown: mt ? [{ typeId:'manual', label: entry.customType || 'รายการ', price: mt, note: used + ' ตร.ม. × ' + fmt(up) + '/ตร.ม. × ' + mq + noteMin, unit:'ตร.ม.', uqty: used, rate: up }] : [] };
+      return { total: mt, breakdown: mt ? [{ typeId:'manual', label: entry.customType || 'รายการ', price: mt, note: used + ' ตร.ม. × ' + fmt(up) + '/ตร.ม. × ' + mq + noteMin, unit:'ตร.ม.', uqty: used, rate: up, setQty: mq, perSet: used, minApplied: (mn > 0 && sqm > 0 && sqm < mn) }] : [] };
     }
     const mt = Math.round(up * mq);
-    return { total: mt, breakdown: mt ? [{ typeId:'manual', label: entry.customType || 'รายการ', price: mt, note: fmt(up) + '/ชุด × ' + mq, unit:'ชุด', uqty: mq, rate: up }] : [] };
+    return { total: mt, breakdown: mt ? [{ typeId:'manual', label: entry.customType || 'รายการ', price: mt, note: fmt(up) + '/ชุด × ' + mq, unit:'ชุด', uqty: mq, rate: up, setQty: mq }] : [] };
   }
   const w = Number(entry.width) || 0;
   const h = Number(entry.height) || 0;
@@ -11282,7 +11290,7 @@ function quoteCalcEntry(entry){
 
     let p = 0;
     let note = '';
-    let unit = '', uqty = 0, urate = 0;
+    let unit = '', uqty = 0, urate = 0, setQty = 0, perSet = 0, minApplied = false;
     if (t.calc === 'area') {
       const tbl = quoPriceTable()[_quoForm.priceType] && quoPriceTable()[_quoForm.priceType][group];
       const ratePerSqm = tbl ? tbl[t.priceKey] : null;
@@ -11292,7 +11300,7 @@ function quoteCalcEntry(entry){
       if (area < minArea) area = minArea;
       p = ratePerSqm * area * qty;
       note = ratePerSqm + '/ตร.ม.';
-      unit = 'ตร.ม.'; uqty = area * qty; urate = ratePerSqm;
+      unit = 'ตร.ม.'; uqty = area * qty; urate = ratePerSqm; setQty = qty; perSet = Math.round(area * 100) / 100; minApplied = ((w * h) / 10000) < minArea;
     } else if (t.calc === 'area_h4') {
       // h4 ใช้สูตรพิเศษ: rate_free × area × qty + (area<6 ? 2000×qty : 0)
       const tbl = quoPriceTable()[_quoForm.priceType] && quoPriceTable()[_quoForm.priceType][group];
@@ -11305,22 +11313,22 @@ function quoteCalcEntry(entry){
       const extra = (area < PK_H4_THRESHOLD_SQM_CLIENT) ? (PK_H4_EXTRA_CLIENT * qty) : 0;
       p = basePrice + extra;
       note = ratePerSqm + '/ตร.ม.' + (extra ? ' +2,000×' + qty : ' (≥ 6 ตร.ม.)');
-      unit = 'ตร.ม.'; uqty = area * qty; urate = ratePerSqm;
+      unit = 'ตร.ม.'; uqty = area * qty; urate = ratePerSqm; setQty = qty; perSet = Math.round(area * 100) / 100; minApplied = ((w * h) / 10000) < minArea;
     } else if (t.calc === 'perimeter') {
       const perim = (w + h) * 2 / 100;
       const rate = t.priceKey === 'slide' ? slidePrice : openPrice;
       p = rate * perim * qty;
       note = rate + '/ม.';
-      unit = 'ม.'; uqty = perim * qty; urate = rate;
+      unit = 'ม.'; uqty = perim * qty; urate = rate; setQty = qty;
     } else if (t.calc === 'perimeter_split') {
       const perim = ((w/2) + h) * 2 * 2 / 100;
       const rate = t.priceKey === 'slide' ? slidePrice : openPrice;
       p = rate * perim * qty;
       note = rate + '/ม.';
-      unit = 'ม.'; uqty = perim * qty; urate = rate;
+      unit = 'ม.'; uqty = perim * qty; urate = rate; setQty = qty;
     }
 
-    breakdown.push({ typeId, label: t.label, price: Math.round(p), note, unit, uqty: Math.round(uqty * 100) / 100, rate: urate });
+    breakdown.push({ typeId, label: t.label, price: Math.round(p), note, unit, uqty: Math.round(uqty * 100) / 100, rate: urate, setQty, perSet, minApplied });
     total += p;
   });
 
@@ -12142,6 +12150,14 @@ function renderQuoteA4Page(entriesInPage, pageNum, totalPages, customer, dateStr
     </div>`;
 }
 
+// ช่องปริมาณใน PDF ใบเสนอ: งานคิด ตร.ม. → "N ชุด × X ตร.ม." (X = ตร.ม.ที่คิดเงินต่อชุด) · งานคิดรอบวง/ชุด → "N ชุด" · ไม่มีข้อมูลชุด → แบบเดิม
+function quoteA4QtyCell_(b){
+  if (b.setQty && b.unit === 'ตร.ม.') {
+    return b.setQty + ' ชุด × ' + b.perSet + ' ตร.ม.' + (b.minApplied ? '<div style="font-size:9px;color:#888;">(คิดพื้นที่ขั้นต่ำ)</div>' : '');
+  }
+  if (b.setQty) return b.setQty + ' ชุด';
+  return b.uqty ? (b.uqty + ' ' + (b.unit || '')) : (b.unit ? ('— ' + b.unit) : '—');
+}
 function renderQuoteA4Entry(e, showSize){
   const bd = (e._calc && e._calc.breakdown) || [];
   const _cid = e.colorId || (_quoForm && _quoForm.mainColor) || '';
@@ -12153,7 +12169,7 @@ function renderQuoteA4Entry(e, showSize){
   const eidx = (e._eidx != null ? e._eidx : '');
   return lines.map((b, i) => {
     const first = i === 0;
-    const qtyCell = b.uqty ? (b.uqty + ' ' + (b.unit || '')) : (b.unit ? ('— ' + b.unit) : '—');
+    const qtyCell = quoteA4QtyCell_(b);
     const rateCell = b.rate ? fmt(b.rate) : '—';
     return `<tr data-eidx="${eidx}">` +
       `<td style="${td}text-align:center;color:#1e6fb8;font-weight:700;font-family:'IBM Plex Mono',monospace;">${first ? e.no : ''}</td>` +
