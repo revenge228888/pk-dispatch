@@ -14301,7 +14301,15 @@ function pkpOnType(i,val){
   pkpRenderRows(); pkpAutosave();
 }
 function pkpOnPatt(i){ var a=pkpItems[i]; var idx=pkpARROWS.indexOf(a.patt); a.patt=pkpARROWS[(idx+1)%pkpARROWS.length]; var el=document.getElementById('pkpPatt'+i); if(el)el.textContent=a.patt; pkpAutosave(); }
-function pkpOnField(i,field,val){ pkpItems[i][field]=val; pkpRecalc(i); pkpRenderReqSummary(); pkpAutosave(); }   // ตัวเลข → คำนวณเฉพาะแถว (ไม่ re-render = ไม่เสีย focus)
+// ── แปลงอักขระที่พิมพ์ตอนลืมสลับภาษา (แป้นไทย Kedmanee แถวเลข) + เลขไทย → เลขอารบิก ──
+// ใช้เฉพาะช่องตัวเลข (ขนาด) เท่านั้น — ช่องสี/หมายเหตุเป็นข้อความไทยจริง ห้ามแปลง
+var PKP_TH_NUM = { 'ๅ':'1','/':'2','-':'3','ภ':'4','ถ':'5','ุ':'6','ึ':'7','ค':'8','ต':'9','จ':'0','ใ':'.','๐':'0','๑':'1','๒':'2','๓':'3','๔':'4','๕':'5','๖':'6','๗':'7','๘':'8','๙':'9' };
+function pkpNumFix(v){ return String(v==null?'':v).replace(/[ๅ\/\-ภถุึคตจใ๐-๙]/g, function(ch){ return PKP_TH_NUM[ch] || ch; }); }
+var PKP_NUM_FIELDS = { w:1, wl:1, wr:1, h:1 };
+function pkpOnField(i,field,val,el){   // ตัวเลข → คำนวณเฉพาะแถว (ไม่ re-render = ไม่เสีย focus)
+  if (PKP_NUM_FIELDS[field]) { var fx = pkpNumFix(val); if (fx !== val) { val = fx; if (el) el.value = fx; } }
+  pkpItems[i][field]=val; pkpRecalc(i); pkpRenderReqSummary(); pkpAutosave();
+}
 function pkpOnNoReq(i,checked){ pkpItems[i].noReq=!checked; pkpRenderRows(); pkpAutosave(); }   // ติ๊กเบิก/ไม่เบิก → re-render ให้ป้าย+สีอัปเดตทันที (checkbox ไม่ต้องรักษา focus)
 
 // ── render การ์ดทุกรายการ ──
@@ -14314,11 +14322,11 @@ function pkpRenderRows(){
     var sp=pkpIsSplit(it.type);
     // ช่องขนาด
     var dims = sp
-      ? '<div class="fg" style="width:78px"><label class="fl">ซ้าย(ซม.)</label><input class="fi" type="number" step="0.1" value="'+(it.wl||'')+'" oninput="pkpOnField('+i+',\'wl\',this.value)"></div>'
-       +'<div class="fg" style="width:78px"><label class="fl">ขวา(ซม.)</label><input class="fi" type="number" step="0.1" value="'+(it.wr||'')+'" oninput="pkpOnField('+i+',\'wr\',this.value)"></div>'
-       +'<div class="fg" style="width:78px"><label class="fl">สูง(ซม.)</label><input class="fi" type="number" step="0.1" value="'+(it.h||'')+'" oninput="pkpOnField('+i+',\'h\',this.value)"></div>'
-      : '<div class="fg" style="width:90px"><label class="fl">กว้าง(ซม.)</label><input class="fi" type="number" step="0.1" value="'+(it.w||'')+'" oninput="pkpOnField('+i+',\'w\',this.value)"></div>'
-       +'<div class="fg" style="width:90px"><label class="fl">สูง(ซม.)</label><input class="fi" type="number" step="0.1" value="'+(it.h||'')+'" oninput="pkpOnField('+i+',\'h\',this.value)"></div>';
+      ? '<div class="fg" style="width:78px"><label class="fl">ซ้าย(ซม.)</label><input class="fi" type="text" inputmode="decimal" value="'+(it.wl||'')+'" oninput="pkpOnField('+i+',\'wl\',this.value,this)"></div>'
+       +'<div class="fg" style="width:78px"><label class="fl">ขวา(ซม.)</label><input class="fi" type="text" inputmode="decimal" value="'+(it.wr||'')+'" oninput="pkpOnField('+i+',\'wr\',this.value,this)"></div>'
+       +'<div class="fg" style="width:78px"><label class="fl">สูง(ซม.)</label><input class="fi" type="text" inputmode="decimal" value="'+(it.h||'')+'" oninput="pkpOnField('+i+',\'h\',this.value,this)"></div>'
+      : '<div class="fg" style="width:90px"><label class="fl">กว้าง(ซม.)</label><input class="fi" type="text" inputmode="decimal" value="'+(it.w||'')+'" oninput="pkpOnField('+i+',\'w\',this.value,this)"></div>'
+       +'<div class="fg" style="width:90px"><label class="fl">สูง(ซม.)</label><input class="fi" type="text" inputmode="decimal" value="'+(it.h||'')+'" oninput="pkpOnField('+i+',\'h\',this.value,this)"></div>';
     html+='<div class="pkp-card" style="border:1px solid var(--line,#2a3344);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--surf,#171d27);">'
       +'<div class="row-form" style="align-items:flex-end;gap:8px;margin-bottom:8px;">'
         +'<div style="font-weight:700;color:var(--acc,#B5653F);min-width:24px;">'+(i+1)+'.</div>'
