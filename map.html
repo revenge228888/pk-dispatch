@@ -1123,7 +1123,8 @@ function openJob(key){
   const geoNote = j.glat === undefined
     ? '<div class="muted">⚠ งานนี้ไม่มี geo tag ใน note — ไม่แสดงบนแผนที่ <button class="btn ng-pin" onclick="startGeoPin(\'' + esc(key) + '\')">📌 ปักพิกัดงานนี้</button></div>'
     : (j.gsrc === 'auto' ? '<div class="muted">~ ตำแหน่งจากการเดาที่อยู่อัตโนมัติ — ควรตรวจ แล้วกดปักยืนยัน <button class="btn ng-pin" onclick="startGeoPin(\'' + esc(key) + '\')">📌 ปักยืนยันตำแหน่ง</button></div>'
-    : (j.gsrc === 'checkin' ? '<div class="muted">~ ตำแหน่งหมุดมาจากจุดเช็คอิน (note ไม่มี geo tag) <button class="btn ng-pin" onclick="startGeoPin(\'' + esc(key) + '\')">📌 ปักพิกัดถาวร</button></div>' : ''));
+    : (j.gsrc === 'checkin' ? '<div class="muted">~ ตำแหน่งหมุดมาจากจุดเช็คอิน (note ไม่มี geo tag) <button class="btn ng-pin" onclick="startGeoPin(\'' + esc(key) + '\')">📌 ปักพิกัดถาวร</button></div>'
+    : '<div class="muted">หมุดไม่ตรงตำแหน่งจริง? <button class="btn ng-pin" onclick="startGeoPin(\'' + esc(key) + '\')">📌 แก้ตำแหน่งหมุด</button></div>'));
 
   $('panel').innerHTML =
     '<button class="pn-close" onclick="closePanel()">ปิด ✕</button>' +
