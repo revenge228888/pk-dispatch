@@ -9815,6 +9815,7 @@ function recordsRender(){
         ${isOffice && r.createdBy !== CURRENT_USER.username ? `<div style="font-size:11px;color:var(--mu);margin-bottom:6px;">โดย ${r.createdBy}${r.team?' · '+r.team:''}</div>` : ''}
         <div class="rec-btns">
           <button class="btn btn-g" onclick="recordOpenView('${r.id}')">👁 ดู</button>
+          <button class="btn btn-g" onclick="recordDuplicate('${r.id}')">📋 ทำซ้ำ</button>
           ${canEdit ? `<button class="btn btn-p" onclick="recordOpenEdit('${r.id}')">✏️ แก้</button>` : ''}
           ${canEdit ? `<button class="btn btn-d" onclick="recordDelete('${r.id}')">🗑 ลบ</button>` : ''}
           ${isDel && isOffice ? `<button class="btn btn-g" onclick="recordRestore('${r.id}')">↩ กู้คืน</button>` : ''}
@@ -9930,6 +9931,47 @@ async function recordOpenView(id){
     document.getElementById('recmQuoteBtn').style.display = (isOfficeLevel() || CURRENT_USER.role === 'sales') ? '' : 'none';
     recordRenderForm();
     recordOpenModal();
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+  finally { _modalOpening = false; }
+}
+
+// ── Duplicate (ทำซ้ำ — เปิดฟอร์มใหม่ก๊อปเนื้อหาจากใบเดิม ผู้ใช้ตรวจแล้วกดบันทึกเอง) ──
+// pure builder แยกไว้ให้เทสได้ (tests/dupdoc_test.js) — ไม่ก๊อป: id / linkedJobId (ใบใหม่ไม่ผูกงานเดิม)
+function recordDupState_(rec){
+  return {
+    mode: 'new', id: null,
+    customer: JSON.parse(JSON.stringify(rec.customer || { name:'', phone:'' })),
+    linkedJobId: '',
+    mainColor: rec.mainColor || '',
+    note: rec.note || '',
+    showNote: !!rec.showNote,
+    entries: (rec.entries && rec.entries.length) ? JSON.parse(JSON.stringify(rec.entries)) : [ recordEmptyEntry(1) ],
+    recentJobs: [], draftKey: 'pk_record_draft_new',
+    draftTimer: null, lastSavedAt: null, dirty: false
+  };
+}
+async function recordDuplicate(id){
+  if (_modalOpening) return;
+  _modalOpening = true;
+  showLoad('กำลังโหลด...');
+  try {
+    const r = await getRecordGetFast(id);
+    hideLoad();
+    if (!r.ok) { toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
+    _recForm = recordDupState_(r.record);
+    document.getElementById('recmTitle').textContent = '📐 บันทึกขนาด — ทำซ้ำจาก ' + id;
+    document.getElementById('recmSaveBar').style.display = 'flex';
+    document.getElementById('recmSaveBtn').textContent = '💾 บันทึก';
+    document.getElementById('recmExportBtn').style.display = 'none';
+    document.getElementById('recmLinkBtn').style.display = 'none';
+    document.getElementById('recmQuoteBtn').style.display = 'none';
+    recordRenderForm();
+    recordOpenModal();
+    recordStartAutosave();
+    var _ls = document.getElementById('recmLinkedJob');
+    if (_ls) _ls.insertAdjacentHTML('beforeend', '<option value="" disabled>⏳ กำลังโหลดงานล่าสุด...</option>');
+    recordLoadRecentJobs().then(recordFillRecentJobs_).catch(function(){});
+    toast('📋 ทำซ้ำจาก ' + id + ' — ตรวจแล้วกดบันทึก');
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
   finally { _modalOpening = false; }
 }
@@ -10826,6 +10868,7 @@ function quotesRender(){
         ${isOffice && q.createdBy !== CURRENT_USER.username ? `<div style="font-size:11px;color:var(--mu);margin-bottom:6px;">โดย ${q.createdBy}</div>` : ''}
         <div class="rec-btns">
           <button class="btn btn-g" onclick="quoteOpenView('${q.id}')">👁 ดู</button>
+          <button class="btn btn-g" onclick="quoteDuplicate('${q.id}')">📋 ทำซ้ำ</button>
           ${(!q.quoteNo && canEdit) ? `<button class="btn" style="background:var(--acc);color:#fff;" onclick="quoteRunNo('${q.id}')">🏷 รันเลข</button>` : ''}
           ${canEdit ? `<button class="btn btn-p" onclick="quoteOpenEdit('${q.id}')">✏️ แก้</button>` : ''}
           ${canEdit ? `<button class="btn btn-d" onclick="quoteDelete('${q.id}')">🗑 ลบ</button>` : ''}
@@ -11050,6 +11093,41 @@ async function quoteOpenView(id){
     quoteOpenModal();
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
   finally { _modalOpening = false; }
+}
+
+// ── Duplicate (ทำซ้ำ — เปิดฟอร์มใหม่ก๊อปเนื้อหาจากใบเดิม) ──
+// pure builder แยกไว้ให้เทสได้ (tests/dupdoc_test.js) — ไม่ก๊อป: id / quoteNo / วันที่เอกสาร / priceSnapshot / linkedJobId / linkedRecordId
+function quoteDupPrefill_(q){
+  const doc = JSON.parse(JSON.stringify(q.doc || {}));
+  delete doc.quoteNo; delete doc.quoteDate; delete doc.validUntil;
+  return {
+    customer: JSON.parse(JSON.stringify(q.customer || { name:'', phone:'' })),
+    priceType: q.priceType || 'HOME',
+    mainColor: q.mainColor || 'white',
+    slidePrice: q.slidePrice || 220,
+    openPrice: q.openPrice || 220,
+    entries: (q.entries && q.entries.length) ? JSON.parse(JSON.stringify(q.entries)) : null,
+    additionalFees: JSON.parse(JSON.stringify(q.additionalFees || [])),
+    doc: doc
+  };
+}
+async function quoteDuplicate(id){
+  if (_modalOpening) return;
+  _modalOpening = true;
+  showLoad('กำลังโหลด...');
+  let prefill = null, srcNo = '';
+  try {
+    const [mOk, r] = await Promise.all([quoteEnsureMetadata(), getQuoteGetFast(id)]);
+    hideLoad();
+    if (!mOk) { return; }
+    if (!r.ok) { toast('❌ ' + (r.error||'โหลดไม่ได้')); return; }
+    prefill = quoteDupPrefill_(r.quote);
+    srcNo = r.quote.quoteNo || id;
+  } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+  finally { _modalOpening = false; }
+  if (!prefill) return;
+  await quoteOpenNew({ ...prefill, autoNo: _quoteCat === 'quote' });
+  toast('📋 ทำซ้ำจาก ' + srcNo + ' — ตรวจแล้วกดบันทึก');
 }
 
 // ── Edit ──
@@ -13608,7 +13686,7 @@ function pkpCutDocHTML(pieces, ids, set, mode, scutPieces){
     +'.wseg{display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(45deg,#e6e6e6,#e6e6e6 4px,#f5f5f5 4px,#f5f5f5 8px);color:#666;font-size:8px;min-width:0}'
     +'.ct{width:100%;border-collapse:collapse;font-size:10.5px}.ct th{background:#1c2733;color:#fff;font-weight:700;font-size:9.5px;padding:2px 6px;text-align:left}.ct th.c,.ct td.c{text-align:center}.ct th.n,.ct td.n{text-align:right}'
     +'.ct td{padding:2px 6px;border-bottom:1px solid #e7ecf0;vertical-align:top}.ct td.n{font-weight:800;color:#1c2733;white-space:nowrap}.ct td.c{white-space:nowrap}.ct tbody tr:nth-child(even){background:#f4f7fa}'
-    +'@media print{body{background:#fff;padding:0}.sheet{box-shadow:none;border-radius:0;width:auto;padding:0}.bar2{display:none}@page{size:A4 landscape;margin:8mm}}';
+    +'@media print{body{background:#fff;padding:0}.sheet{box-shadow:none;border-radius:0;width:auto;padding:8mm}.bar2{display:none}@page{size:A4 landscape;margin:0}}';
   return '<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>ใบจัดตัดราง</title><style>'+CSS+'</style></head><body>'
     +'<div class="bar2"><button onclick="window.print()">🖨 พิมพ์ / บันทึก PDF</button></div>'
     +'<div class="sheet">'+head+body+'</div></body></html>';
@@ -13754,8 +13832,8 @@ function pkpReqDocShell_(inners, title){
     +'.sech{font-size:13px;font-weight:800;margin:15px 0 6px;color:#1c2733}.subln{font-size:11px;color:#4b5a6e;font-weight:600;margin:7px 0 0}'
     +'table{width:100%;border-collapse:collapse;font-size:12.5px}th{background:#1c2733;color:#fff;font-weight:700;font-size:11px;padding:6px 9px;text-align:left}th.n,td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}th.c,td.c{text-align:center;width:34px}td{padding:5px 9px;border-bottom:1px solid #e7ecf0}td.qty{font-weight:800;font-size:13.5px}td.unit{color:#4b5a6e;width:46px}td.note{color:#4b5a6e;font-size:11px;width:84px}tr.tot td{background:#f4f1ec;font-weight:800;border-top:2px solid #1c2733}'
     +'.foot{margin-top:14px;display:flex;justify-content:space-between;align-items:flex-end}.fnote{font-size:10.5px;color:#4b5a6e;max-width:62%}.sign{text-align:center}.sign .ln{border-bottom:1.4px dotted #111a25;width:150px;height:30px}.sign .sl{font-size:11px;margin-top:3px}'
-    +'@media print{body{background:#fff;padding:0}.sheet{box-shadow:none;border-radius:0;width:auto;margin:0;page-break-after:always}.sheet:last-of-type{page-break-after:auto}.bar{display:none}@page{size:A4 portrait;margin:10mm}}';
-  var fit='function fp(){var ppm=96/25.4,pad=(14+12)*ppm,tg=277*ppm-pad,L=document.querySelectorAll(".fit");for(var i=0;i<L.length;i++){var f=L[i];f.style.transform="";var h=f.offsetHeight,s=1;if(h>tg){s=tg/h;f.style.transform="scale("+s+")";}f.parentNode.style.height=(h*s+pad)+"px";}var si=document.getElementById("si");if(si)si.textContent=L.length+" แผ่น";}window.onload=fp;window.onresize=fp;';
+    +'@media print{body{background:#fff;padding:0}.sheet{box-shadow:none;border-radius:0;width:auto;margin:0;padding:24mm 24mm 22mm;page-break-after:always}.sheet:last-of-type{page-break-after:auto}.bar{display:none}@page{size:A4 portrait;margin:0}}';
+  var fit='function fp(){var ppm=96/25.4,pad=(24+22)*ppm,tg=297*ppm-pad,L=document.querySelectorAll(".fit");for(var i=0;i<L.length;i++){var f=L[i];f.style.transform="";var h=f.offsetHeight,s=1;if(h>tg){s=tg/h;f.style.transform="scale("+s+")";}f.parentNode.style.height=(h*s+pad)+"px";}var si=document.getElementById("si");if(si)si.textContent=L.length+" แผ่น";}window.onload=fp;window.onresize=fp;';
   return '<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>'+(title||'ใบเบิก')+'</title><style>'+CSS+'</style></head><body>'
     +'<div class="bar"><button onclick="window.print()">🖨 พิมพ์ / บันทึก PDF</button><span id="si"></span></div>'
     +sheets+'<scr'+'ipt>'+fit+'</scr'+'ipt></body></html>';
