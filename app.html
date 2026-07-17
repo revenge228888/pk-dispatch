@@ -7434,6 +7434,7 @@ function taskOldAccepted_(t){
 let _myTasks = [];
 let _mtSubmitId = null;
 let _mtPhotos = [];
+let _mtSlipPhotos = {};
 
 function myTasksScreenHTML(){
   return ''
@@ -7477,6 +7478,7 @@ function mtSubmitModalHTML(){
   +         '<input class="fi" id="mtPhoto" type="file" accept="image/*" multiple onchange="mtPhotoSelected()">'
   +         '<div id="mtPhotoPreview" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;"></div>'
   +       '</div>'
+  +       '<div id="mtSlipList" style="display:none"></div>'
   +       '<div style="position:sticky;bottom:0;background:var(--surf2);padding:10px 0 2px;margin-top:6px;border-top:1px solid var(--bdr);z-index:2;">'
   +         '<button class="btn btn-p" style="width:100%;justify-content:center;" onclick="mtSubmit()">💾 ส่งผลงาน</button>'
   +       '</div>'
@@ -7637,13 +7639,32 @@ function mtOpenSubmit(id){
   mtEnsureModal();
   _mtSubmitId = id;
   _mtPhotos = (t.resultPhotos || []).slice();   // ★ คงรูปเดิมไว้ (กันหายตอนส่งใหม่หลังตีกลับ)
+  _mtSlipPhotos = {};
+  const slipItems = mtSlipItems_(t);
+  mtRenderSlipList_(slipItems);
   document.getElementById('mtSubmitTitle').textContent = t.title;
   document.getElementById('mtResult').value = t.result || '';   // ★ prefill ข้อความเดิม
   document.getElementById('mtPhoto').value = '';
   mtRenderPreview();
   document.getElementById('mtSubmitModal').classList.add('on');
 }
-function mtCloseSubmit(){ document.getElementById('mtSubmitModal').classList.remove('on'); _mtSubmitId = null; }
+function mtCloseSubmit(){ document.getElementById('mtSubmitModal').classList.remove('on'); _mtSubmitId = null; _mtSlipPhotos = {}; }
+
+function mtSlipItems_(t){ const m=String(t&&t.detail||'').match(/\[sliplist:([^\]]+)\]/); if(!m) return []; return m[1].split(',').map(s=>{const p=s.split('|');return {id:(p[0]||'').trim(), amount:p[1]||'', date:p[2]||''};}).filter(x=>x.id); }
+function mtRenderSlipList_(items){
+  const el = document.getElementById('mtSlipList');
+  if (!el) return;
+  if (!items.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='block';
+  el.style.marginBottom='12px';
+  el.innerHTML='<div class="fl" style="margin-bottom:8px;">🧾 แนบสลิปรายยอด (กดเลือกรูปของแต่ละยอด)</div>'+items.map(x=>'<div style="padding:9px 10px;margin-bottom:7px;border:1px solid var(--bdr);border-radius:7px;"><div style="font-weight:600;margin-bottom:6px;">฿'+escHtml(slpFmtAmt(x.amount))+(x.date?' · '+escHtml(x.date):'')+'</div><input type="file" accept="image/*" onchange="mtSlipPick(this,\''+escAttr(x.id)+'\')"><span id="mtSlipSt_'+escAttr(x.id)+'" style="margin-left:7px;color:var(--mu);">—</span></div>').join('');
+}
+function mtSlipStatus_(id){
+  const el=document.getElementById('mtSlipSt_'+id); if(!el)return;
+  el.innerHTML=_mtSlipPhotos[id]?'✓ แนบแล้ว <button type="button" onclick="mtSlipClear(\''+escAttr(id)+'\')" style="border:0;background:none;color:var(--rd);cursor:pointer;">✕ ลบ</button>':'—';
+}
+function mtSlipPick(inp,id){ const file=inp&&inp.files&&inp.files[0]; if(!file)return; _mtCompressFile(file,dataURL=>{_mtSlipPhotos[id]=dataURL;mtSlipStatus_(id);}); inp.value=''; }
+function mtSlipClear(id){ delete _mtSlipPhotos[id]; mtSlipStatus_(id); }
 
 function mtPhotoSelected(){
   const files = Array.from(document.getElementById('mtPhoto').files || []);
@@ -7655,6 +7676,14 @@ function mtPhotoSelected(){
 function _mtCompressAdd(file){
   if (!file) return;
   if (_mtPhotos.filter(Boolean).length >= 5){ toast('แนบได้สูงสุด 5 รูป'); return; }
+  _mtCompressFile(file, dataURL => {
+    _mtPhotos.push(dataURL);
+    mtRenderPreview();
+  });
+}
+
+function _mtCompressFile(file, cb){
+  if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
     const img = new Image();
@@ -7664,8 +7693,7 @@ function _mtCompressAdd(file){
       if (w > mx || h > mx){ const r = Math.min(mx/w, mx/h); w = Math.round(w*r); h = Math.round(h*r); }
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      _mtPhotos.push(canvas.toDataURL('image/jpeg', 0.8));
-      mtRenderPreview();
+      cb(canvas.toDataURL('image/jpeg', 0.8));
     };
     img.src = ev.target.result;
   };
@@ -7741,10 +7769,11 @@ async function mtSubmit(){
   if (!_mtSubmitId) return;
   const result = document.getElementById('mtResult').value.trim();
   const photos = _mtPhotos.filter(Boolean);
-  if (!result && !photos.length){ toast('กรอกผลงานหรือแนบรูปอย่างน้อย 1 อย่าง'); return; }
-  showLoad(photos.length ? 'กำลังอัปโหลดรูปและส่ง...' : 'กำลังส่ง...');
+  const slipPhotos = Object.keys(_mtSlipPhotos).map(id=>({id, img:_mtSlipPhotos[id]}));
+  if (!result && !photos.length && !slipPhotos.length){ toast('กรอกผลงานหรือแนบรูปอย่างน้อย 1 อย่าง'); return; }
+  showLoad(photos.length || slipPhotos.length ? 'กำลังอัปโหลดรูปและส่ง...' : 'กำลังส่ง...');
   try {
-    const r = await call({ action:'pk_taskSubmitResult', id:_mtSubmitId, result, resultPhotos: photos });
+    const r = await call({ action:'pk_taskSubmitResult', id:_mtSubmitId, result, resultPhotos: photos, slipPhotos });
     hideLoad();
     if (!r.ok){ toast('❌ ' + (r.error||'ผิดพลาด')); return; }
     toast('✅ ส่งผลงานแล้ว — รอตรวจรับ'); mtCloseSubmit(); myTasksLoad();
@@ -14813,7 +14842,7 @@ function slpSelectAwaiting(){_slpSelection.clear();slpVisible().forEach(r=>{if(!
 function slpClearSelection(){_slpSelection.clear();slpRender();}
 function slpFooter(){const s=_slpRecords.filter(r=>_slpSelection.has(r.id));slpEl('slpSummary').textContent=s.length?`เลือก ${s.length} รายการ (มีรูป ${s.filter(r=>r.img).length}) • รวม ${slpFmtAmt(s.reduce((a,r)=>a+(+r.amount||0),0))} บาท`:'ยังไม่ได้เลือกรายการ';const b=slpEl('slpReqBtn');if(b)b.disabled=!s.some(r=>!r.img);}
 async function slpOpenRequest(){const rows=_slpRecords.filter(r=>_slpSelection.has(r.id)&&!r.img);if(!rows.length)return toast('เลือกแถวที่ยังไม่มีรูปก่อน');await taskMgrLoadUsers();let m=slpEl('slpReqModal');if(!m){m=document.createElement('div');m.id='slpReqModal';m.className='slpOverlay';m.innerHTML=`<div class="slpModal"><h3>📨 ขอสลิป</h3><div id="slpReqRows"></div><label>มอบให้ (เลือกได้หลายคน — ใครส่งก่อนรูปคนนั้นเข้า คนอื่นไม่ทับ)</label><div id="slpReqAssignee" style="max-height:150px;overflow:auto;border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px;display:flex;flex-direction:column;gap:4px"></div><label>กำหนดส่ง <input id="slpReqDue" type="date"></label><label>หมายเหตุ <textarea id="slpReqNote" rows="3"></textarea></label><div style="display:flex;gap:8px;justify-content:flex-end"><button onclick="slpHide('slpReqModal')">ยกเลิก</button><button class="slpPrimary" onclick="slpSubmitRequest()">ยืนยัน</button></div></div>`;slpEl('tabSlips').appendChild(m);}m._slpRows=rows;slpEl('slpReqRows').innerHTML=rows.map(r=>`<div class="slpCandidate"><span>${escHtml(r.date||'ไม่ระบุวันที่')} ${escHtml(r.time||'')}</span><b>${r.amount===''?'-':'฿'+slpFmtAmt(r.amount)}</b></div>`).join('');slpEl('slpReqAssignee').innerHTML=_taskUsers.map(u=>`<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="slpReqUser" value="${escAttr(u.username)}"> ${escHtml(u.name||u.username)} (${escHtml(u.role)})</label>`).join('');slpEl('slpReqDue').value='';slpEl('slpReqNote').value='';slpShow('slpReqModal');}
-async function slpSubmitRequest(){const m=slpEl('slpReqModal'),rows=(m&&m._slpRows)||[],dueDate=slpEl('slpReqDue').value,note=slpEl('slpReqNote').value.trim();const assignees=Array.from(document.querySelectorAll('#slpReqModal .slpReqUser:checked')).map(c=>c.value);if(!assignees.length)return toast('เลือกผู้รับอย่างน้อย 1 คน');const names=assignees.map(a=>{const u=_taskUsers.find(x=>x.username===a);return u?(u.name||u.username):a;});const totalJobs=rows.length*assignees.length;showLoad(`กำลังส่งขอสลิป 0/${totalJobs}...`);let done=0;try{for(const r of rows){const amount=r.amount===''?'-':slpFmtAmt(r.amount),when=[r.date,r.time].filter(Boolean).join(' '),detail=`แนบสลิปโอนเงิน ยอด ฿${amount}${when?' วันที่/เวลา '+when:''}${note?'\nหมายเหตุ: '+note:''}\n(ส่งผลงานพร้อมแนบรูปสลิปในแท็บ งานของฉัน)`,ids=r.taskId?String(r.taskId).split(',').map(x=>x.trim()).filter(Boolean):[];for(const assignedTo of assignees){const t=await call({action:'pk_taskCreate',assignedTo,title:`ขอสลิปโอนเงิน ฿${amount}`,detail,dueDate,priority:'กลาง'});if(!t.ok)throw new Error(t.error||'สร้างงานไม่สำเร็จ');ids.push(t.taskId);done++;showLoad(`กำลังส่งขอสลิป ${done}/${totalJobs}...`);}const s=await call({action:'pk_slipUpsert',slip:{id:r.id,taskId:ids.join(',')}});if(!s.ok)throw new Error(s.error||'ผูกงานกับสลิปไม่สำเร็จ');r.taskId=ids.join(',');}slpHide('slpReqModal');slpRender();toast(`ส่งขอสลิป ${done} งาน → ${names.join(', ')}`);}catch(e){slpRender();toast(`ส่งขอสลิปสำเร็จ ${done} งาน แล้วหยุด: ${e.message}`);}finally{hideLoad();}}
+async function slpSubmitRequest(){const m=slpEl('slpReqModal'),rows=(m&&m._slpRows)||[],dueDate=slpEl('slpReqDue').value,note=slpEl('slpReqNote').value.trim();const assignees=Array.from(document.querySelectorAll('#slpReqModal .slpReqUser:checked')).map(c=>c.value);if(!assignees.length)return toast('เลือกผู้รับอย่างน้อย 1 คน');const names=assignees.map(a=>{const u=_taskUsers.find(x=>x.username===a);return u?(u.name||u.username):a;}),sum=rows.reduce((a,r)=>a+(+r.amount||0),0),lines=rows.map((r,i)=>`${i+1}. ฿${slpFmtAmt(r.amount)}${r.date?' · '+r.date:''}${r.time?' '+r.time:''}`).join('\n'),tag='[sliplist:'+rows.map(r=>`${r.id}|${r.amount===''?'':r.amount}|${r.date||''}`).join(',')+']',title=rows.length===1?`ขอสลิปโอนเงิน ฿${slpFmtAmt(rows[0].amount)}`:`ขอสลิปโอนเงิน ${rows.length} ยอด (รวม ฿${slpFmtAmt(sum)})`,detail=`แนบสลิปโอนเงินตามรายการ:\n${lines}`+(note?`\nหมายเหตุ: ${note}`:'')+`\n(ส่งผลงานพร้อมแนบรูปสลิปรายยอดในแท็บ งานของฉัน)\n${tag}`,newIds=[];showLoad(`กำลังส่งขอสลิป 0/${assignees.length}...`);let done=0;try{for(const assignedTo of assignees){const t=await call({action:'pk_taskCreate',assignedTo,title,detail,dueDate,priority:'กลาง'});if(!t.ok)throw new Error(t.error||'สร้างงานไม่สำเร็จ');newIds.push(t.taskId);done++;showLoad(`กำลังส่งขอสลิป ${done}/${assignees.length}...`);}for(let i=0;i<rows.length;i++){const r=rows[i],ids=r.taskId?String(r.taskId).split(',').map(x=>x.trim()).filter(Boolean):[],merged=ids.concat(newIds);showLoad(`กำลังผูกงานกับสลิป ${i+1}/${rows.length}...`);const s=await call({action:'pk_slipUpsert',slip:{id:r.id,taskId:merged.join(',')}});if(!s.ok)throw new Error(s.error||'ผูกงานกับสลิปไม่สำเร็จ');r.taskId=merged.join(',');}slpHide('slpReqModal');slpRender();toast(`ส่งขอสลิป ${rows.length} ยอด → ${names.join(', ')}`);}catch(e){slpRender();toast(`ส่งขอสลิปสำเร็จ ${done} งาน แล้วหยุด: ${e.message}`);}finally{hideLoad();}}
 async function slpMarkSelected(on){const rs=_slpRecords.filter(r=>_slpSelection.has(r.id));for(const r of rs){r.printed=on;r.printedAt=on?new Date().toISOString().slice(0,10):'';try{await slpSave(r);}catch(e){toast(e.message);}}slpRender();}
 function slpAttach(id){_slpAttachId=id;slpEl('slpImgInput').click();}
 function slpReadFile(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});}
