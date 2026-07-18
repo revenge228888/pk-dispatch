@@ -7659,29 +7659,52 @@ function mtRenderSlipList_(items){
   el.style.display='block';
   el.style.marginBottom='12px';
   el.innerHTML='<div class="fl" style="margin-bottom:4px;">🧾 แนบสลิปรายยอด (กดเลือกรูปของแต่ละยอด)</div>'
-    +'<div style="font-size:12px;color:#B45309;background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.35);border-radius:6px;padding:6px 10px;margin-bottom:8px;">⚠ รูปที่แนบจะถูกบันทึกเมื่อกดปุ่ม <b>ส่งผลงาน</b> ด้านล่างเท่านั้น — แนบแล้วอย่าลืมกดส่ง</div>'
+    +'<div style="font-size:12px;color:#1e6f3a;background:rgba(52,199,89,.08);border:1px solid rgba(52,199,89,.3);border-radius:6px;padding:6px 10px;margin-bottom:8px;">💾 รูปแต่ละยอด<b>บันทึกทันทีที่แนบ</b> (ระบบเช็คให้ว่ายอดนั้นมีคนส่งแล้วหรือยัง) · กด <b>ส่งผลงาน</b> เมื่อแนบครบ/หมดยอดที่หาได้แล้ว เพื่อปิดงานให้ผู้จัดการตรวจ</div>'
     +items.map(x=>'<div style="padding:9px 10px;margin-bottom:7px;border:1px solid var(--bdr);border-radius:7px;"><div style="font-weight:600;margin-bottom:6px;">฿'+escHtml(slpFmtAmt(x.amount))+(x.date?' · '+escHtml(x.date):'')+(x.time?' '+escHtml(x.time):'')+'</div><input type="file" accept="image/*" onchange="mtSlipPick(this,\''+escAttr(x.id)+'\')"><span id="mtSlipSt_'+escAttr(x.id)+'" style="margin-left:7px;color:var(--mu);">—</span></div>').join('');
 }
 function mtSlipStatus_(id, msg){
   const el=document.getElementById('mtSlipSt_'+id); if(!el)return;
-  el.innerHTML=_mtSlipPhotos[id]?(msg||'✓ แนบแล้ว')+' <button type="button" onclick="mtSlipClear(\''+escAttr(id)+'\')" style="border:0;background:none;color:var(--rd);cursor:pointer;">✕ ลบ</button>':'—';
+  const p=_mtSlipPhotos[id];
+  if(!p){ el.innerHTML=msg||'—'; return; }
+  el.innerHTML=(msg||'✓ แนบแล้ว')+(p.saved?'':' <button type="button" onclick="mtSlipClear(\''+escAttr(id)+'\')" style="border:0;background:none;color:var(--rd);cursor:pointer;">✕ ลบ</button>');
 }
 // ตรวจยอดในรูปสลิปด้วย OCR (soft-check: เตือนถ้าไม่ตรง ไม่บล็อกการส่ง — OCR อ่านผิดได้) · reuse OCR ของแท็บสลิป (global ไฟล์เดียวกัน โหลด lazy)
 function mtSlipVerify_(id){
   const t=(_myTasks||[]).find(x=>String(x.taskId)===String(_mtSubmitId));
   const item=mtSlipItems_(t).find(x=>x.id===id);
   const want=item?parseFloat(item.amount):NaN;
-  if(!isFinite(want)||typeof slpOcrExtract!=='function')return;
-  mtSlipStatus_(id,'⏳ แนบแล้ว — กำลังตรวจยอดในรูป...');
-  slpOcrExtract(_mtSlipPhotos[id]).then(z=>{
+  const p=_mtSlipPhotos[id];
+  if(!p||!isFinite(want)||typeof slpOcrExtract!=='function')return;
+  const base=p.saved?'💾 บันทึกแล้ว':'✓ แนบแล้ว';
+  slpOcrExtract(p.img).then(z=>{
     if(!_mtSlipPhotos[id])return;
     const got=z&&z.amount;
-    if(got==null){ mtSlipStatus_(id,'✓ แนบแล้ว (อ่านยอดจากรูปไม่ได้)'); return; }
-    if(Math.abs(got-want)<0.005) mtSlipStatus_(id,'✅ แนบแล้ว — ยอดในรูปตรง ฿'+got);
-    else mtSlipStatus_(id,'<span style="color:#B45309;">⚠ ยอดในรูป ฿'+got+' ไม่ตรงกับที่ขอ ฿'+want+' — ตรวจรูปอีกครั้ง</span>');
-  }).catch(()=>{ mtSlipStatus_(id); });
+    if(got==null){ mtSlipStatus_(id,base+' (อ่านยอดจากรูปไม่ได้)'); return; }
+    if(Math.abs(got-want)<0.005) mtSlipStatus_(id,base+' — ✅ ยอดในรูปตรง ฿'+got);
+    else mtSlipStatus_(id,base+' — <span style="color:#B45309;">⚠ ยอดในรูป ฿'+got+' ไม่ตรงกับที่ขอ ฿'+want+' ถ้าผิดจริงแจ้งผู้จัดการแก้ในระบบ</span>');
+  }).catch(()=>{ mtSlipStatus_(id,base); });
 }
-function mtSlipPick(inp,id){ const file=inp&&inp.files&&inp.files[0]; if(!file)return; _mtCompressFile(file,dataURL=>{_mtSlipPhotos[id]=dataURL;mtSlipStatus_(id);mtSlipVerify_(id);}); inp.value=''; }
+// แนบ = บันทึกทันที: เช็คชนที่ server (ยอดมีคนส่งแล้ว → ไม่ทับ แจ้งกลับ) — ไม่ต้องรอกดส่งงาน
+async function mtSlipPick(inp,id){
+  const file=inp&&inp.files&&inp.files[0]; if(!file)return; inp.value='';
+  _mtCompressFile(file, async dataURL=>{
+    _mtSlipPhotos[id]={img:dataURL,saved:false};
+    mtSlipStatus_(id,'⏳ กำลังบันทึก...');
+    try{
+      const r=await call({action:'pk_taskAttachSlip', id:_mtSubmitId, slipId:id, img:dataURL});
+      if(r.ok){
+        _mtSlipPhotos[id].saved=true;
+        mtSlipStatus_(id,'💾 บันทึกแล้ว — ไม่ต้องกดส่งงานซ้ำสำหรับยอดนี้');
+        mtSlipVerify_(id);
+      } else if(r.taken){
+        delete _mtSlipPhotos[id];
+        mtSlipStatus_(id,'<span style="color:#B45309;">🔒 ยอดนี้มีคนส่งสลิปแล้ว — ไม่ต้องส่งซ้ำ</span>');
+      } else {
+        mtSlipStatus_(id,'⚠ บันทึกทันทีไม่สำเร็จ ('+escHtml(r.error||'')+') — รูปจะถูกส่งอีกครั้งตอนกดส่งผลงาน');
+      }
+    }catch(e){ mtSlipStatus_(id,'⚠ เชื่อมต่อไม่ได้ — รูปจะถูกส่งตอนกดส่งผลงาน'); }
+  });
+}
 function mtSlipClear(id){ delete _mtSlipPhotos[id]; mtSlipStatus_(id); }
 
 function mtPhotoSelected(){
@@ -7787,8 +7810,11 @@ async function mtSubmit(){
   if (!_mtSubmitId) return;
   const result = document.getElementById('mtResult').value.trim();
   const photos = _mtPhotos.filter(Boolean);
-  const slipPhotos = Object.keys(_mtSlipPhotos).map(id=>({id, img:_mtSlipPhotos[id]}));
-  if (!result && !photos.length && !slipPhotos.length){ toast('กรอกผลงานหรือแนบรูปอย่างน้อย 1 อย่าง'); return; }
+  // ส่งเฉพาะรูปที่ยังไม่ถูกบันทึกทันที (แนบ inline สำเร็จแล้ว = อยู่ในระบบแล้ว ไม่ส่งซ้ำ)
+  const slipPhotos = Object.keys(_mtSlipPhotos).filter(id=>!_mtSlipPhotos[id].saved).map(id=>({id, img:_mtSlipPhotos[id].img}));
+  const _t = (_myTasks||[]).find(x=>String(x.taskId)===String(_mtSubmitId));
+  const isSlipTask = mtSlipItems_(_t).length > 0;
+  if (!result && !photos.length && !slipPhotos.length && !isSlipTask){ toast('กรอกผลงานหรือแนบรูปอย่างน้อย 1 อย่าง'); return; }
   showLoad(photos.length || slipPhotos.length ? 'กำลังอัปโหลดรูปและส่ง...' : 'กำลังส่ง...');
   try {
     const r = await call({ action:'pk_taskSubmitResult', id:_mtSubmitId, result, resultPhotos: photos, slipPhotos });
