@@ -3301,7 +3301,32 @@ function expenseCardHtml(it){
     (it.payee ? '<div style="font-size:13px;font-weight:600;margin-top:4px;">👤 ' + it.payee + '</div>'
               : (it.vehicle ? '<div style="font-size:13px;margin-top:4px;">🚗 ' + it.vehicle + '</div>' : '')) +
     '<div class="exp-card-desc">' + (it.detail||'-') + '</div>' +
-    '<div class="exp-card-foot">' + (it.invoiceUrl ? '🧾 ' : '') + (it.slipUrl ? '💳 ' : '') + 'ดูรายละเอียด →</div></div>';
+    '<div class="exp-card-foot">' + (it.invoiceUrl ? '🧾 ' : '') + (it.slipUrl ? '💳 ' : '') + 'ดูรายละเอียด →</div>' +
+    (CURRENT_USER.role === 'manager' && it.status === 'รออนุมัติ'
+      ? '<div style="display:flex;gap:6px;margin-top:8px;">' +
+        '<button class="btn btn-p btn-sm" style="flex:1;" onclick="event.stopPropagation();expenseQuickApprove(\'' + it.id + '\')">✅ อนุมัติ</button>' +
+        '<button class="btn btn-d btn-sm" style="flex:1;" onclick="event.stopPropagation();expenseRejectOpen(\'' + it.id + '\')">↩️ ตีกลับ</button></div>'
+      : '') + '</div>';
+}
+
+// ── ⚡ อนุมัติเร็ว (จากการ์ด/detail) — optimistic: การ์ดเปลี่ยนสถานะทันที บันทึกเบื้องหลัง พังค่อย revert ──
+// ไม่มี confirm — กดพลาดแก้ได้ด้วย ⏪ ยกเลิกอนุมัติ (undo ในตัวระบบอยู่แล้ว)
+function expenseRenderActive_(){
+  const ap = document.getElementById('tabExpenseapprove');
+  if (ap && ap.style.display !== 'none') expenseApproveRender();
+  else expenseMyRender();
+}
+async function expenseQuickApprove(id){
+  const it = (_expCurrentList || []).find(x => x.id === id); if (!it) return;
+  if (it.status !== 'รออนุมัติ'){ toast('ใบนี้ไม่ได้อยู่สถานะรออนุมัติ'); return; }
+  const prev = it.status;
+  it.status = 'อนุมัติแล้ว';
+  expenseRenderActive_();
+  toast('✅ อนุมัติ ' + id + ' — กำลังบันทึก... (กดพลาดใช้ ⏪ ในรายละเอียด)');
+  try {
+    const r = await call({ action:'pk_expenseApprove', id: id });
+    if (!r.ok){ it.status = prev; expenseRenderActive_(); toast('❌ อนุมัติไม่สำเร็จ: ' + (r.error || '?')); }
+  } catch(e){ it.status = prev; expenseRenderActive_(); toast('❌ เชื่อมต่อไม่ได้ — ยังไม่อนุมัติ'); }
 }
 
 function expThumbHtml_(url, label){
@@ -4131,31 +4156,41 @@ function summaryRender(d){
 }
 
 async function expenseDoApprove(id){
-  if (!confirm('ยืนยันอนุมัติ ' + id + ' ?')) return;
-  showLoad('อนุมัติ...');
-  try {
-    const r = await call({ action:'pk_expenseApprove', id: id });
-    hideLoad();
-    if (!r.ok){ toast('❌ ' + (r.error||'อนุมัติไม่ได้')); return; }
-    toast('✅ อนุมัติแล้ว ' + id);
-    expenseDetailClose();
-    expenseReloadActive();
-  } catch(e){ hideLoad(); }
+  expenseDetailClose();
+  expenseQuickApprove(id);
 }
 
 // ── ⏪ ยกเลิกอนุมัติ (ใบรอจ่าย → กลับไปรออนุมัติ) — เหตุผลใส่หรือไม่ก็ได้ ──
-async function expenseUnapprove(id){
-  const reason = prompt('⏪ ยกเลิกอนุมัติใบ ' + id + '\nใบจะกลับไปสถานะ "รออนุมัติ" (ผู้ตรวจ/เวลาอนุมัติถูกล้าง)\n\nเหตุผล (เว้นว่างได้):');
-  if (reason == null) return;
-  showLoad('กำลังยกเลิกอนุมัติ...');
+let _expUnappId = '';
+function expenseUnapprove(id){
+  _expUnappId = id;
+  let bg = document.getElementById('expUnappModal');
+  if (!bg){
+    bg = document.createElement('div'); bg.id = 'expUnappModal'; bg.className = 'modal-bg';
+    bg.innerHTML = '<div class="modal" style="padding:18px;max-width:420px;"><h3 style="margin:0 0 8px;">⏪ ยกเลิกอนุมัติ</h3>' +
+      '<div style="font-size:12.5px;color:var(--mu);margin-bottom:10px;">ใบจะกลับไปสถานะ "รออนุมัติ" (ผู้ตรวจ/เวลาอนุมัติถูกล้าง)</div>' +
+      '<input class="fi" id="expUnappReason" placeholder="เหตุผล (เว้นว่างได้)" style="width:100%;margin-bottom:12px;">' +
+      '<div style="display:flex;gap:8px;"><button class="btn btn-g" style="flex:1;" onclick="document.getElementById(\'expUnappModal\').classList.remove(\'on\')">ยกเลิก</button>' +
+      '<button class="btn btn-p" style="flex:1;" onclick="expenseUnappConfirm()">⏪ ยืนยัน</button></div></div>';
+    bg.onclick = function(e){ if (e.target === bg) bg.classList.remove('on'); };
+    document.body.appendChild(bg);
+  }
+  document.getElementById('expUnappReason').value = '';
+  bg.classList.add('on');
+}
+async function expenseUnappConfirm(){
+  const id = _expUnappId, reason = document.getElementById('expUnappReason').value.trim();
+  document.getElementById('expUnappModal').classList.remove('on');
+  const it = (_expCurrentList || []).find(x => x.id === id);
+  const prev = it ? it.status : null;
+  if (it) it.status = 'รออนุมัติ';
+  expenseDetailClose();
+  expenseRenderActive_();
+  toast('⏪ ยกเลิกอนุมัติ ' + id + ' — กำลังบันทึก...');
   try {
-    const r = await call({ action:'pk_expenseUnapprove', id: id, reason: reason.trim() });
-    hideLoad();
-    if (!r.ok){ toast('❌ ' + (r.error||'ยกเลิกอนุมัติไม่ได้')); return; }
-    toast('⏪ ยกเลิกอนุมัติแล้ว ' + id + ' — กลับไปรออนุมัติ');
-    expenseDetailClose();
-    expenseReloadActive();
-  } catch(e){ hideLoad(); }
+    const r = await call({ action:'pk_expenseUnapprove', id: id, reason: reason });
+    if (!r.ok){ if (it && prev){ it.status = prev; expenseRenderActive_(); } toast('❌ ' + (r.error || 'ยกเลิกอนุมัติไม่ได้')); }
+  } catch(e){ if (it && prev){ it.status = prev; expenseRenderActive_(); } toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
 let _expRejectId = '';
@@ -4172,17 +4207,20 @@ function expenseRejectCancel(){
 async function expenseRejectConfirm(){
   const reason = document.getElementById('expRejectReason').value.trim();
   if (!reason){ toast('กรุณาระบุเหตุผล'); return; }
-  showLoad('ตีกลับ...');
+  // optimistic เหมือนอนุมัติเร็ว — ปิด modal + การ์ดเปลี่ยนทันที บันทึกเบื้องหลัง
+  const id = _expRejectId;
+  document.getElementById('expRejectModal').classList.remove('on');
+  _expRejectId = '';
+  const it = (_expCurrentList || []).find(x => x.id === id);
+  const prev = it ? it.status : null;
+  if (it) it.status = 'ตีกลับ';
+  expenseDetailClose();
+  expenseRenderActive_();
+  toast('↩️ ตีกลับ ' + id + ' — กำลังบันทึก...');
   try {
-    const r = await call({ action:'pk_expenseReject', id: _expRejectId, reason: reason });
-    hideLoad();
-    if (!r.ok){ toast('❌ ' + (r.error||'ตีกลับไม่ได้')); return; }
-    toast('↩️ ตีกลับแล้ว ' + _expRejectId);
-    document.getElementById('expRejectModal').classList.remove('on');
-    _expRejectId = '';
-    expenseDetailClose();
-    expenseReloadActive();
-  } catch(e){ hideLoad(); }
+    const r = await call({ action:'pk_expenseReject', id: id, reason: reason });
+    if (!r.ok){ if (it && prev){ it.status = prev; expenseRenderActive_(); } toast('❌ ' + (r.error || 'ตีกลับไม่ได้')); }
+  } catch(e){ if (it && prev){ it.status = prev; expenseRenderActive_(); } toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
 // ── Sidebar groups (พับ/กางหมวด · Option A) ──
