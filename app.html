@@ -504,6 +504,15 @@ tbody tr:nth-child(even){background:rgba(120,96,72,.04);}
   </div>
 </div>
 
+<!-- 🗺 QUEUE MINI MAP MODAL (การ์ดวันแนะนำ — เส้นทางทีมรายวัน · qmm*) -->
+<div class="modal-bg" id="qmmModal">
+  <div class="modal large" style="max-width:680px;">
+    <div class="card-head"><span id="qmmHead">🗺 เส้นทางวัน</span><button onclick="qmmClose()" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button></div>
+    <div id="qmmMapBox" style="height:min(52vh,420px);"></div>
+    <div id="qmmInfo" style="padding:10px 16px 12px;font-size:12.5px;line-height:1.6;"></div>
+  </div>
+</div>
+
 <!-- OFFICE PHOTO MODAL -->
 <div class="modal-bg" id="officePhotoModal" style="z-index:500;" onclick="if(event.target===this)this.classList.remove('on')">
   <button onclick="document.getElementById('officePhotoModal').classList.remove('on')" style="position:fixed;top:14px;right:14px;background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.3);width:42px;height:42px;border-radius:50%;cursor:pointer;font-size:22px;line-height:1;z-index:10;">×</button>
@@ -4380,6 +4389,7 @@ function bkRenderSuggest(r, opts){
   const box = document.getElementById(opts.boxId || 'bkSuggest');
   const pickFn = opts.pick || 'bkPickDate';
   if (!box) return;
+  _qmmNew = { lat: (r.newLat != null ? +r.newLat : null), lng: (r.newLng != null ? +r.newLng : null), zone: r.zone || '' };
   if (!r.suggestions || !r.suggestions.length){
     box.innerHTML = '<div style="font-size:13px;color:var(--rd);padding:6px 0;">ไม่มีวันว่างในกรอบเวลา (คิวเต็ม / ติด buffer 15%) — ลองลดคะแนน หรือกรอกวันเอง</div>';
     return;
@@ -4411,7 +4421,8 @@ function bkRenderSuggest(r, opts){
     }
     const bw = isMax ? '2px' : '1.5px';
     h += '<div onclick="' + pickFn + '(\'' + s.dateKey + '\',\'' + String(s.recommendedTeam||'').replace(/'/g,'') + '\')" style="cursor:pointer;border:' + bw + ' solid ' + bc + ';border-radius:8px;padding:8px 12px;min-width:196px;">'
-       +   '<div style="font-size:15px;font-weight:600;">' + s.dateKey + tag + '</div>'
+       +   '<div style="font-size:15px;font-weight:600;display:flex;align-items:center;gap:6px;">' + s.dateKey + tag
+       +     '<button type="button" onclick="event.stopPropagation();qmmOpen(\'' + s.dateKey + '\')" title="ดูเส้นทางทีมของวันนี้" style="margin-left:auto;background:none;border:1px solid var(--bdr);border-radius:6px;padding:1px 6px;font-size:13px;cursor:pointer;line-height:1.3;">🗺</button></div>'
        +   bkTeamMetersHtml(s)
        +   '<div style="font-size:11px;color:var(--mu);margin-top:3px;line-height:1.5;">' + s.reasons.join('<br>') + '</div>'
        +   '<div style="font-size:11px;margin-top:3px;color:var(--acc);">ถัง: ' + s.pool + '</div>'
@@ -5564,6 +5575,122 @@ function closeMap(){
   if (_mapObj) { try { _mapObj.remove(); } catch(e) {} _mapObj=null; }
 }
 document.getElementById('mapModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeMap(); });
+
+// ═══════ 🗺 QUEUE MINI MAP (qmm — แผนที่ช่วยตัดสินใจตอนเลือกวันแนะนำ · read-only) ═══════
+// พิกัดงาน: tag [geo:lat,lng] หรือ [geo:lat,lng,a] ใน note (sync กับ GEO_RE ของ map.html — parser ตัวที่ 7 ของระบบ ดู Runbook #23) → fallback จุดเช็คอิน
+const QMM_TEAM_COLORS = { 'ช่างทีม A':'#2F73E6', 'ช่างทีม B':'#B5653F', 'ช่างทีม C':'#1FA463', 'เซลล์ทีม A':'#7A5CC6', 'เซลล์ทีม B':'#2E9BA6' };
+const QMM_EXTRA_COLORS = ['#C2497D','#5B8C2A','#8A6A1F','#3E6FA3','#A3543E'];
+const QMM_GEO_RE = /\[geo:(-?\d{1,2}\.\d{3,}),\s*(-?\d{1,3}\.\d{3,})(,a)?\]/;
+const QMM_CACHE_MS = 120000;
+let _qmmNew = null, _qmmMap = null, _qmmCache = {}, _qmmColorIdx = 0;
+function qmmTeamColor(name){
+  if (!QMM_TEAM_COLORS[name]) { QMM_TEAM_COLORS[name] = QMM_EXTRA_COLORS[_qmmColorIdx % QMM_EXTRA_COLORS.length]; _qmmColorIdx++; }
+  return QMM_TEAM_COLORS[name];
+}
+function qmmGeoOk(lat, lng){
+  return isFinite(lat) && isFinite(lng) && lat >= 5 && lat <= 21 && lng >= 95 && lng <= 106;
+}
+function qmmJobGeo(j){
+  const m = String(j.note || '').match(QMM_GEO_RE);
+  if (m) { const lat = parseFloat(m[1]), lng = parseFloat(m[2]); if (qmmGeoOk(lat, lng)) return { lat, lng, src: m[3] ? 'auto' : 'note' }; }
+  const lat = parseFloat(j.lat), lng = parseFloat(j.lng);
+  if (qmmGeoOk(lat, lng)) return { lat, lng, src: 'checkin' };
+  return null;
+}
+function qmmDateToYmd(dateKey){
+  const p = String(dateKey || '').split('/');
+  if (p.length !== 3) return null;
+  return p[2] + '-' + String(p[1]).padStart(2, '0') + '-' + String(p[0]).padStart(2, '0');
+}
+function qmmHavKm(lat1, lng1, lat2, lng2){
+  const R = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function qmmGroupJobs(jobs){
+  const byTeam = {}, unassigned = [];
+  let noCoords = 0;
+  (jobs || []).forEach(j => {
+    const g = qmmJobGeo(j);
+    if (!g) { noCoords++; return; }
+    const job = Object.assign({}, j, { _geo: g });
+    const t = String(j.team || '').trim();
+    if (!t) unassigned.push(job);
+    else (byTeam[t] = byTeam[t] || []).push(job);
+  });
+  const teams = Object.keys(byTeam).sort().map(team => {
+    const list = byTeam[team].sort((a, b) => ((a.orderNum || 999) - (b.orderNum || 999)) || String(a.id).localeCompare(String(b.id)));
+    let km = 0;
+    for (let i = 1; i < list.length; i++) km += qmmHavKm(list[i-1]._geo.lat, list[i-1]._geo.lng, list[i]._geo.lat, list[i]._geo.lng);
+    return { team, jobs: list, km: Math.round(km * 10) / 10 };
+  });
+  return { teams, unassigned, noCoords };
+}
+async function qmmOpen(dateKey){
+  const ymd = qmmDateToYmd(dateKey);
+  if (!ymd) return;
+  let data = _qmmCache[ymd];
+  if (!data || Date.now() - data.ts > QMM_CACHE_MS) {
+    showLoad('กำลังโหลดงานวัน ' + dateKey + '...');
+    try {
+      const body = JSON.stringify({ team: '', date: ymd, username: CURRENT_USER.username, token: CURRENT_USER.token });
+      const [ri, rm] = await Promise.all([
+        fetch(API.replace(/\/api$/, '/install-jobs'), { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'application/json' }, body }).then(r => r.json()),
+        fetch(API.replace(/\/api$/, '/measure-jobs'), { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'application/json' }, body }).then(r => r.json())
+      ]);
+      hideLoad();
+      if (!ri.ok || !rm.ok) { toast('❌ โหลดแผนที่ไม่ได้: ' + ((ri.error || rm.error) || '?')); return; }
+      data = { ts: Date.now(), jobs: (ri.jobs || []).concat(rm.jobs || []) };
+      _qmmCache[ymd] = data;
+    } catch (e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); return; }
+  }
+  document.getElementById('qmmHead').textContent = '🗺 เส้นทางวัน ' + dateKey;
+  document.getElementById('qmmModal').classList.add('on');
+  setTimeout(() => {
+    if (_qmmMap) { try { _qmmMap.remove(); } catch (e) {} _qmmMap = null; }
+    _qmmMap = L.map('qmmMapBox', { zoomControl: true, attributionControl: false });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(_qmmMap);
+    const grp = qmmGroupJobs(data.jobs);
+    const pts = [];
+    grp.teams.forEach(t => {
+      const c = qmmTeamColor(t.team);
+      const latlngs = t.jobs.map(j => [j._geo.lat, j._geo.lng]);
+      if (latlngs.length > 1) L.polyline(latlngs, { color: c, weight: 3, opacity: .75, dashArray: '6 6' }).addTo(_qmmMap);
+      t.jobs.forEach(j => {
+        const num = (j.orderNum && j.orderNum < 999) ? j.orderNum : '·';
+        L.marker([j._geo.lat, j._geo.lng], { icon: L.divIcon({ className: '', html: '<div style="width:24px;height:24px;border-radius:50%;background:' + c + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">' + num + '</div>', iconSize: [24, 24], iconAnchor: [12, 12] }) })
+          .addTo(_qmmMap).bindPopup(escHtml((j.orderLabel || '') + ' ' + (j.name || j.id)) + '<br>' + escHtml(t.team) + ' · ' + escHtml(j.address || ''));
+        pts.push([j._geo.lat, j._geo.lng]);
+      });
+    });
+    grp.unassigned.forEach(j => {
+      L.marker([j._geo.lat, j._geo.lng], { icon: L.divIcon({ className: '', html: '<div style="width:20px;height:20px;border-radius:50%;background:#888;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35);"></div>', iconSize: [20, 20], iconAnchor: [10, 10] }) })
+        .addTo(_qmmMap).bindPopup(escHtml(j.name || j.id) + '<br>ยังไม่จัดทีม · ' + escHtml(j.address || ''));
+      pts.push([j._geo.lat, j._geo.lng]);
+    });
+    if (_qmmNew && qmmGeoOk(_qmmNew.lat, _qmmNew.lng)) {
+      L.marker([_qmmNew.lat, _qmmNew.lng], { icon: L.divIcon({ className: '', html: '<div style="font-size:26px;line-height:1;color:#DAA520;text-shadow:0 0 3px #fff,0 0 6px #fff;">★</div>', iconSize: [26, 26], iconAnchor: [13, 13] }), zIndexOffset: 1000 })
+        .addTo(_qmmMap).bindPopup('★ งานใหม่ (ตำแหน่งโดยประมาณจากที่อยู่)');
+      pts.push([_qmmNew.lat, _qmmNew.lng]);
+    }
+    if (pts.length > 1) _qmmMap.fitBounds(pts, { padding: [28, 28] });
+    else if (pts.length === 1) _qmmMap.setView(pts[0], 15);
+    else _qmmMap.setView([13.7563, 100.5018], 10);
+    _qmmMap.invalidateSize();
+    setTimeout(() => { if (_qmmMap) _qmmMap.invalidateSize(); }, 350);
+    const info = [];
+    grp.teams.forEach(t => info.push('<span style="color:' + qmmTeamColor(t.team) + ';">●</span> ' + escHtml(t.team) + ' · ' + t.jobs.length + ' งาน · ~' + t.km + ' กม'));
+    if (grp.unassigned.length) info.push('<span style="color:#888;">○</span> ยังไม่จัดทีม · ' + grp.unassigned.length + ' งาน');
+    if (grp.noCoords) info.push('📍 อีก ' + grp.noCoords + ' งานไม่มีพิกัด (ไม่ได้ปักบนแผนที่)');
+    if (!(_qmmNew && qmmGeoOk(_qmmNew.lat, _qmmNew.lng))) info.push('<span style="color:var(--amb,#B45309);">★ งานใหม่ยังไม่มีพิกัด (เดาไม่ได้จากที่อยู่)</span>');
+    document.getElementById('qmmInfo').innerHTML = info.join('<br>') || 'ไม่มีงานในวันนี้';
+  }, 150);
+}
+function qmmClose(){
+  document.getElementById('qmmModal').classList.remove('on');
+  if (_qmmMap) { try { _qmmMap.remove(); } catch (e) {} _qmmMap = null; }
+}
+document.getElementById('qmmModal').addEventListener('click', e => { if (e.target === e.currentTarget) qmmClose(); });
 
 // ════════════════════════════════════════
 //  SALES / TECH (stub — Step 3-5)
