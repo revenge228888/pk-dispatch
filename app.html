@@ -2248,6 +2248,7 @@ function renderOfficeShell(){
                 <div class="exp-dt-row"><span class="k">เงินเดือนฐาน</span><span class="v" id="salBase">฿0</span></div>
                 <div class="exp-dt-row"><span class="k" id="salAbsentLbl">หักขาด/ลา</span><span class="v" style="color:var(--rd);" id="salAbsent">−฿0</span></div>
                 <div class="exp-dt-row"><span class="k">หักเบิกล่วงหน้า</span><span class="v" style="color:var(--rd);" id="salAdvance">−฿0</span></div>
+                <div id="salAdvWarn" style="display:none;background:rgba(255,193,7,.12);border:1px solid rgba(255,193,7,.4);border-radius:8px;padding:8px 10px;font-size:12px;color:#ffc107;margin:6px 0;"></div>
                 <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;margin:12px 0 6px;">รายการเพิ่มเติม</div>
                 <div id="salLiList"></div>
                 <button type="button" class="btn btn-g" style="width:100%;font-size:12px;padding:7px;" onclick="expSalAddLi()">+ เพิ่มรายการ (โบนัส/หัก)</button>
@@ -2282,6 +2283,11 @@ function renderOfficeShell(){
           <div class="fg">
             <label class="fl">รายละเอียด</label>
             <input class="fi" id="expDetail" type="text" placeholder="ระบุรายละเอียดค่าใช้จ่าย">
+          </div>
+
+          <div class="fg">
+            <label class="fl">รหัสงาน (ถ้ามี — ไม่บังคับ)</label>
+            <input class="fi" id="expJobRef" type="text" placeholder="เช่น I2607-015 / TK-2607-0056" autocomplete="off">
           </div>
 
           <div class="fg">
@@ -2697,7 +2703,7 @@ function expenseResetForm(){
   const today = new Date().toISOString().slice(0,10);
   const d = document.getElementById('expDate'); if (d){ d.value = today; updateDateDisplay(d); }
   const st = document.getElementById('expSubType'); if (st) st.innerHTML = '<option value="">— เลือกหมวดก่อน —</option>';
-  ['expDetail','expAmount','expNote','expPayee','expVehicle','expPayeeBank','expPayeeAccount'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
+  ['expDetail','expAmount','expNote','expPayee','expVehicle','expPayeeBank','expPayeeAccount','expJobRef'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
   expenseFileClear();
   document.querySelectorAll('.exp-chip').forEach(c => c.classList.remove('on'));
   const pw = document.getElementById('expPayeeWrap');   if (pw) pw.style.display='none';
@@ -2916,6 +2922,15 @@ async function expWageCalcSalary(){
     document.getElementById('salAbsentLbl').textContent = 'หักขาด/ลา (' + r.absentDays + ' วัน)';
     document.getElementById('salAbsent').textContent = '−฿' + r.deductAbsent.toLocaleString();
     document.getElementById('salAdvance').textContent = '−฿' + r.advanceTotal.toLocaleString();
+    // ผู้ใช้จ่ายเงินเดือน 2 ทาง (ฟอร์มนี้ + หน้างวด) — เตือนเมื่อยอดหักงวดนี้ ≠ ยอดค้างสะสมจริง กันหักซ้ำ/ขาด
+    const advWarn = document.getElementById('salAdvWarn');
+    if (advWarn){
+      const out = (r.advOutstanding === null || r.advOutstanding === undefined) ? null : Number(r.advOutstanding);
+      if (out !== null && Math.abs(out - r.advanceTotal) >= 0.005){
+        advWarn.textContent = '⚠ ยอดเบิกล่วงหน้าค้างจริง ฿' + out.toLocaleString() + ' แต่ฟอร์มนี้จะหัก ฿' + r.advanceTotal.toLocaleString() + ' — เช็คหน้า "งวดเงินเดือน" ก่อน กันหักซ้ำ/หักขาด';
+        advWarn.style.display = '';
+      } else advWarn.style.display = 'none';
+    }
     document.getElementById('salLiList').innerHTML = '';
     document.getElementById('expSalResult').style.display = '';
     expSalRecalc();
@@ -2972,6 +2987,7 @@ async function expenseSubmit(){
     payeeBank:    _expCat === 'ค่าเดินทาง' ? '' : document.getElementById('expPayeeBank').value.trim(),
     payeeAccount: _expCat === 'ค่าเดินทาง' ? '' : document.getElementById('expPayeeAccount').value.trim(),
     vehicle: _expCat === 'ค่าเดินทาง' ? document.getElementById('expVehicle').value : '',
+    jobRef: document.getElementById('expJobRef').value.trim(),
     note: document.getElementById('expNote').value.trim()
   };
   if (!formData.subType){ toast('เลือกประเภท'); return; }
@@ -2997,6 +3013,7 @@ async function expenseSubmit(){
   _expSubmitBusy = false;
   toast('⏳ กำลังบันทึก · ' + label);
   call(payload).then(r => {
+    if (r && r.needConfirm){ _expDupAsk_(payload, label, r.dup); return; }
     if (!r || !r.ok){ _expPushFailed_(payload, label, (r&&r.error)||'บันทึกไม่ได้'); toast('❌ บันทึกไม่สำเร็จ — กู้คืนได้ที่หัวฟอร์ม'); return; }
     if (r.payeeAdded) _expApplyPayeeAdded_(formData);
     toast('✅ ตั้งเบิกสำเร็จ ' + r.id + (r.payeeAdded ? ' · เพิ่มผู้รับใหม่แล้ว' : ''));
@@ -3040,6 +3057,7 @@ function _expRetryFailed_(idx){
   _expFailed.splice(idx, 1); _expRenderFailTray_();
   toast('⏳ กำลังส่งใหม่ · ' + item.label);
   call(item.payload).then(r => {
+    if (r && r.needConfirm){ _expDupAsk_(item.payload, item.label, r.dup); return; }
     if (!r || !r.ok){ _expPushFailed_(item.payload, item.label, (r&&r.error)||'บันทึกไม่ได้'); toast('❌ ยังส่งไม่สำเร็จ'); return; }
     if (r.payeeAdded) _expApplyPayeeAdded_(item.payload.formData);
     toast('✅ ตั้งเบิกสำเร็จ ' + r.id);
@@ -3062,6 +3080,52 @@ function _expRenderFailTray_(){
         '<button class="btn btn-g btn-sm" onclick="_expDiscardFailed_(' + i + ')">✕ ทิ้ง</button>' +
       '</div>'
     ).join('');
+}
+
+// ── กันเบิกซ้ำ: server เจอใบใกล้เคียง (needConfirm) → โชว์ใบเดิมให้ตัดสินใจ · ยืนยันแล้วส่งซ้ำพร้อม forceDup ──
+// จงใจไม่ปิดด้วยคลิกพื้นหลัง — เรื่องเงินให้เลือกชัดๆ ปุ่มเดียวจากสองปุ่ม
+let _expDupPending = null;
+function _expDupAsk_(payload, label, dup){
+  _expDupPending = { payload: payload, label: label };
+  let bg = document.getElementById('expDupModal');
+  if (!bg){
+    bg = document.createElement('div'); bg.id = 'expDupModal'; bg.className = 'modal-bg';
+    bg.innerHTML = '<div class="modal" style="padding:18px;max-width:480px;"><h3 style="margin:0 0 10px;">⚠️ อาจเบิกซ้ำ</h3><div id="expDupBody"></div>' +
+      '<div style="display:flex;gap:8px;margin-top:14px;"><button class="btn btn-g" style="flex:1;" onclick="expDupCancel()">ยกเลิก ไม่บันทึก</button>' +
+      '<button class="btn btn-p" style="flex:1;" onclick="expDupConfirm()">ยืนยันเบิก (ไม่ซ้ำ)</button></div></div>';
+    document.body.appendChild(bg);
+  }
+  const d = dup || {};
+  const dd = d.createdAt ? new Date(d.createdAt).toLocaleString('th-TH') : '-';
+  document.getElementById('expDupBody').innerHTML =
+    '<div style="font-size:13px;color:var(--mu);margin-bottom:10px;">พบใบเบิกผู้รับเดิม ยอดเท่ากัน ภายใน 7 วัน — เช็คก่อนว่าไม่ได้ยื่นซ้ำ</div>' +
+    '<div class="exp-bank-box">' +
+    '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">ใบเดิม</span><span class="v" style="font-family:var(--mono);">' + escHtml(d.id||'-') + '</span></div>' +
+    '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">ยื่นเมื่อ</span><span class="v">' + escHtml(dd) + (d.createdBy ? ' · ' + escHtml(d.createdBy) : '') + '</span></div>' +
+    '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">สถานะ</span><span class="v">' + escHtml(d.status||'-') + '</span></div>' +
+    '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">ยอด</span><span class="v">฿' + (Number(d.amount)||0).toLocaleString('th-TH') + '</span></div>' +
+    '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">รายละเอียด</span><span class="v">' + escHtml(d.detail||'-') + '</span></div></div>';
+  bg.classList.add('on');
+}
+function expDupCancel(){
+  _expDupPending = null;
+  const bg = document.getElementById('expDupModal'); if (bg) bg.classList.remove('on');
+  toast('ไม่ได้บันทึก — ทิ้งใบใหม่แล้ว');
+}
+function expDupConfirm(){
+  const p = _expDupPending; _expDupPending = null;
+  const bg = document.getElementById('expDupModal'); if (bg) bg.classList.remove('on');
+  if (!p) return;
+  p.payload.formData.forceDup = true;
+  toast('⏳ กำลังบันทึก · ' + p.label);
+  call(p.payload).then(r => {
+    if (!r || !r.ok){ _expPushFailed_(p.payload, p.label, (r&&r.error)||'บันทึกไม่ได้'); toast('❌ บันทึกไม่สำเร็จ — กู้คืนได้ที่หัวฟอร์ม'); return; }
+    if (r.payeeAdded) _expApplyPayeeAdded_(p.payload.formData);
+    toast('✅ ตั้งเบิกสำเร็จ ' + r.id);
+  }).catch(e => {
+    _expPushFailed_(p.payload, p.label, (e&&e.message)||'เชื่อมต่อไม่ได้');
+    toast('❌ บันทึกไม่สำเร็จ — กู้คืนได้ที่หัวฟอร์ม');
+  });
 }
 
 function expenseSetBadge(n){
@@ -3102,7 +3166,7 @@ function expenseFilterItems_(items, inputId){
   const el = document.getElementById(inputId);
   const q = String(el ? el.value : '').trim().toLowerCase();
   if (!q) return items.slice();
-  return items.filter(it => [it.payee,it.detail,it.id].some(v => String(v||'').toLowerCase().indexOf(q) !== -1));
+  return items.filter(it => [it.payee,it.detail,it.id,it.jobRef].some(v => String(v||'').toLowerCase().indexOf(q) !== -1));
 }
 function expenseFilteredTotal_(items, targetId){
   const total = items.reduce((sum,it) => sum + (Number(it.amount)||0), 0);
@@ -3301,7 +3365,7 @@ function expenseCardHtml(it){
     (it.payee ? '<div style="font-size:13px;font-weight:600;margin-top:4px;">👤 ' + it.payee + '</div>'
               : (it.vehicle ? '<div style="font-size:13px;margin-top:4px;">🚗 ' + it.vehicle + '</div>' : '')) +
     '<div class="exp-card-desc">' + (it.detail||'-') + '</div>' +
-    '<div class="exp-card-foot">' + (it.invoiceUrl ? '🧾 ' : '') + (it.slipUrl ? '💳 ' : '') + 'ดูรายละเอียด →</div>' +
+    '<div class="exp-card-foot">' + (it.jobRef ? '🔗 ' + escHtml(it.jobRef) + ' · ' : '') + (it.invoiceUrl ? '🧾 ' : '') + (it.slipUrl ? '💳 ' : '') + 'ดูรายละเอียด →</div>' +
     (CURRENT_USER.role === 'manager' && it.status === 'รออนุมัติ'
       ? '<div style="display:flex;gap:6px;margin-top:8px;">' +
         '<button class="btn btn-p btn-sm" style="flex:1;" onclick="event.stopPropagation();expenseQuickApprove(\'' + it.id + '\')">✅ อนุมัติ</button>' +
@@ -3430,6 +3494,7 @@ function expenseDetailOpen(id){
     recBlock +
     // 4. รายละเอียด
     '<div class="exp-dt-row"><span class="k">หมวด</span><span class="v">' + (it.mainCat||'-') + ' · ' + (it.subType||'-') + '</span></div>' +
+    (it.jobRef ? '<div class="exp-dt-row"><span class="k">🔗 งาน</span><span class="v" style="font-family:var(--mono);">' + escHtml(it.jobRef) + '</span></div>' : '') +
     '<div class="exp-dt-row"><span class="k">รายละเอียด</span><span class="v">' + (it.detail||'-') + '</span></div>' +
     // 5. ยอดเงิน (เด่น)
     '<div style="text-align:center;margin:16px 0 6px;"><div style="font-size:12px;color:var(--mu);">ยอดเงิน</div>' +
@@ -3461,13 +3526,14 @@ function expenseOwnEditOpen(id){
     '<div class="fg"><label class="fl">ยอดเงิน</label><input class="fi" id="expOwnAmount" type="number" min="0.01" step="0.01" value="'+escAttr(it.amount)+'"></div>' +
     '<div class="fg"><label class="fl">ผู้รับเงิน</label><input class="fi" id="expOwnPayee" value="'+escAttr(it.payee||'')+'"></div>' +
     '<div style="display:flex;gap:8px;"><div class="fg" style="flex:1;"><label class="fl">ธนาคาร</label><input class="fi" id="expOwnBank" value="'+escAttr(it.payeeBank||'')+'"></div><div class="fg" style="flex:1;"><label class="fl">เลขบัญชี</label><input class="fi" id="expOwnAccount" value="'+escAttr(it.payeeAccount||'')+'"></div></div>' +
+    '<div class="fg"><label class="fl">รหัสงาน (ไม่บังคับ)</label><input class="fi" id="expOwnJobRef" value="'+escAttr(it.jobRef||'')+'"></div>' +
     '<div class="fg"><label class="fl">หมายเหตุ</label><input class="fi" id="expOwnNote" value="'+escAttr(it.note||'')+'"></div>' +
     '<div style="display:flex;gap:8px;"><button class="btn btn-p" style="flex:1;" onclick="expenseOwnEditSave()">💾 บันทึก</button><button class="btn btn-g" style="flex:1;" onclick="expenseOwnEditClose()">ปิด</button></div>';
   bg.classList.add('on');
 }
 function expenseOwnEditClose(){ const bg=document.getElementById('expOwnEditModal'); if(bg) bg.classList.remove('on'); _expOwnEditId=''; }
 async function expenseOwnEditSave(){
-  const body={ action:'pk_expenseUpdateOwn', id:_expOwnEditId, expenseDate:document.getElementById('expOwnDate').value, detail:document.getElementById('expOwnDetail').value.trim(), amount:document.getElementById('expOwnAmount').value, payee:document.getElementById('expOwnPayee').value.trim(), payeeBank:document.getElementById('expOwnBank').value.trim(), payeeAccount:document.getElementById('expOwnAccount').value.trim(), note:document.getElementById('expOwnNote').value.trim() };
+  const body={ action:'pk_expenseUpdateOwn', id:_expOwnEditId, expenseDate:document.getElementById('expOwnDate').value, detail:document.getElementById('expOwnDetail').value.trim(), amount:document.getElementById('expOwnAmount').value, payee:document.getElementById('expOwnPayee').value.trim(), payeeBank:document.getElementById('expOwnBank').value.trim(), payeeAccount:document.getElementById('expOwnAccount').value.trim(), jobRef:document.getElementById('expOwnJobRef').value.trim(), note:document.getElementById('expOwnNote').value.trim() };
   if(!body.detail || !(parseFloat(body.amount)>0)){ toast('กรอกข้อมูลให้ถูกต้อง'); return; }
   showLoad('บันทึก...'); try { const r=await call(body); hideLoad(); if(!r.ok){toast('❌ '+(r.error||'ไม่สำเร็จ'));return;} toast('✅ แก้ไขแล้ว'); expenseOwnEditClose(); expenseReloadActive(); } catch(e){ hideLoad(); }
 }
