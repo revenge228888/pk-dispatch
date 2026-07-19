@@ -972,6 +972,78 @@ async function getQuoteTrackFast(opts, cacheOpts){
   const _g = await call({ action:'pk_quoteTrackList' }); _markJobSource('gas'); return _g;
 }
 
+// ── [FAST 19 ก.ค. 2026] 6 จุดที่เคยดึง GAS ตรงทุกครั้ง — Worker-first + GAS fallback อัตโนมัติ ──
+// bootstrap/expense-bootstrap/cf-pending โดนทุก login · day-notes โดนทุกครั้งเปิดหน้าแรก
+let USE_SHEETS_BOOT = true;
+async function _pkFastPost_(path, extra){
+  const r = await fetch(API.replace(/\/api$/, path), {
+    method:'POST', redirect:'follow',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify(Object.assign({ username:CURRENT_USER.username, token:CURRENT_USER.token }, extra||{}))
+  });
+  return r.json();
+}
+async function getBootstrapFast(){
+  if (USE_SHEETS_BOOT && CURRENT_USER) {
+    try {
+      const d = await _pkFastPost_('/bootstrap');
+      if (d && d.ok && Array.isArray(d.teams)) { _markJobSource('sheets', d.ms); return d; }
+      console.warn('[getBootstrapFast] ไม่ ok → fallback GAS:', d && d.error);
+    } catch(e){ console.warn('[getBootstrapFast] error → fallback GAS:', e.message); }
+  }
+  const _g = await call({ action:'pk_bootstrap' }); _markJobSource('gas'); return _g;
+}
+async function getExpenseBootstrapFast(){
+  if (USE_SHEETS_BOOT && CURRENT_USER) {
+    try {
+      const d = await _pkFastPost_('/expense-bootstrap');
+      if (d && d.ok && d.master) { _markJobSource('sheets', d.ms); return d; }
+      console.warn('[getExpenseBootstrapFast] ไม่ ok → fallback GAS:', d && d.error);
+    } catch(e){ console.warn('[getExpenseBootstrapFast] error → fallback GAS:', e.message); }
+  }
+  const _g = await call({ action:'pk_expenseBootstrap' }); _markJobSource('gas'); return _g;
+}
+async function getCfPendingFast(){
+  if (USE_SHEETS_BOOT && CURRENT_USER) {
+    try {
+      const d = await _pkFastPost_('/cf-pending');
+      if (d && d.ok && Array.isArray(d.items)) { _markJobSource('sheets', d.ms); return d; }
+      console.warn('[getCfPendingFast] ไม่ ok → fallback GAS:', d && d.error);
+    } catch(e){ console.warn('[getCfPendingFast] error → fallback GAS:', e.message); }
+  }
+  const _g = await call({ action:'pk_cfPendingList' }); _markJobSource('gas'); return _g;
+}
+async function getDayNotesFast(){
+  if (USE_SHEETS_BOOT && CURRENT_USER) {
+    try {
+      const d = await _pkFastPost_('/day-notes');
+      if (d && d.ok && d.notes) { _markJobSource('sheets', d.ms); return d; }
+      console.warn('[getDayNotesFast] ไม่ ok → fallback GAS:', d && d.error);
+    } catch(e){ console.warn('[getDayNotesFast] error → fallback GAS:', e.message); }
+  }
+  const _g = await call({ action:'pk_dayNoteList' }); _markJobSource('gas'); return _g;
+}
+async function getOutstandingFast(team){
+  if (USE_SHEETS_BOOT && CURRENT_USER) {
+    try {
+      const d = await _pkFastPost_('/outstanding', { team: team||'' });
+      if (d && d.ok && Array.isArray(d.jobs)) { _markJobSource('sheets', d.ms); return d; }
+      console.warn('[getOutstandingFast] ไม่ ok → fallback GAS:', d && d.error);
+    } catch(e){ console.warn('[getOutstandingFast] error → fallback GAS:', e.message); }
+  }
+  const _g = await call({ action:'pk_outstandingList', team: team||'' }); _markJobSource('gas'); return _g;
+}
+async function getListUsersFast(){
+  if (USE_SHEETS_BOOT && CURRENT_USER) {
+    try {
+      const d = await _pkFastPost_('/list-users');
+      if (d && d.ok && Array.isArray(d.users)) { _markJobSource('sheets', d.ms); return d; }
+      console.warn('[getListUsersFast] ไม่ ok → fallback GAS:', d && d.error);
+    } catch(e){ console.warn('[getListUsersFast] error → fallback GAS:', e.message); }
+  }
+  const _g = await call({ action:'pk_listUsers' }); _markJobSource('gas'); return _g;
+}
+
 // ── [Part B] เปิดดู 1 ใบ ผ่าน Drive API — flag แยก + fallback GAS อัตโนมัติ ──
 let USE_SHEETS_TASK = true;
 async function getTaskListFast(opts){
@@ -2582,7 +2654,7 @@ async function reloadAll(){
   clearCache();  // ปุ่ม refresh global → ล้าง cache ทั้งหมด
   document.getElementById('syncTxt').textContent = 'กำลังโหลด...';
   try {
-    const b = await call({ action:'pk_bootstrap' });
+    const b = await getBootstrapFast();
     _teams = b.teams || [];
     _salesTeams = b.salesTeams || [];
     _accessDates = b.access || [];
@@ -2682,7 +2754,7 @@ async function expenseEnsureMaster(){
   if (_expMaster) return true;
   if (!_expMasterPromise){
     _expMasterPromise = (async () => {
-      const r = await call({ action:'pk_expenseBootstrap' });
+      const r = await getExpenseBootstrapFast();
       if (!r || !r.ok){ toast('❌ ' + ((r&&r.error)||'โหลดไม่ได้')); return false; }
       _expMaster = r.master;
       _expCanApprove = !!r.canApprove;
@@ -3142,7 +3214,7 @@ function expenseSetMyBadge(n){
 // โหลด badge ทั้งสอง (เรียกตอน login + เข้าเบิกของฉัน) — เบา ไม่ render อะไร
 async function expenseBadgeRefresh(){
   try {
-    const r = await call({ action:'pk_expenseBootstrap' });
+    const r = await getExpenseBootstrapFast();
     if (!r.ok) return;
     if (!_expMaster){ _expMaster = r.master; _expCanApprove = !!r.canApprove; }
     if (typeof r.pendingCount === 'number') expenseSetBadge(r.pendingCount);
@@ -4465,7 +4537,7 @@ async function initBookingTab(){
   // ถ้า _teams ยังว่าง ให้โหลดก่อน
   if (!_teams.length && !_salesTeams.length) {
     try {
-      const b = await call({ action:'pk_bootstrap' });
+      const b = await getBootstrapFast();
       _teams = b.teams || [];
       _salesTeams = b.salesTeams || [];
       _accessDates = b.access || [];
@@ -4941,7 +5013,7 @@ let _cfItems = [];
 function cfSetBadge(n){ const el = document.getElementById('cfBadge'); if (el) el.textContent = (n > 0) ? n : ''; }
 async function cfBadgeRefresh(){
   if (!CURRENT_USER || (CURRENT_USER.role !== 'office' && CURRENT_USER.role !== 'manager')) return;
-  try { const r = await call({ action:'pk_cfPendingList' }); if (r && r.ok) cfSetBadge(r.items.length); } catch(e){}
+  try { const r = await getCfPendingFast(); if (r && r.ok) cfSetBadge(r.items.length); } catch(e){}
 }
 // ── จับคู่รถ GPS (SIAMGPS) ↔ ทีม — เขียนชีต GpsVehicles ผ่าน worker (/gps-vehicles, /gps-assign) ──
 function gpsMapOpen(){
@@ -5049,7 +5121,7 @@ async function cfLoad(){
   const box = document.getElementById('cfList'); if (!box) return;
   box.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
   try {
-    const r = await call({ action:'pk_cfPendingList' });
+    const r = await getCfPendingFast();
     if (!r.ok){ box.innerHTML = '<div class="loading-row">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
     _cfItems = r.items || [];
     cfSetBadge(_cfItems.length);
@@ -7694,7 +7766,7 @@ async function outstandingLoad(){
   if (w) w.innerHTML = (typeof skelCards === 'function') ? skelCards(4) : '<div class="loading-row">กำลังโหลด...</div>';
   const team = (document.getElementById('outTeam')?.value || '').trim();
   try {
-    const r = await call({ action: 'pk_outstandingList', team });
+    const r = await getOutstandingFast(team);
     if (!r.ok){ if (w) w.innerHTML = '<div class="loading-row">' + (r.error || 'โหลดไม่ได้') + '</div>'; return; }
     _outJobs = r.jobs || [];
     _outSummary = { totalOutstanding: r.totalOutstanding || 0, count: r.count || 0 };
@@ -8239,7 +8311,7 @@ function taskMgrInit(){ taskMgrLoadUsers(); taskMgrSetSubtab('list'); taskMgrLoa
 
 async function taskMgrLoadUsers(){
   try {
-    const r = await call({ action:'pk_listUsers' });
+    const r = await getListUsersFast();
     if (!r.ok) return;
     _taskUsers = (r.users || []).filter(u => u.active);
     const opts = _taskUsers.map(u => '<option value="'+escAttr(u.username)+'">'+escHtml(u.name||u.username)+' ('+escHtml(u.role)+')</option>').join('');
@@ -8401,7 +8473,7 @@ async function dashNotesLoad(){
   if (_dayNotesLoading) return;
   _dayNotesLoading = true;
   try {
-    const r = await call({ action:'pk_dayNoteList' });
+    const r = await getDayNotesFast();
     if (r && r.ok){ _dayNotes = r.notes || {}; dashCalRender(); }
   } catch(e){} finally { _dayNotesLoading = false; }
 }
