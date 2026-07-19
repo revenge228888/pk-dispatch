@@ -1466,6 +1466,7 @@ function renderOfficeShell(){
           <a class="sidebar-item" data-tab="mytasks" href="#tab=mytasks" onclick="return pkNavTab(event,'mytasks',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></span><span class="sidebar-label">งานของฉัน</span></a>
           ${CURRENT_USER.role === 'manager' ? `<a class="sidebar-item" data-tab="taskmgr" href="#tab=taskmgr" onclick="return pkNavTab(event,'taskmgr',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 3h6v3H9zM9 13l2 2 4-4"/></svg></span><span class="sidebar-label">มอบหมายงาน</span><span id="tmgrBadge" class="exp-badge"></span></a>` : ''}
           ${CURRENT_USER.role === 'manager' ? `<a class="sidebar-item" data-tab="slips" href="#tab=slips" onclick="return pkNavTab(event,'slips',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span><span class="sidebar-label">สลิปโอนเงิน</span></a>` : ''}
+          ${CURRENT_USER.role === 'manager' ? `<a class="sidebar-item" data-tab="sheetcap" href="#tab=sheetcap" onclick="return pkNavTab(event,'sheetcap',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="19" cy="18" r="2.5"/></svg></span><span class="sidebar-label">สถานะชีต</span></a>` : ''}
 
           <div class="sidebar-group">วัด & เสนอราคา</div>
           <a class="sidebar-item" data-tab="records" href="#tab=records" onclick="return pkNavTab(event,'records',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 17L17 3l4 4L7 21z"/><path d="M8 8l2 2M11 5l2 2M5 11l2 2"/></svg></span><span class="sidebar-label">จดขนาด</span></a>
@@ -2029,6 +2030,7 @@ function renderOfficeShell(){
       <div id="tabMytasks" style="display:none;">${myTasksScreenHTML()}</div>
 
       <div id="tabSlips" style="display:none"></div>
+      <div id="tabSheetcap" style="display:none"></div>
 
       <!-- 📋 TASK MANAGER (มอบหมายงาน · manager) — Feature #2 -->
       <div id="tabTaskmgr" style="display:none;">
@@ -4354,7 +4356,7 @@ function pkApplyHashTab_(){
   else if (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'manager') setTab(t, btn);
 }
 function setTab(t, btn){
-  ['Dash','Access','Gpssetup','Booking','Jobs','Assign','Cfqueue','Qtrack','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Slips','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po'].forEach(x => {
+  ['Dash','Access','Gpssetup','Booking','Jobs','Assign','Cfqueue','Qtrack','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Slips','Sheetcap','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -4381,6 +4383,7 @@ function setTab(t, btn){
   if (t === 'mytasks') myTasksLoad();
   if (t === 'taskmgr') taskMgrInit();
   if (t === 'slips') slpInit();
+  if (t === 'sheetcap') shcInit();
   if (t === 'payroll') payrollInit();
   if (t === 'po') poInit();
   if (t === 'records') recordsInit();
@@ -15272,7 +15275,13 @@ function slpVisible(){const m=slpEl('slpMonth').value,s=slpEl('slpStatus').value
 function slpRender(){const mf=slpEl('slpMonth'),cur=mf.value,months=[...new Set(_slpRecords.map(r=>(r.date||'').slice(0,7)).filter(x=>x.length===7))].sort();mf.innerHTML='<option value="all">ทั้งหมด</option>'+months.map(m=>`<option value="${m}">${m}</option>`).join('');if(months.includes(cur))mf.value=cur;const vis=slpVisible(),wrap=slpEl('slpTableWrap');let h='<table><thead><tr><th>เลือก</th><th>#</th><th onclick="slpSort(\'date\')">วันที่</th><th>เวลา</th><th onclick="slpSort(\'amount\')">ยอด (บาท)</th><th>สลิป</th><th>สถานะ</th><th>พิมพ์แล้ว</th><th>หมายเหตุ</th><th></th></tr></thead><tbody>';vis.forEach((r,i)=>{const id=escAttr(r.id),status=r.img?(r.matched==='task'?'🔗 จากงานมอบหมาย':r.matched==='auto'?'จับคู่อัตโนมัติ':'มีสลิป'):(r.taskId?'⏳ รอสลิปจากงาน':'รอสลิป'),chip=r.img?(r.matched==='auto'?'slpAuto':'slpHas'):(r.taskId?'slpWait':'');h+=`<tr class="${r.printed?'slpPrinted ':''}${_slpSelection.has(r.id)?'slpSelected':''}"><td><input type="checkbox" ${_slpSelection.has(r.id)?'checked':''} onchange="slpSelect('${id}',this.checked)"></td><td>${i+1}</td><td><input type="date" value="${escAttr(r.date||'')}" oninput="slpEdit('${id}','date',this.value)"></td><td><input type="text" inputmode="numeric" placeholder="ชช:นน" maxlength="5" style="width:56px" value="${escAttr(r.time||'')}" oninput="slpEdit('${id}','time',this.value)" onblur="this.value=slpNormTime(this.value);slpEdit('${id}','time',this.value)"></td><td><input type="number" step=".01" value="${r.amount===''?'':+r.amount}" oninput="slpEdit('${id}','amount',this.value)"></td><td>${r.img?`<img class="slpThumb" src="${escAttr(r.img)}" referrerpolicy="no-referrer" onclick="slpViewImg('${id}')" title="กดดูรูปใหญ่">`:`<button class="slpSmall" onclick="slpAttach('${id}')">แนบรูป</button>`}</td><td><span class="slpChip ${chip}">${status}</span></td><td><input type="checkbox" ${r.printed?'checked':''} onchange="slpEdit('${id}','printed',this.checked)"></td><td><input value="${escAttr(r.note||'')}" oninput="slpEdit('${id}','note',this.value)"></td><td><button class="slpSmall" onclick="slpDelete('${id}')">✕</button></td></tr>`;});h+='</tbody></table><button style="width:100%;margin-top:8px" onclick="slpAddRow()">＋ เพิ่มแถว</button>';if(!vis.length)h='<div style="padding:40px;text-align:center">ยังไม่มีรายการ<br><button onclick="slpAddRow()">＋ เพิ่มแถว</button></div>';wrap.innerHTML=h;slpFooter();}
 function slpSort(k){if(_slpSortKey===k)_slpSortDir*=-1;else{_slpSortKey=k;_slpSortDir=1;}slpRender();}
 function slpNew(p){return Object.assign({id:'',date:'',time:'',amount:'',note:'',img:'',imgW:0,imgH:0,source:'กรอกเอง',matched:'',printed:false,printedAt:'',taskId:''},p||{});}
-async function slpSave(r){const payload=Object.assign({},r,{img:r.img});delete payload.taskId;const out=await call({action:'pk_slipUpsert',slip:payload});if(!out.ok)throw new Error(out.error||'บันทึกไม่สำเร็จ');if(!r.id)r.id=out.id;if(out.imgUrl){r.img=out.imgUrl;r.imgUrl=out.imgUrl;}return out;}
+// รูป/สถานะรูปส่งเฉพาะตอนตั้งใจแนบ ({img:true}) หรือลบ ({imgClear:true}) — inline edit ห้ามพก img จาก state เก่า
+// ไปทับรูปที่คนอื่นเพิ่งแนบผ่านงาน (ซ้ำรอย link-wipe ของ taskId 18 ก.ค. 2026 — root cause เดียวกัน)
+async function slpSave(r,opts){opts=opts||{};const payload=Object.assign({},r);delete payload.taskId;
+if(opts.img){payload.img=r.img;}
+else if(opts.imgClear){payload.img='';payload.imgClear=true;}
+else{delete payload.img;delete payload.imgUrl;delete payload.imgW;delete payload.imgH;delete payload.matched;}
+const out=await call({action:'pk_slipUpsert',slip:payload});if(!out.ok)throw new Error(out.error||'บันทึกไม่สำเร็จ');if(!r.id)r.id=out.id;if(out.imgUrl){r.img=out.imgUrl;r.imgUrl=out.imgUrl;}return out;}
 function slpQueueSave(r){clearTimeout(_slpTimers[r.id]);_slpTimers[r.id]=setTimeout(async()=>{try{await slpSave(r);}catch(e){toast('บันทึกสลิปไม่สำเร็จ: '+e.message);}},800);}
 // ช่องเวลาแบบพิมพ์ 24 ชม. เสมอ (input type=time โชว์ AM/PM ตาม locale เครื่อง คุมไม่ได้) — รับ 14:30 / 14.30 / 1430 / 9:5
 function slpNormTime(v){
@@ -15283,7 +15292,82 @@ function slpNormTime(v){
 }
 function slpEdit(id,f,v){const r=_slpRecords.find(x=>x.id===id);if(!r)return;if(f==='amount')r.amount=v===''?'':parseFloat(v);else if(f==='printed'){r.printed=!!v;r.printedAt=v?new Date().toISOString().slice(0,10):'';}else r[f]=v;slpQueueSave(r);slpFooter();}
 async function slpAddRow(){const r=slpNew();_slpRecords.push(r);try{await slpSave(r);slpRender();}catch(e){_slpRecords.pop();toast(e.message);}}
-async function slpDelete(id){if(!confirm('ลบรายการสลิปนี้?'))return;const out=await call({action:'pk_slipDelete',id});if(out.ok){_slpRecords=_slpRecords.filter(r=>r.id!==id);_slpSelection.delete(id);slpRender();}else toast(out.error||'ลบไม่สำเร็จ');}
+async function slpDelete(id){const rec=_slpRecords.find(x=>x.id===id);const warn=rec&&rec.taskId?'\n\n⚠ ยอดนี้ผูกกับงานขอสลิปอยู่ — ติ๊กในงานจะถูกเอาออก และยอดจะหายจากรายการที่ขอ':'';if(!confirm('ลบรายการสลิปนี้?'+warn))return;const out=await call({action:'pk_slipDelete',id});if(out.ok){_slpRecords=_slpRecords.filter(r=>r.id!==id);_slpSelection.delete(id);slpRender();}else toast(out.error||'ลบไม่สำเร็จ');}
+
+// ════════ 🗄 สถานะชีต (shc — Sheet Capacity, manager only) ════════
+// ชีตมีเพดาน hardcode ในโค้ด — แท็บนี้รวมสถานะที่เดียว + ปุ่มขยาย "แถวจริงของชีต" ให้ถึงเพดาน
+// (เพดานโค้ดเต็มจริง ขยายจาก UI ไม่ได้ — ต้องแก้ constant + sync worker → hint บอกวิธีต่อชีต)
+function shcInit(){ shcLoad(); }
+async function shcLoad(){
+  const box = document.getElementById('tabSheetcap');
+  box.innerHTML = '<div class="loading-row">กำลังตรวจสถานะชีต...</div>';
+  try {
+    const r = await call({ action:'pk_sheetCapStatus' });
+    if (!r.ok){ box.innerHTML = '<div class="loading-row">โหลดไม่ได้: ' + escHtml(r.error||'') + '</div>'; return; }
+    shcRender_(r);
+  } catch(e){ box.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้ — ลองใหม่อีกครั้ง</div>'; }
+}
+function shcCard_(s){
+  if (s.error) return '<div style="background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:10px;">' +
+    '<b>' + escHtml(s.name) + '</b> <span style="color:var(--rd);">⛔ ' + escHtml(s.error) + '</span></div>';
+  const pct = s.cap ? Math.round(s.used * 100 / s.cap) : 0;
+  const crit = s.free <= 20 || pct >= 95, warn = !crit && (pct >= 80 || s.free <= 50);
+  const barColor = crit ? 'var(--rd)' : (warn ? '#ffc107' : 'var(--grn)');
+  const badge = crit ? '<span style="color:var(--rd);font-weight:700;">🔴 ใกล้เต็มมาก</span>'
+              : warn ? '<span style="color:#ffc107;font-weight:700;">🟡 ใกล้เต็ม</span>'
+              : '<span style="color:var(--grn);font-weight:700;">🟢 ปกติ</span>';
+  const rowsInfo = s.needRows
+    ? '<div style="background:rgba(255,150,50,.12);border:1px solid rgba(255,150,50,.4);border-radius:8px;padding:8px 10px;font-size:12px;margin-top:8px;">' +
+      '⚠ ชีตจริงมี ' + s.maxRows.toLocaleString() + ' แถว น้อยกว่าเพดานระบบ (' + s.endRow.toLocaleString() + ') — ข้อมูลใกล้ชนขอบชีตแล้วระบบจะบันทึกไม่ได้ กดขยายเลย' +
+      '<button class="btn btn-p btn-sm" style="width:100%;margin-top:8px;" onclick="shcExtend(\'' + s.key + '\',\'' + escAttr(s.name) + '\')">⬆ ขยายแถวชีตให้ถึงเพดาน</button></div>'
+    : '<div style="font-size:11px;color:var(--mu);margin-top:6px;">แถวจริงของชีต: ' + s.maxRows.toLocaleString() + ' (ครอบเพดานแล้ว)</div>';
+  const hint = (crit || warn) && s.hint ? '<div style="font-size:12px;color:var(--mu);margin-top:6px;">💡 ' + escHtml(s.hint) + '</div>' : '';
+  return '<div style="background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:10px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+      '<b>' + escHtml(s.name) + '</b>' + badge + '</div>' +
+    '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--mu);margin:8px 0 4px;">' +
+      '<span>ใช้ไป ' + s.used.toLocaleString() + ' / ' + s.cap.toLocaleString() + ' แถว</span><span>เหลือ ' + s.free.toLocaleString() + '</span></div>' +
+    '<div style="height:8px;background:var(--surf2);border-radius:4px;overflow:hidden;">' +
+      '<div style="height:100%;width:' + Math.min(100, pct) + '%;background:' + barColor + ';"></div></div>' +
+    rowsInfo + hint + '</div>';
+}
+function shcRender_(r){
+  const box = document.getElementById('tabSheetcap');
+  let h = '<div style="padding:14px;max-width:680px;margin:0 auto;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+      '<h2 style="margin:0;font-size:18px;">🗄 สถานะชีตข้อมูล</h2>' +
+      '<button class="btn btn-g btn-sm" onclick="shcLoad()">↻ รีเฟรช</button></div>' +
+    '<div style="font-size:12px;color:var(--mu);margin-bottom:14px;">ชีตที่มีเพดานแถวในระบบ — เขียว=ปกติ · เหลือง=ใกล้เต็ม · แดง=ต้องจัดการ</div>' +
+    (r.sheets || []).map(shcCard_).join('');
+  if ((r.masters || []).length){
+    h += '<div style="font-size:13px;font-weight:700;margin:16px 0 8px;">ข้อมูลตั้งต้น (รายการ dropdown — เต็มแล้วเพิ่มใหม่ไม่เข้า)</div>' +
+      '<div style="background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:6px 14px;">' +
+      r.masters.map(m => {
+        const w = m.free <= 5 ? ' <span style="color:#ffc107;">🟡 เหลือ ' + m.free + '</span>' : '';
+        return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--bdr);">' +
+          '<span>' + escHtml(m.name) + w + '</span><span style="color:var(--mu);">' + m.used + ' / ' + m.cap + '</span></div>';
+      }).join('') + '</div>';
+  }
+  if ((r.auto || []).length){
+    h += '<div style="font-size:13px;font-weight:700;margin:16px 0 8px;">ชีตโตอัตโนมัติ (ไม่มีเพดาน — ไม่มีวันเต็ม)</div>' +
+      '<div style="background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:6px 14px;">' +
+      r.auto.map(a => '<div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--bdr);">' +
+        '<span>' + escHtml(a.name) + '</span><span style="color:var(--mu);">' + a.used.toLocaleString() + ' แถว · ✅ โตอัตโนมัติ</span></div>').join('') + '</div>';
+  }
+  h += '</div>';
+  box.innerHTML = h;
+}
+async function shcExtend(key, name){
+  if (!confirm('ขยายแถวชีต "' + name + '" ให้ถึงเพดานระบบ?\n(เพิ่มแถวว่างท้ายชีต — ไม่แตะข้อมูลเดิม)')) return;
+  showLoad('กำลังขยายแถว...');
+  try {
+    const r = await call({ action:'pk_sheetCapExtend', key:key });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'ขยายไม่สำเร็จ')); return; }
+    toast(r.added ? ('✅ เพิ่มแล้ว ' + r.added.toLocaleString() + ' แถว') : '✅ ชีตครอบเพดานอยู่แล้ว');
+    shcLoad();
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
+}
 function slpSelect(id,on){on?_slpSelection.add(id):_slpSelection.delete(id);slpFooter();}
 function slpSelectUnprinted(){_slpSelection.clear();slpVisible().forEach(r=>{if(!r.printed&&r.img)_slpSelection.add(r.id);});slpRender();}
 // เลือกรายการที่ "ยังไม่มีสลิป + ยังไม่ติ๊กพิมพ์" รวดเดียว — แล้วติ๊กเพิ่ม/เอาออกรายแถวได้ก่อนกดขอสลิป
@@ -15311,13 +15395,13 @@ async function slpDeleteImg(id){
   if(!confirm('ลบรูปสลิปออกจากยอดนี้? (แถวจะกลับเป็น "รอสลิป" และติ๊กในงานที่เกี่ยวจะถูกเอาออก)'))return;
   r.img='';r.imgUrl='';r.matched='';
   slpHide('slpImgModal');
-  try{ await slpSave(r); toast('ลบรูปแล้ว — ยอดกลับเป็นรอสลิป'); }catch(e){ toast('ลบไม่สำเร็จ: '+e.message); }
+  try{ await slpSave(r,{imgClear:true}); toast('ลบรูปแล้ว — ยอดกลับเป็นรอสลิป'); }catch(e){ toast('ลบไม่สำเร็จ: '+e.message); }
   slpRender();
 }
 function slpReadFile(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});}
 function slpLoadImage(src){return new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=src;});}
 async function slpCompress(file){const src=await slpReadFile(file),im=await slpLoadImage(src),scale=Math.min(1,1280/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement('canvas');c.width=Math.round(im.naturalWidth*scale);c.height=Math.round(im.naturalHeight*scale);c.getContext('2d').drawImage(im,0,0,c.width,c.height);return {src:c.toDataURL('image/jpeg',.8),w:c.width,h:c.height};}
-async function slpAddImages(list){for(const f of [...list].filter(f=>f.type.indexOf('image/')===0)){const x=await slpCompress(f);if(_slpAttachId){const r=_slpRecords.find(r=>r.id===_slpAttachId);_slpAttachId='';if(r){r.img=x.src;r.imgW=x.w;r.imgH=x.h;r.source='รูป';slpQueueOcr('fill',{rec:r,src:x.src});await slpSave(r);slpRender();}continue;}const it={tempId:_slpTempSeq++,src:x.src,w:x.w,h:x.h,status:'pending',msg:'รอคิวอ่าน…'};_slpIncoming.push(it);slpQueueOcr('match',it);}slpRenderIncoming();}
+async function slpAddImages(list){for(const f of [...list].filter(f=>f.type.indexOf('image/')===0)){const x=await slpCompress(f);if(_slpAttachId){const r=_slpRecords.find(r=>r.id===_slpAttachId);_slpAttachId='';if(r){r.img=x.src;r.imgW=x.w;r.imgH=x.h;r.source='รูป';slpQueueOcr('fill',{rec:r,src:x.src});await slpSave(r,{img:true});slpRender();}continue;}const it={tempId:_slpTempSeq++,src:x.src,w:x.w,h:x.h,status:'pending',msg:'รอคิวอ่าน…'};_slpIncoming.push(it);slpQueueOcr('match',it);}slpRenderIncoming();}
 function slpEnsureScript(id,src,test){if(test())return Promise.resolve();const old=document.getElementById(id);if(old)return new Promise((r,j)=>{old.addEventListener('load',r,{once:true});old.addEventListener('error',j,{once:true});});return new Promise((r,j)=>{const s=document.createElement('script');s.id=id;s.src=src;s.onload=r;s.onerror=j;document.head.appendChild(s);});}
 function slpEnsureOcr(){return slpEnsureScript('slpTesseract','https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',()=>typeof Tesseract!=='undefined');}
 function slpEnsureXlsx(){return slpEnsureScript('slpXlsx','https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',()=>typeof XLSX!=='undefined');}
