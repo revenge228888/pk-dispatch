@@ -4739,21 +4739,28 @@ function bkRenderSuggest(r, opts){
   box.innerHTML = h;
 }
 
+// ชื่อทีมบนการ์ดวันแนะนำต้องบอกชนิดทีม (ผู้ใช้ 19 ก.ค.: "ทีม A" เฉยๆ ไม่รู้ว่าช่างหรือเซลล์)
+// 'ช่างทีม A' → 'ช่าง A' · 'เซลล์ทีม A' → 'เซลล์ A' · รูปแบบอื่นโชว์ชื่อเต็มตามจริง — ห้ามตัดอักษรไทยทิ้ง
+function bkTeamLabel(team){
+  var t = String(team||'').trim();
+  var m = t.match(/^(ช่าง|เซลล์)\s*ทีม\s*(.+)$/);
+  return m ? (m[1] + ' ' + m[2]) : t;
+}
 function bkTeamMetersHtml(s){
   if (s.perTeamLoad && s.perTeamLoad.length){
     var rows = s.perTeamLoad.map(function(t){
-      var nm=(t.team||'').replace(/[^A-Za-z]/g,'')||t.team;
+      var nm=bkTeamLabel(t.team);
       var cap=Math.max(t.cap||10,1), pct=Math.min(100,Math.round(t.load/cap*100));
       var col=t.over?'var(--rd)':(t.load/cap>=0.85?'var(--acc)':'var(--grn)');
       var rec=(t.team===s.recommendedTeam);
       return '<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px;">'
-        +'<span style="font-size:10px;width:66px;color:'+(rec?'var(--acc)':'var(--mu)')+';'+(rec?'font-weight:700;':'')+'">'+(rec?'\u25B6 ':'')+'ทีม '+nm+(t.backup?' (สำรอง)':'')+'</span>'
+        +'<span style="font-size:10px;width:78px;color:'+(rec?'var(--acc)':'var(--mu)')+';'+(rec?'font-weight:700;':'')+'">'+(rec?'\u25B6 ':'')+escHtml(nm)+(t.backup?' (สำรอง)':'')+'</span>'
         +'<div style="flex:1;height:5px;background:var(--surf2);border-radius:3px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+col+';"></div></div>'
         +'<span style="font-size:9px;color:var(--mu);width:32px;text-align:right;">'+t.load+'/'+t.cap+'</span>'
         +'</div>';
     }).join('');
     var badge = s.recommendedTeam
-      ? '<div style="font-size:11px;color:var(--acc);margin-top:3px;font-weight:600;">\u2b50 แนะนำ: ทีม '+(s.recommendedTeam||'').replace(/[^A-Za-z]/g,'')+(s.usedBackup?' \u00b7 ต้องใช้สำรอง':'')+'</div>'
+      ? '<div style="font-size:11px;color:var(--acc);margin-top:3px;font-weight:600;">\u2b50 แนะนำ: '+escHtml(String(s.recommendedTeam||''))+(s.usedBackup?' \u00b7 ต้องใช้สำรอง':'')+'</div>'
       : '<div style="font-size:11px;color:var(--rd);margin-top:3px;">\u26a0 ทุกทีมเต็มวันนี้</div>';
     var extra = '';
     if (s.unplacedCount) extra += '<div style="font-size:10.5px;color:var(--rd);margin-top:2px;">⚠ จัดไม่ลงอีก '+s.unplacedCount+' งาน (★'+s.unplacedScore+') — ไม่รวมในแถบทีม</div>';
