@@ -9135,6 +9135,14 @@ async function measCalFetch(force){
   if (_measAllJobs !== null && !force) return;   // ไม่ force = ดึงครั้งเดียวแล้วใช้ cache
   if (_measCalLoading) return;                    // กันยิงซ้อน
   _measCalLoading = true;
+  // [FAST 19 ก.ค. 2026] worker /measure-queue ก่อน (= pk_officeMeasureQueue) — ปฏิทินวัดงานเคยช้า ~5 วิเพราะ GAS ตรง
+  if (USE_SHEETS_BOOT && CURRENT_USER) {
+    try {
+      const d = await _pkFastPost_('/measure-queue');
+      if (d && d.ok && Array.isArray(d.jobs)) { _measAllJobs = d.jobs; _markJobSource('sheets', d.ms); _measCalLoading = false; return; }
+      console.warn('[measCalFetch] /measure-queue ไม่ ok → fallback GAS:', d && d.error);
+    } catch(e){ console.warn('[measCalFetch] /measure-queue error → fallback GAS:', e && e.message); }
+  }
   try {
     const r = await Promise.race([
       call({ action:'pk_officeMeasureQueue' }),
