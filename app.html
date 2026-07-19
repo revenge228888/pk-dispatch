@@ -1428,7 +1428,8 @@ async function doLogin(){
   try {
     const r = await call({ action:'pk_login', username, password });
     if (r.ok) {
-      CURRENT_USER = { username:r.user.username, role:r.user.role, name:r.user.name, token:r.token };
+      // team ต้องเก็บด้วย — fast wrapper งานวัดเซลล์/หน้าช่างใช้ (เคยหลุด: login สดไม่มี team → ตกเส้น GAS ช้าเงียบๆ 19 ก.ค.)
+      CURRENT_USER = { username:r.user.username, role:r.user.role, name:r.user.name, team:r.user.team||'', token:r.token };
       localStorage.setItem('pk_user', JSON.stringify(CURRENT_USER));
       enterApp();
     } else err.textContent = r.error || 'เข้าสู่ระบบไม่สำเร็จ';
@@ -1496,6 +1497,11 @@ function enterApp(){
   window._pkSessionInterval = setInterval(async () => {
     try {
       const r = await call({ action:'pk_checkSession', username:CURRENT_USER.username, token:CURRENT_USER.token });
+      // session เก่าจากก่อนแก้ login ไม่มี team → เติมจาก checkSession ให้เอง (ไม่ต้อง logout/login ใหม่)
+      if (r && r.ok === true && r.valid === true && r.user && r.user.team && !CURRENT_USER.team) {
+        CURRENT_USER.team = r.user.team;
+        try { localStorage.setItem('pk_user', JSON.stringify(CURRENT_USER)); } catch(e){}
+      }
       // logout เฉพาะเมื่อ backend ยืนยันชัดว่า session ตายจริง (ok:true + valid:false)
       // ไม่เด้งตอน error/timeout ชั่วคราว (r.ok=false) — กัน false logout จาก glitch
       if (r && r.ok === true && r.valid === false) {
