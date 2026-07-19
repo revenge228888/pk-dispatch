@@ -15422,6 +15422,14 @@ function shcInit(){ shcLoad(); }
 async function shcLoad(){
   const box = document.getElementById('tabSheetcap');
   box.innerHTML = '<div class="loading-row">กำลังตรวจสถานะชีต...</div>';
+  // [FAST 19 ก.ค. 2026] worker /sheet-cap ก่อน (อ่าน 3 ไฟล์ขนาน) — GAS เหลือ fallback (กฎใหม่: งานอ่านทุกตัว worker-first)
+  if (USE_SHEETS_BOOT && CURRENT_USER) {
+    try {
+      const d = await _pkFastPost_('/sheet-cap');
+      if (d && d.ok && Array.isArray(d.sheets)) { _markJobSource('sheets', d.ms); shcRender_(d); return; }
+      console.warn('[shcLoad] /sheet-cap ไม่ ok → fallback GAS:', d && d.error);
+    } catch(e){ console.warn('[shcLoad] error → fallback GAS:', e && e.message); }
+  }
   try {
     const r = await call({ action:'pk_sheetCapStatus' });
     if (!r.ok){ box.innerHTML = '<div class="loading-row">โหลดไม่ได้: ' + escHtml(r.error||'') + '</div>'; return; }
