@@ -15439,9 +15439,10 @@ function shcCard_(s){
               : '<span style="color:var(--grn);font-weight:700;">🟢 ปกติ</span>';
   const rowsInfo = s.needRows
     ? '<div style="background:rgba(255,150,50,.12);border:1px solid rgba(255,150,50,.4);border-radius:8px;padding:8px 10px;font-size:12px;margin-top:8px;">' +
-      '⚠ ชีตจริงมี ' + s.maxRows.toLocaleString() + ' แถว น้อยกว่าเพดานระบบ (' + s.endRow.toLocaleString() + ') — ข้อมูลใกล้ชนขอบชีตแล้วระบบจะบันทึกไม่ได้ กดขยายเลย' +
+      '⚠ ชีตจริงมี ' + s.maxRows.toLocaleString() + ' แถว น้อยกว่าเพดานระบบ (' + s.endRow.toLocaleString() + ') — ปกติระบบขยายให้เองตอนบันทึกครั้งถัดไป หรือกดขยายตอนนี้เลยก็ได้' +
       '<button class="btn btn-p btn-sm" style="width:100%;margin-top:8px;" onclick="shcExtend(\'' + s.key + '\',\'' + escAttr(s.name) + '\')">⬆ ขยายแถวชีตให้ถึงเพดาน</button></div>'
-    : '<div style="font-size:11px;color:var(--mu);margin-top:6px;">แถวจริงของชีต: ' + s.maxRows.toLocaleString() + ' (ครอบเพดานแล้ว)</div>';
+    : '<div style="font-size:11px;color:var(--mu);margin-top:6px;">แถวจริงของชีต: ' + s.maxRows.toLocaleString() + ' · ✓ ครอบเพดานแล้ว — ระบบขยายให้อัตโนมัติเมื่อบันทึกข้อมูลใหม่' +
+      '<button class="btn btn-g btn-sm" style="width:100%;margin-top:8px;opacity:.45;cursor:not-allowed;" disabled>⬆ ขยายแถว (ยังไม่จำเป็น — จะกดได้เมื่อชีตจริงต่ำกว่าเพดาน)</button></div>';
   const hint = (crit || warn) && s.hint ? '<div style="font-size:12px;color:var(--mu);margin-top:6px;">💡 ' + escHtml(s.hint) + '</div>' : '';
   return '<div style="background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:10px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
