@@ -6418,13 +6418,25 @@ function salesMeasureSwitchTab(t){
   salesMeasureRender();
 }
 
+// [FAST 19 ก.ค. 2026] งานวัดของเซลล์ผ่าน worker /measure-jobs (endpoint เดิมของ mini map — shape ตรง pkGetJobsFromRows ครบ
+// รวม status/รูป/พิกัด) · ส่ง team ของตัวเองให้พฤติกรรมตรง GAS (เห็นเฉพาะทีมตัวเอง) · ไม่มีทีม/พลาด → fallback GAS เดิม
+async function getSalesMeasureJobsFast(date){
+  if (USE_SHEETS_BOOT && CURRENT_USER && CURRENT_USER.team) {
+    try {
+      const d = await _pkFastPost_('/measure-jobs', { team: CURRENT_USER.team, date: date });
+      if (d && d.ok && Array.isArray(d.jobs)) { _markJobSource('sheets', d.ms); return d; }
+      console.warn('[getSalesMeasureJobsFast] ไม่ ok → fallback GAS:', d && d.error);
+    } catch(e){ console.warn('[getSalesMeasureJobsFast] error → fallback GAS:', e.message); }
+  }
+  const _g = await call({ action:'pk_salesGetMeasureJobs', date }); _markJobSource('gas'); return _g;
+}
 async function salesMeasureLoad(){
   const date = document.getElementById('smDate').value;
   if (!date) { toast('เลือกวันที่ก่อน'); return; }
   const w = document.getElementById('smJobsList');
   w.innerHTML = skelCards(3);
   try {
-    const r = await call({ action:'pk_salesGetMeasureJobs', date });
+    const r = await getSalesMeasureJobsFast(date);
     if (!r.ok) { w.innerHTML = '<div class="loading-row">'+(r.error||'โหลดไม่ได้')+'</div>'; return; }
     _smJobs = r.jobs || [];
     salesMeasureRender();
