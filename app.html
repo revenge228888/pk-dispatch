@@ -15470,13 +15470,12 @@ function shcRender_(r){
     '<div style="font-size:12px;color:var(--mu);margin-bottom:14px;">ชีตที่มีเพดานแถวในระบบ — เขียว=ปกติ · เหลือง=ใกล้เต็ม · แดง=ต้องจัดการ</div>' +
     (r.sheets || []).map(shcCard_).join('');
   if ((r.masters || []).length){
-    h += '<div style="font-size:13px;font-weight:700;margin:16px 0 8px;">ข้อมูลตั้งต้น (รายการ dropdown — เต็มแล้วเพิ่มใหม่ไม่เข้า)</div>' +
+    h += '<div style="font-size:13px;font-weight:700;margin:16px 0 8px;">ข้อมูลตั้งต้น (รายการ dropdown — ✅ โตอัตโนมัติ ไม่มีเพดานแล้ว)</div>' +
       '<div style="background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:6px 14px;">' +
-      r.masters.map(m => {
-        const w = m.free <= 5 ? ' <span style="color:#ffc107;">🟡 เหลือ ' + m.free + '</span>' : '';
-        return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--bdr);">' +
-          '<span>' + escHtml(m.name) + w + '</span><span style="color:var(--mu);">' + m.used + ' / ' + m.cap + '</span></div>';
-      }).join('') + '</div>';
+      r.masters.map(m =>
+        '<div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--bdr);">' +
+        '<span>' + escHtml(m.name) + '</span><span style="color:var(--mu);">' + m.used + ' รายการ · ✅ โตอัตโนมัติ</span></div>'
+      ).join('') + '</div>';
   }
   if ((r.auto || []).length){
     h += '<div style="font-size:13px;font-weight:700;margin:16px 0 8px;">ชีตโตอัตโนมัติ (ไม่มีเพดาน — ไม่มีวันเต็ม)</div>' +
