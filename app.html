@@ -15552,7 +15552,16 @@ async function slpDeleteImg(id){
 function slpReadFile(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});}
 function slpLoadImage(src){return new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=src;});}
 async function slpCompress(file){const src=await slpReadFile(file),im=await slpLoadImage(src),scale=Math.min(1,1280/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement('canvas');c.width=Math.round(im.naturalWidth*scale);c.height=Math.round(im.naturalHeight*scale);c.getContext('2d').drawImage(im,0,0,c.width,c.height);return {src:c.toDataURL('image/jpeg',.8),w:c.width,h:c.height};}
-async function slpAddImages(list){for(const f of [...list].filter(f=>f.type.indexOf('image/')===0)){const x=await slpCompress(f);if(_slpAttachId){const r=_slpRecords.find(r=>r.id===_slpAttachId);_slpAttachId='';if(r){r.img=x.src;r.imgW=x.w;r.imgH=x.h;r.source='รูป';slpQueueOcr('fill',{rec:r,src:x.src});await slpSave(r,{img:true});slpRender();}continue;}const it={tempId:_slpTempSeq++,src:x.src,w:x.w,h:x.h,status:'pending',msg:'รอคิวอ่าน…'};_slpIncoming.push(it);slpQueueOcr('match',it);}slpRenderIncoming();}
+async function slpAddImages(list){for(const f of [...list].filter(f=>f.type.indexOf('image/')===0)){const x=await slpCompress(f);if(_slpAttachId){const r=_slpRecords.find(r=>r.id===_slpAttachId);_slpAttachId='';if(r){clearTimeout(_slpTimers[r.id]);r.img=x.src;r.imgW=x.w;r.imgH=x.h;r.source='รูป';
+// เซฟรูปให้เสร็จ (+ติ๊ก checkbox ในงานถ้ายอดผูกงาน) ก่อน แล้วค่อยคิว OCR เติมวัน/เวลา/ยอด — กัน OCR-save รอบสองแทรกทับ (20 ก.ค. 2026)
+// clearTimeout กัน debounce เก่า (จาก inline edit ก่อนหน้า) fire ทับด้วย state เก่าที่ยังไม่มีรูป
+const out=await slpSave(r,{img:true});slpRender();slpNotifyTick_(r,out);slpQueueOcr('fill',{rec:r,src:x.src});}continue;}const it={tempId:_slpTempSeq++,src:x.src,w:x.w,h:x.h,status:'pending',msg:'รอคิวอ่าน…'};_slpIncoming.push(it);slpQueueOcr('match',it);}slpRenderIncoming();}
+// แจ้ง manager ว่าติ๊กในงานสำเร็จไหม — ยอดผูกงานแต่ติ๊กไม่ได้ = tag/ลำดับเพี้ยน (ต้องรู้ ไม่ใช่เงียบ)
+function slpNotifyTick_(r,out){
+  if(!out||!out.ok)return;
+  if(out.ticked>0){ toast('✅ แนบสลิปแล้ว · ติ๊กในงานให้อัตโนมัติ'); return; }
+  if(out.linkedTask && out.ticked===0){ toast('⚠ แนบสลิปแล้ว แต่ติ๊กในงานไม่ได้ — ยอดนี้อาจไม่ตรงลำดับในงาน (แจ้งแอดมิน)'); }
+}
 function slpEnsureScript(id,src,test){if(test())return Promise.resolve();const old=document.getElementById(id);if(old)return new Promise((r,j)=>{old.addEventListener('load',r,{once:true});old.addEventListener('error',j,{once:true});});return new Promise((r,j)=>{const s=document.createElement('script');s.id=id;s.src=src;s.onload=r;s.onerror=j;document.head.appendChild(s);});}
 function slpEnsureOcr(){return slpEnsureScript('slpTesseract','https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',()=>typeof Tesseract!=='undefined');}
 function slpEnsureXlsx(){return slpEnsureScript('slpXlsx','https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',()=>typeof XLSX!=='undefined');}
