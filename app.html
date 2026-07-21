@@ -11616,6 +11616,7 @@ async function quoteOpenNew(prefill){
     _quoForm = {
       mode: 'new', id: null,
       priceSnap: null,   // ใบใหม่ = ราคาปัจจุบันเสมอ
+      minCm: PK_QUO_MIN_CM_CLIENT,   // ใบใหม่ = floor 50cm/ด้าน
       customer: prefill.customer || { name:'', phone:'' },
       priceType: prefill.priceType || 'HOME',
       mainColor: prefill.mainColor || 'white',
@@ -11679,6 +11680,7 @@ async function quoteOpenView(id){
     _quoForm = {
       mode: 'view', id,
       priceSnap: (q.priceSnapshot && q.priceSnapshot.priceTable) ? q.priceSnapshot.priceTable : null,   // ราคา ณ วันบันทึก — ให้ตรงกับยอดบนการ์ด
+      minCm: (q.priceSnapshot && q.priceSnapshot.minCm != null) ? Number(q.priceSnapshot.minCm) : 0,   // ใบเก่า (ไม่มี minCm) = 0 ตรึงราคาเดิม
       customer: q.customer || { name:'', phone:'' },
       priceType: q.priceType || 'HOME',
       mainColor: q.mainColor || 'white',
@@ -11750,6 +11752,7 @@ async function quoteOpenEdit(id){
     _quoForm = {
       mode: 'edit', id,
       priceSnap: (q.priceSnapshot && q.priceSnapshot.priceTable) ? q.priceSnapshot.priceTable : null,   // ตอน save GAS ก็คิดด้วย snapshot เดียวกัน
+      minCm: (q.priceSnapshot && q.priceSnapshot.minCm != null) ? Number(q.priceSnapshot.minCm) : 0,   // ใบเก่า = 0 ตรึงราคา · ใบใหม่ = snapshot 50
       customer: q.customer || { name:'', phone:'' },
       priceType: q.priceType || 'HOME',
       mainColor: q.mainColor || 'white',
@@ -11851,6 +11854,8 @@ function quoteFillHeaders_(){
 // ════════════════════════════════════════
 const PK_H4_EXTRA_CLIENT = 2000;
 const PK_H4_THRESHOLD_SQM_CLIENT = 6;
+// ขั้นต่ำคิดราคา มุ้งบานเลื่อน/บานเปิด = 50cm/ด้าน (21 ก.ค. 2026 · server sync PK_QUO_MIN_CM) — floor ผ่าน _quoForm.minCm (ใบเก่า=0 ตรึงราคา)
+const PK_QUO_MIN_CM_CLIENT = 50;
 
 function quoteCalcEntry(entry){
   if (!_quoteMetadata) return { total:0, breakdown:[] };
@@ -11878,6 +11883,7 @@ function quoteCalcEntry(entry){
   const group = color ? color.group : 'g1';
   const slidePrice = Number(_quoForm.slidePrice) || 0;
   const openPrice = Number(_quoForm.openPrice) || 0;
+  const quoMinCm = Number(_quoForm.minCm) || 0;   // ขั้นต่ำ 50cm/ด้าน (ใบเก่า=0 ตรึงราคา · ใบใหม่=50)
 
   let total = 0;
   const breakdown = [];
@@ -11913,16 +11919,20 @@ function quoteCalcEntry(entry){
       note = ratePerSqm + '/ตร.ม.' + (extra ? ' +2,000×' + qty : ' (≥ 6 ตร.ม.)');
       unit = 'ตร.ม.'; uqty = area * qty; urate = ratePerSqm; setQty = qty; perSet = Math.round(area * 100) / 100; minApplied = ((w * h) / 10000) < minArea;
     } else if (t.calc === 'perimeter') {
-      const perim = (w + h) * 2 / 100;
+      const cw = Math.max(w, quoMinCm), ch = Math.max(h, quoMinCm);
+      const perim = (cw + ch) * 2 / 100;
       const rate = t.priceKey === 'slide' ? slidePrice : openPrice;
       p = rate * perim * qty;
-      note = rate + '/ม.';
+      minApplied = quoMinCm > 0 && (w < quoMinCm || h < quoMinCm);
+      note = rate + '/ม.' + (minApplied ? ' · ขั้นต่ำ ' + quoMinCm + 'cm/ด้าน' : '');
       unit = 'ม.'; uqty = perim * qty; urate = rate; setQty = qty;
     } else if (t.calc === 'perimeter_split') {
-      const perim = ((w/2) + h) * 2 * 2 / 100;
+      const cwp = Math.max(w/2, quoMinCm), ch = Math.max(h, quoMinCm);
+      const perim = (cwp + ch) * 2 * 2 / 100;
       const rate = t.priceKey === 'slide' ? slidePrice : openPrice;
       p = rate * perim * qty;
-      note = rate + '/ม.';
+      minApplied = quoMinCm > 0 && (w/2 < quoMinCm || h < quoMinCm);
+      note = rate + '/ม.' + (minApplied ? ' · ขั้นต่ำ ' + quoMinCm + 'cm/บาน' : '');
       unit = 'ม.'; uqty = perim * qty; urate = rate; setQty = qty;
     }
 
