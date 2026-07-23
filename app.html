@@ -13977,6 +13977,23 @@ let _leftoverSets=[];
 async function pkpLeftoverFetch(){
   try{ var r=await call({action:'pk_leftoverList'}); _leftoverSets=(r&&r.ok)?(r.items||[]):[]; }
   catch(e){ _leftoverSets=[]; }   // fail-soft: ไม่มีข้อมูล = ไม่แนะนำ ใบผลิตทำงานปกติ
+  try{ pkpBackfillLs_(); }catch(e){}   // ♻ ใบที่ใช้ชุดค้างก่อนมี field lsCovered → สร้างเส้นที่หักจาก note ให้ (กันตัดเกิน)
+}
+// ♻ Backfill lsCovered จาก note tag "♻ ใช้ชุดค้าง ... <lsId>" — สำหรับใบที่จองชุดค้างก่อน 21 ก.ค. 2026
+// (ตอนนั้นเก็บแค่ note ไม่มี lsCovered) → reconstruct เส้นที่ครอบ เพื่อให้ตัดราง/ต้นทุนหักถูก + band แสดงยกเลิกได้
+function pkpBackfillLs_(items, mainAluOverride){
+  var mainAlu = (mainAluOverride!=null) ? mainAluOverride : ((document.getElementById('pkpMainAlu')||{}).value||'');
+  (items||pkpItems||[]).forEach(function(it){
+    if(!it || !it.type || (it.lsCovered||[]).length) return;   // มี lsCovered แล้ว = ใบใหม่ ไม่ต้อง backfill
+    var note=String(it.note||''); if(note.indexOf('♻ ใช้ชุดค้าง')===-1) return;
+    var col=String((it.cAlu||mainAlu)||'').trim();
+    _leftoverSets.forEach(function(ls){
+      if(!ls || note.indexOf(ls.id)===-1) return;   // ชุดนี้ถูกอ้างใน note ของรายการนี้
+      if(!pkpIsReqScreen(ls.type)) return;
+      var m=pkpLeftoverMatch_(pkpRailPieces([it], col, {}), pkpRailPieces([{type:ls.type,w:ls.w,h:ls.h,cAlu:ls.cAlu}], ls.cAlu, {}));
+      it.lsCovered=(it.lsCovered||[]).concat((m.usable||[]).map(function(u){ return {rail:u.rail, len:u.need, lsId:ls.id}; }));
+    });
+  });
 }
 // need/have = output pkpRailPieces ของชุดเดียว · จับคู่รายเส้นตาม rail key (ไม่สนชนิดมุ้ง — ตระกูลรางพอ)
 function pkpLeftoverMatch_(needPieces, havePieces){
@@ -14210,9 +14227,11 @@ async function pkpCutOptimize(){
   ids.forEach(function(id){ delete pkpWoCache[id]; });   // ดึงสด — กันแผนตัดใช้ขนาดเก่าหลังแก้ใบ
   showLoad('กำลังจัดตัดราง '+ids.length+' ใบ...');
   try{
+    if(!_leftoverSets.length){ try{ await pkpLeftoverFetch(); }catch(e){} }   // ♻ ให้ backfill ใบเก่ามีข้อมูลชุดค้าง
     var pieces=[], scut=[];
     for(var i=0;i<ids.length;i++){
       var o=await pkpFetchWO(ids[i]); if(!o)continue;
+      pkpBackfillLs_(o.items, o.mainColorAlu||'');   // ♻ ใบที่จองชุดค้างก่อน 21 ก.ค. → หักเส้นจาก note (กันตัดเกิน)
       var meta={wo:o.woId, name:(o.customer&&o.customer.name)||''};
       pieces=pieces.concat(pkpRailPieces(o.items, o.mainColorAlu||'', meta));
       scut=scut.concat(pkpScutCollect(o.items, o.mainColorAlu||'', meta));   // มุ้งบานเลื่อน/บานเปิด — จัดตัดในใบเดียวกัน
@@ -15164,6 +15183,8 @@ async function pkpOpen(woId){
     var woEl=document.getElementById('pkpWoLabel'); if(woEl)woEl.textContent=o.woId+(o.status?' · '+o.status:'');
     var sv=document.getElementById('pkpSaveBtn'); if(sv)sv.textContent='💾 บันทึกการแก้ไข';
     pkpRenderRows();
+    // ♻ โหลดชุดค้าง + backfill lsCovered จาก note (ใบที่จองก่อน 21 ก.ค.) → band แสดง "ใช้แล้ว" + ตัด/ต้นทุนหักถูก
+    pkpLeftoverFetch().then(function(){ pkpRenderRows(); }).catch(function(){});
     pkpRenderSig();
     var cw=document.getElementById('pkpCostWrap'); if(cw)cw.innerHTML='';   // ล้างต้นทุนของใบก่อน
     if(o.costSnapshot) pkpShowSnapshot(o.costSnapshot);                     // แสดงราคา ณ ตอนบันทึก (ถ้ามี)
