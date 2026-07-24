@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>PK Dispatch · เส้นทางทีม</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    :root { --accent:#d4760f; --accent-dark:#ad5d08; --text:#242424; --muted:#6d7278; --danger:#b42318; --amb:#B45309; }
+    * { box-sizing:border-box; }
+    html, body { width:100%; height:100%; margin:0; overflow:hidden; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--text); background:#eef0f2; }
+    body { display:flex; flex-direction:column; }
+    header { flex:0 0 auto; min-height:48px; padding:10px 14px; display:flex; align-items:center; background:var(--accent); color:#fff; box-shadow:0 2px 8px rgba(0,0,0,.18); z-index:500; }
+    header h1 { margin:0; font-size:16px; line-height:1.35; font-weight:800; }
+    #mapBox { flex:1 1 auto; min-height:180px; width:100%; }
+    #legend { flex:0 0 auto; max-height:30vh; min-height:42px; overflow:auto; padding:8px 12px calc(8px + env(safe-area-inset-bottom)); background:#fff; border-top:1px solid #ddd; font-size:12px; line-height:1.55; z-index:500; }
+    #loading { position:fixed; inset:48px 0 0; display:none; align-items:center; justify-content:center; background:rgba(255,255,255,.84); z-index:1000; color:#555; font-weight:700; }
+    #loading.on { display:flex; }
+    #loginOverlay { position:fixed; inset:0; display:none; align-items:center; justify-content:center; padding:18px; background:#f5f6f8; z-index:2000; }
+    #loginOverlay.on { display:flex; }
+    .card { width:100%; max-width:390px; padding:22px; background:#fff; border-radius:18px; box-shadow:0 8px 28px rgba(39,31,21,.12); }
+    .brand { margin-bottom:8px; color:var(--accent); font-size:13px; font-weight:800; letter-spacing:.08em; text-align:center; text-transform:uppercase; }
+    .card h2 { margin:0 0 5px; font-size:23px; }
+    .sub { margin:0 0 18px; color:var(--muted); font-size:14px; }
+    label { display:block; margin:13px 0 6px; font-size:14px; font-weight:700; }
+    input, button { width:100%; min-height:46px; font:inherit; font-size:16px; border-radius:10px; }
+    input { padding:10px 12px; border:1px solid #d7dadd; outline:none; }
+    input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(212,118,15,.14); }
+    button { margin-top:16px; border:0; background:var(--accent); color:#fff; cursor:pointer; font-weight:800; }
+    button:disabled { cursor:wait; opacity:.62; }
+    .error { display:none; margin-top:12px; padding:9px 11px; border-radius:8px; background:#fff0ee; color:var(--danger); font-size:13px; }
+    .error.show { display:block; }
+    .leaflet-popup-content { line-height:1.45; }
+  </style>
+</head>
+<body>
+  <header><h1 id="pageTitle">🗺 เส้นทางทีม</h1></header>
+  <div id="mapBox" aria-label="แผนที่เส้นทางทีม"></div>
+  <div id="legend">กำลังเตรียมข้อมูล...</div>
+  <div id="loading" class="on">กำลังโหลดแผนที่...</div>
+
+  <div id="loginOverlay">
+    <section class="card">
+      <div class="brand">PK Dispatch</div>
+      <h2>เข้าสู่ระบบ</h2>
+      <p class="sub">เข้าสู่ระบบเพื่อดูแผนที่เส้นทางทีม</p>
+      <form id="loginForm">
+        <label for="lgUser">ชื่อผู้ใช้</label>
+        <input id="lgUser" name="username" autocomplete="username" required>
+        <label for="lgPass">รหัสผ่าน</label>
+        <input id="lgPass" name="password" type="password" autocomplete="current-password" required>
+        <div id="loginError" class="error"></div>
+        <button id="loginButton" type="submit">เข้าสู่ระบบ</button>
+      </form>
+    </section>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const API = 'https://pk-discord-relay.revenge2288.workers.dev/api';
+    const ALLOWED_ROLES = ['office', 'manager', 'sales'];
+    const params = new URLSearchParams(location.search);
+    const pageType = params.get('type') === 'measure' ? 'measure' : 'install';
+    const pageDate = params.get('date') || '';
+    const newLat = parseFloat(params.get('nlat'));
+    const newLng = parseFloat(params.get('nlng'));
+    const recTeam = String(params.get('nteam') || '').trim();
+
+    let _user = null;
+    let _map = null;
+    let _colorIdx = 0;
+
+    const QMM_TEAM_COLORS = { 'ช่างทีม A':'#2F73E6', 'ช่างทีม B':'#B5653F', 'ช่างทีม C':'#1FA463', 'เซลล์ทีม A':'#7A5CC6', 'เซลล์ทีม B':'#2E9BA6' };
+    const QMM_EXTRA_COLORS = ['#C2497D','#5B8C2A','#8A6A1F','#3E6FA3','#A3543E'];
+    const QMM_GEO_RE = /\[geo:(-?\d{1,2}\.\d{3,}),\s*(-?\d{1,3}\.\d{3,})(,a)?\]/;
+
+    function escHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, function(ch) {
+        return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[ch];
+      });
+    }
+
+    function setLoginError(text) {
+      const el = document.getElementById('loginError');
+      el.textContent = text || '';
+      el.classList.toggle('show', Boolean(text));
+    }
+
+    function showLogin() {
+      document.getElementById('loading').classList.remove('on');
+      document.getElementById('lgPass').value = '';
+      setLoginError('');
+      document.getElementById('loginOverlay').classList.add('on');
+    }
+
+    function thaiDate(ymd) {
+      const m = String(ymd).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!m) return ymd || 'ไม่ระบุวันที่';
+      const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      return new Intl.DateTimeFormat('th-TH', { weekday:'short', day:'numeric', month:'short' }).format(d);
+    }
+
+    function updateTitle() {
+      const kind = pageType === 'measure' ? 'วัดพื้นที่' : 'ติดตั้ง';
+      const title = '🗺 เส้นทางทีม · ' + kind + ' · ' + thaiDate(pageDate);
+      document.title = 'PK Dispatch · ' + kind + ' · ' + thaiDate(pageDate);
+      document.getElementById('pageTitle').textContent = title;
+    }
+
+    async function call(body){
+      if (body.action !== 'pk_login' && _user){
+        if (body.username == null) body.username = _user.username;
+        if (body.token == null)    body.token    = _user.token;
+      }
+      const r = await fetch(API, { method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+      return await r.json();
+    }
+
+    async function bootAuth() {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem('pk_user')); } catch(e) {}
+      if (!saved || !saved.username || !saved.token) {
+        _user = null;
+        showLogin();
+        return;
+      }
+      _user = saved;
+      try {
+        const r = await call({ action:'pk_checkSession', username:_user.username, token:_user.token });
+        if (r && r.ok && r.valid && ALLOWED_ROLES.includes((r.user || _user).role)) {
+          _user = Object.assign({}, _user, r.user || {});
+          localStorage.setItem('pk_user', JSON.stringify(_user));
+          await loadMapData();
+          return;
+        }
+      } catch(e) {}
+      localStorage.removeItem('pk_user');
+      _user = null;
+      showLogin();
+    }
+
+    async function doLogin() {
+      const username = document.getElementById('lgUser').value.trim();
+      const password = document.getElementById('lgPass').value;
+      const button = document.getElementById('loginButton');
+      setLoginError('');
+      if (!username || !password) {
+        setLoginError('กรอกชื่อผู้ใช้และรหัสผ่าน');
+        return;
+      }
+      button.disabled = true;
+      button.textContent = 'กำลังเข้าสู่ระบบ...';
+      try {
+        const r = await call({ action:'pk_login', username, password });
+        if (!r || !r.ok) {
+          setLoginError((r && r.error) || 'เข้าสู่ระบบไม่สำเร็จ');
+          return;
+        }
+        if (!r.user || !ALLOWED_ROLES.includes(r.user.role)) {
+          setLoginError('บัญชีนี้ดูแผนที่ไม่ได้');
+          return;
+        }
+        _user = { username:r.user.username, role:r.user.role, name:r.user.name, team:r.user.team||'', token:r.token };
+        localStorage.setItem('pk_user', JSON.stringify(_user));
+        document.getElementById('loginOverlay').classList.remove('on');
+        document.getElementById('loading').classList.add('on');
+        await loadMapData();
+      } catch(e) {
+        setLoginError('เชื่อมต่อระบบไม่ได้ กรุณาลองใหม่');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'เข้าสู่ระบบ';
+      }
+    }
+
+    function qmmTeamAbbr(team){
+      const m = String(team || '').match(/([A-Za-z])\s*$/);
+      const letter = m ? m[1].toUpperCase() : (String(team || '?').charAt(0) || '?');
+      return (String(team || '').indexOf('เซลล์') !== -1 ? 'S' : '') + letter;
+    }
+
+    function qmmZoneGuess(address, zones){
+      const a = String(address || '').toLowerCase();
+      if (!a) return null;
+      for (let i = 0; i < (zones || []).length; i++) {
+        const z = zones[i];
+        if (z.kw && a.indexOf(z.kw) !== -1 && z.lat != null && z.lng != null) return { zone:z.zone, lat:z.lat, lng:z.lng };
+      }
+      return null;
+    }
+
+    function qmmTeamColor(name){
+      if (!QMM_TEAM_COLORS[name]) {
+        QMM_TEAM_COLORS[name] = QMM_EXTRA_COLORS[_colorIdx % QMM_EXTRA_COLORS.length];
+        _colorIdx++;
+      }
+      return QMM_TEAM_COLORS[name];
+    }
+
+    function qmmGeoOk(lat, lng){
+      return isFinite(lat) && isFinite(lng) && lat >= 5 && lat <= 21 && lng >= 95 && lng <= 106;
+    }
+
+    function qmmJobGeo(j){
+      const m = String(j.note || '').match(QMM_GEO_RE);
+      if (m) {
+        const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+        if (qmmGeoOk(lat, lng)) return { lat, lng, src:m[3] ? 'auto' : 'note' };
+      }
+      const lat = parseFloat(j.lat), lng = parseFloat(j.lng);
+      if (qmmGeoOk(lat, lng)) return { lat, lng, src:'checkin' };
+      return null;
+    }
+
+    function qmmHavKm(lat1, lng1, lat2, lng2){
+      const R = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function qmmGroupJobs(jobs, zones){
+      const byTeam = {}, unassigned = [], approx = [];
+      let noCoords = 0;
+      (jobs || []).forEach(j => {
+        const g = qmmJobGeo(j);
+        if (!g) {
+          const zg = qmmZoneGuess(j.address, zones || []);
+          if (zg) approx.push(Object.assign({}, j, { _zone:zg }));
+          else noCoords++;
+          return;
+        }
+        const job = Object.assign({}, j, { _geo:g });
+        const t = String(j.team || '').trim();
+        if (!t) unassigned.push(job);
+        else (byTeam[t] = byTeam[t] || []).push(job);
+      });
+      const teams = Object.keys(byTeam).sort().map(team => {
+        const list = byTeam[team].sort((a, b) => ((a.orderNum || 999) - (b.orderNum || 999)) || String(a.id).localeCompare(String(b.id)));
+        let km = 0;
+        for (let i = 1; i < list.length; i++) km += qmmHavKm(list[i-1]._geo.lat, list[i-1]._geo.lng, list[i]._geo.lat, list[i]._geo.lng);
+        return { team, jobs:list, km:Math.round(km * 10) / 10 };
+      });
+      return { teams, unassigned, approx, noCoords };
+    }
+
+    async function directPost(path, body) {
+      const r = await fetch(API.replace(/\/api$/, path), {
+        method:'POST',
+        redirect:'follow',
+        headers:{ 'Content-Type':'application/json' },
+        body:JSON.stringify(body)
+      });
+      return await r.json();
+    }
+
+    async function loadMapData() {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(pageDate)) {
+        showFatal('ไม่พบวันที่ หรือรูปแบบวันที่ไม่ถูกต้อง (ต้องเป็น yyyy-mm-dd)');
+        return;
+      }
+      document.getElementById('loading').classList.add('on');
+      try {
+        const body = { team:'', date:pageDate, username:_user.username, token:_user.token };
+        const results = await Promise.all([
+          directPost('/install-jobs', body),
+          directPost('/measure-jobs', body)
+        ]);
+        if (!results[0].ok || !results[1].ok) throw new Error(results[0].error || results[1].error || 'โหลดข้อมูลงานไม่ได้');
+        let zones = [];
+        try {
+          const rz = await directPost('/zone-master', { username:_user.username, token:_user.token });
+          zones = rz && rz.ok && Array.isArray(rz.zones) ? rz.zones : [];
+        } catch(e) {}
+        renderMap((results[0].jobs || []).concat(results[1].jobs || []), zones);
+      } catch(e) {
+        showFatal('❌ ' + (e.message || 'เชื่อมต่อระบบไม่ได้'));
+      } finally {
+        document.getElementById('loading').classList.remove('on');
+      }
+    }
+
+    function showFatal(message) {
+      document.getElementById('legend').textContent = message;
+      if (!_map) {
+        _map = L.map('mapBox', { zoomControl:true, attributionControl:false }).setView([13.7563, 100.5018], 10);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(_map);
+      }
+    }
+
+    function renderMap(jobs, zones) {
+      if (_map) { try { _map.remove(); } catch(e) {} }
+      _map = L.map('mapBox', { zoomControl:true, attributionControl:false });
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(_map);
+      const grp = qmmGroupJobs(jobs, zones);
+      const pts = [];
+
+      grp.teams.forEach(t => {
+        const c = qmmTeamColor(t.team);
+        const latlngs = t.jobs.map(j => [j._geo.lat, j._geo.lng]);
+        if (latlngs.length > 1) L.polyline(latlngs, { color:c, weight:3, opacity:.75, dashArray:'6 6' }).addTo(_map);
+        const abbr = qmmTeamAbbr(t.team);
+        t.jobs.forEach(j => {
+          const num = (j.orderNum && j.orderNum < 999) ? j.orderNum : '';
+          L.marker([j._geo.lat, j._geo.lng], { icon:L.divIcon({ className:'', html:'<div style="min-width:26px;height:26px;padding:0 3px;border-radius:13px;background:' + c + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;white-space:nowrap;">' + abbr + num + '</div>', iconSize:[26,26], iconAnchor:[13,13] }) })
+            .addTo(_map).bindPopup(escHtml((j.orderLabel || '') + ' ' + (j.name || j.id)) + '<br>' + escHtml(t.team) + ' · ' + escHtml(j.address || ''));
+          pts.push([j._geo.lat, j._geo.lng]);
+        });
+      });
+
+      grp.unassigned.forEach(j => {
+        L.marker([j._geo.lat, j._geo.lng], { icon:L.divIcon({ className:'', html:'<div style="width:20px;height:20px;border-radius:50%;background:#888;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35);"></div>', iconSize:[20,20], iconAnchor:[10,10] }) })
+          .addTo(_map).bindPopup(escHtml(j.name || j.id) + '<br>ยังไม่จัดทีม · ' + escHtml(j.address || ''));
+        pts.push([j._geo.lat, j._geo.lng]);
+      });
+
+      grp.approx.forEach((j, k) => {
+        const ang = k * 2.4, r = .0012 * (1 + Math.floor(k / 6));
+        const la = j._zone.lat + r * Math.cos(ang), ln = j._zone.lng + r * Math.sin(ang);
+        L.marker([la, ln], { icon:L.divIcon({ className:'', html:'<div style="width:24px;height:24px;border-radius:50%;background:rgba(136,136,136,.25);border:2px dashed #666;color:#444;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;">?</div>', iconSize:[24,24], iconAnchor:[12,12] }) })
+          .addTo(_map).bindPopup('❓ ' + escHtml(j.name || j.id) + '<br><b>หาหมุดไม่เจอ</b> — ปักกลางเขต ' + escHtml(j._zone.zone || '?') + ' โดยประมาณ' + (j.team ? '<br>' + escHtml(j.team) : '') + '<br>' + escHtml(j.address || ''));
+        pts.push([la, ln]);
+      });
+
+      let recLink = '';
+      if (qmmGeoOk(newLat, newLng)) {
+        L.marker([newLat, newLng], { icon:L.divIcon({ className:'', html:'<div style="position:relative;width:46px;height:46px;"><div style="position:absolute;inset:0;border-radius:50%;background:rgba(218,165,32,.18);border:3px solid #DAA520;box-shadow:0 0 10px rgba(218,165,32,.8);"></div><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:28px;line-height:1;color:#DAA520;text-shadow:0 1px 2px #fff,0 0 8px #fff;">★</div></div>', iconSize:[46,46], iconAnchor:[23,23] }), zIndexOffset:1000 })
+          .addTo(_map).bindPopup('★ งานใหม่ (ตำแหน่งโดยประมาณจากที่อยู่)' + (recTeam ? '<br>⭐ แนะนำ: ' + escHtml(recTeam) : ''));
+        pts.push([newLat, newLng]);
+        if (recTeam) {
+          const rt = grp.teams.find(t => t.team === recTeam);
+          if (rt && rt.jobs.length) {
+            const last = rt.jobs[rt.jobs.length - 1]._geo;
+            L.polyline([[last.lat, last.lng], [newLat, newLng]], { color:'#DAA520', weight:3.5, opacity:.9, dashArray:'3 9' }).addTo(_map);
+            recLink = '<span style="color:#DAA520;font-weight:700;">┅ ★</span> งานใหม่ต่อจากงานสุดท้ายของ ' + escHtml(recTeam);
+          } else {
+            recLink = '<span style="color:#DAA520;">★</span> แนะนำ ' + escHtml(recTeam) + ' (ทีมนี้ยังไม่มีหมุดบนแผนที่วันนี้ — ลากเส้นไม่ได้)';
+          }
+        }
+      }
+
+      if (pts.length > 1) _map.fitBounds(pts, { padding:[28,28] });
+      else if (pts.length === 1) _map.setView(pts[0], 15);
+      else _map.setView([13.7563, 100.5018], 10);
+      _map.invalidateSize();
+      setTimeout(() => { if (_map) _map.invalidateSize(); }, 350);
+
+      const info = [];
+      grp.teams.forEach(t => info.push('<span style="color:' + qmmTeamColor(t.team) + ';">●</span> ' + escHtml(t.team) + ' · ' + t.jobs.length + ' งาน · ~' + t.km + ' กม.'));
+      if (grp.unassigned.length) info.push('<span style="color:#888;">○</span> ยังไม่จัดทีม · ' + grp.unassigned.length + ' งาน');
+      if (grp.approx.length) info.push('❓ หาหมุดไม่เจอ ' + grp.approx.length + ' งาน — ปักกลางเขตโดยประมาณ (หมุดขอบประ)');
+      if (grp.noCoords) info.push('📍 อีก ' + grp.noCoords + ' งานไม่มีพิกัดและเดาเขตไม่ได้ (ไม่ได้ปักบนแผนที่)');
+      if (recLink) info.push(recLink);
+      if (!qmmGeoOk(newLat, newLng)) info.push('<span style="color:var(--amb);">★ งานใหม่ยังไม่มีพิกัด</span>');
+      document.getElementById('legend').innerHTML = info.join('<br>') || 'ไม่มีงานในวันนี้';
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      doLogin();
+    });
+    updateTitle();
+    bootAuth();
+  </script>
+</body>
+</html>
