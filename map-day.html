@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <title>PK Dispatch · เส้นทางทีม</title>
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link rel="preconnect" href="https://tile.openstreetmap.org">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
     :root { --accent:#d4760f; --accent-dark:#ad5d08; --text:#242424; --muted:#6d7278; --danger:#b42318; --amb:#B45309; }
@@ -125,19 +127,10 @@
         showLogin();
         return;
       }
+      // ไม่เรียก pk_checkSession แยก (ผ่าน GAS ช้า) — ให้ worker /install-jobs validate session ให้เลย
+      // (getValidSession ใน worker เช็ค+cache) · ถ้า session หมดอายุ loadMapData จะเด้ง showLogin ให้
       _user = saved;
-      try {
-        const r = await call({ action:'pk_checkSession', username:_user.username, token:_user.token });
-        if (r && r.ok && r.valid && ALLOWED_ROLES.includes((r.user || _user).role)) {
-          _user = Object.assign({}, _user, r.user || {});
-          localStorage.setItem('pk_user', JSON.stringify(_user));
-          await loadMapData();
-          return;
-        }
-      } catch(e) {}
-      localStorage.removeItem('pk_user');
-      _user = null;
-      showLogin();
+      await loadMapData();
     }
 
     async function doLogin() {
@@ -220,14 +213,13 @@
     }
 
     function qmmGroupJobs(jobs, zones){
-      const byTeam = {}, unassigned = [], approx = [];
-      let noCoords = 0;
+      const byTeam = {}, unassigned = [], approx = [], noCoords = [];
       (jobs || []).forEach(j => {
         const g = qmmJobGeo(j);
         if (!g) {
           const zg = qmmZoneGuess(j.address, zones || []);
           if (zg) approx.push(Object.assign({}, j, { _zone:zg }));
-          else noCoords++;
+          else noCoords.push(j);
           return;
         }
         const job = Object.assign({}, j, { _geo:g });
@@ -266,7 +258,14 @@
           directPost('/install-jobs', body),
           directPost('/measure-jobs', body)
         ]);
-        if (!results[0].ok || !results[1].ok) throw new Error(results[0].error || results[1].error || 'โหลดข้อมูลงานไม่ได้');
+        if (!results[0].ok || !results[1].ok) {
+          const err = results[0].error || results[1].error || '';
+          // session หมดอายุ/ไม่มีสิทธิ์ → กลับไปหน้า login (ไม่ใช่ error ค้าง)
+          if (/session|token|สิทธิ|ล็อกอิน|login|เข้าสู่ระบบ/i.test(err)) {
+            localStorage.removeItem('pk_user'); _user = null; showLogin(); return;
+          }
+          throw new Error(err || 'โหลดข้อมูลงานไม่ได้');
+        }
         let zones = [];
         try {
           const rz = await directPost('/zone-master', { username:_user.username, token:_user.token });
@@ -349,9 +348,16 @@
       grp.teams.forEach(t => info.push('<span style="color:' + qmmTeamColor(t.team) + ';">●</span> ' + escHtml(t.team) + ' · ' + t.jobs.length + ' งาน · ~' + t.km + ' กม.'));
       if (grp.unassigned.length) info.push('<span style="color:#888;">○</span> ยังไม่จัดทีม · ' + grp.unassigned.length + ' งาน');
       if (grp.approx.length) info.push('❓ หาหมุดไม่เจอ ' + grp.approx.length + ' งาน — ปักกลางเขตโดยประมาณ (หมุดขอบประ)');
-      if (grp.noCoords) info.push('📍 อีก ' + grp.noCoords + ' งานไม่มีพิกัดและเดาเขตไม่ได้ (ไม่ได้ปักบนแผนที่)');
       if (recLink) info.push(recLink);
-      if (!qmmGeoOk(newLat, newLng)) info.push('<span style="color:var(--amb);">★ งานใหม่ยังไม่มีพิกัด</span>');
+      if (!qmmGeoOk(newLat, newLng) && (params.get('nlat') || params.get('nlng'))) info.push('<span style="color:var(--amb);">★ งานใหม่ยังไม่มีพิกัด</span>');
+      // งานไม่มีพิกัดและเดาเขตไม่ได้ → แสดงเป็นรายการพร้อมลิงก์ Google Maps (จะได้ไม่ตกหล่นจากสายตา)
+      if (grp.noCoords.length) {
+        info.push('<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #ccc;">📍 <b>' + grp.noCoords.length + ' งานไม่มีพิกัดบนแผนที่</b> (กดลิงก์เปิดที่อยู่ได้):</div>');
+        grp.noCoords.forEach(j => {
+          const link = j.mapLink ? ' <a href="' + escHtml(j.mapLink) + '" target="_blank" rel="noopener" style="color:#2563EB;font-weight:700;">🔗 เปิดแผนที่</a>' : '';
+          info.push('<div style="padding:2px 0 2px 10px;">• ' + escHtml(j.name || j.id) + (j.team ? ' <span style="color:#888;">(' + escHtml(j.team) + ')</span>' : '') + ' — ' + escHtml(j.address || '-') + link + '</div>');
+        });
+      }
       document.getElementById('legend').innerHTML = info.join('<br>') || 'ไม่มีงานในวันนี้';
     }
 
