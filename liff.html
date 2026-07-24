@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>PK Dispatch · จองคิว</title>
+  <style>
+    :root { --accent:#d4760f; --accent-dark:#ad5d08; --bg:#f5f6f8; --text:#242424; --muted:#6d7278; --danger:#b42318; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+    main { width:100%; max-width:520px; margin:0 auto; padding:20px 14px 36px; }
+    .brand { color:var(--accent); font-size:13px; font-weight:800; letter-spacing:.08em; text-align:center; text-transform:uppercase; }
+    .card { margin-top:10px; padding:20px; background:#fff; border-radius:18px; box-shadow:0 8px 28px rgba(39,31,21,.09); }
+    h1 { margin:0 0 6px; font-size:24px; line-height:1.25; }
+    .sub { margin:0 0 20px; color:var(--muted); font-size:14px; }
+    .screen { display:none; }
+    .field { margin-bottom:16px; }
+    label { display:block; margin-bottom:7px; font-size:14px; font-weight:700; }
+    input, textarea, select, button { width:100%; min-height:46px; font:inherit; font-size:16px; }
+    input, textarea, select { padding:11px 12px; border:1px solid #d7dadd; border-radius:10px; background:#fff; color:var(--text); outline:none; }
+    textarea { min-height:72px; resize:vertical; }
+    input:focus, textarea:focus, select:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(212,118,15,.14); }
+    button { border:0; border-radius:11px; cursor:pointer; font-weight:800; }
+    button:disabled { cursor:wait; opacity:.62; }
+    .primary { background:var(--accent); color:#fff; }
+    .primary:active { background:var(--accent-dark); }
+    .secondary { border:1px solid #d6d8da; background:#fff; color:var(--text); }
+    .toggle { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .toggle button { border:1px solid #e1e1e1; background:#f7f7f7; color:#444; }
+    .toggle button.active { border-color:var(--accent); background:var(--accent); color:#fff; }
+    .form-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:18px; }
+    .form-head h1 { font-size:21px; }
+    .user-name { color:var(--muted); font-size:13px; }
+    .logout { width:auto; min-height:34px; padding:6px 10px; border:1px solid #ddd; background:#fff; color:#666; font-size:13px; font-weight:600; }
+    .hint { margin-top:5px; color:var(--muted); font-size:12px; }
+    .message { display:none; margin:0 0 14px; padding:10px 12px; border-radius:9px; background:#fff0ee; color:var(--danger); font-size:14px; }
+    .message.show { display:block; }
+    .loading { display:flex; align-items:center; justify-content:center; min-height:160px; color:var(--muted); }
+    .spinner { width:20px; height:20px; margin-right:9px; border:3px solid #ead8c5; border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .done { text-align:center; }
+    .done-icon { margin-bottom:8px; font-size:48px; }
+    .summary { margin:18px 0; padding:14px; border-radius:12px; background:#fff8ef; text-align:left; line-height:1.75; }
+    .actions { display:grid; gap:9px; margin-top:20px; }
+    @media (min-width:480px) { main { padding-top:34px; } .card { padding:26px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">PK Dispatch</div>
+    <section id="screenLoading" class="card screen">
+      <div class="loading"><span class="spinner"></span><span>กำลังเตรียมระบบ...</span></div>
+    </section>
+
+    <section id="screenLogin" class="card screen">
+      <h1>เข้าสู่ระบบ</h1>
+      <p class="sub">ใช้บัญชี PK Dispatch เพื่อจองคิวงาน</p>
+      <div id="loginError" class="message" role="alert"></div>
+      <form id="loginForm">
+        <div class="field">
+          <label for="lgUser">ชื่อผู้ใช้</label>
+          <input id="lgUser" name="username" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="lgPass">รหัสผ่าน</label>
+          <input id="lgPass" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <button id="loginButton" class="primary" type="submit">เข้าสู่ระบบ</button>
+      </form>
+    </section>
+
+    <section id="screenForm" class="card screen">
+      <div class="form-head">
+        <div><h1>จองคิวงาน</h1><div id="userName" class="user-name"></div></div>
+        <button class="logout" type="button" onclick="logout()">ออกจากระบบ</button>
+      </div>
+      <div id="bookingError" class="message" role="alert"></div>
+      <form id="bookingForm">
+        <div class="field">
+          <label>ประเภทงาน</label>
+          <div class="toggle">
+            <button id="typeInstall" class="active" type="button" onclick="setBookingType('install')">🔧 ติดตั้ง</button>
+            <button id="typeMeasure" type="button" onclick="setBookingType('measure')">📏 วัดงาน</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="bkDate">วันที่ลูกค้าสะดวก</label>
+          <input type="date" id="bkDate" required>
+        </div>
+        <div class="field">
+          <label for="bkCustomer">ชื่อลูกค้า</label>
+          <input id="bkCustomer" required>
+        </div>
+        <div class="field">
+          <label for="bkAddress">ที่อยู่ / ลิงก์ Google Maps</label>
+          <textarea id="bkAddress" rows="2" placeholder="ที่อยู่ หรือวางลิงก์ Google Maps"></textarea>
+        </div>
+        <div class="field">
+          <label for="bkJob">รายละเอียดงาน + เบอร์โทร</label>
+          <textarea id="bkJob" rows="2" placeholder="รายละเอียด เช่น มุ้งจีบ 3 บาน / เบอร์ 08x-xxx"></textarea>
+        </div>
+        <div class="field">
+          <label for="bkScore">คะแนนความสำคัญ</label>
+          <input type="number" id="bkScore" min="1" max="5" value="1">
+          <div class="hint">1=ปกติ ถึง 5=ด่วน</div>
+        </div>
+        <div class="field">
+          <label for="bkTeam">ทีม</label>
+          <select id="bkTeam"></select>
+        </div>
+        <button id="submitButton" class="primary" type="submit">📤 ส่งลงคิว</button>
+      </form>
+    </section>
+
+    <section id="screenDone" class="card screen done">
+      <div class="done-icon">✅</div>
+      <h1>ลงคิวสำเร็จ</h1>
+      <div id="doneSummary" class="summary"></div>
+      <p class="sub">ออฟฟิศจะตรวจและยืนยันคิวให้อีกครั้ง</p>
+      <div class="actions">
+        <button class="primary" type="button" onclick="newBooking()">จองใบใหม่</button>
+        <button id="closeButton" class="secondary" type="button" onclick="closeLiff()">ปิด</button>
+      </div>
+    </section>
+  </main>
+
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script>
+    const API = 'https://pk-discord-relay.revenge2288.workers.dev/api';
+    const LIFF_ID = 'PLACEHOLDER_LIFF_ID';  // ⚠️ ผู้ใช้จะแทนด้วย LIFF ID จริงหลังสร้าง LIFF app ใน LINE Console
+
+    let _liffReady = false;
+    let _user = null;
+    let _bkType = 'install';
+
+    function showScreen(id) {
+      ['screenLoading', 'screenLogin', 'screenForm', 'screenDone'].forEach(function(screenId) {
+        document.getElementById(screenId).style.display = screenId === id ? 'block' : 'none';
+      });
+    }
+
+    function setError(id, text) {
+      const el = document.getElementById(id);
+      el.textContent = text || '';
+      el.classList.toggle('show', Boolean(text));
+    }
+
+    async function call(body){
+      if (body.action !== 'pk_login' && _user){
+        if (body.username == null) body.username = _user.username;
+        if (body.token == null)    body.token    = _user.token;
+      }
+      const r = await fetch(API, { method:'POST', redirect:'follow',
+        headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+      return await r.json();
+    }
+
+    async function initLiff() {
+      showScreen('screenLoading');
+      try {
+        await liff.init({ liffId: LIFF_ID });
+        _liffReady = true;
+      } catch(e) {
+        _liffReady = false;
+      }
+      document.getElementById('closeButton').style.display = _liffReady ? 'block' : 'none';
+      await bootAuth();
+    }
+
+    async function bootAuth() {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem('pk_user')); } catch(e) {}
+      if (!saved || !saved.username || !saved.token) {
+        _user = null;
+        showLogin();
+        return;
+      }
+      _user = saved;
+      try {
+        const r = await call({ action:'pk_checkSession', username:_user.username, token:_user.token });
+        if (r && r.ok && r.valid) {
+          _user = Object.assign({}, _user, r.user || {});
+          localStorage.setItem('pk_user', JSON.stringify(_user));
+          showForm();
+          return;
+        }
+      } catch(e) {}
+      localStorage.removeItem('pk_user');
+      _user = null;
+      showLogin();
+    }
+
+    function showLogin() {
+      setError('loginError', '');
+      document.getElementById('lgPass').value = '';
+      showScreen('screenLogin');
+    }
+
+    async function doLogin() {
+      const username = document.getElementById('lgUser').value.trim();
+      const password = document.getElementById('lgPass').value;
+      const button = document.getElementById('loginButton');
+      setError('loginError', '');
+      if (!username || !password) {
+        setError('loginError', 'กรอกชื่อผู้ใช้และรหัสผ่าน');
+        return;
+      }
+      button.disabled = true;
+      button.textContent = 'กำลังเข้าสู่ระบบ...';
+      try {
+        const r = await call({ action:'pk_login', username, password });
+        if (!r || !r.ok) {
+          setError('loginError', (r && r.error) || 'เข้าสู่ระบบไม่สำเร็จ');
+          return;
+        }
+        if (!r.user || !['sales', 'office', 'manager'].includes(r.user.role)) {
+          setError('loginError', 'บัญชีนี้ใช้จองคิวผ่าน LINE ไม่ได้');
+          return;
+        }
+        _user = { username:r.user.username, role:r.user.role, name:r.user.name, team:r.user.team||'', token:r.token };
+        localStorage.setItem('pk_user', JSON.stringify(_user));
+        showForm();
+      } catch(e) {
+        setError('loginError', 'เชื่อมต่อระบบไม่ได้ กรุณาลองใหม่');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'เข้าสู่ระบบ';
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('pk_user');
+      _user = null;
+      showLogin();
+    }
+
+    function localToday() {
+      const now = new Date();
+      const offset = now.getTimezoneOffset();
+      return new Date(now.getTime() - offset * 60000).toISOString().slice(0, 10);
+    }
+
+    function showForm() {
+      document.getElementById('userName').textContent = _user.name || _user.username;
+      if (!document.getElementById('bkDate').value) document.getElementById('bkDate').value = localToday();
+      setError('bookingError', '');
+      fillTeamOptions();
+      showScreen('screenForm');
+    }
+
+    function setBookingType(type) {
+      _bkType = type === 'measure' ? 'measure' : 'install';
+      document.getElementById('typeInstall').classList.toggle('active', _bkType === 'install');
+      document.getElementById('typeMeasure').classList.toggle('active', _bkType === 'measure');
+      fillTeamOptions();
+    }
+
+    function fillTeamOptions() {
+      const select = document.getElementById('bkTeam');
+      const previous = select.value;
+      const teams = ['', 'ช่างทีม A', 'ช่างทีม B', 'ช่างทีม C'];
+      if (_bkType === 'measure') teams.push('เซลล์ทีม A', 'เซลล์ทีม B', 'เซลล์ทีม C');
+      select.replaceChildren();
+      teams.forEach(function(team, index) {
+        const option = document.createElement('option');
+        option.value = team;
+        option.textContent = index === 0 ? '— ให้ออฟฟิศจัดทีม —' : team;
+        select.appendChild(option);
+      });
+      if (teams.includes(previous)) select.value = previous;
+    }
+
+    async function submitBooking(){
+      const date = document.getElementById('bkDate').value;
+      const customer = document.getElementById('bkCustomer').value.trim();
+      if (!date || !customer){ setError('bookingError', 'กรอกวันที่ + ชื่อลูกค้า'); return; }
+      const body = {
+        action: 'pk_salesAddBooking',
+        username: _user.username,
+        type: _bkType,
+        date: date,
+        customer: customer,
+        address: document.getElementById('bkAddress').value.trim(),
+        job: document.getElementById('bkJob').value.trim(),
+        score: parseFloat(document.getElementById('bkScore').value) || 1,
+        team: document.getElementById('bkTeam').value
+      };
+      const button = document.getElementById('submitButton');
+      setError('bookingError', '');
+      button.disabled = true;
+      button.textContent = 'กำลังส่ง...';
+      try {
+        const r = await call(body);
+        if (!r || !r.ok) {
+          setError('bookingError', (r && r.error) || 'ส่งคิวไม่สำเร็จ');
+          return;
+        }
+        await showDone(r, customer);
+      } catch(e) {
+        setError('bookingError', 'เชื่อมต่อระบบไม่ได้ กรุณาลองใหม่');
+      } finally {
+        button.disabled = false;
+        button.textContent = '📤 ส่งลงคิว';
+      }
+    }
+
+    async function showDone(r, customer) {
+      const kind = r.kind === 'measure' ? 'วัดงาน' : 'ติดตั้ง';
+      const summary = document.getElementById('doneSummary');
+      summary.replaceChildren();
+      [['เลขงาน', r.id], ['ประเภท', kind], ['วันที่', r.date], ['ลูกค้า', customer]].forEach(function(row) {
+        const line = document.createElement('div');
+        const strong = document.createElement('strong');
+        strong.textContent = row[0] + ': ';
+        line.append(strong, document.createTextNode(row[1] == null ? '-' : String(row[1])));
+        summary.appendChild(line);
+      });
+      showScreen('screenDone');
+      if (_liffReady) {
+        try {
+          await liff.sendMessages([{ type:'text', text:'📥 ลงคิว'+kind+' '+r.id+' · '+customer+' · '+r.date+' (รอออฟฟิศยืนยัน)' }]);
+        } catch(e) {}
+      }
+    }
+
+    function newBooking() {
+      document.getElementById('bookingForm').reset();
+      document.getElementById('bkDate').value = localToday();
+      setBookingType('install');
+      showForm();
+    }
+
+    function closeLiff() {
+      if (_liffReady) {
+        try { liff.closeWindow(); } catch(e) {}
+      }
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      doLogin();
+    });
+    document.getElementById('bookingForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      submitBooking();
+    });
+    initLiff();
+  </script>
+</body>
+</html>
