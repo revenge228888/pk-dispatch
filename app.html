@@ -1579,7 +1579,8 @@ function renderOfficeShell(){
           <a class="sidebar-item" data-tab="salesreport" href="#tab=salesreport" onclick="return pkNavTab(event,'salesreport',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M12 12V3a9 9 0 1 0 9 9z"/><path d="M13 3a8 8 0 0 1 8 8h-8z"/></svg></span><span class="sidebar-label">รายงานเซลล์</span></a>` : ''}
           ${CURRENT_USER.role === 'manager' ? `
           <div class="sidebar-group">ระบบ</div>
-          <a class="sidebar-item" data-tab="sheetcap" href="#tab=sheetcap" onclick="return pkNavTab(event,'sheetcap',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="19" cy="18" r="2.5"/></svg></span><span class="sidebar-label">สถานะชีต</span></a>` : ''}
+          <a class="sidebar-item" data-tab="sheetcap" href="#tab=sheetcap" onclick="return pkNavTab(event,'sheetcap',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="19" cy="18" r="2.5"/></svg></span><span class="sidebar-label">สถานะชีต</span></a>
+          <a class="sidebar-item" data-tab="usermgr" href="#tab=usermgr" onclick="return pkNavTab(event,'usermgr',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><path d="M16 5.5a3 3 0 0 1 0 5M17 14c2.5.5 4 2.5 4 6"/></svg></span><span class="sidebar-label">จัดการผู้ใช้</span></a>` : ''}
         </div>
         <div class="sidebar-bottom">
           <div class="sidebar-user"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></span><span class="sidebar-label">${CURRENT_USER.name || CURRENT_USER.username}</span></div>
@@ -2112,6 +2113,7 @@ function renderOfficeShell(){
 
       <div id="tabSlips" style="display:none"></div>
       <div id="tabSheetcap" style="display:none"></div>
+      <div id="tabUsermgr" style="display:none"></div>
 
       <!-- 📋 TASK MANAGER (มอบหมายงาน · manager) — Feature #2 -->
       <div id="tabTaskmgr" style="display:none;">
@@ -4437,7 +4439,7 @@ function pkApplyHashTab_(){
   else if (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'manager') setTab(t, btn);
 }
 function setTab(t, btn){
-  ['Dash','Access','Gpssetup','Booking','Jobs','Assign','Cfqueue','Qtrack','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Slips','Sheetcap','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po'].forEach(x => {
+  ['Dash','Access','Gpssetup','Booking','Jobs','Assign','Cfqueue','Qtrack','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Slips','Sheetcap','Usermgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -4465,6 +4467,7 @@ function setTab(t, btn){
   if (t === 'taskmgr') taskMgrInit();
   if (t === 'slips') slpInit();
   if (t === 'sheetcap') shcInit();
+  if (t === 'usermgr') umInit();
   if (t === 'payroll') payrollInit();
   if (t === 'po') poInit();
   if (t === 'records') recordsInit();
@@ -15496,6 +15499,106 @@ async function slpDelete(id){const rec=_slpRecords.find(x=>x.id===id);const warn
 // ════════ 🗄 สถานะชีต (shc — Sheet Capacity, manager only) ════════
 // ชีตมีเพดาน hardcode ในโค้ด — แท็บนี้รวมสถานะที่เดียว + ปุ่มขยาย "แถวจริงของชีต" ให้ถึงเพดาน
 // (เพดานโค้ดเต็มจริง ขยายจาก UI ไม่ได้ — ต้องแก้ constant + sync worker → hint บอกวิธีต่อชีต)
+// ══ จัดการผู้ใช้ (manager only · prefix um*) ══════════════════════════════════
+let _umUsers = [];
+const UM_ROLES = [['office','ออฟฟิศ'],['sales','เซลล์'],['tech','ช่าง'],['manager','ผู้จัดการ'],['quote','ทำใบเสนอราคา']];
+function umRoleLabel(r){ const f = UM_ROLES.find(x => x[0] === r); return f ? f[1] : (r || '-'); }
+function umInit(){ umLoad(); }
+async function umLoad(){
+  const box = document.getElementById('tabUsermgr');
+  box.innerHTML = '<div class="loading-row">กำลังโหลดรายชื่อผู้ใช้...</div>';
+  // worker-first (getListUsersFast) → GAS fallback อยู่ในตัว wrapper แล้ว
+  try {
+    const r = await getListUsersFast();
+    if (!r || !r.ok || !Array.isArray(r.users)) { box.innerHTML = '<div class="loading-row">โหลดไม่ได้: ' + escHtml((r && r.error) || '') + '</div>'; return; }
+    _umUsers = r.users.slice().sort((a, b) => (a.active === b.active ? 0 : a.active ? -1 : 1) || String(a.username).localeCompare(String(b.username)));
+    umRender_();
+  } catch(e){ box.innerHTML = '<div class="loading-row">เชื่อมต่อไม่ได้ — ลองใหม่อีกครั้ง</div>'; }
+}
+function umRender_(editUser){
+  const box = document.getElementById('tabUsermgr');
+  const activeCount = _umUsers.filter(u => u.active).length;
+  let h = '<div style="padding:14px;max-width:820px;margin:0 auto;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+      '<h2 style="margin:0;font-size:18px;">👥 จัดการผู้ใช้</h2>' +
+      '<button class="btn btn-g btn-sm" onclick="umLoad()">↻ รีเฟรช</button></div>' +
+    '<div style="font-size:12px;color:var(--mu);margin-bottom:12px;">ทั้งหมด ' + _umUsers.length + ' คน · ใช้งานอยู่ ' + activeCount + ' · ระงับ ' + (_umUsers.length - activeCount) + ' — เพิ่ม/แก้/ระงับได้ที่นี่ (ไม่ต้องเปิดชีต)</div>' +
+    '<div id="umFormBox">' + (editUser !== undefined ? umFormHtml_(editUser) : '<button class="btn btn-p" onclick="umForm()">+ เพิ่มผู้ใช้ใหม่</button>') + '</div>';
+  h += '<div style="overflow-x:auto;margin-top:14px;"><table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+    '<thead><tr style="text-align:left;border-bottom:2px solid var(--bdr);color:var(--mu);font-size:12px;">' +
+    '<th style="padding:8px 6px;">ชื่อผู้ใช้</th><th style="padding:8px 6px;">ชื่อ-สกุล</th><th style="padding:8px 6px;">บทบาท</th><th style="padding:8px 6px;">ทีม</th><th style="padding:8px 6px;">สถานะ</th><th style="padding:8px 6px;text-align:right;">จัดการ</th></tr></thead><tbody>';
+  _umUsers.forEach(u => {
+    const st = u.active
+      ? '<span style="color:var(--grn);font-weight:700;">● ใช้งาน</span>'
+      : '<span style="color:var(--rd);font-weight:700;">● ระงับ</span>';
+    const toggleBtn = u.active
+      ? '<button class="btn btn-g btn-sm" onclick="umToggle(\'' + escAttr(u.username) + '\',false)">ระงับ</button>'
+      : '<button class="btn btn-p btn-sm" onclick="umToggle(\'' + escAttr(u.username) + '\',true)">เปิดใช้</button>';
+    const warn = u.hashed ? '' : ' <span title="รหัสยังไม่ถูกเข้ารหัส (จะเข้ารหัสเมื่อ login ครั้งแรก)" style="color:#ffc107;">⚠</span>';
+    h += '<tr style="border-bottom:1px solid var(--bdr);' + (u.active ? '' : 'opacity:.55;') + '">' +
+      '<td style="padding:8px 6px;font-weight:600;">' + escHtml(u.username) + warn + '</td>' +
+      '<td style="padding:8px 6px;">' + escHtml(u.name || '-') + '</td>' +
+      '<td style="padding:8px 6px;">' + escHtml(umRoleLabel(u.role)) + '</td>' +
+      '<td style="padding:8px 6px;">' + escHtml(u.team || '-') + '</td>' +
+      '<td style="padding:8px 6px;">' + st + '</td>' +
+      '<td style="padding:8px 6px;text-align:right;white-space:nowrap;"><button class="btn btn-g btn-sm" onclick="umForm(\'' + escAttr(u.username) + '\')">✏ แก้</button> ' + toggleBtn + '</td></tr>';
+  });
+  h += '</tbody></table></div></div>';
+  box.innerHTML = h;
+}
+function umForm(username){
+  const u = username ? _umUsers.find(x => x.username === username) : null;
+  umRender_(u || null);   // undefined = ไม่มีฟอร์ม · null = เพิ่มใหม่ · object = แก้
+  setTimeout(() => { const el = document.getElementById(username ? 'umFieldName' : 'umFieldUser'); if (el) el.focus(); }, 40);
+}
+function umFormHtml_(u){
+  const isEdit = !!u;
+  const LB = 'style="display:block;font-size:12px;color:var(--mu);margin:0 0 4px;"';
+  const IN = 'style="width:100%;padding:8px 10px;border:1px solid var(--bdr);border-radius:8px;background:var(--surf2);color:inherit;font:inherit;box-sizing:border-box;"';
+  const roleOpts = UM_ROLES.map(r => '<option value="' + r[0] + '"' + ((u && u.role === r[0]) ? ' selected' : '') + '>' + r[1] + '</option>').join('');
+  return '<div style="background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:16px;">' +
+    '<div style="font-weight:700;margin-bottom:12px;">' + (isEdit ? '✏ แก้ไข: ' + escHtml(u.username) : '+ เพิ่มผู้ใช้ใหม่') + '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">' +
+      '<div><label ' + LB + '>ชื่อผู้ใช้ (login)</label><input id="umFieldUser" ' + IN + ' ' + (isEdit ? 'value="' + escAttr(u.username) + '" readonly' : 'placeholder="เช่น sale02"') + '></div>' +
+      '<div><label ' + LB + '>รหัสผ่าน</label><input id="umFieldPwd" ' + IN + ' type="text" placeholder="' + (isEdit ? 'เว้นว่าง = ไม่เปลี่ยน' : 'ตั้งรหัสผ่าน') + '"></div>' +
+      '<div><label ' + LB + '>ชื่อ-สกุล</label><input id="umFieldName" ' + IN + ' value="' + (u ? escAttr(u.name) : '') + '"></div>' +
+      '<div><label ' + LB + '>บทบาท</label><select id="umFieldRole" ' + IN + '>' + roleOpts + '</select></div>' +
+      '<div><label ' + LB + '>ทีม</label><input id="umFieldTeam" ' + IN + ' value="' + (u ? escAttr(u.team) : '') + '" placeholder="เช่น ช่างทีม A"></div>' +
+      '<div><label ' + LB + '>Discord ID (ไม่บังคับ)</label><input id="umFieldDiscord" ' + IN + ' value="' + (u ? escAttr(u.discordId) : '') + '" placeholder="ไว้แจ้งเตือนใน Discord"></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:14px;">' +
+      '<button class="btn btn-p" onclick="umSave(' + (isEdit ? '\'' + escAttr(u.username) + '\'' : 'null') + ')">💾 บันทึก</button>' +
+      '<button class="btn btn-g" onclick="umRender_()">ยกเลิก</button></div></div>';
+}
+async function umSave(editUsername){
+  const username = editUsername || (document.getElementById('umFieldUser').value || '').trim();
+  const password = document.getElementById('umFieldPwd').value;
+  const role = document.getElementById('umFieldRole').value;
+  const name = (document.getElementById('umFieldName').value || '').trim();
+  const team = (document.getElementById('umFieldTeam').value || '').trim();
+  const discordId = (document.getElementById('umFieldDiscord').value || '').trim();
+  if (!username) { toast('กรอกชื่อผู้ใช้'); return; }
+  if (!editUsername && !password) { toast('ผู้ใช้ใหม่ต้องตั้งรหัสผ่าน'); return; }
+  const body = { action:'pk_userUpsert', username: username, role: role, name: name, team: team, discordId: discordId, active: true };
+  if (password) body.password = password;
+  if (editUsername) { const cur = _umUsers.find(x => x.username === editUsername); if (cur) body.active = cur.active; }   // แก้ไข = คงสถานะเดิม (ระงับผ่านปุ่มแยก)
+  try {
+    const r = await call(body);
+    if (!r.ok) { toast('❌ ' + (r.error || 'บันทึกไม่สำเร็จ')); return; }
+    toast(r.mode === 'add' ? '✓ เพิ่มผู้ใช้แล้ว' : '✓ บันทึกแล้ว');
+    await umLoad();
+  } catch(e){ toast('เชื่อมต่อไม่ได้'); }
+}
+async function umToggle(username, active){
+  if (!confirm(active ? 'เปิดใช้งาน "' + username + '" ให้ login ได้อีกครั้ง?' : 'ระงับ "' + username + '"?\nlogin ไม่ได้ทันที แต่เก็บประวัติงาน/ยอดเงินเก่าไว้')) return;
+  try {
+    const r = await call({ action:'pk_userSetActive', username: username, active: active });
+    if (!r.ok) { toast('❌ ' + (r.error || 'ทำไม่สำเร็จ')); return; }
+    toast(active ? '✓ เปิดใช้งานแล้ว' : '✓ ระงับแล้ว');
+    await umLoad();
+  } catch(e){ toast('เชื่อมต่อไม่ได้'); }
+}
+
 function shcInit(){ shcLoad(); }
 async function shcLoad(){
   const box = document.getElementById('tabSheetcap');
