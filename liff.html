@@ -196,6 +196,15 @@
       showScreen('screenLogin');
     }
 
+    // ลอง worker /login ก่อน (เร็ว · token ตรง GAS) → ไม่สำเร็จ ถอยไป GAS pk_login (ครบ rate-limit/migrate)
+    async function pkLoginTry(username, password){
+      try {
+        const wr = await fetch(API.replace(/\/api$/, '/login'), { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ username: username, password: password }) });
+        const wd = await wr.json();
+        if (wd && wd.ok && wd.token) return wd;
+      } catch(e){ /* worker ล่ม → GAS */ }
+      return await call({ action:'pk_login', username: username, password: password });
+    }
     async function doLogin() {
       const username = document.getElementById('lgUser').value.trim();
       const password = document.getElementById('lgPass').value;
@@ -208,7 +217,7 @@
       button.disabled = true;
       button.textContent = 'กำลังเข้าสู่ระบบ...';
       try {
-        const r = await call({ action:'pk_login', username, password });
+        const r = await pkLoginTry(username, password);
         if (!r || !r.ok) {
           setError('loginError', (r && r.error) || 'เข้าสู่ระบบไม่สำเร็จ');
           return;
