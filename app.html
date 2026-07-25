@@ -14054,23 +14054,60 @@ function pkpLeftoverSuggest_(it, mainAlu){
   });
   return out.slice(0,2);
 }
+var LS_DIM_TOL=10;
+// ชุดค้างสำหรับมุ้งประเภทอื่น — จับคู่เฉพาะประเภท/สี/ขนาด ไม่เกี่ยวกับรางหรือต้นทุน
+function pkpLeftoverSuggestDim_(it, mainAlu){
+  if(!_leftoverSets.length || !it || !it.type || pkpIsReqScreen(it.type)) return [];
+  var col=String((it.cAlu||mainAlu)||'').trim(); if(!col) return [];
+  var iw=Number(it.w)||0, ih=Number(it.h)||0, typ=String(it.type||'').trim(), out=[];
+  _leftoverSets.forEach(function(ls){
+    if(ls.status!=='ว่าง') return;
+    if(String(ls.cAlu||'').trim()!==col || String(ls.type||'').trim()!==typ) return;
+    var dw=(Number(ls.w)||0)-iw, dh=(Number(ls.h)||0)-ih;
+    if(Math.abs(dw)<=LS_DIM_TOL && Math.abs(dh)<=LS_DIM_TOL) out.push({ls:ls,dw:dw,dh:dh});
+  });
+  out.sort(function(a,b){ return (Math.abs(a.dw)+Math.abs(a.dh))-(Math.abs(b.dw)+Math.abs(b.dh)); });
+  return out.slice(0,3);
+}
 // ♻ แถบ "ชุดค้างที่ใช้แล้ว" ของรายการนี้ + ปุ่มยกเลิก (group lsCovered ตาม lsId · B 21 ก.ค. 2026)
 function pkpLeftoverUsedHTML_(i){
-  var it=pkpItems[i]; if(!it || !(it.lsCovered||[]).length) return '';
+  var it=pkpItems[i]; if(!it) return '';
   var byId={};   // lsId → จำนวนเส้นที่ครอบ
-  it.lsCovered.forEach(function(cv){ var id=cv.lsId||'(ไม่ทราบชุด)'; byId[id]=(byId[id]||0)+1; });
-  return Object.keys(byId).map(function(id){
+  (it.lsCovered||[]).forEach(function(cv){ var id=cv.lsId||'(ไม่ทราบชุด)'; byId[id]=(byId[id]||0)+1; });
+  var railHTML=Object.keys(byId).map(function(id){
     var ls=null; for(var k=0;k<_leftoverSets.length;k++){ if(_leftoverSets[k].id===id){ ls=_leftoverSets[k]; break; } }
     var label=ls?((ls.code?'['+escHtml(ls.code)+'] ':'')+escHtml(ls.id)+' · '+escHtml(ls.type)+' '+ls.w+'×'+ls.h+' ('+escHtml(ls.cAlu)+')'):escHtml(id);
     var act=_pkpSandbox?'':'<button type="button" class="btn btn-sm" style="background:#fed7d7;color:#c53030;" onclick="pkpLeftoverCancel('+i+',\''+escHtml(id)+'\')">↩ ยกเลิกใช้ชุดนี้</button>';
     return '<div style="margin-top:6px;font-size:12px;line-height:1.6;background:rgba(31,164,99,.10);border:1px solid rgba(31,164,99,.35);border-radius:7px;padding:6px 9px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
       +'<span style="flex:1;min-width:200px;"><b style="color:var(--grn);">♻ ใช้ชุดค้างแล้ว:</b> '+label+' · <span style="color:var(--mu);">หักราง '+byId[id]+' เส้นจากการตัด/ต้นทุน</span></span>'+act+'</div>';
   }).join('');
+  var dimHTML=(it.lsUsedDim||[]).map(function(x){
+    var id=x.lsId||'', label=(x.code?'['+escHtml(x.code)+'] ':'')+escHtml(id)+' · '+escHtml(x.type||'')+' '+x.w+'×'+x.h+' ('+escHtml(x.cAlu||'')+')';
+    var act=_pkpSandbox?'':'<button type="button" class="btn btn-sm" style="background:#fed7d7;color:#c53030;" onclick="pkpLeftoverCancelDim('+i+',\''+escHtml(id)+'\')">↩ ยกเลิกใช้ชุดนี้</button>';
+    return '<div style="margin-top:6px;font-size:12px;line-height:1.6;background:rgba(31,164,99,.10);border:1px solid rgba(31,164,99,.35);border-radius:7px;padding:6px 9px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+      +'<span style="flex:1;min-width:200px;"><b style="color:var(--grn);">♻ ใช้ชุดค้างแล้ว:</b> '+label+' · <span style="color:var(--mu);">เอามาใช้ทำชุดนี้</span></span>'+act+'</div>';
+  }).join('');
+  return railHTML+dimHTML;
 }
 function pkpLeftoverBandHTML_(i){
   var it=pkpItems[i]; if(!it) return '';
   var usedHTML=pkpLeftoverUsedHTML_(i);   // ชุดที่ใช้แล้ว (โชว์บนสุด + ยกเลิกได้)
   var mainAlu=(document.getElementById('pkpMainAlu')||{}).value||'';
+  if(!pkpIsReqScreen(it.type)){
+    var sugDim;
+    try{ sugDim=pkpLeftoverSuggestDim_(it, mainAlu); }catch(e){ return usedHTML; }
+    if(!sugDim.length) return usedHTML;
+    return usedHTML+sugDim.map(function(s){
+      var ls=s.ls;
+      var head='♻ ของค้างขนาดใกล้เคียง '+(ls.code?'<b style="font-size:13px;">['+escHtml(ls.code)+']</b> ':'')+'<b>'+escHtml(ls.id)+'</b> · '+escHtml(ls.type)+' '+ls.w+'×'+ls.h+' ('+escHtml(ls.cAlu)+')';
+      var diff=(s.dw||s.dh)?'<br><span style="color:var(--mu);">ต่างจากงาน: กว้าง '+(s.dw>0?'+':'')+s.dw+' · สูง '+(s.dh>0?'+':'')+s.dh+' ซม.</span>':'';
+      var act=_pkpSandbox
+        ? '<span style="font-size:11px;color:var(--mu);white-space:nowrap;">🧮 โหมดทด — ดูอย่างเดียว</span>'
+        : '<button type="button" class="btn btn-p btn-sm" onclick="pkpLeftoverUseDim('+i+',\''+escHtml(ls.id)+'\')">✓ ใช้ชุดนี้</button>';
+      return '<div style="margin-top:6px;font-size:12px;line-height:1.7;background:rgba(31,164,99,.10);border:1px solid rgba(31,164,99,.35);border-radius:7px;padding:6px 9px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+        +'<span style="flex:1;min-width:200px;">'+head+diff+(ls.note?'<br><span style="color:var(--mu);">📝 '+escHtml(ls.note)+'</span>':'')+'</span>'+act+'</div>';
+    }).join('');
+  }
   var sug;
   try{ sug=pkpLeftoverSuggest_(it, mainAlu); }catch(e){ return usedHTML; }
   if(!sug.length) return usedHTML;
@@ -14127,6 +14164,37 @@ async function pkpLeftoverCancel(i, id){
   toast('↩ คืนชุด '+id+' เข้าคลังแล้ว');
   pkpRenderRows(); pkpAutosave(); lsBtnCount_();
 }
+async function pkpLeftoverUseDim(i, id){
+  if(_pkpSandbox){ toast('🧮 โหมดทดคำนวณ — จองชุดค้างไม่ได้'); return; }
+  var ls=null; for(var k=0;k<_leftoverSets.length;k++){ if(_leftoverSets[k].id===id){ ls=_leftoverSets[k]; break; } }
+  if(!ls) return;
+  if(!confirm('ใช้ชุดค้าง '+(ls.code?'['+ls.code+'] ':'')+id+' ('+ls.type+' '+ls.w+'×'+ls.h+' '+ls.cAlu+') ทำรายการที่ '+(i+1)+'?')) return;
+  showLoad('กำลังจองชุดค้าง...');
+  var r; try{ r=await call({action:'pk_leftoverSetStatus', id:id, status:'ใช้แล้ว', usedWO:(pkpEditingWO||'(ร่าง)')}); } finally{ hideLoad(); }
+  if(!r||!r.ok){ toast('❌ '+((r&&r.error)||'จองไม่สำเร็จ')); pkpLeftoverFetch(); return; }
+  var it=pkpItems[i];
+  it.lsUsedDim=(it.lsUsedDim||[]).concat([{lsId:id,code:ls.code,type:ls.type,w:ls.w,h:ls.h,cAlu:ls.cAlu}]);
+  var tag='♻ ใช้ชุดค้าง '+(ls.code?'['+ls.code+'] ':'')+id+' ('+ls.type+' '+ls.w+'×'+ls.h+' '+ls.cAlu+')';
+  it.note=(it.note?it.note+' · ':'')+tag;
+  ls.status='ใช้แล้ว'; ls.usedWO=(pkpEditingWO||'(ร่าง)');
+  if(!pkpEditingWO && _pkpBookedLS.indexOf(id)===-1) _pkpBookedLS.push(id);
+  toast('✅ จองชุด '+id+' แล้ว — จดไว้ในหมายเหตุรายการ');
+  pkpRenderRows(); pkpAutosave(); lsBtnCount_();
+}
+async function pkpLeftoverCancelDim(i, id){
+  if(_pkpSandbox){ toast('🧮 โหมดทดคำนวณ — ยกเลิกไม่ได้'); return; }
+  var it=pkpItems[i]; if(!it) return;
+  if(!confirm('ยกเลิกการใช้ชุดค้าง '+id+' กับรายการที่ '+(i+1)+'?\nชุดจะกลับเข้าคลัง (สถานะ "ว่าง")')) return;
+  showLoad('กำลังคืนชุดค้าง...');
+  var r; try{ r=await call({action:'pk_leftoverSetStatus', id:id, status:'ว่าง'}); } finally{ hideLoad(); }
+  if(!r||!r.ok){ toast('❌ '+((r&&r.error)||'คืนไม่สำเร็จ')); pkpLeftoverFetch(); return; }
+  it.lsUsedDim=(it.lsUsedDim||[]).filter(function(cv){ return (cv.lsId||'')!==id; });
+  it.note=String(it.note||'').split(' · ').filter(function(seg){ return seg.indexOf(id)===-1; }).join(' · ');
+  var idx=_pkpBookedLS.indexOf(id); if(idx!==-1) _pkpBookedLS.splice(idx,1);
+  for(var k=0;k<_leftoverSets.length;k++){ if(_leftoverSets[k].id===id){ _leftoverSets[k].status='ว่าง'; _leftoverSets[k].usedWO=''; break; } }
+  toast('↩ คืนชุด '+id+' เข้าคลังแล้ว');
+  pkpRenderRows(); pkpAutosave(); lsBtnCount_();
+}
 // ── UI ทะเบียนชุดค้าง (lsModal · office+manager) ──
 function lsBtnCount_(){
   var n=0; for(var k=0;k<_leftoverSets.length;k++){ if(_leftoverSets[k].status==='ว่าง') n++; }
@@ -14134,7 +14202,7 @@ function lsBtnCount_(){
 }
 function lsOpen(){
   var sel=document.getElementById('lsType');
-  if(sel && sel.options.length<2) sel.innerHTML='<option value="">— ชนิดมุ้งจีบ —</option>'+Object.keys(pkpREQ).map(function(t){return '<option>'+escHtml(t)+'</option>';}).join('');
+  if(sel && sel.options.length<2) sel.innerHTML='<option value="">— เลือกชนิดมุ้ง —</option>'+pkpTYPES.map(function(g){ return '<optgroup label="'+escHtml(g.g)+'">'+g.items.map(function(t){return '<option>'+escHtml(t)+'</option>';}).join('')+'</optgroup>'; }).join('');
   document.getElementById('lsModal').classList.add('on');
   lsReload();
 }
@@ -14168,7 +14236,7 @@ function lsRender(){
 async function lsAdd(){
   var g=function(id){ return String((document.getElementById(id)||{}).value||''); };
   var body={ action:'pk_leftoverAdd', code:g('lsCode').trim(), type:g('lsType').trim(), w:Number(g('lsW')), h:Number(g('lsH')), cAlu:g('lsAlu').trim(), cMesh:g('lsMesh').trim(), note:g('lsNote').trim() };
-  if(!body.type){ toast('เลือกชนิดมุ้งจีบ'); return; }
+  if(!body.type){ toast('เลือกชนิดมุ้ง'); return; }
   if(!(body.w>0) || !(body.h>0)){ toast('กรอกขนาด กว้าง × สูง (ซม.)'); return; }
   if(!body.cAlu){ toast('กรอกสีอลู — ใช้เป็นเงื่อนไขจับคู่'); return; }
   showLoad('กำลังบันทึก...');
@@ -14654,7 +14722,8 @@ function pkpWoResolvedItems(o){
   var ma=o.mainColorAlu||'';
   return (o.items||[]).filter(function(it){return it.type;}).map(function(it){
     return { type:it.type, w:it.w, h:it.h, wl:it.wl, wr:it.wr, cAlu:(it.cAlu||ma), cMesh:it.cMesh, note:it.note, noReq:!!it.noReq,
-             lsCovered: Array.isArray(it.lsCovered)?it.lsCovered:[] };   // ♻ ให้ export ใบเบิก/ตัดราง หักเส้นชุดค้างด้วย
+             lsCovered: Array.isArray(it.lsCovered)?it.lsCovered:[],
+             lsUsedDim: Array.isArray(it.lsUsedDim)?it.lsUsedDim:[] };   // ♻ คงทะเบียนชุดค้างทุกประเภท
   });
 }
 // ── เลือกหลายใบ + รวม export ──
@@ -15066,7 +15135,8 @@ function pkpBody(){
       type:it.type, patt:it.patt||'',
       w:it.w, h:it.h, wl:it.wl, wr:it.wr,
       cAlu:it.cAlu, cMesh:it.cMesh, note:it.note||'', noReq:!!it.noReq,
-      lsCovered: Array.isArray(it.lsCovered)?it.lsCovered:[]   // ♻ เส้นที่ดึงจากชุดค้าง — persist ไม่งั้น reload แล้วตัดเกิน (21 ก.ค. 2026)
+      lsCovered: Array.isArray(it.lsCovered)?it.lsCovered:[],   // ♻ เส้นที่ดึงจากชุดค้าง — persist ไม่งั้น reload แล้วตัดเกิน (21 ก.ค. 2026)
+      lsUsedDim: Array.isArray(it.lsUsedDim)?it.lsUsedDim:[]
     };}),
     sigCheck: pkpSigCheck,
     sigApprove: pkpSigApprove,
@@ -15189,7 +15259,8 @@ async function pkpOpen(woId){
     set('pkpRef',o.refNo); set('pkpNote',o.note); set('pkpMainAlu',o.mainColorAlu); set('pkpMainMesh',o.mainColorMesh);
     pkpItems=(o.items&&o.items.length?o.items:[pkpBlankItem()]).map(function(it){return {
       type:it.type||'', patt:it.patt||'→', w:it.w||'', h:it.h||'', wl:it.wl||'', wr:it.wr||'', cAlu:it.cAlu||'', cMesh:it.cMesh||'', note:it.note||'', noReq:!!it.noReq,
-      lsCovered: Array.isArray(it.lsCovered)?it.lsCovered:[]   // ♻ คงเส้นที่ดึงจากชุดค้าง ตอนเปิดใบเก่ามาแก้ (ไม่งั้นตัดเกิน)
+      lsCovered: Array.isArray(it.lsCovered)?it.lsCovered:[],   // ♻ คงเส้นที่ดึงจากชุดค้าง ตอนเปิดใบเก่ามาแก้ (ไม่งั้นตัดเกิน)
+      lsUsedDim: Array.isArray(it.lsUsedDim)?it.lsUsedDim:[]
     };});
     pkpSigCheck=o.sigCheck||null; pkpSigApprove=o.sigApprove||null;
     var woEl=document.getElementById('pkpWoLabel'); if(woEl)woEl.textContent=o.woId+(o.status?' · '+o.status:'');
