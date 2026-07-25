@@ -1417,6 +1417,15 @@ window.addEventListener('DOMContentLoaded', async () => {
 // ════════════════════════════════════════
 //  LOGIN / LOGOUT
 // ════════════════════════════════════════
+// ลอง worker /login ก่อน (เร็ว ~1 วิ · token ตรง GAS เป๊ะ) → ไม่สำเร็จ (รหัสผิด/ยังไม่ hash/ระงับ/lock/worker ล่ม) ถอยไป GAS pk_login (ครบ rate-limit/migrate)
+async function pkLoginTry(username, password){
+  try {
+    const wr = await fetch(WORKER_URL + '/login', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ username: username, password: password }) });
+    const wd = await wr.json();
+    if (wd && wd.ok && wd.token) return wd;   // worker สำเร็จ (happy path) — ใช้เลย
+  } catch(e){ /* worker ล่ม/เน็ตพลาด → ถอย GAS */ }
+  return await call({ action:'pk_login', username: username, password: password });
+}
 async function doLogin(){
   const username = document.getElementById('lgUser').value.trim();
   const password = document.getElementById('lgPass').value;
@@ -1426,7 +1435,7 @@ async function doLogin(){
   const btn = document.getElementById('lgBtn');
   btn.disabled = true; btn.textContent = 'กำลังเข้าสู่ระบบ...';
   try {
-    const r = await call({ action:'pk_login', username, password });
+    const r = await pkLoginTry(username, password);
     if (r.ok) {
       // team ต้องเก็บด้วย — fast wrapper งานวัดเซลล์/หน้าช่างใช้ (เคยหลุด: login สดไม่มี team → ตกเส้น GAS ช้าเงียบๆ 19 ก.ค.)
       CURRENT_USER = { username:r.user.username, role:r.user.role, name:r.user.name, team:r.user.team||'', token:r.token };
