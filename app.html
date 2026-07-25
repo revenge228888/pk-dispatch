@@ -1404,7 +1404,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (u.username && u.token) {
         showLoad('กำลังตรวจสอบ session...');
         // ตอนเช็ค session — ส่ง username/token แบบ explicit ไม่ผ่าน CURRENT_USER
-        const r = await call({ action:'pk_checkSession', username:u.username, token:u.token });
+        const r = await pkCheckSessionTry(u.username, u.token);
         hideLoad();
         if (r.ok && r.valid) { CURRENT_USER = { ...u, ...r.user }; enterApp(); return; }
         localStorage.removeItem('pk_user');
@@ -1425,6 +1425,14 @@ async function pkLoginTry(username, password){
     if (wd && wd.ok && wd.token) return wd;   // worker สำเร็จ (happy path) — ใช้เลย
   } catch(e){ /* worker ล่ม/เน็ตพลาด → ถอย GAS */ }
   return await call({ action:'pk_login', username: username, password: password });
+}
+async function pkCheckSessionTry(username, token){
+  try {
+    const wr = await fetch(WORKER_URL + '/check-session', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ username: username, token: token }) });
+    const wd = await wr.json();
+    if (wd && wd.ok && wd.valid && wd.user) return wd;
+  } catch(e){ /* worker ล่ม/เน็ตพลาด → ถอย GAS */ }
+  return await call({ action:'pk_checkSession', username: username, token: token });
 }
 async function doLogin(){
   const username = document.getElementById('lgUser').value.trim();
@@ -1505,7 +1513,7 @@ function enterApp(){
   window._pkSessionFails = 0;
   window._pkSessionInterval = setInterval(async () => {
     try {
-      const r = await call({ action:'pk_checkSession', username:CURRENT_USER.username, token:CURRENT_USER.token });
+      const r = await pkCheckSessionTry(CURRENT_USER.username, CURRENT_USER.token);
       // session เก่าจากก่อนแก้ login ไม่มี team → เติมจาก checkSession ให้เอง (ไม่ต้อง logout/login ใหม่)
       if (r && r.ok === true && r.valid === true && r.user && r.user.team && !CURRENT_USER.team) {
         CURRENT_USER.team = r.user.team;
@@ -14054,7 +14062,8 @@ function pkpLeftoverSuggest_(it, mainAlu){
   });
   return out.slice(0,2);
 }
-var LS_DIM_TOL=10;
+var LS_DIM_TOL=10;         // เตือนเมื่อขนาดต่างกันไม่เกิน ±10 ซม. (ทั้งกว้าง/สูง)
+var LS_SMALL_PCT=0.10;     // หรือ ของค้างเล็กกว่างานไม่เกิน 10% ทั้ง 2 มิติ (เผื่อดัด/เสริม) — ผู้ใช้ขอ 26 ก.ค. 2026
 // ชุดค้างสำหรับมุ้งประเภทอื่น — จับคู่เฉพาะประเภท/สี/ขนาด ไม่เกี่ยวกับรางหรือต้นทุน
 function pkpLeftoverSuggestDim_(it, mainAlu){
   if(!_leftoverSets.length || !it || !it.type || pkpIsReqScreen(it.type)) return [];
@@ -14063,8 +14072,13 @@ function pkpLeftoverSuggestDim_(it, mainAlu){
   _leftoverSets.forEach(function(ls){
     if(ls.status!=='ว่าง') return;
     if(String(ls.cAlu||'').trim()!==col || String(ls.type||'').trim()!==typ) return;
-    var dw=(Number(ls.w)||0)-iw, dh=(Number(ls.h)||0)-ih;
-    if(Math.abs(dw)<=LS_DIM_TOL && Math.abs(dh)<=LS_DIM_TOL) out.push({ls:ls,dw:dw,dh:dh});
+    var lw=Number(ls.w)||0, lh=Number(ls.h)||0, dw=lw-iw, dh=lh-ih;
+    var near=Math.abs(dw)<=LS_DIM_TOL && Math.abs(dh)<=LS_DIM_TOL;   // ใกล้เคียง ±10 ซม.
+    // ของค้างเล็กกว่างานทั้งกว้างและสูง แต่ไม่เกิน 10% (เผื่องานใหญ่ที่ 10% > 10 ซม.)
+    var small=(dw<=0 && dh<=0 && iw>0 && ih>0 && (iw-lw)<=iw*LS_SMALL_PCT && (ih-lh)<=ih*LS_SMALL_PCT);
+    if(!near && !small) return;
+    var pct=small?Math.round(Math.max((iw-lw)/iw,(ih-lh)/ih)*100):0;
+    out.push({ls:ls, dw:dw, dh:dh, small:(small&&!near), pct:pct});
   });
   out.sort(function(a,b){ return (Math.abs(a.dw)+Math.abs(a.dh))-(Math.abs(b.dw)+Math.abs(b.dh)); });
   return out.slice(0,3);
@@ -14100,7 +14114,7 @@ function pkpLeftoverBandHTML_(i){
     return usedHTML+sugDim.map(function(s){
       var ls=s.ls;
       var head='♻ ของค้างขนาดใกล้เคียง '+(ls.code?'<b style="font-size:13px;">['+escHtml(ls.code)+']</b> ':'')+'<b>'+escHtml(ls.id)+'</b> · '+escHtml(ls.type)+' '+ls.w+'×'+ls.h+' ('+escHtml(ls.cAlu)+')';
-      var diff=(s.dw||s.dh)?'<br><span style="color:var(--mu);">ต่างจากงาน: กว้าง '+(s.dw>0?'+':'')+s.dw+' · สูง '+(s.dh>0?'+':'')+s.dh+' ซม.</span>':'';
+      var diff=(s.dw||s.dh)?'<br><span style="color:var(--mu);">ต่างจากงาน: กว้าง '+(s.dw>0?'+':'')+s.dw+' · สูง '+(s.dh>0?'+':'')+s.dh+' ซม.'+(s.small?' · <b style="color:var(--amb,#B45309);">เล็กกว่างาน ~'+s.pct+'%</b>':'')+'</span>':'';
       var act=_pkpSandbox
         ? '<span style="font-size:11px;color:var(--mu);white-space:nowrap;">🧮 โหมดทด — ดูอย่างเดียว</span>'
         : '<button type="button" class="btn btn-p btn-sm" onclick="pkpLeftoverUseDim('+i+',\''+escHtml(ls.id)+'\')">✓ ใช้ชุดนี้</button>';
