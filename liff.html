@@ -177,7 +177,7 @@
       }
       _user = saved;
       try {
-        const r = await call({ action:'pk_checkSession', username:_user.username, token:_user.token });
+        const r = await pkCheckSessionTry(_user.username, _user.token);
         if (r && r.ok && r.valid) {
           _user = Object.assign({}, _user, r.user || {});
           localStorage.setItem('pk_user', JSON.stringify(_user));
@@ -204,6 +204,14 @@
         if (wd && wd.ok && wd.token) return wd;
       } catch(e){ /* worker ล่ม → GAS */ }
       return await call({ action:'pk_login', username: username, password: password });
+    }
+    async function pkCheckSessionTry(username, token){
+      try {
+        const wr = await fetch(API.replace(/\/api$/, '/check-session'), { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ username: username, token: token }) });
+        const wd = await wr.json();
+        if (wd && wd.ok && wd.valid && wd.user) return wd;
+      } catch(e){ /* worker ล่ม → GAS */ }
+      return await call({ action:'pk_checkSession', username: username, token: token });
     }
     async function doLogin() {
       const username = document.getElementById('lgUser').value.trim();
