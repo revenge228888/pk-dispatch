@@ -13828,7 +13828,10 @@ var pkpREQ={
 function pkpMagnetCount(t){ if(/6 มือจับ/.test(t))return 8; if(/4 มือจับ/.test(t))return 6; if(/อิสระ/.test(t))return 4; return 2; } // ตามรูปแบบบาน (ยาว/เส้น=PVC)
 // จำนวนเส้นราง/ชุด: มือจับ N · รางข้าง O · บน-ล่าง P · เตี้ย Q (อิงสูตร Sheet1; handle=เท่าอิสระ, แยกกลาง=เท่าคู่ ตาม cut engine)
 function pkpRailCount(t){
-  return { N:(/บานคู่|อิสระ|แยกกลาง|มือจับ/.test(t)?2:1), O:2, P:(/รางเตี้ย/.test(t)?1:2), Q:(/รางเตี้ย/.test(t)?1:0) };
+  // รางมือจับ 1 เส้น/บาน → "N มือจับ" = N เส้น (4 มือจับ=4 · 6 มือจับ=6) · ไม่มีเลข: บานคู่/อิสระ/แยกกลาง=2 · เดี่ยว=1
+  var mj=String(t).match(/(\d+)\s*มือจับ/);
+  var N=mj?parseInt(mj[1],10):(/บานคู่|อิสระ|แยกกลาง|มือจับ/.test(t)?2:1);
+  return { N:N, O:2, P:(/รางเตี้ย/.test(t)?1:2), Q:(/รางเตี้ย/.test(t)?1:0) };
 }
 function pkpIsReqScreen(t){ return !!pkpREQ[t]; }  // มุ้งจีบที่ทำใบเบิกได้
 // items = รายการ WO, mainAlu = สีอลูหลัก (ใช้เมื่อ item.cAlu ว่าง)
