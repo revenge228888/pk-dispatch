@@ -203,7 +203,11 @@
         const wd = await wr.json();
         if (wd && wd.ok && wd.token) return wd;
       } catch(e){ /* worker ล่ม → GAS */ }
-      return await call({ action:'pk_login', username: username, password: password });
+      try {
+        return await call({ action:'pk_login', username: username, password: password });
+      } catch(e){
+        return { ok:false, error:'ระบบตอบช้าชั่วคราว (Google Sheets อาจล่ม/ช้า) — รอสักครู่แล้วลองใหม่' };
+      }
     }
     async function pkCheckSessionTry(username, token){
       try {
