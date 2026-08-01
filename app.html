@@ -1424,7 +1424,12 @@ async function pkLoginTry(username, password){
     const wd = await wr.json();
     if (wd && wd.ok && wd.token) return wd;   // worker สำเร็จ (happy path) — ใช้เลย
   } catch(e){ /* worker ล่ม/เน็ตพลาด → ถอย GAS */ }
-  return await call({ action:'pk_login', username: username, password: password });
+  try {
+    return await call({ action:'pk_login', username: username, password: password });
+  } catch(e){
+    // GAS/worker คืนไม่ใช่ JSON (เช่น หน้า HTML 524 = Google Sheets ตอบช้า/ไม่ตอบ) → json parse fail
+    return { ok:false, error:'ระบบตอบช้าชั่วคราว (Google Sheets อาจล่ม/ช้า) — รอสัก 1-2 นาทีแล้วลองใหม่' };
+  }
 }
 async function pkCheckSessionTry(username, token){
   try {
