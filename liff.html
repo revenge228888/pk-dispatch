@@ -96,8 +96,12 @@
           <textarea id="bkAddress" rows="2" placeholder="ที่อยู่ หรือวางลิงก์ Google Maps"></textarea>
         </div>
         <div class="field">
-          <label for="bkJob">รายละเอียดงาน + เบอร์โทร</label>
-          <textarea id="bkJob" rows="2" placeholder="รายละเอียด เช่น มุ้งจีบ 3 บาน / เบอร์ 08x-xxx"></textarea>
+          <label for="bkPhone">เบอร์โทรลูกค้า</label>
+          <input id="bkPhone" type="tel" inputmode="numeric" placeholder="เฉพาะตัวเลข เช่น 0812345678" oninput="this.value=this.value.replace(/\D/g,'')" maxlength="10">
+        </div>
+        <div class="field">
+          <label for="bkJob">รายละเอียดงาน</label>
+          <textarea id="bkJob" rows="2" placeholder="เช่น มุ้งจีบ 3 บาน"></textarea>
         </div>
         <div class="field">
           <label for="bkScore">คะแนนความสำคัญ</label>
@@ -302,6 +306,7 @@
         date: date,
         customer: customer,
         address: document.getElementById('bkAddress').value.trim(),
+        phone: (document.getElementById('bkPhone').value||'').replace(/\D/g,''),
         job: document.getElementById('bkJob').value.trim(),
         score: parseFloat(document.getElementById('bkScore').value) || 1,
         team: document.getElementById('bkTeam').value
