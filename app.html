@@ -1940,6 +1940,12 @@ function renderOfficeShell(){
             </div>
             <div class="row-form" style="margin-bottom:10px;">
               <div class="fg" style="flex:1;width:100%;">
+                <label class="fl">เบอร์โทรลูกค้า</label>
+                <input id="bkPhone" class="fi" type="tel" inputmode="numeric" placeholder="เบอร์โทรลูกค้า (เฉพาะตัวเลข)" oninput="this.value=this.value.replace(/\D/g,'')" maxlength="10">
+              </div>
+            </div>
+            <div class="row-form" style="margin-bottom:10px;">
+              <div class="fg" style="flex:1;width:100%;">
                 <label class="fl">รายการงาน</label>
                 <input class="fi" id="bkJob" type="text" placeholder="เช่น ติดตั้งมุ้งจีบ 3 ช่อง">
               </div>
@@ -4610,6 +4616,7 @@ async function submitBooking(){
     const date     = document.getElementById('bkDate').value;
     const customer = document.getElementById('bkCustomer').value.trim();
     const address  = document.getElementById('bkAddress').value.trim();
+    const phone    = (document.getElementById('bkPhone').value||'').replace(/\D/g,'');
     const job      = document.getElementById('bkJob').value.trim();
     const score    = document.getElementById('bkScore').value;
     const amount   = document.getElementById('bkAmount').value;
@@ -4620,7 +4627,7 @@ async function submitBooking(){
     // ติ๊กงานกระจก → ต่อท้าย JOB ด้วย [กระจก] (ใช้เป็น flag จังหวะ2)
     const _glassChk = document.getElementById('bkGlass');
     const job2 = (_glassChk && _glassChk.checked && job.indexOf('[กระจก]') === -1) ? (job + ' [กระจก]').trim() : job;
-    Object.assign(body, { date, customer, address, job: job2, score, amount, team });
+    Object.assign(body, { date, customer, address, phone, job: job2, score, amount, team });
   } else {
     const raw = document.getElementById('bkRawText').value.trim();
     if (!raw) { toast('พิมพ์ข้อมูลก่อน'); return; }
@@ -5037,6 +5044,7 @@ function clearBookingForm_impl(){
   if (_bkMode === 'form') {
     document.getElementById('bkCustomer').value = '';
     document.getElementById('bkAddress').value = '';
+    document.getElementById('bkPhone').value = '';
     document.getElementById('bkJob').value = '';
     document.getElementById('bkScore').value = '';
     document.getElementById('bkAmount').value = '';
@@ -6221,6 +6229,12 @@ function renderSalesStub(){
             </div>
             <div class="row-form" style="margin-bottom:10px;">
               <div class="fg" style="flex:1;width:100%;">
+                <label class="fl">เบอร์โทรลูกค้า</label>
+                <input id="sBkPhone" class="fi" type="tel" inputmode="numeric" placeholder="เบอร์โทรลูกค้า (เฉพาะตัวเลข)" oninput="this.value=this.value.replace(/\D/g,'')" maxlength="10">
+              </div>
+            </div>
+            <div class="row-form" style="margin-bottom:10px;">
+              <div class="fg" style="flex:1;width:100%;">
                 <label class="fl">รายการงาน</label>
                 <input class="fi" id="sBkJob" type="text" placeholder="เช่น ติดตั้งมุ้งจีบ 3 ช่อง">
               </div>
@@ -6856,6 +6870,7 @@ async function salesSubmitBooking(){
     const date     = document.getElementById('sBkDate').value;
     const customer = document.getElementById('sBkCustomer').value.trim();
     const address  = document.getElementById('sBkAddress').value.trim();
+    const phone    = (document.getElementById('sBkPhone').value||'').replace(/\D/g,'');
     const job      = document.getElementById('sBkJob').value.trim();
     const score    = document.getElementById('sBkScore').value;
     const amount   = document.getElementById('sBkAmount').value;
@@ -6866,7 +6881,7 @@ async function salesSubmitBooking(){
     if (r.ok && r.level === 'full') {
       if (!confirm(`⚠️ วันนี้คิวเกินจุดเต็มแล้ว (${r.totalAfter}/${r.maxScore})\nต้องการลงคิวต่อไหม?`)) return;
     }
-    Object.assign(body, { date, customer, address, job, score, amount });
+    Object.assign(body, { date, customer, address, phone, job, score, amount });
     if (_salesBookingMeasureId) body.linkedMeasureId = _salesBookingMeasureId;
   } else {
     const raw = document.getElementById('sBkRawText').value.trim();
@@ -6891,6 +6906,7 @@ function salesClearForm(){
   if (_sBkMode === 'form') {
     document.getElementById('sBkCustomer').value = '';
     document.getElementById('sBkAddress').value = '';
+    document.getElementById('sBkPhone').value = '';
     document.getElementById('sBkJob').value = '';
     document.getElementById('sBkScore').value = '1';
     document.getElementById('sBkAmount').value = '';
