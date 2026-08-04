@@ -233,6 +233,31 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 .modal.large{max-width:560px;}
 .map-box{height:380px;border-radius:0 0 14px 14px;}
 
+/* WHITEBOARD — shared header modal (wb*) */
+#wbModal{z-index:260;}
+#wbModal .wb-modal{max-width:980px;overflow:hidden;display:flex;flex-direction:column;}
+.wb-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--bdr);}
+.wb-filters{display:flex;gap:6px;flex-wrap:wrap;flex:1;}
+.wb-filter{border:1px solid var(--bdr);background:var(--surf);color:var(--mu);border-radius:var(--r-pill);padding:6px 10px;font:600 12px var(--sans);cursor:pointer;}
+.wb-filter.on{background:var(--acc);border-color:var(--acc);color:#fff;}
+.wb-add-form{display:grid;grid-template-columns:150px auto minmax(220px,1fr) auto;gap:10px;align-items:center;padding:12px 16px;background:rgba(255,255,255,.18);border-bottom:1px solid var(--bdr);}
+.wb-add-form textarea{min-height:42px;max-height:110px;resize:vertical;}
+.wb-swatches{display:flex;gap:5px;flex-wrap:wrap;}
+.wb-swatch{width:27px;height:27px;border:2px solid rgba(56,44,35,.2);border-radius:50%;cursor:pointer;box-shadow:inset 0 0 0 2px rgba(255,255,255,.55);}
+.wb-swatch.on{outline:3px solid var(--acc);outline-offset:1px;}
+.wb-board{padding:16px;overflow-y:auto;min-height:220px;max-height:62vh;column-count:3;column-gap:12px;}
+.wb-card{break-inside:avoid;margin:0 0 12px;border:1px solid rgba(56,44,35,.16);border-radius:12px;padding:13px;color:#382c23;box-shadow:0 5px 15px rgba(56,44,35,.12);}
+.wb-card-head{display:flex;align-items:flex-start;gap:9px;}
+.wb-card-check{width:18px;height:18px;flex:0 0 auto;margin-top:2px;accent-color:#382c23;}
+.wb-card-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:14px;flex:1;}
+.wb-card.done .wb-card-text{text-decoration:line-through;opacity:.58;}
+.wb-card-foot{display:flex;align-items:center;gap:6px;margin-top:11px;padding-top:8px;border-top:1px solid rgba(56,44,35,.14);font-size:10.5px;color:rgba(56,44,35,.66);}
+.wb-card-meta{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.wb-card-action{border:0;background:rgba(255,255,255,.45);border-radius:6px;width:28px;height:27px;cursor:pointer;color:#382c23;}
+.wb-empty{padding:56px 18px;text-align:center;color:var(--mu);font-size:13px;break-inside:avoid;}
+@media(max-width:800px){.wb-board{column-count:2}.wb-add-form{grid-template-columns:1fr 1fr}.wb-add-form textarea{grid-column:1/-1}.wb-add-form .wb-save{grid-column:1/-1}}
+@media(max-width:520px){#wbModal{padding:0}.modal.wb-modal{border-radius:0;max-height:100vh;height:100vh}.wb-board{column-count:1;max-height:none;flex:1}.wb-add-form{grid-template-columns:1fr}.wb-add-form textarea,.wb-add-form .wb-save{grid-column:auto}.user-chip{display:none}.hbtns{gap:5px}.hbtn{padding:5px 9px}}
+
 /* LOADING / TOAST */
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(70px);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);background:var(--surf2);border:1px solid var(--bdr);color:var(--tx);border-radius:var(--r-md);padding:11px 18px;font-size:13px;z-index:300;opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,.5);}
 .toast.on{transform:translateX(-50%) translateY(0);opacity:1;}
@@ -487,11 +512,44 @@ tbody tr:nth-child(even){background:rgba(120,96,72,.04);}
         <span id="hdrRoleBadge" class="role-badge"></span>
         <b id="hdrName"></b>
       </div>
+      <button id="btnWb" class="hbtn" onclick="wbOpen()" title="กระดานร่วม">📌</button>
       <button class="hbtn" id="btnRefresh" onclick="reloadAll()" title="รีเฟรช">↺</button>
       <button class="hbtn danger" onclick="logout()">🚪</button>
     </div>
   </header>
   <div class="wrap"><div id="roleContent"></div></div>
+</div>
+
+<!-- WHITEBOARD MODAL — shared ทุก role (wb*) -->
+<div class="modal-bg" id="wbModal" onclick="if(event.target===this)wbClose()">
+  <div class="modal wb-modal">
+    <div class="card-head"><span>📌 กระดานร่วม</span><button onclick="wbClose()" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button></div>
+    <div class="wb-toolbar">
+      <div class="wb-filters">
+        <button class="wb-filter on" data-wb-filter="all" onclick="wbSetFilter('all')">ทั้งหมด</button>
+        <button class="wb-filter" data-wb-filter="note" onclick="wbSetFilter('note')">📝 โน้ต</button>
+        <button class="wb-filter" data-wb-filter="todo" onclick="wbSetFilter('todo')">✅ to-do</button>
+        <button class="wb-filter" data-wb-filter="buy" onclick="wbSetFilter('buy')">🛒 ของต้องซื้อ</button>
+      </div>
+      <button class="btn primary" type="button" onclick="document.getElementById('wbText').focus()">+ เพิ่มการ์ด</button>
+    </div>
+    <div class="wb-add-form">
+      <select id="wbType" class="fi" aria-label="ชนิดการ์ด">
+        <option value="note">📝 โน้ต</option><option value="todo">✅ to-do</option><option value="buy">🛒 ของต้องซื้อ</option>
+      </select>
+      <div class="wb-swatches" aria-label="เลือกสีการ์ด">
+        <button type="button" class="wb-swatch on" style="background:#fde68a" data-wb-color="#fde68a" onclick="wbPickColor('#fde68a',this)" title="เหลือง"></button>
+        <button type="button" class="wb-swatch" style="background:#fbcfe8" data-wb-color="#fbcfe8" onclick="wbPickColor('#fbcfe8',this)" title="ชมพู"></button>
+        <button type="button" class="wb-swatch" style="background:#bfdbfe" data-wb-color="#bfdbfe" onclick="wbPickColor('#bfdbfe',this)" title="ฟ้า"></button>
+        <button type="button" class="wb-swatch" style="background:#bbf7d0" data-wb-color="#bbf7d0" onclick="wbPickColor('#bbf7d0',this)" title="เขียว"></button>
+        <button type="button" class="wb-swatch" style="background:#fed7aa" data-wb-color="#fed7aa" onclick="wbPickColor('#fed7aa',this)" title="ส้ม"></button>
+        <button type="button" class="wb-swatch" style="background:#ddd6fe" data-wb-color="#ddd6fe" onclick="wbPickColor('#ddd6fe',this)" title="ม่วง"></button>
+      </div>
+      <textarea id="wbText" class="fi" maxlength="1000" placeholder="เขียนข้อความบนกระดาน..."></textarea>
+      <button id="wbSave" class="btn primary wb-save" type="button" onclick="wbAdd()">บันทึก</button>
+    </div>
+    <div id="wbBoard" class="wb-board"><div class="wb-empty">เปิดกระดานเพื่อโหลดการ์ด</div></div>
+  </div>
 </div>
 
 <!-- MAP MODAL -->
@@ -1042,6 +1100,16 @@ async function getListUsersFast(){
     } catch(e){ console.warn('[getListUsersFast] error → fallback GAS:', e.message); }
   }
   const _g = await call({ action:'pk_listUsers' }); _markJobSource('gas'); return _g;
+}
+async function getWhiteboardFast(){
+  if (USE_SHEETS_BOOT && CURRENT_USER) {
+    try {
+      const d = await _pkFastPost_('/wb-list');
+      if (d && d.ok && Array.isArray(d.cards)) { _markJobSource('sheets', d.ms); return d; }
+      console.warn('[getWhiteboardFast] ไม่ ok → fallback GAS:', d && d.error);
+    } catch(e){ console.warn('[getWhiteboardFast] error → fallback GAS:', e.message); }
+  }
+  const _g = await call({ action:'pk_wbList' }); _markJobSource('gas'); return _g;
 }
 
 // ── [Part B] เปิดดู 1 ใบ ผ่าน Drive API — flag แยก + fallback GAS อัตโนมัติ ──
@@ -15955,6 +16023,127 @@ async function slpExportExcel(){const vis=slpVisible();if(!vis.length)return toa
 function slpDownload(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 async function slpImportJson(file){if(!file)return;try{const data=JSON.parse(await file.text());if(data.app!=='slipManager'||!Array.isArray(data.records))throw new Error('รูปแบบไฟล์ไม่ถูกต้อง');const have=new Set(_slpRecords.map(r=>r.id)),rows=data.records.filter(r=>!r.id||!have.has(r.id)).map(r=>Object.assign({},r,{source:r.source||'import'}));if(!rows.length)return toast('ไม่มีรายการใหม่ (ข้าม id ที่มีอยู่แล้ว)');if(!confirm(`นำเข้า ${rows.length} รายการ?`))return;for(let i=0;i<rows.length;i+=10){showLoad(`นำเข้า ${Math.min(i+10,rows.length)}/${rows.length}...`);const out=await call({action:'pk_slipBatchUpsert',slips:rows.slice(i,i+10)});if(!out.ok)throw new Error(out.error);}toast(`นำเข้าแล้ว ${rows.length} รายการ`);await slpInit();}catch(e){toast('นำเข้าไม่สำเร็จ: '+e.message);}finally{hideLoad();}}
 function slpFmtAmt(v){return (+v||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+// ════════ WHITEBOARD — shared modal ทุก role (wb*) ════════
+const WB_COLORS = ['#fde68a','#fbcfe8','#bfdbfe','#bbf7d0','#fed7aa','#ddd6fe'];
+let _wbCards = [], _wbFilter = 'all', _wbColor = WB_COLORS[0], _wbTimer = null, _wbLoading = false;
+function wbOpen(){
+  const modal = document.getElementById('wbModal');
+  if (!modal || !CURRENT_USER) return;
+  modal.classList.add('on');
+  wbLoad();
+  if (_wbTimer) clearInterval(_wbTimer);
+  _wbTimer = setInterval(wbLoad, 12000);
+}
+function wbClose(){
+  const modal = document.getElementById('wbModal');
+  if (modal) modal.classList.remove('on');
+  if (_wbTimer) clearInterval(_wbTimer);
+  _wbTimer = null;
+}
+async function wbLoad(){
+  const modal = document.getElementById('wbModal');
+  if (!modal || !modal.classList.contains('on') || _wbLoading) return;
+  _wbLoading = true;
+  try {
+    const out = await getWhiteboardFast();
+    if (!modal.classList.contains('on')) return;
+    if (!out || !out.ok || !Array.isArray(out.cards)) throw new Error((out && out.error) || 'โหลดกระดานไม่สำเร็จ');
+    _wbCards = out.cards;
+    wbRender();
+  } catch(e) {
+    console.warn('[wbLoad]', e);
+    if (!_wbCards.length && modal.classList.contains('on')) document.getElementById('wbBoard').innerHTML = '<div class="wb-empty">โหลดกระดานไม่สำเร็จ — ระบบจะลองใหม่อัตโนมัติ</div>';
+  } finally { _wbLoading = false; }
+}
+function wbSetFilter(type){
+  _wbFilter = ['all','note','todo','buy'].indexOf(type) !== -1 ? type : 'all';
+  document.querySelectorAll('[data-wb-filter]').forEach(function(el){ el.classList.toggle('on', el.getAttribute('data-wb-filter') === _wbFilter); });
+  wbRender();
+}
+function wbPickColor(color, el){
+  _wbColor = WB_COLORS.indexOf(color) !== -1 ? color : WB_COLORS[0];
+  document.querySelectorAll('[data-wb-color]').forEach(function(x){ x.classList.toggle('on', x === el); });
+}
+function wbTypeLabel(type){ return type === 'todo' ? '✅ to-do' : type === 'buy' ? '🛒 ของต้องซื้อ' : '📝 โน้ต'; }
+function wbTime(ts){
+  const n = Number(ts) || 0;
+  if (!n) return '';
+  try { return new Date(n).toLocaleString('th-TH', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }); }
+  catch(e) { return ''; }
+}
+function wbRender(){
+  const board = document.getElementById('wbBoard');
+  if (!board) return;
+  const cards = _wbCards.filter(function(c){ return _wbFilter === 'all' || c.type === _wbFilter; })
+    .slice().sort(function(a,b){ return (Number(b.updatedAt)||0) - (Number(a.updatedAt)||0); });
+  if (!cards.length) { board.innerHTML = '<div class="wb-empty">ยังไม่มีการ์ดในหมวดนี้</div>'; return; }
+  board.innerHTML = cards.map(function(c){
+    const color = WB_COLORS.indexOf(String(c.color || '').toLowerCase()) !== -1 ? String(c.color).toLowerCase() : WB_COLORS[0];
+    const check = (c.type === 'todo' || c.type === 'buy')
+      ? '<input class="wb-card-check" type="checkbox" '+(c.done?'checked ':'')+'onchange="wbToggle(this.closest(\'.wb-card\').dataset.wbId,this.checked)" aria-label="ติ๊กเสร็จ">'
+      : '<span title="'+escAttr(wbTypeLabel(c.type))+'">'+(c.type === 'buy' ? '🛒' : '📝')+'</span>';
+    return '<article class="wb-card '+(c.done?'done':'')+'" data-wb-id="'+escAttr(c.id)+'" style="background:'+color+'">'
+      +'<div class="wb-card-head">'+check+'<div class="wb-card-text">'+escHtml(c.text)+'</div></div>'
+      +'<div class="wb-card-foot"><span class="wb-card-meta">'+escHtml(wbTypeLabel(c.type))+' · '+escHtml(c.by || '-')+(wbTime(c.updatedAt || c.createdAt)?' · '+escHtml(wbTime(c.updatedAt || c.createdAt)):'')+'</span>'
+      +'<button class="wb-card-action" type="button" onclick="wbEdit(this.closest(\'.wb-card\').dataset.wbId)" title="แก้ไข">✏</button>'
+      +'<button class="wb-card-action" type="button" onclick="wbDelete(this.closest(\'.wb-card\').dataset.wbId)" title="ลบ">🗑</button></div></article>';
+  }).join('');
+}
+async function wbAdd(){
+  const textEl = document.getElementById('wbText'), typeEl = document.getElementById('wbType'), btn = document.getElementById('wbSave');
+  const text = String(textEl.value || '').trim(), type = typeEl.value;
+  if (!text) { toast('กรุณาเขียนข้อความก่อนบันทึก'); textEl.focus(); return; }
+  btn.disabled = true;
+  try {
+    const out = await call({ action:'pk_wbAdd', text:text, color:_wbColor, type:type });
+    if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกไม่สำเร็จ');
+    const now = Date.now();
+    _wbCards.push({ id:out.id, text:text, color:_wbColor, type:type, done:false, by:CURRENT_USER.username, createdAt:now, updatedAt:now });
+    textEl.value = '';
+    wbRender();
+    toast('เพิ่มการ์ดแล้ว');
+    wbLoad();
+  } catch(e) { toast('เพิ่มการ์ดไม่สำเร็จ: ' + e.message); }
+  finally { btn.disabled = false; }
+}
+async function wbToggle(id, done){
+  const card = _wbCards.find(function(x){ return x.id === id; });
+  if (!card) return;
+  const before = !!card.done;
+  card.done = !!done; card.updatedAt = Date.now(); wbRender();
+  try {
+    const out = await call({ action:'pk_wbToggle', id:id, done:!!done });
+    if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกไม่สำเร็จ');
+    wbLoad();
+  } catch(e) { card.done = before; wbRender(); toast('ติ๊กการ์ดไม่สำเร็จ: ' + e.message); }
+}
+async function wbEdit(id){
+  const card = _wbCards.find(function(x){ return x.id === id; });
+  if (!card) return;
+  const text = prompt('แก้ข้อความบนการ์ด', card.text);
+  if (text == null) return;
+  const clean = String(text).trim();
+  if (!clean) return toast('ข้อความห้ามว่าง');
+  const before = card.text;
+  card.text = clean; card.updatedAt = Date.now(); wbRender();
+  try {
+    const out = await call({ action:'pk_wbUpdate', id:id, text:clean });
+    if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกไม่สำเร็จ');
+    toast('แก้การ์ดแล้ว'); wbLoad();
+  } catch(e) { card.text = before; wbRender(); toast('แก้การ์ดไม่สำเร็จ: ' + e.message); }
+}
+async function wbDelete(id){
+  const card = _wbCards.find(function(x){ return x.id === id; });
+  if (!card || !confirm('ลบการ์ดนี้ออกจากกระดาน?')) return;
+  const idx = _wbCards.indexOf(card);
+  _wbCards.splice(idx, 1); wbRender();
+  try {
+    const out = await call({ action:'pk_wbDelete', id:id });
+    if (!out || !out.ok) throw new Error((out && out.error) || 'ลบไม่สำเร็จ');
+    toast('ลบการ์ดแล้ว'); wbLoad();
+  } catch(e) { _wbCards.splice(idx, 0, card); wbRender(); toast('ลบการ์ดไม่สำเร็จ: ' + e.message); }
+}
 </script>
 </body>
 </html>
