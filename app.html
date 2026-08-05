@@ -233,30 +233,49 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 .modal.large{max-width:560px;}
 .map-box{height:380px;border-radius:0 0 14px 14px;}
 
-/* WHITEBOARD — shared header modal (wb*) */
-#wbModal{z-index:260;}
-#wbModal .wb-modal{max-width:980px;overflow:hidden;display:flex;flex-direction:column;}
-.wb-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--bdr);}
-.wb-filters{display:flex;gap:6px;flex-wrap:wrap;flex:1;}
-.wb-filter{border:1px solid var(--bdr);background:var(--surf);color:var(--mu);border-radius:var(--r-pill);padding:6px 10px;font:600 12px var(--sans);cursor:pointer;}
-.wb-filter.on{background:var(--acc);border-color:var(--acc);color:#fff;}
-.wb-add-form{display:grid;grid-template-columns:150px auto minmax(220px,1fr) auto;gap:10px;align-items:center;padding:12px 16px;background:rgba(255,255,255,.18);border-bottom:1px solid var(--bdr);}
-.wb-add-form textarea{min-height:42px;max-height:110px;resize:vertical;}
-.wb-swatches{display:flex;gap:5px;flex-wrap:wrap;}
-.wb-swatch{width:27px;height:27px;border:2px solid rgba(56,44,35,.2);border-radius:50%;cursor:pointer;box-shadow:inset 0 0 0 2px rgba(255,255,255,.55);}
+/* WHITEBOARD — canvas board (wb*) */
+#wbModal{z-index:260;padding:0;}
+#wbModal .wb-modal{max-width:100vw;width:100vw;height:100vh;max-height:100vh;border-radius:0;overflow:hidden;display:flex;flex-direction:column;background:#eae5d9;}
+.wb-head{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surf2);border-bottom:1px solid var(--bdr);flex-wrap:wrap;}
+.wb-head>span:first-child{font-weight:700;color:var(--tx);white-space:nowrap;font-size:15px;}
+.wb-tools{display:flex;align-items:center;gap:6px;flex:1;flex-wrap:wrap;}
+.wb-tool{border:1px solid var(--bdr);background:var(--surf);color:var(--tx);border-radius:9px;min-width:38px;height:34px;padding:0 10px;font:600 14px var(--sans);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:4px;}
+.wb-tool.on{background:var(--acc);border-color:var(--acc);color:#fff;}
+.wb-close{background:none;border:none;color:var(--mu);font-size:26px;line-height:1;cursor:pointer;padding:0 4px;}
+.wb-pen-colors{display:none;align-items:center;gap:5px;}
+.wb-pen-colors.on{display:inline-flex;}
+.wb-swatch{width:24px;height:24px;border:2px solid rgba(0,0,0,.18);border-radius:50%;cursor:pointer;box-shadow:inset 0 0 0 2px rgba(255,255,255,.5);padding:0;}
 .wb-swatch.on{outline:3px solid var(--acc);outline-offset:1px;}
-.wb-board{padding:16px;overflow-y:auto;min-height:220px;max-height:62vh;column-count:3;column-gap:12px;}
-.wb-card{break-inside:avoid;margin:0 0 12px;border:1px solid rgba(56,44,35,.16);border-radius:12px;padding:13px;color:#382c23;box-shadow:0 5px 15px rgba(56,44,35,.12);}
-.wb-card-head{display:flex;align-items:flex-start;gap:9px;}
-.wb-card-check{width:18px;height:18px;flex:0 0 auto;margin-top:2px;accent-color:#382c23;}
-.wb-card-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:14px;flex:1;}
-.wb-card.done .wb-card-text{text-decoration:line-through;opacity:.58;}
-.wb-card-foot{display:flex;align-items:center;gap:6px;margin-top:11px;padding-top:8px;border-top:1px solid rgba(56,44,35,.14);font-size:10.5px;color:rgba(56,44,35,.66);}
+.wb-pen-colors .wb-swatch{box-shadow:none;}
+.wb-viewport{position:relative;flex:1;overflow:hidden;touch-action:none;background:#eae5d9;cursor:grab;-webkit-user-select:none;user-select:none;}
+.wb-viewport.panning{cursor:grabbing;}
+.wb-viewport.mode-pen{cursor:crosshair;}
+.wb-viewport.mode-erase{cursor:cell;}
+.wb-board{position:absolute;top:0;left:0;width:3600px;height:2400px;transform-origin:0 0;background-image:radial-gradient(rgba(0,0,0,.07) 1px,transparent 1px);background-size:26px 26px;}
+.wb-ink{position:absolute;top:0;left:0;width:3600px;height:2400px;pointer-events:none;overflow:visible;}
+.wb-viewport.mode-erase .wb-ink path{pointer-events:stroke;cursor:pointer;}
+.wb-cards{position:absolute;inset:0;pointer-events:none;}
+.wb-card{position:absolute;width:190px;min-height:118px;padding:12px 13px 30px;color:#3a2f22;font-size:14px;line-height:1.5;border-radius:2px;box-shadow:2px 4px 12px rgba(0,0,0,.22);cursor:grab;touch-action:none;pointer-events:auto;display:flex;flex-direction:column;}
+.wb-card.dragging{cursor:grabbing;box-shadow:7px 13px 28px rgba(0,0,0,.32);z-index:50;}
+.wb-card.wb-draft{cursor:default;z-index:60;box-shadow:7px 13px 30px rgba(0,0,0,.34);}
+.wb-card::after{content:"";position:absolute;right:0;bottom:0;border-width:0 0 15px 15px;border-style:solid;border-color:transparent transparent rgba(0,0,0,.12) rgba(0,0,0,.04);}
+.wb-card-body{display:flex;gap:8px;flex:1;}
+.wb-card-check{width:17px;height:17px;flex:0 0 auto;margin-top:2px;accent-color:#3a2f22;cursor:pointer;}
+.wb-card-text{white-space:pre-wrap;overflow-wrap:anywhere;flex:1;font-family:'Segoe Print','Comic Sans MS','Sarabun',var(--sans);}
+.wb-card.done .wb-card-text{text-decoration:line-through;opacity:.55;}
+.wb-card-foot{position:absolute;left:11px;right:11px;bottom:6px;display:flex;align-items:center;gap:5px;font-size:10px;color:rgba(58,47,34,.6);}
 .wb-card-meta{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.wb-card-action{border:0;background:rgba(255,255,255,.45);border-radius:6px;width:28px;height:27px;cursor:pointer;color:#382c23;}
-.wb-empty{padding:56px 18px;text-align:center;color:var(--mu);font-size:13px;break-inside:avoid;}
-@media(max-width:800px){.wb-board{column-count:2}.wb-add-form{grid-template-columns:1fr 1fr}.wb-add-form textarea{grid-column:1/-1}.wb-add-form .wb-save{grid-column:1/-1}}
-@media(max-width:520px){#wbModal{padding:0}.modal.wb-modal{border-radius:0;max-height:100vh;height:100vh}.wb-board{column-count:1;max-height:none;flex:1}.wb-add-form{grid-template-columns:1fr}.wb-add-form textarea,.wb-add-form .wb-save{grid-column:auto}.user-chip{display:none}.hbtns{gap:5px}.hbtn{padding:5px 9px}}
+.wb-card-action{border:0;background:rgba(255,255,255,.5);border-radius:5px;width:24px;height:22px;cursor:pointer;color:#3a2f22;font-size:12px;}
+.wb-card-edit{width:100%;flex:1;min-height:60px;border:none;background:rgba(255,255,255,.6);border-radius:5px;padding:5px;font:14px 'Segoe Print','Comic Sans MS','Sarabun',var(--sans);color:#3a2f22;resize:none;outline:none;}
+.wb-draft-bar{display:flex;align-items:center;gap:4px;margin-top:6px;flex-wrap:wrap;}
+.wb-dt{border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.5);border-radius:5px;padding:2px 6px;font-size:13px;cursor:pointer;}
+.wb-dt.on{background:var(--acc);border-color:var(--acc);}
+.wb-draft-cols{display:flex;gap:3px;margin-left:auto;}
+.wb-draft-cols .wb-swatch{width:18px;height:18px;box-shadow:none;}
+.wb-draft-act{display:flex;gap:6px;margin-top:6px;}
+.wb-draft-save{flex:1;border:0;background:var(--acc);color:#fff;border-radius:6px;padding:6px;font:600 12px var(--sans);cursor:pointer;}
+.wb-draft-cancel{border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.4);color:#3a2f22;border-radius:6px;padding:6px 10px;font:600 12px var(--sans);cursor:pointer;}
+@media(max-width:520px){.wb-head{padding:6px 8px;gap:6px}.wb-head>span:first-child{font-size:13px}.wb-tool{min-width:34px;height:32px;padding:0 7px}.user-chip{display:none}}
 
 /* LOADING / TOAST */
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(70px);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);background:var(--surf2);border:1px solid var(--bdr);color:var(--tx);border-radius:var(--r-md);padding:11px 18px;font-size:13px;z-index:300;opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,.5);}
@@ -523,32 +542,24 @@ tbody tr:nth-child(even){background:rgba(120,96,72,.04);}
 <!-- WHITEBOARD MODAL — shared ทุก role (wb*) -->
 <div class="modal-bg" id="wbModal" onclick="if(event.target===this)wbClose()">
   <div class="modal wb-modal">
-    <div class="card-head"><span>📌 กระดานร่วม</span><button onclick="wbClose()" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button></div>
-    <div class="wb-toolbar">
-      <div class="wb-filters">
-        <button class="wb-filter on" data-wb-filter="all" onclick="wbSetFilter('all')">ทั้งหมด</button>
-        <button class="wb-filter" data-wb-filter="note" onclick="wbSetFilter('note')">📝 โน้ต</button>
-        <button class="wb-filter" data-wb-filter="todo" onclick="wbSetFilter('todo')">✅ to-do</button>
-        <button class="wb-filter" data-wb-filter="buy" onclick="wbSetFilter('buy')">🛒 ของต้องซื้อ</button>
+    <div class="wb-head">
+      <span>📌 กระดานร่วม</span>
+      <div class="wb-tools">
+        <button id="wbToolHand" class="wb-tool on" type="button" onclick="wbSetMode('hand')" title="เลื่อน/ย้ายการ์ด">🖐</button>
+        <button id="wbToolPen" class="wb-tool" type="button" onclick="wbSetMode('pen')" title="ปากกาวาด">✏️</button>
+        <button id="wbToolErase" class="wb-tool" type="button" onclick="wbSetMode('erase')" title="ยางลบเส้น">🧹</button>
+        <span id="wbPenColors" class="wb-pen-colors"></span>
+        <button class="wb-tool" type="button" onclick="wbUndoStroke()" title="ย้อนเส้นล่าสุด">↶</button>
+        <button class="wb-tool" type="button" onclick="wbAddCardCenter()" title="เพิ่มโน้ต">+ โน้ต</button>
       </div>
-      <button class="btn primary" type="button" onclick="document.getElementById('wbText').focus()">+ เพิ่มการ์ด</button>
+      <button class="wb-close" type="button" onclick="wbClose()" aria-label="ปิด">×</button>
     </div>
-    <div class="wb-add-form">
-      <select id="wbType" class="fi" aria-label="ชนิดการ์ด">
-        <option value="note">📝 โน้ต</option><option value="todo">✅ to-do</option><option value="buy">🛒 ของต้องซื้อ</option>
-      </select>
-      <div class="wb-swatches" aria-label="เลือกสีการ์ด">
-        <button type="button" class="wb-swatch on" style="background:#fde68a" data-wb-color="#fde68a" onclick="wbPickColor('#fde68a',this)" title="เหลือง"></button>
-        <button type="button" class="wb-swatch" style="background:#fbcfe8" data-wb-color="#fbcfe8" onclick="wbPickColor('#fbcfe8',this)" title="ชมพู"></button>
-        <button type="button" class="wb-swatch" style="background:#bfdbfe" data-wb-color="#bfdbfe" onclick="wbPickColor('#bfdbfe',this)" title="ฟ้า"></button>
-        <button type="button" class="wb-swatch" style="background:#bbf7d0" data-wb-color="#bbf7d0" onclick="wbPickColor('#bbf7d0',this)" title="เขียว"></button>
-        <button type="button" class="wb-swatch" style="background:#fed7aa" data-wb-color="#fed7aa" onclick="wbPickColor('#fed7aa',this)" title="ส้ม"></button>
-        <button type="button" class="wb-swatch" style="background:#ddd6fe" data-wb-color="#ddd6fe" onclick="wbPickColor('#ddd6fe',this)" title="ม่วง"></button>
+    <div id="wbViewport" class="wb-viewport">
+      <div id="wbBoard" class="wb-board">
+        <svg id="wbInk" class="wb-ink" viewBox="0 0 3600 2400" preserveAspectRatio="none"></svg>
+        <div id="wbCards" class="wb-cards"></div>
       </div>
-      <textarea id="wbText" class="fi" maxlength="1000" placeholder="เขียนข้อความบนกระดาน..."></textarea>
-      <button id="wbSave" class="btn primary wb-save" type="button" onclick="wbAdd()">บันทึก</button>
     </div>
-    <div id="wbBoard" class="wb-board"><div class="wb-empty">เปิดกระดานเพื่อโหลดการ์ด</div></div>
   </div>
 </div>
 
@@ -16024,13 +16035,20 @@ function slpDownload(blob,name){const a=document.createElement('a');a.href=URL.c
 async function slpImportJson(file){if(!file)return;try{const data=JSON.parse(await file.text());if(data.app!=='slipManager'||!Array.isArray(data.records))throw new Error('รูปแบบไฟล์ไม่ถูกต้อง');const have=new Set(_slpRecords.map(r=>r.id)),rows=data.records.filter(r=>!r.id||!have.has(r.id)).map(r=>Object.assign({},r,{source:r.source||'import'}));if(!rows.length)return toast('ไม่มีรายการใหม่ (ข้าม id ที่มีอยู่แล้ว)');if(!confirm(`นำเข้า ${rows.length} รายการ?`))return;for(let i=0;i<rows.length;i+=10){showLoad(`นำเข้า ${Math.min(i+10,rows.length)}/${rows.length}...`);const out=await call({action:'pk_slipBatchUpsert',slips:rows.slice(i,i+10)});if(!out.ok)throw new Error(out.error);}toast(`นำเข้าแล้ว ${rows.length} รายการ`);await slpInit();}catch(e){toast('นำเข้าไม่สำเร็จ: '+e.message);}finally{hideLoad();}}
 function slpFmtAmt(v){return (+v||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
-// ════════ WHITEBOARD — shared modal ทุก role (wb*) ════════
+// ════════ WHITEBOARD — กระดานร่วม canvas ทุก role (wb*) ════════
 const WB_COLORS = ['#fde68a','#fbcfe8','#bfdbfe','#bbf7d0','#fed7aa','#ddd6fe'];
-let _wbCards = [], _wbFilter = 'all', _wbColor = WB_COLORS[0], _wbTimer = null, _wbLoading = false;
+const WB_PEN = ['#1f2937','#dc2626','#2563eb','#16a34a'];
+const WB_BOARD_W = 3600, WB_BOARD_H = 2400, WB_PEN_W = 3;
+let _wbCards = [], _wbMode = 'hand', _wbNoteColor = WB_COLORS[0], _wbPenColor = WB_PEN[0];
+let _wbPan = { x:0, y:0 }, _wbTimer = null, _wbLoading = false, _wbStrokeStack = [], _wbDraft = null, _wbPtr = null, _wbBound = false;
 function wbOpen(){
   const modal = document.getElementById('wbModal');
   if (!modal || !CURRENT_USER) return;
   modal.classList.add('on');
+  wbBindOnce();
+  wbBuildPenColors();
+  wbSetMode('hand');
+  wbApplyPan();
   wbLoad();
   if (_wbTimer) clearInterval(_wbTimer);
   _wbTimer = setInterval(wbLoad, 12000);
@@ -16040,6 +16058,7 @@ function wbClose(){
   if (modal) modal.classList.remove('on');
   if (_wbTimer) clearInterval(_wbTimer);
   _wbTimer = null;
+  wbCancelDraft();
 }
 async function wbLoad(){
   const modal = document.getElementById('wbModal');
@@ -16053,96 +16072,270 @@ async function wbLoad(){
     wbRender();
   } catch(e) {
     console.warn('[wbLoad]', e);
-    if (!_wbCards.length && modal.classList.contains('on')) document.getElementById('wbBoard').innerHTML = '<div class="wb-empty">โหลดกระดานไม่สำเร็จ — ระบบจะลองใหม่อัตโนมัติ</div>';
   } finally { _wbLoading = false; }
 }
-function wbSetFilter(type){
-  _wbFilter = ['all','note','todo','buy'].indexOf(type) !== -1 ? type : 'all';
-  document.querySelectorAll('[data-wb-filter]').forEach(function(el){ el.classList.toggle('on', el.getAttribute('data-wb-filter') === _wbFilter); });
-  wbRender();
+function wbBindOnce(){
+  if (_wbBound) return;
+  const vp = document.getElementById('wbViewport'); if (!vp) return;
+  _wbBound = true;
+  vp.addEventListener('pointerdown', wbViewportDown);
+  vp.addEventListener('pointermove', wbViewportMove);
+  vp.addEventListener('pointerup', wbViewportUp);
+  vp.addEventListener('pointercancel', wbViewportUp);
+  vp.addEventListener('dblclick', wbBoardDblClick);
+  const ink = document.getElementById('wbInk'); if (ink) ink.addEventListener('click', wbInkClick);
 }
-function wbPickColor(color, el){
-  _wbColor = WB_COLORS.indexOf(color) !== -1 ? color : WB_COLORS[0];
-  document.querySelectorAll('[data-wb-color]').forEach(function(x){ x.classList.toggle('on', x === el); });
+function wbBuildPenColors(){
+  const box = document.getElementById('wbPenColors'); if (!box) return;
+  box.innerHTML = WB_PEN.map(function(c){ return '<button type="button" class="wb-swatch'+(c===_wbPenColor?' on':'')+'" style="background:'+c+'" data-wb-pen="'+c+'" onclick="wbPickPen(\''+c+'\',this)" title="สีปากกา"></button>'; }).join('');
 }
-function wbTypeLabel(type){ return type === 'todo' ? '✅ to-do' : type === 'buy' ? '🛒 ของต้องซื้อ' : '📝 โน้ต'; }
-function wbTime(ts){
-  const n = Number(ts) || 0;
-  if (!n) return '';
-  try { return new Date(n).toLocaleString('th-TH', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }); }
-  catch(e) { return ''; }
+function wbPickPen(c, el){ _wbPenColor = WB_PEN.indexOf(c)!==-1?c:WB_PEN[0]; document.querySelectorAll('[data-wb-pen]').forEach(function(x){ x.classList.toggle('on', x===el); }); }
+function wbSetMode(mode){
+  _wbMode = ['hand','pen','erase'].indexOf(mode)!==-1 ? mode : 'hand';
+  const vp = document.getElementById('wbViewport');
+  if (vp){ vp.classList.remove('mode-pen','mode-erase'); if (_wbMode!=='hand') vp.classList.add('mode-'+_wbMode); }
+  [['hand','Hand'],['pen','Pen'],['erase','Erase']].forEach(function(m){ const b=document.getElementById('wbTool'+m[1]); if(b) b.classList.toggle('on', _wbMode===m[0]); });
+  const pc = document.getElementById('wbPenColors'); if (pc) pc.classList.toggle('on', _wbMode==='pen');
+  if (_wbDraft) wbCancelDraft();
 }
-function wbRender(){
+function wbClampPan(){
+  const vp = document.getElementById('wbViewport'); if (!vp) return;
+  const minX = Math.min(0, vp.clientWidth - WB_BOARD_W), minY = Math.min(0, vp.clientHeight - WB_BOARD_H);
+  _wbPan.x = Math.max(minX, Math.min(0, _wbPan.x));
+  _wbPan.y = Math.max(minY, Math.min(0, _wbPan.y));
+}
+function wbApplyPan(){
+  wbClampPan();
   const board = document.getElementById('wbBoard');
-  if (!board) return;
-  const cards = _wbCards.filter(function(c){ return _wbFilter === 'all' || c.type === _wbFilter; })
-    .slice().sort(function(a,b){ return (Number(b.updatedAt)||0) - (Number(a.updatedAt)||0); });
-  if (!cards.length) { board.innerHTML = '<div class="wb-empty">ยังไม่มีการ์ดในหมวดนี้</div>'; return; }
-  board.innerHTML = cards.map(function(c){
-    const color = WB_COLORS.indexOf(String(c.color || '').toLowerCase()) !== -1 ? String(c.color).toLowerCase() : WB_COLORS[0];
-    const check = (c.type === 'todo' || c.type === 'buy')
-      ? '<input class="wb-card-check" type="checkbox" '+(c.done?'checked ':'')+'onchange="wbToggle(this.closest(\'.wb-card\').dataset.wbId,this.checked)" aria-label="ติ๊กเสร็จ">'
-      : '<span title="'+escAttr(wbTypeLabel(c.type))+'">'+(c.type === 'buy' ? '🛒' : '📝')+'</span>';
-    return '<article class="wb-card '+(c.done?'done':'')+'" data-wb-id="'+escAttr(c.id)+'" style="background:'+color+'">'
-      +'<div class="wb-card-head">'+check+'<div class="wb-card-text">'+escHtml(c.text)+'</div></div>'
-      +'<div class="wb-card-foot"><span class="wb-card-meta">'+escHtml(wbTypeLabel(c.type))+' · '+escHtml(c.by || '-')+(wbTime(c.updatedAt || c.createdAt)?' · '+escHtml(wbTime(c.updatedAt || c.createdAt)):'')+'</span>'
-      +'<button class="wb-card-action" type="button" onclick="wbEdit(this.closest(\'.wb-card\').dataset.wbId)" title="แก้ไข">✏</button>'
-      +'<button class="wb-card-action" type="button" onclick="wbDelete(this.closest(\'.wb-card\').dataset.wbId)" title="ลบ">🗑</button></div></article>';
+  if (board) board.style.transform = 'translate('+_wbPan.x+'px,'+_wbPan.y+'px)';
+}
+function wbClientToBoard(cx, cy){
+  const board = document.getElementById('wbBoard'); const r = board.getBoundingClientRect();
+  return { x: cx - r.left, y: cy - r.top };
+}
+function wbViewportDown(e){
+  if (_wbMode === 'pen'){ wbStrokeStart(e); return; }
+  if (_wbMode === 'hand'){ wbPanStart(e); }
+}
+function wbPanStart(e){
+  const vp = document.getElementById('wbViewport');
+  _wbPtr = { kind:'pan', id:e.pointerId, sx:e.clientX, sy:e.clientY, px:_wbPan.x, py:_wbPan.y };
+  vp.classList.add('panning');
+  try { vp.setPointerCapture(e.pointerId); } catch(_){}
+}
+function wbViewportMove(e){
+  if (!_wbPtr || _wbPtr.id !== e.pointerId) return;
+  if (_wbPtr.kind === 'pan'){
+    _wbPan.x = _wbPtr.px + (e.clientX - _wbPtr.sx);
+    _wbPan.y = _wbPtr.py + (e.clientY - _wbPtr.sy);
+    wbApplyPan();
+  } else if (_wbPtr.kind === 'draw'){
+    const p = wbClientToBoard(e.clientX, e.clientY);
+    _wbPtr.pts.push([Math.round(p.x), Math.round(p.y)]);
+    _wbPtr.path.setAttribute('d', wbPathD(_wbPtr.pts));
+  } else if (_wbPtr.kind === 'card'){
+    const dx = e.clientX - _wbPtr.sx, dy = e.clientY - _wbPtr.sy;
+    if (Math.abs(dx)>2 || Math.abs(dy)>2) _wbPtr.moved = true;
+    _wbPtr.el.style.left = (_wbPtr.ox+dx)+'px';
+    _wbPtr.el.style.top = (_wbPtr.oy+dy)+'px';
+  }
+}
+function wbViewportUp(e){
+  if (!_wbPtr || _wbPtr.id !== e.pointerId) return;
+  const info = _wbPtr;
+  const vp = document.getElementById('wbViewport');
+  if (info.kind === 'pan' && vp) vp.classList.remove('panning');
+  if (info.kind === 'draw') wbStrokeEnd(info);
+  if (info.kind === 'card'){
+    if (info.el){ info.el.classList.remove('dragging'); try { info.el.releasePointerCapture(e.pointerId); } catch(_){} }
+    if (info.moved) wbPersistMove(info.cardId, Math.round(info.ox+(e.clientX-info.sx)), Math.round(info.oy+(e.clientY-info.sy)));
+  }
+  try { if (vp) vp.releasePointerCapture(e.pointerId); } catch(_){}
+  _wbPtr = null;
+}
+function wbPathD(pts){ return pts.map(function(pt,i){ return (i?'L':'M')+pt[0]+' '+pt[1]; }).join(' '); }
+function wbStrokeStart(e){
+  const p = wbClientToBoard(e.clientX, e.clientY);
+  const ink = document.getElementById('wbInk'); if (!ink) return;
+  const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+  path.setAttribute('fill','none'); path.setAttribute('stroke', _wbPenColor);
+  path.setAttribute('stroke-width', WB_PEN_W); path.setAttribute('stroke-linecap','round'); path.setAttribute('stroke-linejoin','round');
+  path.setAttribute('d','M'+Math.round(p.x)+' '+Math.round(p.y));
+  ink.appendChild(path);
+  _wbPtr = { kind:'draw', id:e.pointerId, pts:[[Math.round(p.x),Math.round(p.y)]], path:path };
+  const vp = document.getElementById('wbViewport'); try { vp.setPointerCapture(e.pointerId); } catch(_){}
+  e.preventDefault();
+}
+async function wbStrokeEnd(info){
+  if (!info) return;
+  if (info.pts.length < 2){ if (info.path && info.path.parentNode) info.path.parentNode.removeChild(info.path); return; }
+  const d = wbPathD(info.pts), color = _wbPenColor;
+  try {
+    const out = await call({ action:'pk_wbAdd', type:'draw', text:d, color:color, x:0, y:0 });
+    if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกเส้นไม่สำเร็จ');
+    const now = Date.now();
+    _wbCards.push({ id:out.id, text:d, color:color, type:'draw', done:false, by:CURRENT_USER.username, createdAt:now, updatedAt:now, x:0, y:0 });
+    _wbStrokeStack.push(out.id);
+    wbRenderInk();
+  } catch(e){ if (info.path && info.path.parentNode) info.path.parentNode.removeChild(info.path); toast('วาดเส้นไม่สำเร็จ: '+e.message); }
+}
+function wbInkClick(e){
+  if (_wbMode !== 'erase') return;
+  const path = e.target && e.target.closest ? e.target.closest('path') : null; if (!path) return;
+  const id = path.getAttribute('data-wb-id'); if (id) wbDeleteStroke(id);
+}
+async function wbDeleteStroke(id){
+  const idx = _wbCards.findIndex(function(c){ return c.id===id; });
+  const removed = idx!==-1 ? _wbCards.splice(idx,1)[0] : null;
+  wbRenderInk();
+  try { const out = await call({ action:'pk_wbDelete', id:id }); if (!out || !out.ok) throw new Error((out && out.error) || 'ลบไม่สำเร็จ'); }
+  catch(e){ if (removed){ _wbCards.splice(Math.max(0,idx),0,removed); wbRenderInk(); } toast('ลบเส้นไม่สำเร็จ: '+e.message); }
+}
+function wbUndoStroke(){
+  let id = _wbStrokeStack.pop();
+  if (!id){
+    const mine = _wbCards.filter(function(c){ return c.type==='draw' && c.by===CURRENT_USER.username; }).sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); });
+    if (mine.length) id = mine[0].id;
+  }
+  if (!id) return toast('ไม่มีเส้นให้ย้อน');
+  wbDeleteStroke(id);
+}
+function wbTypeLabel(type){ return type==='todo' ? '✅ to-do' : type==='buy' ? '🛒 ของต้องซื้อ' : '📝 โน้ต'; }
+function wbHashRot(id){ let h=0; for (let i=0;i<id.length;i++) h=(h*31+id.charCodeAt(i))&0xffff; return (h%7)-3; }
+function wbAutoPos(i){ return { x:40+(i%6)*210, y:40+Math.floor(i/6)*210 }; }
+function wbRender(){ wbRenderCards(); wbRenderInk(); }
+function wbRenderCards(){
+  const layer = document.getElementById('wbCards'); if (!layer) return;
+  const notes = _wbCards.filter(function(c){ return c.type!=='draw'; });
+  let ai = 0;
+  layer.innerHTML = notes.map(function(c){
+    const color = WB_COLORS.indexOf(String(c.color||'').toLowerCase())!==-1 ? String(c.color).toLowerCase() : WB_COLORS[0];
+    let x = Number(c.x)||0, y = Number(c.y)||0;
+    if (x<=0 && y<=0){ const ap = wbAutoPos(ai++); x = ap.x; y = ap.y; }
+    const rot = wbHashRot(String(c.id));
+    const check = (c.type==='todo'||c.type==='buy')
+      ? '<input class="wb-card-check" type="checkbox" '+(c.done?'checked ':'')+'onpointerdown="event.stopPropagation()" onchange="wbToggle(this.closest(\'.wb-card\').dataset.wbId,this.checked)" aria-label="ติ๊กเสร็จ">'
+      : '';
+    return '<div class="wb-card '+(c.done?'done ':'')+'type-'+escAttr(c.type)+'" data-wb-id="'+escAttr(c.id)+'" style="left:'+x+'px;top:'+y+'px;background:'+color+';transform:rotate('+rot+'deg)" onpointerdown="wbCardDown(event,this.dataset.wbId)">'
+      +'<div class="wb-card-body">'+check+'<div class="wb-card-text">'+escHtml(c.text)+'</div></div>'
+      +'<div class="wb-card-foot"><span class="wb-card-meta">'+escHtml(wbTypeLabel(c.type))+' · '+escHtml(c.by||'-')+'</span>'
+      +'<button class="wb-card-action" type="button" onpointerdown="event.stopPropagation()" onclick="wbEditInline(this.closest(\'.wb-card\').dataset.wbId)" title="แก้ไข">✏</button>'
+      +'<button class="wb-card-action" type="button" onpointerdown="event.stopPropagation()" onclick="wbDelete(this.closest(\'.wb-card\').dataset.wbId)" title="ลบ">🗑</button></div></div>';
   }).join('');
 }
-async function wbAdd(){
-  const textEl = document.getElementById('wbText'), typeEl = document.getElementById('wbType'), btn = document.getElementById('wbSave');
-  const text = String(textEl.value || '').trim(), type = typeEl.value;
-  if (!text) { toast('กรุณาเขียนข้อความก่อนบันทึก'); textEl.focus(); return; }
-  btn.disabled = true;
+function wbRenderInk(){
+  const ink = document.getElementById('wbInk'); if (!ink) return;
+  const strokes = _wbCards.filter(function(c){ return c.type==='draw' && c.text; });
+  ink.innerHTML = strokes.map(function(c){
+    const color = /^#[0-9a-fA-F]{3,8}$/.test(c.color) ? c.color : WB_PEN[0];
+    return '<path d="'+escAttr(c.text)+'" fill="none" stroke="'+color+'" stroke-width="'+WB_PEN_W+'" stroke-linecap="round" stroke-linejoin="round" data-wb-id="'+escAttr(c.id)+'"></path>';
+  }).join('');
+}
+function wbCardDown(e, id){
+  if (_wbMode !== 'hand') return;
+  const card = _wbCards.find(function(c){ return c.id===id; }); if (!card) return;
+  const el = e.currentTarget; if (!el) return;
+  e.stopPropagation(); e.preventDefault();
+  let x = Number(card.x)||0, y = Number(card.y)||0;
+  if (x<=0 && y<=0){ x = parseFloat(el.style.left)||0; y = parseFloat(el.style.top)||0; }
+  _wbPtr = { kind:'card', id:e.pointerId, cardId:id, el:el, sx:e.clientX, sy:e.clientY, ox:x, oy:y, moved:false };
+  el.classList.add('dragging');
+  try { el.setPointerCapture(e.pointerId); } catch(_){}
+}
+async function wbPersistMove(id, x, y){
+  const card = _wbCards.find(function(c){ return c.id===id; });
+  if (card){ card.x=x; card.y=y; card.updatedAt=Date.now(); }
+  try { const out = await call({ action:'pk_wbUpdate', id:id, x:x, y:y }); if (!out || !out.ok) throw new Error((out && out.error) || 'ย้ายไม่สำเร็จ'); }
+  catch(e){ toast('บันทึกตำแหน่งไม่สำเร็จ: '+e.message); wbLoad(); }
+}
+function wbAddCardCenter(){
+  const vp = document.getElementById('wbViewport'); if (!vp) return;
+  wbOpenDraft(Math.round(vp.clientWidth/2 - _wbPan.x - 95), Math.round(vp.clientHeight/2 - _wbPan.y - 60));
+}
+function wbBoardDblClick(e){
+  if (_wbMode !== 'hand') return;
+  if (e.target && e.target.closest && e.target.closest('.wb-card')) return;
+  const p = wbClientToBoard(e.clientX, e.clientY);
+  wbOpenDraft(Math.round(p.x-95), Math.round(p.y-60));
+}
+function wbOpenDraft(x, y){
+  if (_wbMode!=='hand') wbSetMode('hand');
+  wbCancelDraft();
+  x = Math.max(4, Math.min(WB_BOARD_W-194, x)); y = Math.max(4, Math.min(WB_BOARD_H-150, y));
+  _wbDraft = { x:x, y:y, type:'note', color:_wbNoteColor };
+  const layer = document.getElementById('wbCards'); if (!layer) return;
+  const div = document.createElement('div');
+  div.className = 'wb-card wb-draft'; div.id = 'wbDraftCard';
+  div.style.left = x+'px'; div.style.top = y+'px'; div.style.background = _wbDraft.color; div.style.zIndex = 60;
+  div.innerHTML =
+    '<textarea class="wb-card-edit" id="wbDraftText" maxlength="1000" placeholder="เขียนโน้ต..."></textarea>'
+    +'<div class="wb-draft-bar">'
+      +'<button type="button" class="wb-dt on" data-t="note" onclick="wbDraftType(\'note\',this)" title="โน้ต">📝</button>'
+      +'<button type="button" class="wb-dt" data-t="todo" onclick="wbDraftType(\'todo\',this)" title="to-do">✅</button>'
+      +'<button type="button" class="wb-dt" data-t="buy" onclick="wbDraftType(\'buy\',this)" title="ของต้องซื้อ">🛒</button>'
+      +'<span class="wb-draft-cols">'+ WB_COLORS.map(function(cc){ return '<button type="button" class="wb-swatch'+(cc===_wbDraft.color?' on':'')+'" style="background:'+cc+'" data-c="'+cc+'" onclick="wbDraftColor(\''+cc+'\',this)"></button>'; }).join('') +'</span>'
+    +'</div>'
+    +'<div class="wb-draft-act"><button type="button" class="wb-draft-save" onclick="wbSaveDraft()">บันทึก</button><button type="button" class="wb-draft-cancel" onclick="wbCancelDraft()">ยกเลิก</button></div>';
+  layer.appendChild(div);
+  div.addEventListener('pointerdown', function(ev){ ev.stopPropagation(); });
+  const ta = document.getElementById('wbDraftText');
+  if (ta){ setTimeout(function(){ ta.focus(); }, 30); ta.addEventListener('keydown', function(ev){ if (ev.key==='Escape') wbCancelDraft(); }); }
+}
+function wbDraftType(t, el){ if (!_wbDraft) return; _wbDraft.type=t; const bar=el.parentNode; if(bar) bar.querySelectorAll('[data-t]').forEach(function(b){ b.classList.toggle('on', b===el); }); }
+function wbDraftColor(c, el){ if (!_wbDraft) return; _wbDraft.color=c; _wbNoteColor=c; const card=document.getElementById('wbDraftCard'); if (card) card.style.background=c; if (el.parentNode) el.parentNode.querySelectorAll('[data-c]').forEach(function(b){ b.classList.toggle('on', b===el); }); }
+function wbCancelDraft(){ _wbDraft=null; const d=document.getElementById('wbDraftCard'); if (d && d.parentNode) d.parentNode.removeChild(d); }
+async function wbSaveDraft(){
+  if (!_wbDraft) return;
+  const ta = document.getElementById('wbDraftText'); const text = ta ? String(ta.value||'').trim() : '';
+  if (!text){ toast('เขียนข้อความก่อนบันทึก'); if (ta) ta.focus(); return; }
+  const d = _wbDraft;
   try {
-    const out = await call({ action:'pk_wbAdd', text:text, color:_wbColor, type:type });
+    const out = await call({ action:'pk_wbAdd', text:text, color:d.color, type:d.type, x:d.x, y:d.y });
     if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกไม่สำเร็จ');
     const now = Date.now();
-    _wbCards.push({ id:out.id, text:text, color:_wbColor, type:type, done:false, by:CURRENT_USER.username, createdAt:now, updatedAt:now });
-    textEl.value = '';
-    wbRender();
-    toast('เพิ่มการ์ดแล้ว');
-    wbLoad();
-  } catch(e) { toast('เพิ่มการ์ดไม่สำเร็จ: ' + e.message); }
-  finally { btn.disabled = false; }
+    _wbCards.push({ id:out.id, text:text, color:d.color, type:d.type, done:false, by:CURRENT_USER.username, createdAt:now, updatedAt:now, x:d.x, y:d.y });
+    wbCancelDraft(); wbRenderCards(); toast('เพิ่มโน้ตแล้ว');
+  } catch(e){ toast('เพิ่มโน้ตไม่สำเร็จ: '+e.message); }
+}
+function wbEditInline(id){
+  const card = _wbCards.find(function(c){ return c.id===id; }); if (!card) return;
+  const el = document.querySelector('.wb-card[data-wb-id="'+id+'"]'); if (!el) return;
+  const textDiv = el.querySelector('.wb-card-text'); if (!textDiv || el.querySelector('.wb-card-edit')) return;
+  const cur = card.text;
+  const ta = document.createElement('textarea'); ta.className = 'wb-card-edit'; ta.maxLength = 1000; ta.value = cur;
+  ta.addEventListener('pointerdown', function(ev){ ev.stopPropagation(); });
+  textDiv.replaceWith(ta); setTimeout(function(){ ta.focus(); }, 20);
+  let done = false;
+  function commit(save){
+    if (done) return; done = true;
+    const val = String(ta.value||'').trim();
+    const nd = document.createElement('div'); nd.className = 'wb-card-text';
+    if (save && val && val!==cur){ nd.textContent = val; if (ta.parentNode) ta.replaceWith(nd); wbSaveText(id, val); }
+    else { nd.textContent = cur; if (ta.parentNode) ta.replaceWith(nd); if (save && !val) toast('ข้อความห้ามว่าง'); }
+  }
+  ta.addEventListener('blur', function(){ commit(true); });
+  ta.addEventListener('keydown', function(ev){ if (ev.key==='Escape'){ ev.preventDefault(); commit(false); } });
+}
+async function wbSaveText(id, val){
+  const card = _wbCards.find(function(c){ return c.id===id; }); const before = card ? card.text : '';
+  if (card){ card.text = val; card.updatedAt = Date.now(); }
+  try { const out = await call({ action:'pk_wbUpdate', id:id, text:val }); if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกไม่สำเร็จ'); toast('แก้โน้ตแล้ว'); }
+  catch(e){ if (card) card.text = before; wbRenderCards(); toast('แก้ไม่สำเร็จ: '+e.message); }
 }
 async function wbToggle(id, done){
-  const card = _wbCards.find(function(x){ return x.id === id; });
-  if (!card) return;
+  const card = _wbCards.find(function(c){ return c.id===id; }); if (!card) return;
   const before = !!card.done;
-  card.done = !!done; card.updatedAt = Date.now(); wbRender();
-  try {
-    const out = await call({ action:'pk_wbToggle', id:id, done:!!done });
-    if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกไม่สำเร็จ');
-    wbLoad();
-  } catch(e) { card.done = before; wbRender(); toast('ติ๊กการ์ดไม่สำเร็จ: ' + e.message); }
-}
-async function wbEdit(id){
-  const card = _wbCards.find(function(x){ return x.id === id; });
-  if (!card) return;
-  const text = prompt('แก้ข้อความบนการ์ด', card.text);
-  if (text == null) return;
-  const clean = String(text).trim();
-  if (!clean) return toast('ข้อความห้ามว่าง');
-  const before = card.text;
-  card.text = clean; card.updatedAt = Date.now(); wbRender();
-  try {
-    const out = await call({ action:'pk_wbUpdate', id:id, text:clean });
-    if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกไม่สำเร็จ');
-    toast('แก้การ์ดแล้ว'); wbLoad();
-  } catch(e) { card.text = before; wbRender(); toast('แก้การ์ดไม่สำเร็จ: ' + e.message); }
+  card.done = !!done; card.updatedAt = Date.now(); wbRenderCards();
+  try { const out = await call({ action:'pk_wbToggle', id:id, done:!!done }); if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกไม่สำเร็จ'); }
+  catch(e){ card.done = before; wbRenderCards(); toast('ติ๊กการ์ดไม่สำเร็จ: '+e.message); }
 }
 async function wbDelete(id){
-  const card = _wbCards.find(function(x){ return x.id === id; });
+  const card = _wbCards.find(function(c){ return c.id===id; });
   if (!card || !confirm('ลบการ์ดนี้ออกจากกระดาน?')) return;
   const idx = _wbCards.indexOf(card);
-  _wbCards.splice(idx, 1); wbRender();
-  try {
-    const out = await call({ action:'pk_wbDelete', id:id });
-    if (!out || !out.ok) throw new Error((out && out.error) || 'ลบไม่สำเร็จ');
-    toast('ลบการ์ดแล้ว'); wbLoad();
-  } catch(e) { _wbCards.splice(idx, 0, card); wbRender(); toast('ลบการ์ดไม่สำเร็จ: ' + e.message); }
+  _wbCards.splice(idx, 1); wbRenderCards();
+  try { const out = await call({ action:'pk_wbDelete', id:id }); if (!out || !out.ok) throw new Error((out && out.error) || 'ลบไม่สำเร็จ'); toast('ลบการ์ดแล้ว'); }
+  catch(e){ _wbCards.splice(idx, 0, card); wbRenderCards(); toast('ลบการ์ดไม่สำเร็จ: '+e.message); }
 }
 </script>
 </body>
