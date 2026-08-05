@@ -233,6 +233,14 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 .modal.large{max-width:560px;}
 .map-box{height:380px;border-radius:0 0 14px 14px;}
 
+/* CRM2 — customer registry */
+.crm2-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;}
+.crm2-bar-lbl{font-size:12px;color:var(--mu);min-width:34px;}
+.crm2-chip{border:1px solid var(--bdr);background:var(--surf);color:var(--mu);border-radius:var(--r-pill,20px);padding:5px 12px;font:600 12px var(--sans);cursor:pointer;}
+.crm2-chip.on{background:var(--acc);border-color:var(--acc);color:#fff;}
+.crm2-group{font-weight:800;font-size:13px;color:var(--acc);margin:14px 0 6px;padding-bottom:3px;border-bottom:1px solid var(--bdr);}
+.crm2-group:first-child{margin-top:0;}
+
 /* WHITEBOARD — canvas board (wb*) */
 #wbModal{z-index:260;padding:0;}
 #wbModal .wb-modal{max-width:100vw;width:100vw;height:100vh;max-height:100vh;border-radius:0;overflow:hidden;display:flex;flex-direction:column;background:#eae5d9;}
@@ -1718,6 +1726,19 @@ function renderOfficeShell(){
             ${CURRENT_USER.role === 'manager' ? '<button class="btn btn-g btn-sm" id="crm2BackfillBtn" onclick="custBackfill()">🔄 สร้าง/อัปเดตทะเบียนจากงานเก่า</button>' : ''}
           </div>
           <input id="crm2Search" class="fi" type="search" placeholder="🔍 ค้นหาเบอร์โทรหรือชื่อลูกค้า" oninput="custRender()" style="margin-bottom:12px;">
+          <div id="crm2Summary" style="font-size:13px;color:var(--mu);margin-bottom:8px;"></div>
+          <div class="crm2-bar">
+            <span class="crm2-bar-lbl">เรียง:</span>
+            <button class="crm2-chip on" data-sort="name" onclick="custSetSort('name')">ชื่อ ก-ฮ</button>
+            <button class="crm2-chip" data-sort="recent" onclick="custSetSort('recent')">ล่าสุด</button>
+            <button class="crm2-chip" data-sort="jobs" onclick="custSetSort('jobs')">งานเยอะสุด</button>
+          </div>
+          <div class="crm2-bar">
+            <span class="crm2-bar-lbl">งาน:</span>
+            <button class="crm2-chip on" data-filter="all" onclick="custSetFilter('all')">ทั้งหมด</button>
+            <button class="crm2-chip" data-filter="install" onclick="custSetFilter('install')">มีติดตั้ง</button>
+            <button class="crm2-chip" data-filter="measure" onclick="custSetFilter('measure')">มีวัด</button>
+          </div>
           <div id="custList"><div class="loading-row">กำลังโหลด...</div></div>
         </div>
       </div>
@@ -16075,6 +16096,25 @@ function slpFmtAmt(v){return (+v||0).toLocaleString('th-TH',{minimumFractionDigi
 // ════════ CRM2 — ทะเบียนลูกค้ากลาง (cust*; office + manager) ════════
 let _crm2Customers = [];
 let _crm2Loaded = false;
+let _crm2Sort = 'name', _crm2Filter = 'all';
+
+// ตัดคำนำหน้าตอนเรียงเท่านั้น โดยยังแสดงชื่อเต็มบนการ์ดเสมอ
+function custSortKey(name){
+  return String(name||'').replace(/^(คุณ|ร้าน|นางสาว|นาง|นาย|น\.?\s?ส\.?|เจ๊|พี่|หจก\.?|บจก\.?|บริษัท|ห้าง)\s*/,'').trim().toLowerCase();
+}
+
+function custGroupLetter(name){
+  var s = custSortKey(name) || String(name||'').trim();
+  var ch = s.charAt(0);
+  if(!ch) return 'อื่นๆ';
+  if(/[ก-ฮเแโใไำ]/.test(ch)) return ch.replace(/[ำ]/,'อ');
+  if(/[0-9]/.test(ch)) return '#';
+  if(/[a-zA-Z]/.test(ch)) return ch.toUpperCase();
+  return 'อื่นๆ';
+}
+
+function custSetSort(s){ _crm2Sort = s; document.querySelectorAll('[data-sort]').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-sort')===s); }); custRender(); }
+function custSetFilter(f){ _crm2Filter = f; document.querySelectorAll('[data-filter]').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-filter')===f); }); custRender(); }
 
 async function custLoad(){
   const host = document.getElementById('custList');
@@ -16099,9 +16139,23 @@ function custRender(){
   const q = String(input ? input.value : '').trim().toLowerCase().replace(/[-\s]/g, '');
   const rows = _crm2Customers.filter(function(c){
     return !q || String(c.phone || '').replace(/[-\s]/g, '').indexOf(q) !== -1 || String(c.name || '').toLowerCase().indexOf(q) !== -1;
+  }).filter(function(c){
+    if (_crm2Filter === 'install') return Number(c.installCount) > 0;
+    if (_crm2Filter === 'measure') return Number(c.measureCount) > 0;
+    return true;
   });
+
+  rows.sort(function(a, b){
+    if (_crm2Sort === 'recent') return String(b.lastSeen || '').localeCompare(String(a.lastSeen || ''));
+    if (_crm2Sort === 'jobs') return ((Number(b.installCount)||0) + (Number(b.measureCount)||0)) - ((Number(a.installCount)||0) + (Number(a.measureCount)||0));
+    return custSortKey(a.name).localeCompare(custSortKey(b.name), 'th');
+  });
+
+  const summary = document.getElementById('crm2Summary');
+  if (summary) summary.textContent = 'ลูกค้าทั้งหมด '+_crm2Customers.length+' ราย'+(rows.length !== _crm2Customers.length ? ' · แสดง '+rows.length+' ราย' : '');
   if (!rows.length) { host.innerHTML = '<div class="empty-section">ไม่พบลูกค้า</div>'; return; }
-  host.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;">' + rows.map(function(c, idx){
+
+  function cardHtml(c){
     const realIdx = _crm2Customers.indexOf(c);
     const phone = String(c.phone || '').replace(/\D/g, '');
     return '<div class="card" role="button" tabindex="0" onclick="custOpen('+realIdx+')" onkeydown="if(event.key===\'Enter\')custOpen('+realIdx+')" style="padding:14px;cursor:pointer;">'
@@ -16109,7 +16163,25 @@ function custRender(){
       + '<a href="tel:'+phone+'" onclick="event.stopPropagation()" style="color:var(--acc);text-decoration:none;">📞 '+escHtml(telFmt(phone))+'</a>'
       + '<div style="font-size:12px;color:var(--mu);margin-top:8px;">ติดตั้ง '+(Number(c.installCount)||0)+' · วัด '+(Number(c.measureCount)||0)+' · ล่าสุด '+escHtml(c.lastSeen || '-')+'</div>'
       + '</div>';
-  }).join('') + '</div>';
+  }
+
+  const gridOpen = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;">';
+  if (_crm2Sort !== 'name') {
+    host.innerHTML = gridOpen + rows.map(cardHtml).join('') + '</div>';
+    return;
+  }
+
+  let html = '', group = '';
+  rows.forEach(function(c){
+    const letter = custGroupLetter(c.name);
+    if (letter !== group) {
+      if (group) html += '</div>';
+      group = letter;
+      html += '<div class="crm2-group">'+escHtml(letter)+'</div>'+gridOpen;
+    }
+    html += cardHtml(c);
+  });
+  host.innerHTML = html + '</div>';
 }
 
 function custOpen(index){
