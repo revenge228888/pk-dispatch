@@ -10616,7 +10616,7 @@ function recordsRender(){
         </div>
         <div class="rec-cust">👤 ${r.customerName || '(ไม่มีชื่อ)'}</div>
         <div class="rec-meta">
-          ${r.customerPhone ? `<span>📞 ${r.customerPhone}</span>` : ''}
+          ${r.customerPhone ? `<span>📞 ${telFmt(r.customerPhone)}</span>` : ''}
           <span>📋 <b>${r.entryCount}</b> รายการ</span>
           ${r.linkedJobId ? `<span class="rec-link">🔗 ${r.linkedJobId}</span>` : ''}
         </div>
@@ -11057,7 +11057,10 @@ function recmPreviewHtml(e){
 function escAttr(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function jobTel(note){ var m = String(note||'').match(/\[tel:(\d{6,})\]/); return m ? m[1] : ''; }
-function telFmt(d){ d=String(d||''); if(d.length===10) return d.replace(/(\d{3})(\d{3})(\d{4})/,'$1-$2-$3'); if(d.length===9) return d.replace(/(\d{2})(\d{3})(\d{4})/,'$1-$2-$3'); return d; }
+// เบอร์ที่เก็บเป็นตัวเลขในชีต (worker อ่าน UNFORMATTED_VALUE) จะทำ 0 หน้าหาย → เติมกลับ
+// มือถือไทย=10หลักขึ้นต้น 0 · บ้าน=9หลักขึ้นต้น 0 · ถ้ามา 9/8 หลักไม่ขึ้นต้น 0 = 0 หน้าหาย เติมคืน
+function telNorm(d){ d=String(d==null?'':d).replace(/\D/g,''); if(d.length===9 && d.charAt(0)!=='0') d='0'+d; else if(d.length===8 && d.charAt(0)!=='0') d='0'+d; return d; }
+function telFmt(d){ d=telNorm(d); if(d.length===10) return d.replace(/(\d{3})(\d{3})(\d{4})/,'$1-$2-$3'); if(d.length===9) return d.replace(/(\d{2})(\d{3})(\d{4})/,'$1-$2-$3'); return d; }
 function jobTelHtml(note){ var t=jobTel(note); return t ? '<div class="t-jobtel">📞 <a href="tel:'+t+'" onclick="event.stopPropagation()">'+telFmt(t)+'</a></div>' : ''; }
 
 // ── Event Handlers ──
@@ -11672,7 +11675,7 @@ function quotesRender(){
         </div>
         <div class="rec-cust" data-c="${escAttr(q.customerName||'')}" ${q.customerName?'onclick="quoteByCustomer(this.dataset.c)" style="cursor:pointer;" title="ดูใบเสนอราคาทั้งหมดของลูกค้านี้"':''}>👤 ${q.customerName || '(ไม่มีชื่อ)'}${q.customerName?' <span style="font-size:11px;color:var(--blu);">🔎</span>':''}</div>
         <div class="rec-meta">
-          ${q.customerPhone ? `<span>📞 ${q.customerPhone}</span>` : ''}
+          ${q.customerPhone ? `<span>📞 ${telFmt(q.customerPhone)}</span>` : ''}
           <span>📋 <b>${q.entryCount}</b> รายการ</span>
           <span style="color:var(--blu);">💲 ${priceLabel}</span>
         </div>
@@ -16172,13 +16175,13 @@ function fuRender(){
   }
   const groups = {};
   _fuQuotes.forEach(function(q){
-    const phone = String(q.customerPhone || '').replace(/\D/g,'');
+    const phone = telNorm(q.customerPhone);
     const key = phone || String(q.customerName || 'ไม่ระบุลูกค้า').trim().toLowerCase();
     if (!groups[key]) groups[key] = [];
     groups[key].push(q);
   });
   host.innerHTML = Object.keys(groups).map(function(key){
-    const rows = groups[key], first = rows[0], phone = String(first.customerPhone || '').replace(/\D/g,'');
+    const rows = groups[key], first = rows[0], phone = telNorm(first.customerPhone);
     const phoneHtml = phone ? '<a class="btn btn-g btn-sm" href="tel:' + escAttr(phone) + '" onclick="event.stopPropagation()">📞 โทร ' + escHtml(telFmt(phone)) + '</a>' : '<span style="color:var(--mu);">ไม่มีเบอร์โทร</span>';
     const items = rows.map(function(q){
       const idx = _fuQuotes.indexOf(q), lateColor = Number(q.ageDays) > 7 ? 'var(--rd)' : 'var(--acc)';
@@ -16250,7 +16253,7 @@ function fuBook(idx){
   setBookingMode('form');
   setBookingType('install');
   document.getElementById('bkCustomer').value = q.customerName || '';
-  document.getElementById('bkPhone').value = q.customerPhone || '';
+  document.getElementById('bkPhone').value = telNorm(q.customerPhone);
   document.getElementById('bkAddress').value = q.customerAddress || '';
   toast('กรอกให้แล้ว ตรวจสอบและกดลงคิว');
 }
@@ -16336,7 +16339,7 @@ function custRender(){
 
   function cardHtml(c){
     const realIdx = _crm2Customers.indexOf(c);
-    const phone = String(c.phone || '').replace(/\D/g, '');
+    const phone = telNorm(c.phone);
     const siteCount = custSites(c).length;
     return '<div class="card" role="button" tabindex="0" onclick="custOpen('+realIdx+')" onkeydown="if(event.key===\'Enter\')custOpen('+realIdx+')" style="padding:14px;cursor:pointer;">'
       + '<div style="font-weight:800;margin-bottom:7px;">'+escHtml(c.name || 'ไม่ระบุชื่อ')+'</div>'
@@ -16375,7 +16378,7 @@ function custOpen(index){
     return '<div style="padding:7px 0;border-bottom:1px solid var(--bd);"><b>'+escHtml(j.name || 'ไม่ระบุชื่อ')+'</b> · '+(kind === 'install' ? 'ติดตั้ง' : 'วัด')+' · '+escHtml(j.date || '')
       + '<div style="margin-top:3px;">📍 '+escHtml(j.addr || '-')+'</div><div style="margin-top:2px;">🔧 '+escHtml(j.job || '-')+'</div><div style="font-size:10px;color:var(--mu);margin-top:2px;">'+escHtml(j.id || '-')+'</div></div>';
   }).join('');
-  const phone = String(c.phone || '').replace(/\D/g, '');
+  const phone = telNorm(c.phone);
   modal.innerHTML = '<div class="modal" style="max-width:620px;"><div class="modal-head"><b>'+escHtml(c.name || 'ไม่ระบุชื่อ')+'</b><button class="btn btn-g btn-sm" onclick="document.getElementById(\'crm2Modal\').classList.remove(\'on\')">×</button></div>'
     + '<div style="padding:18px;"><div><a href="tel:'+phone+'">📞 '+escHtml(telFmt(phone))+'</a></div><div style="margin-top:9px;">📍 '+escHtml(c.lastAddress || '-')+'</div>'
     + '<div style="margin-top:9px;">งานติดตั้ง '+(Number(c.installCount)||0)+' · งานวัด '+(Number(c.measureCount)||0)+'</div>'
