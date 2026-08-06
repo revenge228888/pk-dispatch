@@ -1144,6 +1144,16 @@ async function getCustomersFast(){
   }
   const _g = await call({ action:'pk_custList' }); _markJobSource('gas'); return _g;
 }
+async function getFollowupFast(){
+  if (USE_SHEETS_BOOT && CURRENT_USER) {
+    try {
+      const d = await _pkFastPost_('/quote-followup');
+      if (d && d.ok && Array.isArray(d.quotes)) { _markJobSource('sheets', d.ms); return d; }
+      console.warn('[getFollowupFast] worker not ok, falling back to GAS:', d && d.error);
+    } catch(e){ console.warn('[getFollowupFast] worker error, falling back to GAS:', e.message); }
+  }
+  const _g = await call({ action:'pk_quoteFollowupList' }); _markJobSource('gas'); return _g;
+}
 
 // ── [Part B] เปิดดู 1 ใบ ผ่าน Drive API — flag แยก + fallback GAS อัตโนมัติ ──
 let USE_SHEETS_TASK = true;
@@ -1667,6 +1677,7 @@ function renderOfficeShell(){
           <a class="sidebar-item" data-tab="records" href="#tab=records" onclick="return pkNavTab(event,'records',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 17L17 3l4 4L7 21z"/><path d="M8 8l2 2M11 5l2 2M5 11l2 2"/></svg></span><span class="sidebar-label">จดขนาด</span></a>
           <a class="sidebar-item" data-tab="quotes" href="#tab=quotes" onclick="return pkNavTab(event,'quotes',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2"/></svg></span><span class="sidebar-label">คำนวณราคา</span></a>
           <a class="sidebar-item" data-tab="qtrack" href="#tab=qtrack" onclick="return pkNavTab(event,'qtrack',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M15 3v4h4M9 12l2 2 4-5M9 18h6"/></svg></span><span class="sidebar-label">ติดตามใบเสนอ</span><span id="qtBadge" class="exp-badge"></span></a>
+          <a class="sidebar-item" data-tab="followup" href="#tab=followup" onclick="return pkNavTab(event,'followup',this,setTab)"><span class="sidebar-ico">📋</span><span class="sidebar-label">ตามใบเสนอ</span><span id="fuBadge" class="exp-badge"></span></a>
           ${CURRENT_USER.role === 'manager' ? `<a class="sidebar-item" data-tab="quoteprice" href="#tab=quoteprice" onclick="return pkNavTab(event,'quoteprice',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 11l8-8 9 9-8 8z"/><circle cx="9" cy="9" r="1.5"/></svg></span><span class="sidebar-label">แก้ราคาขาย</span></a>
           <a class="sidebar-item" data-tab="quoteheader" href="#tab=quoteheader" onclick="return pkNavTab(event,'quoteheader',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg></span><span class="sidebar-label">หัวใบเสนอราคา</span></a>` : ''}
           ${CURRENT_USER.role === 'manager' ? `
@@ -1741,6 +1752,20 @@ function renderOfficeShell(){
             <button class="crm2-chip" data-filter="measure" onclick="custSetFilter('measure')">มีวัด</button>
           </div>
           <div id="custList"><div class="loading-row">กำลังโหลด...</div></div>
+        </div>
+      </div>
+
+      <!-- CRM3A QUOTE FOLLOW-UP (office + manager) -->
+      <div id="tabFollowup" style="display:none;">
+        <div class="section-pad">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+            <div>
+              <div style="font-weight:800;font-size:18px;">📋 ติดตามใบเสนอราคาค้าง</div>
+              <div id="fuSummary" style="font-size:12px;color:var(--mu);margin-top:3px;">กำลังโหลด...</div>
+            </div>
+            ${CURRENT_USER.role === 'manager' ? '<div id="fuDaysConfig" style="display:flex;align-items:center;gap:7px;"><label for="fuDays" style="font-size:12px;color:var(--mu);">ค้างตั้งแต่</label><input id="fuDays" class="fi" type="number" min="1" max="30" style="width:72px;"><span style="font-size:12px;color:var(--mu);">วัน</span><button class="btn btn-g btn-sm" onclick="fuSetDays()">บันทึกเกณฑ์</button></div>' : ''}
+          </div>
+          <div id="fuList"><div class="loading-row">กำลังโหลด...</div></div>
         </div>
       </div>
 
@@ -2732,6 +2757,7 @@ function officeInit(){
   cfBadgeRefresh();   // badge จำนวนงานรอยืนยัน (รอ CF)
   tmgrBadgeRefresh(); // badge งานมอบหมายที่รอตรวจ
   qtBadgeRefresh();   // badge งานวัดเสร็จแล้วยังไม่มีใบเสนอ
+  fuLoad();           // badge ใบเสนอราคาค้าง (Worker-first)
 }
 
 // ════════════════════════════════════════
@@ -4594,7 +4620,7 @@ function pkApplyHashTab_(){
   else if (CURRENT_USER.role === 'office' || CURRENT_USER.role === 'manager') setTab(t, btn);
 }
 function setTab(t, btn){
-  ['Dash','Access','Gpssetup','Booking','Jobs','Customers','Assign','Cfqueue','Qtrack','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Slips','Sheetcap','Usermgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po'].forEach(x => {
+  ['Dash','Access','Gpssetup','Booking','Jobs','Customers','Followup','Assign','Cfqueue','Qtrack','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Slips','Sheetcap','Usermgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -4614,6 +4640,7 @@ function setTab(t, btn){
   if (t === 'dash') { loadDashboard(); dashCalLoad(); }
   if (t === 'booking') initBookingTab();
   if (t === 'customers' && !_crm2Loaded) custLoad();
+  if (t === 'followup') { if (!_fuLoaded) fuLoad(); else fuRender(); }
   if (t === 'assign') assignInit();
   if (t === 'gpssetup') gpsSetupInit();
   if (t === 'cfqueue') cfLoad();
@@ -16097,6 +16124,117 @@ async function slpExportExcel(){const vis=slpVisible();if(!vis.length)return toa
 function slpDownload(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 async function slpImportJson(file){if(!file)return;try{const data=JSON.parse(await file.text());if(data.app!=='slipManager'||!Array.isArray(data.records))throw new Error('รูปแบบไฟล์ไม่ถูกต้อง');const have=new Set(_slpRecords.map(r=>r.id)),rows=data.records.filter(r=>!r.id||!have.has(r.id)).map(r=>Object.assign({},r,{source:r.source||'import'}));if(!rows.length)return toast('ไม่มีรายการใหม่ (ข้าม id ที่มีอยู่แล้ว)');if(!confirm(`นำเข้า ${rows.length} รายการ?`))return;for(let i=0;i<rows.length;i+=10){showLoad(`นำเข้า ${Math.min(i+10,rows.length)}/${rows.length}...`);const out=await call({action:'pk_slipBatchUpsert',slips:rows.slice(i,i+10)});if(!out.ok)throw new Error(out.error);}toast(`นำเข้าแล้ว ${rows.length} รายการ`);await slpInit();}catch(e){toast('นำเข้าไม่สำเร็จ: '+e.message);}finally{hideLoad();}}
 function slpFmtAmt(v){return (+v||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+// ════════ CRM3A — ติดตามใบเสนอราคาค้าง (fu*; office + manager) ════════
+let _fuQuotes = [], _fuDays = 3, _fuLoaded = false, _fuLoading = false;
+
+function fuUpdateBadge_(){
+  const badge = document.getElementById('fuBadge');
+  if (!badge) return;
+  const n = _fuQuotes.length;
+  badge.textContent = n ? String(n) : '';
+  badge.style.display = n ? '' : 'none';
+}
+
+async function fuLoad(){
+  const host = document.getElementById('fuList');
+  if (!host || _fuLoading) return;
+  _fuLoading = true;
+  if (!_fuLoaded) host.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+  try {
+    const out = await getFollowupFast();
+    if (!out || !out.ok || !Array.isArray(out.quotes)) throw new Error((out && out.error) || 'โหลดรายการไม่สำเร็จ');
+    _fuQuotes = out.quotes;
+    _fuDays = Number(out.days) || 3;
+    _fuLoaded = true;
+    const input = document.getElementById('fuDays');
+    if (input && CURRENT_USER && CURRENT_USER.role === 'manager') input.value = _fuDays;
+    fuRender();
+    fuUpdateBadge_();
+  } catch(e) {
+    host.innerHTML = '<div class="empty-section">โหลดรายการติดตามไม่สำเร็จ</div>';
+    console.warn('[fuLoad]', e);
+  } finally { _fuLoading = false; }
+}
+
+function fuRender(){
+  const host = document.getElementById('fuList');
+  if (!host) return;
+  const summary = document.getElementById('fuSummary');
+  if (summary) summary.textContent = 'เกณฑ์ ' + _fuDays + ' วัน · ค้าง ' + _fuQuotes.length + ' ใบ';
+  if (!_fuQuotes.length) {
+    host.innerHTML = '<div class="empty-section">✅ ไม่มีใบเสนอราคาค้างติดตาม</div>';
+    fuUpdateBadge_();
+    return;
+  }
+  const groups = {};
+  _fuQuotes.forEach(function(q){
+    const phone = String(q.customerPhone || '').replace(/\D/g,'');
+    const key = phone || String(q.customerName || 'ไม่ระบุลูกค้า').trim().toLowerCase();
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(q);
+  });
+  host.innerHTML = Object.keys(groups).map(function(key){
+    const rows = groups[key], first = rows[0], phone = String(first.customerPhone || '').replace(/\D/g,'');
+    const phoneHtml = phone ? '<a class="btn btn-g btn-sm" href="tel:' + escAttr(phone) + '" onclick="event.stopPropagation()">📞 โทร ' + escHtml(telFmt(phone)) + '</a>' : '<span style="color:var(--mu);">ไม่มีเบอร์โทร</span>';
+    const items = rows.map(function(q){
+      const idx = _fuQuotes.indexOf(q), lateColor = Number(q.ageDays) > 7 ? 'var(--rd)' : 'var(--acc)';
+      return '<div style="border-top:1px solid var(--bdr);padding:10px 0;">'
+        + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+        + '<b style="font-family:var(--mono);">' + escHtml(q.quoteNo || q.id) + '</b>'
+        + '<span style="margin-left:auto;font-weight:700;color:var(--grn);">฿' + fmt(q.totalAmount || 0) + '</span>'
+        + '<span style="font-size:12px;font-weight:700;color:' + lateColor + ';">⏳ ค้าง ' + Number(q.ageDays || 0) + ' วัน</span></div>'
+        + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">'
+        + '<button class="btn btn-g btn-sm" onclick="quoteOpenView(\'' + escAttr(q.id) + '\')">👁 ดูใบ</button>'
+        + '<button class="btn btn-g btn-sm" onclick="fuBook(' + idx + ')">🔧 ลงคิว</button>'
+        + '<button class="btn btn-p btn-sm" onclick="fuDone(\'' + escAttr(q.id) + '\')">✅ ติดตามแล้ว</button>'
+        + '</div></div>';
+    }).join('');
+    return '<div class="card" style="padding:13px 14px;margin-bottom:10px;">'
+      + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:2px;">'
+      + '<div style="font-size:16px;font-weight:800;">' + escHtml(first.customerName || 'ไม่ระบุลูกค้า') + '</div>'
+      + '<div style="margin-left:auto;font-size:13px;">' + phoneHtml + '</div></div>' + items + '</div>';
+  }).join('');
+  fuUpdateBadge_();
+}
+
+async function fuDone(id){
+  if (!confirm('ยืนยันว่าติดตามใบเสนอราคานี้แล้ว?')) return;
+  try {
+    const out = await call({action:'pk_quoteFollowupDone', id:id});
+    if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกไม่สำเร็จ');
+    _fuQuotes = _fuQuotes.filter(function(q){ return q.id !== id; });
+    fuRender();
+    fuUpdateBadge_();
+    toast('✅ บันทึกว่าติดตามแล้ว');
+  } catch(e){ toast('❌ ' + e.message); }
+}
+
+async function fuSetDays(){
+  if (!CURRENT_USER || CURRENT_USER.role !== 'manager') return;
+  const input = document.getElementById('fuDays');
+  const days = Math.max(1, Math.min(30, parseInt(input && input.value, 10) || 3));
+  try {
+    const out = await call({action:'pk_followupDaysSet', days:days});
+    if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกไม่สำเร็จ');
+    _fuLoaded = false;
+    await fuLoad();
+    toast('บันทึกเกณฑ์ ' + out.days + ' วันแล้ว');
+  } catch(e){ toast('❌ ' + e.message); }
+}
+
+function fuBook(idx){
+  const q = _fuQuotes[idx];
+  if (!q) return;
+  const btn = document.querySelector('#officeSidebar .sidebar-item[data-tab="booking"]');
+  setTab('booking', btn);
+  setBookingMode('form');
+  setBookingType('install');
+  document.getElementById('bkCustomer').value = q.customerName || '';
+  document.getElementById('bkPhone').value = q.customerPhone || '';
+  document.getElementById('bkAddress').value = q.customerAddress || '';
+  toast('กรอกให้แล้ว ตรวจสอบและกดลงคิว');
+}
 
 // ════════ CRM2 — ทะเบียนลูกค้ากลาง (cust*; office + manager) ════════
 let _crm2Customers = [];
