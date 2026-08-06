@@ -16132,13 +16132,30 @@ async function custLoad(){
   }
 }
 
+// หน้างานไม่ซ้ำ (key = ที่อยู่ ถ้าว่างใช้ชื่อ) จาก jobIds
+function custSites(c){
+  var seen = {}, out = [];
+  (c && c.jobIds || []).forEach(function(j){
+    var key = String((j.addr||j.name||'')).trim().toLowerCase();
+    if(!key || seen[key]) return; seen[key] = 1;
+    out.push({ name:String(j.name||''), addr:String(j.addr||''), date:String(j.date||''), kind:String(j.kind||'') });
+  });
+  return out;
+}
+
 function custRender(){
   const host = document.getElementById('custList');
   if (!host) return;
   const input = document.getElementById('crm2Search');
-  const q = String(input ? input.value : '').trim().toLowerCase().replace(/[-\s]/g, '');
+  const qtext = String(input ? input.value : '').trim().toLowerCase();
+  const qphone = qtext.replace(/[-\s]/g, '');
   const rows = _crm2Customers.filter(function(c){
-    return !q || String(c.phone || '').replace(/[-\s]/g, '').indexOf(q) !== -1 || String(c.name || '').toLowerCase().indexOf(q) !== -1;
+    if (!qtext) return true;
+    return (qphone && String(c.phone || '').replace(/[-\s]/g, '').indexOf(qphone) !== -1)
+      || String(c.name || '').toLowerCase().indexOf(qtext) !== -1
+      || (c.jobIds || []).some(function(j){
+        return (String(j.name || '')+' '+String(j.addr || '')).toLowerCase().indexOf(qtext) !== -1;
+      });
   }).filter(function(c){
     if (_crm2Filter === 'install') return Number(c.installCount) > 0;
     if (_crm2Filter === 'measure') return Number(c.measureCount) > 0;
@@ -16158,10 +16175,12 @@ function custRender(){
   function cardHtml(c){
     const realIdx = _crm2Customers.indexOf(c);
     const phone = String(c.phone || '').replace(/\D/g, '');
+    const siteCount = custSites(c).length;
     return '<div class="card" role="button" tabindex="0" onclick="custOpen('+realIdx+')" onkeydown="if(event.key===\'Enter\')custOpen('+realIdx+')" style="padding:14px;cursor:pointer;">'
       + '<div style="font-weight:800;margin-bottom:7px;">'+escHtml(c.name || 'ไม่ระบุชื่อ')+'</div>'
       + '<a href="tel:'+phone+'" onclick="event.stopPropagation()" style="color:var(--acc);text-decoration:none;">📞 '+escHtml(telFmt(phone))+'</a>'
       + '<div style="font-size:12px;color:var(--mu);margin-top:8px;">ติดตั้ง '+(Number(c.installCount)||0)+' · วัด '+(Number(c.measureCount)||0)+' · ล่าสุด '+escHtml(c.lastSeen || '-')+'</div>'
+      + (siteCount > 1 ? '<span style="display:inline-block;margin-top:6px;font-size:11px;font-weight:700;background:var(--acc-t,rgba(255,159,67,.15));color:var(--acc);border:1px solid var(--acc);border-radius:20px;padding:2px 9px;">🏗️ '+siteCount+' หน้างาน</span>' : '')
       + '</div>';
   }
 
@@ -16188,11 +16207,17 @@ function custOpen(index){
   const c = _crm2Customers[index]; if (!c) return;
   let modal = document.getElementById('crm2Modal');
   if (!modal) { modal = document.createElement('div'); modal.id = 'crm2Modal'; modal.className = 'modal-bg'; modal.onclick = function(e){ if(e.target === modal) modal.classList.remove('on'); }; document.body.appendChild(modal); }
-  const jobs = (c.jobIds || []).map(function(j){ return '<div style="padding:7px 0;border-bottom:1px solid var(--bd);"><b>'+escHtml(j.id || '-')+'</b> · '+escHtml(j.kind || '')+' · '+escHtml(j.date || '')+'</div>'; }).join('');
+  const siteCount = custSites(c).length;
+  const jobs = (c.jobIds || []).map(function(j){
+    const kind = String(j.kind || '');
+    return '<div style="padding:7px 0;border-bottom:1px solid var(--bd);"><b>'+escHtml(j.name || 'ไม่ระบุชื่อ')+'</b> · '+(kind === 'install' ? 'ติดตั้ง' : 'วัด')+' · '+escHtml(j.date || '')
+      + '<div style="margin-top:3px;">📍 '+escHtml(j.addr || '-')+'</div><div style="font-size:10px;color:var(--mu);margin-top:2px;">'+escHtml(j.id || '-')+'</div></div>';
+  }).join('');
   const phone = String(c.phone || '').replace(/\D/g, '');
   modal.innerHTML = '<div class="modal" style="max-width:620px;"><div class="modal-head"><b>'+escHtml(c.name || 'ไม่ระบุชื่อ')+'</b><button class="btn btn-g btn-sm" onclick="document.getElementById(\'crm2Modal\').classList.remove(\'on\')">×</button></div>'
     + '<div style="padding:18px;"><div><a href="tel:'+phone+'">📞 '+escHtml(telFmt(phone))+'</a></div><div style="margin-top:9px;">📍 '+escHtml(c.lastAddress || '-')+'</div>'
     + '<div style="margin-top:9px;">งานติดตั้ง '+(Number(c.installCount)||0)+' · งานวัด '+(Number(c.measureCount)||0)+'</div>'
+    + (siteCount > 1 ? '<div style="margin-top:9px;font-weight:700;">หน้างานทั้งหมด '+siteCount+' แห่ง</div>' : '')
     + '<div style="margin-top:14px;font-weight:700;">ประวัติงาน</div><div style="max-height:360px;overflow:auto;">'+(jobs || '<div class="empty-section">ไม่มีรายการงาน</div>')+'</div></div></div>';
   modal.classList.add('on');
 }
