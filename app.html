@@ -1763,7 +1763,10 @@ function renderOfficeShell(){
               <div style="font-weight:800;font-size:18px;">📋 ติดตามใบเสนอราคาค้าง</div>
               <div id="fuSummary" style="font-size:12px;color:var(--mu);margin-top:3px;">กำลังโหลด...</div>
             </div>
-            ${CURRENT_USER.role === 'manager' ? '<div id="fuDaysConfig" style="display:flex;align-items:center;gap:7px;"><label for="fuDays" style="font-size:12px;color:var(--mu);">ค้างตั้งแต่</label><input id="fuDays" class="fi" type="number" min="1" max="30" style="width:72px;"><span style="font-size:12px;color:var(--mu);">วัน</span><button class="btn btn-g btn-sm" onclick="fuSetDays()">บันทึกเกณฑ์</button></div>' : ''}
+            <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
+              <button class="btn btn-g btn-sm" id="fuClearBtn" onclick="fuClearOld()">🧹 เคลียร์ค้างเกิน 7 วัน</button>
+              ${CURRENT_USER.role === 'manager' ? '<div id="fuDaysConfig" style="display:flex;align-items:center;gap:7px;"><label for="fuDays" style="font-size:12px;color:var(--mu);">ค้างตั้งแต่</label><input id="fuDays" class="fi" type="number" min="1" max="30" style="width:72px;"><span style="font-size:12px;color:var(--mu);">วัน</span><button class="btn btn-g btn-sm" onclick="fuSetDays()">บันทึกเกณฑ์</button></div>' : ''}
+            </div>
           </div>
           <div id="fuList"><div class="loading-row">กำลังโหลด...</div></div>
         </div>
@@ -16208,6 +16211,22 @@ async function fuDone(id){
     fuUpdateBadge_();
     toast('✅ บันทึกว่าติดตามแล้ว');
   } catch(e){ toast('❌ ' + e.message); }
+}
+
+async function fuClearOld(){
+  const old = _fuQuotes.filter(function(q){ return Number(q.ageDays) >= 7; });
+  if (!old.length) { toast('ไม่มีใบค้างเกิน 7 วัน'); return; }
+  if (!confirm('เคลียร์ ' + old.length + ' ใบที่ค้างเกิน 7 วัน?\n(ทำเครื่องหมายติดตามแล้ว — ใบเสนอยังอยู่ในระบบ ไม่ได้ลบ)')) return;
+  const btn = document.getElementById('fuClearBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const out = await call({action:'pk_quoteFollowupClear', minDays:7});
+    if (!out || !out.ok) throw new Error((out && out.error) || 'เคลียร์ไม่สำเร็จ');
+    toast('✅ เคลียร์แล้ว ' + out.cleared + ' ใบ');
+    _fuLoaded = false;
+    await fuLoad();
+  } catch(e){ toast('❌ ' + e.message); }
+  finally { if (btn) btn.disabled = false; }
 }
 
 async function fuSetDays(){
