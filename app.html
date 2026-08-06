@@ -654,6 +654,7 @@ tbody tr:nth-child(even){background:rgba(120,96,72,.04);}
     <div class="card-head"><span id="jeTitle">✏️ แก้ไขงานติดตั้ง</span></div>
     <div style="padding:14px 16px;">
       <div class="fg"><label class="fl">ชื่อลูกค้า</label><input class="fi" id="jeName"></div>
+      <div class="fg"><label class="fl">เบอร์โทร</label><input class="fi" id="jePhone" type="tel" inputmode="numeric" oninput="this.value=this.value.replace(/\D/g,'')" maxlength="10" placeholder="กรอกเฉพาะตัวเลข"></div>
       <div class="fg"><label class="fl">วันที่</label><input class="fi" id="jeDate" type="date"></div>
       <div class="fg"><label class="fl">ที่อยู่</label><textarea class="fi" id="jeAddr" rows="2"></textarea></div>
       <div class="fg"><label class="fl">รายการงาน</label><textarea class="fi" id="jeJob" rows="2"></textarea></div>
@@ -9150,6 +9151,7 @@ function jobEditOpen(id, sheet){
   const jc = document.getElementById('jeConvertBtn');
   if (jc) jc.style.display = isMeas ? 'none' : '';   // แปลงได้เฉพาะงานติดตั้ง
   document.getElementById('jeName').value   = j.name||'';
+  document.getElementById('jePhone').value = jobTel(j.note||'');
   document.getElementById('jeDate').value   = j.date||'';
   document.getElementById('jeAddr').value   = j.rawAddr||'';
   document.getElementById('jeJob').value    = j.job||'';
@@ -9206,6 +9208,9 @@ async function jobEditSave(){
   if (addrV !== (cur.rawAddr||''))         payload.address = addrV;
   if (jobV  !== (cur.job||''))             payload.job = jobV;
   if (teamV !== String(cur.team||'').trim()) payload.team = teamV;
+  const phoneV = gv('jePhone');
+  const curPhone = jobTel(cur.note||'');
+  if (phoneV !== curPhone) payload.phone = phoneV;
   const curAmt = (cur.amount!=null ? Number(cur.amount) : 0);
   if (amtEl.value!=='' && Number(amtEl.value) !== curAmt) payload.amount = amtEl.value;
   const curOrd = (cur.orderStr!=null ? String(cur.orderStr).replace(/[^0-9]/g,'') : '');
@@ -16211,7 +16216,7 @@ function custOpen(index){
   const jobs = (c.jobIds || []).map(function(j){
     const kind = String(j.kind || '');
     return '<div style="padding:7px 0;border-bottom:1px solid var(--bd);"><b>'+escHtml(j.name || 'ไม่ระบุชื่อ')+'</b> · '+(kind === 'install' ? 'ติดตั้ง' : 'วัด')+' · '+escHtml(j.date || '')
-      + '<div style="margin-top:3px;">📍 '+escHtml(j.addr || '-')+'</div><div style="font-size:10px;color:var(--mu);margin-top:2px;">'+escHtml(j.id || '-')+'</div></div>';
+      + '<div style="margin-top:3px;">📍 '+escHtml(j.addr || '-')+'</div><div style="margin-top:2px;">🔧 '+escHtml(j.job || '-')+'</div><div style="font-size:10px;color:var(--mu);margin-top:2px;">'+escHtml(j.id || '-')+'</div></div>';
   }).join('');
   const phone = String(c.phone || '').replace(/\D/g, '');
   modal.innerHTML = '<div class="modal" style="max-width:620px;"><div class="modal-head"><b>'+escHtml(c.name || 'ไม่ระบุชื่อ')+'</b><button class="btn btn-g btn-sm" onclick="document.getElementById(\'crm2Modal\').classList.remove(\'on\')">×</button></div>'
