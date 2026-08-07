@@ -241,6 +241,51 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 .crm2-group{font-weight:800;font-size:13px;color:var(--acc);margin:14px 0 6px;padding-bottom:3px;border-bottom:1px solid var(--bdr);}
 .crm2-group:first-child{margin-top:0;}
 
+/* ทะเบียนลูกค้า — หาง่าย */
+.crm2-sticky{position:sticky;top:0;z-index:6;background:var(--surf2);padding:10px 0 8px;margin:-4px 0 0;border-bottom:1px solid var(--bdr);}
+.crm2-jump{display:flex;gap:4px;flex-wrap:wrap;margin:8px 0 4px;}
+.crm2-jump button{border:1px solid var(--bdr);background:var(--surf);color:var(--mu);border-radius:var(--r-sm);min-width:26px;height:26px;font:700 12px var(--sans);cursor:pointer;padding:0 5px;}
+.crm2-jump button:hover{border-color:var(--acc);color:var(--acc);}
+.crm2-hit{background:var(--acc-t2);border-radius:3px;font-weight:800;}
+/* การ์ดลูกค้า */
+.cust-card{background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r-lg);padding:13px 14px;cursor:pointer;transition:border-color .15s,transform .15s;}
+.cust-card:hover{border-color:var(--acc);transform:translateY(-1px);}
+.cust-card:focus-visible{outline:2px solid var(--acc);outline-offset:2px;}
+.cust-name{font-weight:800;font-size:15px;line-height:1.35;color:var(--tx);}
+.cust-tel{display:inline-flex;align-items:center;gap:5px;margin-top:5px;font:600 13px var(--mono);color:var(--acc);text-decoration:none;}
+.cust-tel:hover{text-decoration:underline;}
+.cust-chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px;}
+.cust-chip{font:700 11px var(--sans);border-radius:var(--r-pill);padding:2px 9px;border:1px solid;}
+.cust-chip.i{color:var(--acc);border-color:var(--acc-t2);background:var(--acc-t);}
+.cust-chip.m{color:var(--blu);border-color:rgba(47,115,230,.28);background:rgba(47,115,230,.12);}
+.cust-chip.s{color:var(--amb);border-color:rgba(180,83,9,.3);background:var(--amb-t);}
+.cust-when{margin-top:8px;font-size:11px;color:var(--mu);}
+/* โปรไฟล์ 360 */
+.cp-head{padding:16px 18px 14px;border-bottom:1px solid var(--bdr);}
+.cp-name{font-weight:800;font-size:21px;line-height:1.3;color:var(--tx);}
+.cp-sub{margin-top:4px;font-size:12px;color:var(--mu);}
+.cp-call{display:inline-flex;align-items:center;gap:7px;margin-top:11px;background:var(--acc);color:#fff;border-radius:var(--r-pill);padding:8px 16px;font:700 14px var(--mono);text-decoration:none;}
+.cp-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--bdr);border-bottom:1px solid var(--bdr);}
+.cp-stat{background:var(--surf2);padding:11px 8px;text-align:center;}
+.cp-stat b{display:block;font:800 19px var(--mono);color:var(--tx);line-height:1.2;}
+.cp-stat span{font-size:10.5px;color:var(--mu);}
+.cp-tabs{display:flex;gap:6px;padding:11px 16px 0;flex-wrap:wrap;}
+.cp-tab{border:1px solid var(--bdr);background:var(--surf);color:var(--mu);border-radius:var(--r-pill);padding:6px 14px;font:700 12px var(--sans);cursor:pointer;}
+.cp-tab.on{background:var(--acc);border-color:var(--acc);color:#fff;}
+.cp-body{padding:14px 16px 18px;max-height:52vh;overflow:auto;}
+/* ไทม์ไลน์ — เส้นสันหลัง + จุดสีตามประเภท (signature) */
+.cp-tl{position:relative;padding-left:20px;}
+.cp-tl::before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:2px;background:var(--bdr);}
+.cp-ev{position:relative;padding:0 0 15px 0;}
+.cp-ev::before{content:"";position:absolute;left:-19px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--mu);box-shadow:0 0 0 3px var(--surf2);}
+.cp-ev.i::before{background:var(--acc);} .cp-ev.m::before{background:var(--blu);} .cp-ev.q::before{background:var(--amb);}
+.cp-date{font:600 11px var(--mono);color:var(--mu);}
+.cp-title{font-weight:700;font-size:14px;color:var(--tx);margin-top:2px;}
+.cp-meta{font-size:12px;color:var(--mu);margin-top:3px;line-height:1.5;}
+.cp-empty{padding:26px 12px;text-align:center;color:var(--mu);font-size:13px;}
+.crm2-jump button:focus-visible,.crm2-chip:focus-visible,.cp-call:focus-visible,.cp-tab:focus-visible{outline:2px solid var(--acc);outline-offset:2px;}
+@media(max-width:520px){.cp-stats{grid-template-columns:repeat(2,1fr)}.cp-body{max-height:none}}
+
 /* WHITEBOARD — canvas board (wb*) */
 #wbModal{z-index:260;padding:0;}
 #wbModal .wb-modal{max-width:100vw;width:100vw;height:100vh;max-height:100vh;border-radius:0;overflow:hidden;display:flex;flex-direction:column;background:#eae5d9;}
@@ -1144,6 +1189,16 @@ async function getCustomersFast(){
   }
   const _g = await call({ action:'pk_custList' }); _markJobSource('gas'); return _g;
 }
+async function getCustProfileFast(phone){
+  if (USE_SHEETS_BOOT && CURRENT_USER) {
+    try {
+      const d = await _pkFastPost_('/cust-profile', { phone:phone });
+      if (d && d.ok && Array.isArray(d.quotes)) { _markJobSource('sheets', d.ms); return d; }
+      console.warn('[getCustProfileFast] worker not ok, falling back to GAS:', d && d.error);
+    } catch(e){ console.warn('[getCustProfileFast] worker error, falling back to GAS:', e.message); }
+  }
+  const _g = await call({ action:'pk_custProfile', phone:phone }); _markJobSource('gas'); return _g;
+}
 async function getFollowupFast(){
   if (USE_SHEETS_BOOT && CURRENT_USER) {
     try {
@@ -1737,20 +1792,23 @@ function renderOfficeShell(){
             <div style="font-weight:800;font-size:18px;">👥 ทะเบียนลูกค้า</div>
             ${CURRENT_USER.role === 'manager' ? '<button class="btn btn-g btn-sm" id="crm2BackfillBtn" onclick="custBackfill()">🔄 สร้าง/อัปเดตทะเบียนจากงานเก่า</button>' : ''}
           </div>
-          <input id="crm2Search" class="fi" type="search" placeholder="🔍 ค้นหาเบอร์โทรหรือชื่อลูกค้า" oninput="custRender()" style="margin-bottom:12px;">
-          <div id="crm2Summary" style="font-size:13px;color:var(--mu);margin-bottom:8px;"></div>
-          <div class="crm2-bar">
-            <span class="crm2-bar-lbl">เรียง:</span>
-            <button class="crm2-chip on" data-sort="name" onclick="custSetSort('name')">ชื่อ ก-ฮ</button>
-            <button class="crm2-chip" data-sort="recent" onclick="custSetSort('recent')">ล่าสุด</button>
-            <button class="crm2-chip" data-sort="jobs" onclick="custSetSort('jobs')">งานเยอะสุด</button>
+          <div class="crm2-sticky">
+            <input id="crm2Search" class="fi" type="search" placeholder="🔍 ค้นหาเบอร์โทรหรือชื่อลูกค้า" oninput="custRender()" style="margin-bottom:12px;">
+            <div id="crm2Summary" style="font-size:13px;color:var(--mu);margin-bottom:8px;"></div>
+            <div class="crm2-bar">
+              <span class="crm2-bar-lbl">เรียง:</span>
+              <button class="crm2-chip on" data-sort="name" onclick="custSetSort('name')">ชื่อ ก-ฮ</button>
+              <button class="crm2-chip" data-sort="recent" onclick="custSetSort('recent')">ล่าสุด</button>
+              <button class="crm2-chip" data-sort="jobs" onclick="custSetSort('jobs')">งานเยอะสุด</button>
+            </div>
+            <div class="crm2-bar">
+              <span class="crm2-bar-lbl">งาน:</span>
+              <button class="crm2-chip on" data-filter="all" onclick="custSetFilter('all')">ทั้งหมด</button>
+              <button class="crm2-chip" data-filter="install" onclick="custSetFilter('install')">มีติดตั้ง</button>
+              <button class="crm2-chip" data-filter="measure" onclick="custSetFilter('measure')">มีวัด</button>
+            </div>
           </div>
-          <div class="crm2-bar">
-            <span class="crm2-bar-lbl">งาน:</span>
-            <button class="crm2-chip on" data-filter="all" onclick="custSetFilter('all')">ทั้งหมด</button>
-            <button class="crm2-chip" data-filter="install" onclick="custSetFilter('install')">มีติดตั้ง</button>
-            <button class="crm2-chip" data-filter="measure" onclick="custSetFilter('measure')">มีวัด</button>
-          </div>
+          <div id="crm2Jump" class="crm2-jump"></div>
           <div id="custList"><div class="loading-row">กำลังโหลด...</div></div>
         </div>
       </div>
@@ -16278,6 +16336,19 @@ function custGroupLetter(name){
   return 'อื่นๆ';
 }
 
+function custAgo(d){
+  var s=String(d||'').trim(); if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s||'-';
+  var t=new Date(s+'T00:00:00'), days=Math.floor((Date.now()-t.getTime())/86400000);
+  if(days<0) return 'อีก '+Math.abs(days)+' วัน'; if(days===0) return 'วันนี้'; if(days===1) return 'เมื่อวาน';
+  if(days<30) return days+' วันก่อน'; if(days<365) return Math.floor(days/30)+' เดือนก่อน'; return Math.floor(days/365)+' ปีก่อน';
+}
+
+function custHi(text,q){
+  var t=escHtml(String(text||'')); if(!q) return t;
+  var qq=String(q).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); if(!qq) return t;
+  try { return t.replace(new RegExp('('+qq+')','gi'),'<span class="crm2-hit">$1</span>'); } catch(e){ return t; }
+}
+
 function custSetSort(s){ _crm2Sort = s; document.querySelectorAll('[data-sort]').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-sort')===s); }); custRender(); }
 function custSetFilter(f){ _crm2Filter = f; document.querySelectorAll('[data-filter]').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-filter')===f); }); custRender(); }
 
@@ -16302,8 +16373,17 @@ function custSites(c){
   var seen = {}, out = [];
   (c && c.jobIds || []).forEach(function(j){
     var key = String((j.addr||j.name||'')).trim().toLowerCase();
-    if(!key || seen[key]) return; seen[key] = 1;
-    out.push({ name:String(j.name||''), addr:String(j.addr||''), date:String(j.date||''), kind:String(j.kind||'') });
+    if(!key) return;
+    if(seen[key]){
+      seen[key].count++;
+      if(String(j.date||'') > seen[key].date){
+        seen[key].name=String(j.name||''); seen[key].addr=String(j.addr||''); seen[key].date=String(j.date||'');
+        seen[key].kind=String(j.kind||''); seen[key].job=String(j.job||'');
+      }
+      return;
+    }
+    var site = { name:String(j.name||''), addr:String(j.addr||''), date:String(j.date||''), kind:String(j.kind||''), job:String(j.job||''), count:1 };
+    seen[key] = site; out.push(site);
   });
   return out;
 }
@@ -16311,6 +16391,7 @@ function custSites(c){
 function custRender(){
   const host = document.getElementById('custList');
   if (!host) return;
+  const jump = document.getElementById('crm2Jump');
   const input = document.getElementById('crm2Search');
   const qtext = String(input ? input.value : '').trim().toLowerCase();
   const qphone = qtext.replace(/[-\s]/g, '');
@@ -16335,56 +16416,111 @@ function custRender(){
 
   const summary = document.getElementById('crm2Summary');
   if (summary) summary.textContent = 'ลูกค้าทั้งหมด '+_crm2Customers.length+' ราย'+(rows.length !== _crm2Customers.length ? ' · แสดง '+rows.length+' ราย' : '');
-  if (!rows.length) { host.innerHTML = '<div class="empty-section">ไม่พบลูกค้า</div>'; return; }
+  if (!rows.length) { if(jump) jump.innerHTML=''; host.innerHTML = '<div class="empty-section">ไม่พบลูกค้า</div>'; return; }
 
   function cardHtml(c){
     const realIdx = _crm2Customers.indexOf(c);
     const phone = telNorm(c.phone);
     const siteCount = custSites(c).length;
-    return '<div class="card" role="button" tabindex="0" onclick="custOpen('+realIdx+')" onkeydown="if(event.key===\'Enter\')custOpen('+realIdx+')" style="padding:14px;cursor:pointer;">'
-      + '<div style="font-weight:800;margin-bottom:7px;">'+escHtml(c.name || 'ไม่ระบุชื่อ')+'</div>'
-      + '<a href="tel:'+phone+'" onclick="event.stopPropagation()" style="color:var(--acc);text-decoration:none;">📞 '+escHtml(telFmt(phone))+'</a>'
-      + '<div style="font-size:12px;color:var(--mu);margin-top:8px;">ติดตั้ง '+(Number(c.installCount)||0)+' · วัด '+(Number(c.measureCount)||0)+' · ล่าสุด '+escHtml(c.lastSeen || '-')+'</div>'
-      + (siteCount > 1 ? '<span style="display:inline-block;margin-top:6px;font-size:11px;font-weight:700;background:var(--acc-t,rgba(255,159,67,.15));color:var(--acc);border:1px solid var(--acc);border-radius:20px;padding:2px 9px;">🏗️ '+siteCount+' หน้างาน</span>' : '')
+    return '<div class="cust-card" role="button" tabindex="0" onclick="custOpen('+realIdx+')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();custOpen('+realIdx+')}">'
+      + '<div class="cust-name">'+custHi(c.name || 'ไม่ระบุชื่อ', qtext)+'</div>'
+      + '<a class="cust-tel" href="tel:'+phone+'" onclick="event.stopPropagation()">📞 '+escHtml(telFmt(phone))+'</a>'
+      + '<div class="cust-chips"><span class="cust-chip i">🔧 ติดตั้ง '+(Number(c.installCount)||0)+'</span><span class="cust-chip m">📐 วัด '+(Number(c.measureCount)||0)+'</span>'
+      + (siteCount > 1 ? '<span class="cust-chip s">🏗️ '+siteCount+' หน้างาน</span>' : '') + '</div>'
+      + '<div class="cust-when">ล่าสุด '+escHtml(custAgo(c.lastSeen))+'</div>'
       + '</div>';
   }
 
   const gridOpen = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;">';
   if (_crm2Sort !== 'name') {
+    if(jump) jump.innerHTML='';
     host.innerHTML = gridOpen + rows.map(cardHtml).join('') + '</div>';
     return;
   }
 
-  let html = '', group = '';
+  let html = '', group = '', groupIndex = -1, jumpHtml = '';
   rows.forEach(function(c){
     const letter = custGroupLetter(c.name);
     if (letter !== group) {
       if (group) html += '</div>';
-      group = letter;
-      html += '<div class="crm2-group">'+escHtml(letter)+'</div>'+gridOpen;
+      group = letter; groupIndex++;
+      jumpHtml += '<button type="button" onclick="document.getElementById(\'crm2g-'+groupIndex+'\').scrollIntoView({behavior:\'smooth\',block:\'start\'})">'+escHtml(letter)+'</button>';
+      html += '<div class="crm2-group" id="crm2g-'+groupIndex+'">'+escHtml(letter)+'</div>'+gridOpen;
     }
     html += cardHtml(c);
   });
   host.innerHTML = html + '</div>';
+  if(jump) jump.innerHTML = jumpHtml;
+}
+
+let _cpTab = 'timeline', _cpCustomer = null, _cpQuotes = [], _cpQuoteState = 'idle', _cpQuoteError = '', _cpLoadSeq = 0;
+
+function custProfileClose(){ var modal=document.getElementById('crm2Modal'); if(modal) modal.classList.remove('on'); }
+function custProfileTab(tab){ _cpTab=tab; custProfileRender(); }
+function custProfileQuoteOpen(index){ var q=_cpQuotes[index]; if(q) quoteOpenView(q.id); }
+function custProfileQuoteDate_(createdAt){ var d=new Date(Number(createdAt)||createdAt); return isNaN(d.getTime()) ? '-' : d.toISOString().slice(0,10); }
+function custProfileAmount_(value){ return '฿'+(Number(value)||0).toLocaleString('th-TH',{minimumFractionDigits:0,maximumFractionDigits:2})+' (ต่อใบ)'; }
+
+function custProfileRender(){
+  var c=_cpCustomer, body=document.getElementById('cpBody'); if(!c||!body) return;
+  document.querySelectorAll('#crm2Modal .cp-tab').forEach(function(b){ b.classList.toggle('on',b.getAttribute('data-cptab')===_cpTab); });
+  var qc=document.getElementById('cpQuoteCount');
+  if(qc) qc.textContent=_cpQuoteState==='loading'?'…':(_cpQuoteState==='error'?'-':String(_cpQuotes.length));
+  if(_cpTab==='sites'){
+    var sites=custSites(c);
+    body.innerHTML=sites.length?sites.map(function(s){
+      return '<div class="cp-ev"><div class="cp-title">'+escHtml(s.name||'ไม่ระบุชื่อ')+'</div><div class="cp-meta">📍 '+escHtml(s.addr||'-')+'<br>ไปหน้างาน '+s.count+' ครั้ง · ล่าสุด '+escHtml(s.date||'-')+' · '+escHtml(custAgo(s.date))+'</div></div>';
+    }).join(''):'<div class="cp-empty">ไม่มีข้อมูลหน้างาน</div>';
+    return;
+  }
+  if(_cpTab==='quotes'){
+    if(_cpQuoteState==='loading'){ body.innerHTML='<div class="cp-empty">กำลังโหลดใบเสนอ...</div>'; return; }
+    if(_cpQuoteState==='error'){ body.innerHTML='<div class="cp-empty">โหลดใบเสนอไม่สำเร็จ · '+escHtml(_cpQuoteError)+'</div>'; return; }
+    body.innerHTML=_cpQuotes.length?_cpQuotes.map(function(q,i){
+      var date=custProfileQuoteDate_(q.createdAt), status=q.linkedJobId?'✅ ลงคิวแล้ว':'⏳ ยังไม่ลงคิว';
+      return '<div class="cp-ev q"><div class="cp-date">'+escHtml(date)+' · '+escHtml(custAgo(date))+'</div><div class="cp-title">ใบเสนอ '+escHtml(q.quoteNo||q.id||'-')+'</div><div class="cp-meta">'+custProfileAmount_(q.totalAmount)+' · '+(Number(q.entryCount)||0)+' รายการ · '+status+'</div><button class="btn btn-g btn-sm" style="margin-top:7px;" onclick="custProfileQuoteOpen('+i+')">👁 ดูใบ</button></div>';
+    }).join(''):'<div class="cp-empty">ไม่มีใบเสนอราคา</div>';
+    return;
+  }
+  var events=[];
+  (c.jobIds||[]).forEach(function(j){
+    var date=String(j.date||''), kind=String(j.kind||'');
+    events.push({ts:Date.parse(date+'T00:00:00')||0, html:'<div class="cp-ev '+(kind==='install'?'i':'m')+'"><div class="cp-date">'+escHtml(date||'-')+' · '+escHtml(custAgo(date))+'</div><div class="cp-title">'+escHtml(j.name || 'ไม่ระบุชื่อ')+'</div><div class="cp-meta">📍 '+escHtml(j.addr || '-')+'<br>🔧 '+escHtml(j.job || '-')+'<br><span style="font-family:var(--mono);font-size:10px;">'+escHtml(j.id||'-')+'</span></div></div>'});
+  });
+  _cpQuotes.forEach(function(q){
+    var date=custProfileQuoteDate_(q.createdAt), status=q.linkedJobId?'✅ ลงคิวแล้ว':'⏳ ยังไม่ลงคิว';
+    events.push({ts:Number(q.createdAt)||0, html:'<div class="cp-ev q"><div class="cp-date">'+escHtml(date)+' · '+escHtml(custAgo(date))+'</div><div class="cp-title">ใบเสนอ '+escHtml(q.quoteNo||q.id||'-')+'</div><div class="cp-meta">'+custProfileAmount_(q.totalAmount)+' · '+(Number(q.entryCount)||0)+' รายการ · '+status+'</div></div>'});
+  });
+  events.sort(function(a,b){ return b.ts-a.ts; });
+  var extra=_cpQuoteState==='loading'?'<div class="cp-empty">กำลังโหลดใบเสนอ...</div>':(_cpQuoteState==='error'?'<div class="cp-empty">โหลดใบเสนอไม่สำเร็จ · '+escHtml(_cpQuoteError)+'</div>':'');
+  body.innerHTML=events.length?'<div class="cp-tl">'+events.map(function(e){return e.html;}).join('')+'</div>'+extra:(extra||'<div class="cp-empty">ไม่มีประวัติ</div>');
 }
 
 function custOpen(index){
   const c = _crm2Customers[index]; if (!c) return;
   let modal = document.getElementById('crm2Modal');
-  if (!modal) { modal = document.createElement('div'); modal.id = 'crm2Modal'; modal.className = 'modal-bg'; modal.onclick = function(e){ if(e.target === modal) modal.classList.remove('on'); }; document.body.appendChild(modal); }
-  const siteCount = custSites(c).length;
-  const jobs = (c.jobIds || []).map(function(j){
-    const kind = String(j.kind || '');
-    return '<div style="padding:7px 0;border-bottom:1px solid var(--bd);"><b>'+escHtml(j.name || 'ไม่ระบุชื่อ')+'</b> · '+(kind === 'install' ? 'ติดตั้ง' : 'วัด')+' · '+escHtml(j.date || '')
-      + '<div style="margin-top:3px;">📍 '+escHtml(j.addr || '-')+'</div><div style="margin-top:2px;">🔧 '+escHtml(j.job || '-')+'</div><div style="font-size:10px;color:var(--mu);margin-top:2px;">'+escHtml(j.id || '-')+'</div></div>';
-  }).join('');
-  const phone = telNorm(c.phone);
-  modal.innerHTML = '<div class="modal" style="max-width:620px;"><div class="modal-head"><b>'+escHtml(c.name || 'ไม่ระบุชื่อ')+'</b><button class="btn btn-g btn-sm" onclick="document.getElementById(\'crm2Modal\').classList.remove(\'on\')">×</button></div>'
-    + '<div style="padding:18px;"><div><a href="tel:'+phone+'">📞 '+escHtml(telFmt(phone))+'</a></div><div style="margin-top:9px;">📍 '+escHtml(c.lastAddress || '-')+'</div>'
-    + '<div style="margin-top:9px;">งานติดตั้ง '+(Number(c.installCount)||0)+' · งานวัด '+(Number(c.measureCount)||0)+'</div>'
-    + (siteCount > 1 ? '<div style="margin-top:9px;font-weight:700;">หน้างานทั้งหมด '+siteCount+' แห่ง</div>' : '')
-    + '<div style="margin-top:14px;font-weight:700;">ประวัติงาน</div><div style="max-height:360px;overflow:auto;">'+(jobs || '<div class="empty-section">ไม่มีรายการงาน</div>')+'</div></div></div>';
+  if (!modal) {
+    modal = document.createElement('div'); modal.id = 'crm2Modal'; modal.className = 'modal-bg';
+    modal.onclick = function(e){ if(e.target === modal) custProfileClose(); };
+    document.body.appendChild(modal);
+    document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&modal.classList.contains('on')) custProfileClose(); });
+  }
+  const sites=custSites(c), siteCount=sites.length, phone=telNorm(c.phone);
+  _cpCustomer=c; _cpQuotes=[]; _cpQuoteState='loading'; _cpQuoteError=''; _cpTab='timeline';
+  modal.innerHTML='<div class="modal" style="max-width:680px;"><div class="cp-head"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;"><div><div class="cp-name">'+escHtml(c.name||'ไม่ระบุชื่อ')+'</div><div class="cp-sub">'+(siteCount>1?'🏗️ ผู้รับเหมา · '+siteCount+' หน้างาน<br>':'')+'📍 '+escHtml(c.lastAddress||'-')+'</div></div><button class="btn btn-g btn-sm" onclick="custProfileClose()" aria-label="ปิด">×</button></div><a class="cp-call" href="tel:'+phone+'">📞 '+escHtml(telFmt(phone))+'</a></div>'
+    +'<div class="cp-stats"><div class="cp-stat"><b>'+(Number(c.installCount)||0)+'</b><span>ติดตั้ง</span></div><div class="cp-stat"><b>'+(Number(c.measureCount)||0)+'</b><span>วัด</span></div><div class="cp-stat"><b id="cpQuoteCount">…</b><span>ใบเสนอ</span></div><div class="cp-stat" aria-label="หน้างานทั้งหมด"><b>'+siteCount+'</b><span>หน้างาน</span></div></div>'
+    +'<div class="cp-tabs"><button class="cp-tab on" data-cptab="timeline" onclick="custProfileTab(\'timeline\')">ไทม์ไลน์</button><button class="cp-tab" data-cptab="sites" onclick="custProfileTab(\'sites\')">หน้างาน</button><button class="cp-tab" data-cptab="quotes" onclick="custProfileTab(\'quotes\')">ใบเสนอ</button></div><div id="cpBody" class="cp-body"></div></div>';
   modal.classList.add('on');
+  custProfileRender();
+  const seq=++_cpLoadSeq;
+  getCustProfileFast(phone).then(function(out){
+    if(seq!==_cpLoadSeq||_cpCustomer!==c) return;
+    if(!out||!out.ok) throw new Error((out&&out.error)||'โหลดใบเสนอไม่สำเร็จ');
+    _cpQuotes=out.quotes||[]; _cpQuoteState='ready'; custProfileRender();
+  }).catch(function(e){
+    if(seq!==_cpLoadSeq||_cpCustomer!==c) return;
+    _cpQuoteState='error'; _cpQuoteError=e.message||'โหลดใบเสนอไม่สำเร็จ'; custProfileRender();
+  });
 }
 
 async function custBackfill(){
