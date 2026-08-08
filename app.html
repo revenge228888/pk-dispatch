@@ -693,6 +693,17 @@ tbody tr:nth-child(even){background:rgba(120,96,72,.04);}
   </div>
 </div>
 
+<!-- DASHBOARD JOB DETAIL MODAL -->
+<div class="modal-bg" id="dashJobModal" onclick="if(event.target===this)dashJobClose()">
+  <div class="modal large" style="max-width:720px;width:96vw;">
+    <div class="card-head">
+      <span id="dashJobModalTitle">รายละเอียดงาน</span>
+      <button id="dashJobCloseBtn" class="btn btn-g btn-sm" onclick="dashJobClose()" aria-label="ปิดรายละเอียดงาน">×</button>
+    </div>
+    <div class="card-body" id="dashJobModalBody"></div>
+  </div>
+</div>
+
 <!-- ✏️ JOB EDIT MODAL — แก้ไขงานติดตั้ง/วัดงาน (ต้องอยู่ระดับบนสุด ไม่งั้นโดน display:none ของ view ครอบ) -->
 <div class="modal-bg" id="jobEditModal">
   <div class="modal">
@@ -1281,6 +1292,20 @@ async function getProdGetFast(woId){
   const _g = await call({ action: 'pk_prodGet', woId: woId }); _markJobSource('gas'); return _g;
 }
 
+// Dashboard: สถานะใบผลิตต้องจับคู่ชื่อ+วันติดตั้งแบบ 1:1 เท่านั้น
+async function getJobProdFast(name, date){
+  if (USE_SHEETS_PROD_GET && CURRENT_USER && name && date) {
+    try {
+      const d = await _pkFastPost_('/job-prod', { name:name, date:date });
+      if (d && d.ok && (d.match === 'one' || d.match === 'none' || d.match === 'ambiguous')) {
+        _markJobSource('sheets', d.ms); return d;
+      }
+      console.warn('[getJobProdFast] worker not ok, falling back to GAS:', d && d.error);
+    } catch(e){ console.warn('[getJobProdFast] worker error, falling back to GAS:', e.message); }
+  }
+  const _g = await call({ action:'pk_jobProdStatus', name:name, date:date }); _markJobSource('gas'); return _g;
+}
+
 let USE_SHEETS_EXP = true;   // ON: เบิกจ่าย /expense-list-*
 async function getExpenseListMyFast(statusFilter){
   if (USE_SHEETS_EXP && CURRENT_USER) {
@@ -1832,10 +1857,12 @@ function renderOfficeShell(){
 
       <!-- DASHBOARD -->
       <div id="tabDash">
-        <!-- TOGGLE ติดตั้ง / วัดงาน — Feature 1.1 -->
-        <div class="section-pad" style="display:flex;gap:8px;padding-bottom:0;">
-          <button class="quo-subtab on" id="dashModeInstall" onclick="dashSetMode('install')">📅 ติดตั้ง</button>
-          <button class="quo-subtab" id="dashModeMeasure" onclick="dashSetMode('measure')">📏 วัดงาน</button>
+        <div class="section-pad" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-bottom:0;">
+          <div id="dashSelectedTitle" style="font-size:18px;font-weight:800;">กำลังโหลดปฏิทิน...</div>
+          <div style="display:flex;gap:8px;">
+            <button class="quo-subtab on" id="dashModeInstall" onclick="dashSetMode('install')">📅 ติดตั้ง</button>
+            <button class="quo-subtab" id="dashModeMeasure" onclick="dashSetMode('measure')">📏 วัดงาน</button>
+          </div>
         </div>
         <div id="dashInstallView">
         <div class="section-pad dash-vbar">
@@ -1843,14 +1870,18 @@ function renderOfficeShell(){
           <button class="dash-vtab" id="dashViewRangeBtn" onclick="dashInstallSetView('range')">📋 ช่วงวันที่</button>
         </div>
         <div id="dashCalView">
-        <!-- 6.3 ปฏิทินคิวงาน (เสริมด้านบน · สรุปทีมเดิมอยู่ล่าง) -->
         <div class="section-pad" id="dashCalWrap">
-          <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin:2px 0 12px;">
+          <div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:2px 0 12px;">
             <button class="btn btn-g btn-sm" onclick="dashCalPrev()">‹</button>
             <span style="font-size:17px;font-weight:800;" id="dashCalTitle">ปฏิทินคิวงาน</span>
-            <button class="btn btn-g btn-sm" onclick="dashCalToday()">วันนี้</button>
             <button class="btn btn-g btn-sm" onclick="dashCalNext()">›</button>
+            <button class="btn btn-g btn-sm" onclick="dashCalToday()">วันนี้</button>
             <button class="btn btn-g btn-sm" id="dashCmpBtn" onclick="dashCmpToggle()" style="margin-left:6px;">⇄ เทียบ 2 วัน</button>
+            <button class="btn btn-g btn-sm" onclick="dashDayNoteEdit(_dashCalSel)" title="เพิ่มหรือแก้หมายเหตุวันที่เลือก">📝 หมายเหตุ</button>
+            <div style="display:flex;gap:4px;">
+              <button class="dash-vtab on" id="dashSpanMonthBtn" onclick="dashSetCalSpan('month')">เดือน</button>
+              <button class="dash-vtab" id="dashSpanWeekBtn" onclick="dashSetCalSpan('week')">สัปดาห์</button>
+            </div>
           </div>
           <div id="dashCalGrid"><div class="loading-row">กำลังโหลด...</div></div>
           <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin:10px 2px 0;">
@@ -1862,16 +1893,6 @@ function renderOfficeShell(){
           </div>
           <div id="dashCalPanel" style="margin-top:16px;"></div>
         </div>
-        <div class="section-pad row-form">
-          <div class="fg"><label class="fl">เลือกวันที่</label>
-            <div class="date-wrap">
-              <input class="fi" id="dashDate" type="date" onchange="loadDashboard();updateDateDisplay(this)" oninput="updateDateDisplay(this)">
-              <span class="date-display empty" data-for="dashDate">เลือกวันที่</span>
-            </div>
-          </div>
-          <button class="btn btn-p" onclick="clearCache('pk_dashboard');loadDashboard()">ดูสรุป</button>
-        </div>
-        <div id="dashContent"><div class="loading-row">เลือกวันที่เพื่อดูสรุปงาน</div></div>
         </div><!-- /dashCalView -->
         <div id="dashRangeView" style="display:none;">
           <div class="section-pad row-form" style="align-items:flex-end;flex-wrap:wrap;">
@@ -1893,12 +1914,17 @@ function renderOfficeShell(){
         </div>
         <div id="measCalView">
           <div class="section-pad">
-            <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin:2px 0 12px;">
+            <div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:2px 0 12px;">
               <button class="btn btn-g btn-sm" onclick="measCalPrev()">‹</button>
               <span style="font-size:17px;font-weight:800;" id="measCalTitle">ปฏิทินคิววัดงาน</span>
-              <button class="btn btn-g btn-sm" onclick="measCalToday()">วันนี้</button>
               <button class="btn btn-g btn-sm" onclick="measCalNext()">›</button>
+              <button class="btn btn-g btn-sm" onclick="measCalToday()">วันนี้</button>
               <button class="btn btn-g btn-sm" onclick="measCalRefresh()" title="ดึงข้อมูลล่าสุดจากชีต">↻</button>
+              <button class="btn btn-g btn-sm" onclick="dashDayNoteEdit(_measCalSel)" title="เพิ่มหรือแก้หมายเหตุวันที่เลือก">📝 หมายเหตุ</button>
+              <div style="display:flex;gap:4px;">
+                <button class="dash-vtab on" id="measSpanMonthBtn" onclick="measSetCalSpan('month')">เดือน</button>
+                <button class="dash-vtab" id="measSpanWeekBtn" onclick="measSetCalSpan('week')">สัปดาห์</button>
+              </div>
             </div>
             <div id="measCalGrid"><div class="loading-row">กำลังโหลด...</div></div>
             <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin:10px 2px 0;">
@@ -2809,7 +2835,7 @@ function renderOfficeShell(){
 
 function officeInit(){
   const today = new Date().toISOString().split('T')[0];
-  ['dashDate','jDate'].forEach(id => { const el = document.getElementById(id); if (el) el.value = today; });
+  ['jDate'].forEach(id => { const el = document.getElementById(id); if (el) el.value = today; });
   refreshAllDateDisplays();
   restoreSidebarState();
   try { initSidebarGroups(); } catch(e){}
@@ -2915,7 +2941,7 @@ async function reloadAll(){
     fillTeamDropdowns();
     renderAccess();
     document.getElementById('syncTxt').textContent = 'อัปเดต ' + new Date().toLocaleTimeString('th-TH',{timeStyle:'short'});
-    if (document.getElementById('tabDash') && document.getElementById('tabDash').style.display !== 'none') { loadDashboard(); dashCalLoad(); }
+    if (document.getElementById('tabDash') && document.getElementById('tabDash').style.display !== 'none') { _dashCalCache={}; dashCalReload(); }
   } catch(e) { document.getElementById('syncTxt').textContent = '❌ โหลดไม่ได้'; }
 }
 
@@ -4698,7 +4724,7 @@ function setTab(t, btn){
   }
   // ปิด drawer บนมือถือ
   closeSidebarMobile();
-  if (t === 'dash') { loadDashboard(); dashCalLoad(); }
+  if (t === 'dash') { dashCalLoad(); }
   if (t === 'booking') initBookingTab();
   if (t === 'customers' && !_crm2Loaded) custLoad();
   if (t === 'followup') { if (!_fuLoaded) fuLoad(); else fuRender(); }
@@ -4779,6 +4805,7 @@ function restoreSidebarState(){
 let _bkType = 'measure';  // measure | install — default ตรงกับปุ่มที่ไฮไลต์ใน HTML
 let _bkMode = 'form';     // form | raw
 let _bkRecent = [];
+let _bkLinkedMeasureId = '', _bkFromMeasureBtn = false;
 
 async function initBookingTab(){
   // sync ปุ่มประเภท/รูปแบบ ให้ตรงกับ state (source of truth = _bkType/_bkMode)
@@ -4808,6 +4835,19 @@ async function initBookingTab(){
   fillScorePicker();
   // ดึงตารางคะแนนจากชีต (override default ถ้ามี)
   loadScoreTiers();
+  if (!_bkFromMeasureBtn) _bkLinkedMeasureId = '';
+  _bkFromMeasureBtn = false;
+}
+
+// ใช้ flow ลงคิวเดิมของ office/manager พร้อมผูกกลับงานวัดเดิม
+function measToInstall(j){
+  if (!j || !j.id) return;
+  _bkLinkedMeasureId = j.id; _bkFromMeasureBtn = true;
+  const btn=document.querySelector('#officeSidebar .sidebar-item[data-tab="booking"]');
+  setTab('booking',btn); setBookingType('install'); setBookingMode('form');
+  const put=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+  put('bkCustomer',j.name||''); put('bkAddress',j.address||j.rawAddr||''); put('bkPhone',jobTel(j.note)||''); put('bkJob',j.job||''); put('bkScore',''); put('bkAmount','');
+  toast('🔧 ดึงข้อมูลงานวัด '+j.id+' แล้ว — กรอกคะแนนและยอดก่อนลงคิวติดตั้ง');
 }
 
 function setBookingType(t){
@@ -4844,6 +4884,7 @@ async function submitBooking(){
     const _glassChk = document.getElementById('bkGlass');
     const job2 = (_glassChk && _glassChk.checked && job.indexOf('[กระจก]') === -1) ? (job + ' [กระจก]').trim() : job;
     Object.assign(body, { date, customer, address, phone, job: job2, score, amount, team });
+    if (_bkType === 'install' && _bkLinkedMeasureId) body.linkedMeasureId = _bkLinkedMeasureId;
   } else {
     const raw = document.getElementById('bkRawText').value.trim();
     if (!raw) { toast('พิมพ์ข้อมูลก่อน'); return; }
@@ -4856,6 +4897,7 @@ async function submitBooking(){
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error || 'ผิดพลาด')); return; }
     toast(`✅ ลงคิว ${r.sheet} #${r.id} สำเร็จ`);
+    _bkLinkedMeasureId = '';
     clearCache(); _dashCalCache = {};   // ลงคิวแล้วล้าง cache ให้ขึ้นทันที
     addRecentBooking(r);
     clearBookingForm();
@@ -5590,43 +5632,6 @@ async function qtSkipIds(ids){
   } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 
-// ─── DASHBOARD ───
-async function loadDashboard(){
-  const date = document.getElementById('dashDate').value;
-  if (!date) { document.getElementById('dashContent').innerHTML='<div class="loading-row">เลือกวันที่ก่อน</div>'; return; }
-  document.getElementById('dashContent').innerHTML = skelDashboard();
-  try {
-    const r = await getDashboardFast(date);
-    if (!r.ok) { document.getElementById('dashContent').innerHTML='<div class="loading-row">'+r.error+'</div>'; return; }
-    const s = r.summary;
-    if (s.totalJobs === 0) { document.getElementById('dashContent').innerHTML='<div class="loading-row">ไม่มีงานในวันที่ '+fmtD(date)+'</div>'; return; }
-    let html = `<div class="dash-stats">
-      <div class="dstat"><div class="dstat-num">${s.totalJobs}</div><div class="dstat-lbl">งานทั้งหมด</div></div>
-      <div class="dstat"><div class="dstat-num" style="color:var(--acc)">${s.cntPending}</div><div class="dstat-lbl">รอรับงาน</div></div>
-      <div class="dstat"><div class="dstat-num" style="color:var(--blu)">${s.cntWorking}</div><div class="dstat-lbl">กำลังทำ</div></div>
-      <div class="dstat"><div class="dstat-num" style="color:var(--grn)">${s.cntDone}</div><div class="dstat-lbl">✅ จบงาน</div></div>
-      <div class="dstat"><div class="dstat-num" style="color:var(--acc)">${s.cntContinue||0}</div><div class="dstat-lbl">➡ ต่องาน</div></div>
-      <div class="dstat"><div class="dstat-num" style="color:var(--grn);font-size:18px;">฿${fmt(s.totalAmt)}</div><div class="dstat-lbl">ยอดเงินรวม</div></div>
-    </div><div class="dash-team-grid">`;
-    r.teams.forEach(t => {
-      const tot = t.jobs || 1;
-      const pp = (t.pending||0)/tot*100, pw=(t.working||0)/tot*100, pd=(t.done||0)/tot*100;
-      html += `<div class="dteam" onclick="showTeamDetail('${t.team.replace(/'/g,"\\'")}','${date}')">
-        <div class="dteam-name">👷 ${t.team}</div>
-        <div class="dteam-bar"><div class="dseg-p" style="width:${pp}%"></div><div class="dseg-w" style="width:${pw}%"></div><div class="dseg-d" style="width:${pd}%"></div></div>
-        <div class="dteam-row"><span>งานทั้งหมด</span><b>${t.jobs}</b></div>
-        <div class="dteam-row"><span style="color:var(--acc)">รอรับงาน</span><b>${t.pending||0}</b></div>
-        <div class="dteam-row"><span style="color:var(--blu)">กำลังทำ</span><b>${t.working||0}</b></div>
-        <div class="dteam-row"><span style="color:var(--grn)">✅ จบงาน</span><b>${t.done||0}</b></div>
-        <div class="dteam-row"><span style="color:var(--acc)">➡ ต่องาน</span><b>${t.continued||0}</b></div>
-        <div class="dteam-row" style="border-top:1px solid var(--bdr);margin-top:6px;padding-top:6px;"><span>ยอดเงิน</span><b style="color:var(--grn)">฿${fmt(t.amount)}</b></div>
-      </div>`;
-    });
-    html += '</div>';
-    document.getElementById('dashContent').innerHTML = html;
-  } catch(e) { document.getElementById('dashContent').innerHTML='<div class="loading-row">โหลดไม่ได้</div>'; }
-}
-
 // ─── Team Detail Modal — กด card ทีมใน Dashboard → ดูงานของทีมนั้น ───
 async function showTeamDetail(team, date){
   window._tdmTeam = team; window._tdmDate = date;
@@ -5749,7 +5754,7 @@ function contJobOpenCore(j, baseDate, teamLabel, from){
 function tdmContinueOpen(jobId){
   const j = (window._tdmJobs||[]).find(x => x.id === jobId);
   if (!j) return;
-  contJobOpenCore(j, window._tdmDate || document.getElementById('dashDate').value || '', window._tdmTeam || '', 'tdm');
+  contJobOpenCore(j, window._tdmDate || _dashCalSel || '', window._tdmTeam || '', 'tdm');
 }
 async function tdmContinueSave(){
   if (!_contJob) return;
@@ -5770,10 +5775,10 @@ async function tdmContinueSave(){
         _dashRangeJobs = [];
         if (document.getElementById('dashCalGrid')) await dashCalReload();
         if (_dashInstallView === 'range') await dashRangeRun();
-        loadDashboard();
+        dashJobClose();
       } else {
         if (window._tdmTeam && window._tdmDate) showTeamDetail(window._tdmTeam, window._tdmDate);
-        loadDashboard(); if (typeof dashCalLoad === 'function') dashCalLoad();
+        if (typeof dashCalLoad === 'function') dashCalLoad();
       }
     } else toast((r && r.error) || 'ผิดพลาด');
   } catch(e) { /* call() toast ให้แล้ว */ }
@@ -5819,9 +5824,10 @@ async function tdmPinGeo(jobId){
   if (!c) { toast('อ่านพิกัดไม่ได้ — วางลิงก์ Google Maps หรือ lat,lng'); return; }
   if (!(c.lat >= 5 && c.lat <= 21 && c.lng >= 95 && c.lng <= 106)) { toast('พิกัดไม่อยู่ในกรอบประเทศไทย'); return; }
   if (!confirm(`ปักพิกัดให้ "${j.name||j.id}"\nที่ ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)} ?`)) return;
-  const r = await call({ action:'pk_setJobGeo', id:j.id, sheet:'install', lat:c.lat, lng:c.lng });
+  const r = await call({ action:'pk_setJobGeo', id:j.id, sheet:window._tdmSheet==='measure'?'measure':'install', lat:c.lat, lng:c.lng });
   if (r && r.ok) {
     toast('📌 ปักพิกัดแล้ว — ขึ้นบนแผนที่ทันที');
+    dashJobClose();
     if (window._tdmTeam && window._tdmDate) showTeamDetail(window._tdmTeam, window._tdmDate);
   } else toast((r && r.error) || 'ผิดพลาด');
 }
@@ -8757,6 +8763,24 @@ const PK_DASH_DOW = ['อา','จ','อ','พ','พฤ','ศ','ส'];
 function pkDashTone_(st){ return st==='working' ? 'var(--blu)' : st==='continue' ? 'var(--rd)' : st==='done' ? 'var(--grn)' : 'var(--acc)'; }
 function pkDashSumScore_(js){ return js.reduce((s,j) => s + (Number(j.score)||0), 0); }
 function pkOrderNum_(j){ return parseInt(String(j.orderStr||'').replace(/[^0-9]/g,'')) || 999; }   // ว่าง/0/ไม่ใช่เลข → 999 (ท้าย)
+function pkDashCleanAddr_(addr){ return String(addr||'').replace(/https?:\/\/\S+/g,' ').replace(/\s+/g,' ').trim(); }
+function pkDashStatusLabel_(st){ return st==='working' ? 'กำลังทำ' : st==='done' ? 'จบงาน' : st==='continue' ? 'ต่องาน' : 'รอรับงาน'; }
+function pkDashDateTitle_(ds){
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ds||'')) return 'เลือกวันที่จากปฏิทิน';
+  const x=ds.split('-'), d=new Date(Number(x[0]),Number(x[1])-1,Number(x[2]));
+  const full=['วันอาทิตย์','วันจันทร์','วันอังคาร','วันพุธ','วันพฤหัสบดี','วันศุกร์','วันเสาร์'][d.getDay()]+' '+Number(x[2])+' '+PK_DASH_TH_M[Number(x[1])-1]+' '+(Number(x[0])+543);
+  return full+(ds===pkTodayStr_()?' · วันนี้':'');
+}
+function pkDashStatusBar_(js, height){
+  if (!js.length) return '<div class="dteam-bar" style="height:'+(height||8)+'px;margin:0;"></div>';
+  const n=js.length, cnt={pending:0,working:0,done:0,continue:0};
+  js.forEach(j => { const s=cnt[j.status]===undefined?'pending':j.status; cnt[s]++; });
+  return '<div class="dteam-bar" style="height:'+(height||8)+'px;margin:0;">'
+    +'<div class="dseg-p" style="width:'+(cnt.pending/n*100)+'%"></div>'
+    +'<div class="dseg-w" style="width:'+(cnt.working/n*100)+'%"></div>'
+    +'<div class="dseg-d" style="width:'+(cnt.done/n*100)+'%"></div>'
+    +'<div style="width:'+(cnt.continue/n*100)+'%;background:var(--rd);"></div></div>';
+}
 function pkDashGroupTeam_(js){
   const g = {}, order = [];
   js.forEach(j => { const t = (j.team && String(j.team).trim()) ? String(j.team).trim() : '__none__'; if (!g[t]){ g[t]=[]; order.push(t); } g[t].push(j); });
@@ -8768,6 +8792,7 @@ function pkDashGroupTeam_(js){
 let _dashCalJobs = [], _dashCalY = null, _dashCalM = null, _dashCalSel = '', _dashCalClicked = false, _dashCalLoading = false;
 let _dashCalCache = {};
 let _dashCmpMode = false, _dashCmpA = '', _dashCmpB = '';   // โหมดเทียบ 2 วัน   // SWR cache ปฏิทินต่อเดือน (in-memory)
+let _dashCalSpan = 'month', _dashAttentionFilter = '', _dashTeamFilter = '';
 // ── 📝 หมายเหตุรายวัน (DayNotes) — โชว์ในปฏิทิน + แก้จาก panel วัน · ฝั่งวันแนะนำแนบมากับ pk_queueSuggest ──
 let _dayNotes = {}, _dayNotesLoading = false;
 async function dashNotesLoad(){
@@ -8775,7 +8800,7 @@ async function dashNotesLoad(){
   _dayNotesLoading = true;
   try {
     const r = await getDayNotesFast();
-    if (r && r.ok){ _dayNotes = r.notes || {}; dashCalRender(); }
+    if (r && r.ok){ _dayNotes = r.notes || {}; const mv=document.getElementById('dashMeasureView'); if(mv&&mv.style.display!=='none') measCalRender(); else dashCalRender(); }
   } catch(e){} finally { _dayNotesLoading = false; }
 }
 async function dashDayNoteEdit(ds){
@@ -8786,16 +8811,15 @@ async function dashDayNoteEdit(ds){
   if (r && r.ok){
     if (r.note) _dayNotes[ds] = r.note; else delete _dayNotes[ds];
     toast(r.note ? '📝 บันทึกหมายเหตุแล้ว — จะขึ้นในวันแนะนำตอนลงคิวด้วย' : 'ลบหมายเหตุแล้ว');
-    dashCalRender();
+    const mv=document.getElementById('dashMeasureView'); if(mv&&mv.style.display!=='none') measCalRender(); else dashCalRender();
   } else toast((r && r.error) || 'ผิดพลาด');
 }
 function dashDayNoteHtml_(ds){
   const n = _dayNotes[ds];
-  const btn = isOfficeLevel() ? ' <button class="btn btn-g btn-sm" onclick="dashDayNoteEdit(\'' + ds + '\')">' + (n ? '✏️ แก้หมายเหตุ' : '📝 เพิ่มหมายเหตุวันนี้') + '</button>' : '';
-  if (!n && !btn) return '';
-  return '<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;' + (n ? 'background:var(--acc-t);border-left:3px solid var(--acc);border-radius:0 8px 8px 0;padding:8px 10px;' : '') + '">'
-    + (n ? '<span style="color:var(--acc);font-size:13px;font-weight:600;">📝 ' + escHtml(n) + '</span>' : '')
-    + btn + '</div>';
+  if (!n) return '';
+  const btn = isOfficeLevel() ? ' <button class="btn btn-g btn-sm" onclick="dashDayNoteEdit(\'' + ds + '\')">✏️ แก้ไข</button>' : '';
+  return '<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--acc-t);border-left:3px solid var(--acc);border-radius:0 var(--r-md) var(--r-md) 0;padding:8px 10px;">'
+    + '<span style="color:var(--acc);font-size:13px;font-weight:600;flex:1;">📝 ' + escHtml(n) + '</span>' + btn + '</div>';
 }
 async function dashCalLoad(){
   if (!document.getElementById('dashCalGrid')) return;
@@ -8857,50 +8881,60 @@ function dashCalRender(){
   const grid = document.getElementById('dashCalGrid'); if (!grid) return;
   const today = pkTodayStr_();
   const byDay = {}; _dashCalJobs.forEach(j => { if (j.date) (byDay[j.date]=byDay[j.date]||[]).push(j); });
-  document.getElementById('dashCalTitle').textContent = PK_DASH_TH_M[_dashCalM] + ' ' + (_dashCalY+543);
+  const title=document.getElementById('dashCalTitle'); if(title) title.textContent = PK_DASH_TH_M[_dashCalM] + ' ' + (_dashCalY+543);
+  const head=document.getElementById('dashSelectedTitle'),iv=document.getElementById('dashInstallView'); if(head&&(!iv||iv.style.display!=='none')) head.textContent=pkDashDateTitle_(_dashCalSel);
+  const bm=document.getElementById('dashSpanMonthBtn'), bw=document.getElementById('dashSpanWeekBtn');
+  if(bm) bm.classList.toggle('on',_dashCalSpan==='month'); if(bw) bw.classList.toggle('on',_dashCalSpan==='week');
   let html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">';
-  PK_DASH_DOW.forEach(d => html += '<div style="text-align:center;font-size:12px;color:var(--mu);padding:4px 0;font-weight:600;">'+d+'</div>');
-  const first = new Date(_dashCalY, _dashCalM, 1).getDay(), days = new Date(_dashCalY, _dashCalM+1, 0).getDate();
-  for (let i=0;i<first;i++) html += '<div></div>';
-  for (let d=1; d<=days; d++){
-    const ds = _dashCalY+'-'+String(_dashCalM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-    const js = byDay[ds] || [], dow = new Date(_dashCalY,_dashCalM,d).getDay(), wk = (dow===0||dow===6);
-    let st = 'min-height:64px;background:'+(wk?'rgba(181,101,63,.08)':'var(--surf)')+';border:1px solid var(--bdr);border-radius:10px;padding:6px 7px;cursor:pointer;position:relative;';
-    if (ds===today) st += 'box-shadow:inset 0 0 0 2px var(--blu);';
-    if (_dashCmpMode){
-      if (ds===_dashCmpA) st += 'box-shadow:inset 0 0 0 3px var(--blu);background:rgba(91,141,239,.16);';
-      else if (ds===_dashCmpB) st += 'box-shadow:inset 0 0 0 3px var(--acc);background:rgba(181,101,63,.16);';
-    } else if (ds===_dashCalSel) st += 'box-shadow:inset 0 0 0 2px var(--acc);background:rgba(181,101,63,.14);';
-    const cnt = js.length ? '<span style="position:absolute;top:5px;right:6px;font-size:10px;background:var(--acc);color:#fff;border-radius:9px;padding:1px 6px;font-weight:800;">'+js.length+'</span>' : '';
-    const sc  = js.length ? '<span style="position:absolute;top:24px;right:6px;font-size:10px;color:var(--acc);font-weight:700;">★'+pkDashSumScore_(js)+'</span>' : '';
-    const noteMark = _dayNotes[ds] ? '<span title="'+escHtml(_dayNotes[ds])+'" style="position:absolute;bottom:4px;right:6px;font-size:10px;">📝</span>' : '';
-    const dots = js.slice(0,6).map(j => '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;margin:1px;background:'+pkDashTone_(j.status||j.sheetStatus)+';"></span>').join('');
-    html += '<div onclick="dashCalPick(\''+ds+'\')" style="'+st+'"><span style="font-size:13px;font-weight:700;">'+d+'</span>'+cnt+sc+noteMark+'<div style="margin-top:22px;">'+dots+'</div></div>';
+  if(_dashCalSpan==='month') PK_DASH_DOW.forEach(d => html += '<div style="text-align:center;font-size:12px;color:var(--mu);padding:4px 0;font-weight:600;">'+d+'</div>');
+  let dates=[];
+  if(_dashCalSpan==='week'){
+    const base=new Date((_dashCalSel||today)+'T00:00:00'); base.setDate(base.getDate()-base.getDay());
+    for(let i=0;i<7;i++){ const q=new Date(base); q.setDate(base.getDate()+i); dates.push(pkYmd_(q)); }
+  } else {
+    const first = new Date(_dashCalY, _dashCalM, 1).getDay(), days = new Date(_dashCalY, _dashCalM+1, 0).getDate();
+    for (let i=0;i<first;i++) dates.push('');
+    for (let d=1;d<=days;d++) dates.push(_dashCalY+'-'+String(_dashCalM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'));
   }
+  dates.forEach(ds => {
+    if(!ds){ html+='<div></div>'; return; }
+    const x=ds.split('-'), d=Number(x[2]), dow=new Date(Number(x[0]),Number(x[1])-1,d).getDay(), js=byDay[ds]||[], wk=(dow===0||dow===6);
+    let st='min-height:'+(_dashCalSpan==='week'?'82':'70')+'px;background:'+(wk?'var(--acc-t)':'var(--surf)')+';border:1px solid var(--bdr);border-radius:var(--r-md);padding:6px 7px;cursor:pointer;display:grid;grid-template-rows:auto 6px auto;gap:7px;';
+    if (ds===_dashCalSel) st += 'border-color:var(--acc);background:var(--acc-t);';
+    if (_dashCmpMode){
+      if (ds===_dashCmpA) st += 'border-color:var(--blu);box-shadow:inset 0 0 0 2px var(--blu);';
+      else if (ds===_dashCmpB) st += 'border-color:var(--acc);box-shadow:inset 0 0 0 2px var(--acc);';
+    }
+    const dayNum=ds===today?'<span style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 5px;border-radius:var(--r-pill);background:var(--acc);color:var(--surf2);font-weight:800;">'+d+'</span>':'<span style="font-weight:800;">'+d+'</span>';
+    html+='<div role="button" tabindex="0" onclick="dashCalPick(\''+ds+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();dashCalPick(\''+ds+'\')}" style="'+st+'">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;">'+(_dashCalSpan==='week'?'<span style="color:var(--mu);font-weight:700;">'+PK_DASH_DOW[dow]+'</span>':'')+dayNum+(js.length?'<span class="badge bp">'+js.length+' งาน</span>':'')+'</div>'
+      +pkDashStatusBar_(js,6)
+      +'<div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--mu);"><span>'+(js.length?'★ '+pkDashSumScore_(js):'')+'</span><span>'+(_dayNotes[ds]?'📝':'')+'</span></div></div>';
+  });
   html += '</div>';
   grid.innerHTML = html;
   dashCalRenderPanel();
 }
-// การ์ดงานแบบเต็ม (ใช้ร่วมกันระหว่างมุมมองวันเดียว กับโหมดเทียบ)
-function dashJobCardFull_(j, none){
-  const badge = none ? ' <span style="font-size:10px;background:#3a2228;color:var(--rd);border:1px solid #54323a;border-radius:20px;padding:1px 8px;font-weight:800;">ยังไม่จัด</span>' : '';
-  const contBadge = (j.status==='continue') ? ' <span style="font-size:10px;background:#3a2228;color:var(--rd);border:1px solid #54323a;border-radius:20px;padding:1px 8px;font-weight:800;">➡ ต่องาน</span>' : '';
-  return '<div style="background:var(--surf2);border:1px solid '+(none?'#54323a':'var(--bdr)')+';border-radius:10px;padding:12px 14px;margin-bottom:10px;">'
-    + '<div style="font-size:16px;font-weight:800;margin-bottom:6px;">'+escHtml(j.name||'-')+badge+contBadge+'</div>'
-    + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:54px;">📍 ที่อยู่</span><span>'+escHtml(j.rawAddr||'-')+'</span></div>'
-    + jobTelHtml(j.note)
-    + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:54px;">🔧 รายการ</span><span>'+escHtml(j.job||'-')+'</span></div>'
-    + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);">'
-      + '<span style="color:var(--acc);font-weight:800;">★ คะแนน '+(Number(j.score)||0)+'</span>'
-      + '<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount||0)+'</span></div>'
-    + dashMapBtn_(j)
-    + dashShowAmtBtn(j)
-    + jobMarkMeasBtn_(j)
-    + jobEditBtn_(j.id)
-    + jobContBtn_(j.id)
-    + jobDelBtn_(j.id)
-    + '</div>';
+function dashSetCalSpan(v){ _dashCalSpan=v==='week'?'week':'month'; dashCalRender(); }
+// การ์ดเดียวกันทั้งรายการรายวันและช่วงวันที่ — ปุ่มจัดการอยู่ใน modal เท่านั้น
+function dashJobCard_(j, mode){
+  mode=mode==='measure'?'measure':'install';
+  const none=!String(j.team||'').trim(), tel=telNorm(jobTel(j.note)||''), addr=pkDashCleanAddr_(mode==='measure'?(j.address||j.rawAddr):j.rawAddr);
+  const type=mode==='measure'?'📏 งานวัด':'🔧 ติดตั้ง', flagged=String(j.note||'').indexOf('[qtmeasure]')!==-1;
+  const queue=j.sheetStatus&&j.sheetStatus!=='ยืนยันแล้ว'?'<span class="badge bp">'+escHtml(j.sheetStatus)+'</span>':'';
+  const amount=mode==='measure'?'<span style="color:var(--mu);font-weight:700;">รอประเมินราคา</span>':'<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount)+'</span>';
+  return '<div class="card" role="button" tabindex="0" onclick="dashJobOpen(\''+escAttr(j.id)+'\',\''+mode+'\')" onkeydown="dashJobKey_(event,\''+escAttr(j.id)+'\',\''+mode+'\')" style="padding:13px 14px;margin-bottom:10px;cursor:pointer;border-color:'+(none?'var(--rd)':'var(--bdr)')+';">'
+    +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;"><div style="font-size:16px;font-weight:800;">'+escHtml(j.name||'-')+'</div><span class="badge '+(mode==='measure'?'bw':'bp')+'">'+type+'</span></div>'
+    +(tel?'<div style="margin-top:5px;"><a href="tel:'+escAttr(tel)+'" onclick="event.stopPropagation()" style="color:var(--blu);font-weight:700;text-decoration:none;">📞 '+escHtml(telFmt(tel))+'</a></div>':'')
+    +'<div style="font-size:13px;margin-top:5px;">📍 '+escHtml(addr||'-')+'</div>'
+    +'<div style="font-size:13px;margin-top:5px;">🔧 '+escHtml(j.job||'-')+'</div>'
+    +(flagged?'<div style="margin-top:6px;"><span class="badge bw">📐 ระบุเป็นงานวัด</span></div>':'')
+    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px;padding-top:8px;border-top:1px solid var(--bdr);">'
+      +(none?'<span class="badge" style="color:var(--rd);background:var(--surf);border:1px solid var(--rd);">ยังไม่จัดทีม</span>':'<span>👷 '+escHtml(j.team)+'</span>')
+      +'<span style="color:var(--acc);font-weight:800;">★ '+(Number(j.score)||0)+'</span><span style="margin-left:auto;">'+amount+'</span>'
+      +'<span class="badge" style="color:'+pkDashTone_(j.status)+';background:var(--surf);border:1px solid '+pkDashTone_(j.status)+';">'+pkDashStatusLabel_(j.status)+'</span>'+queue+'</div></div>';
 }
+function dashJobCardFull_(j){ return dashJobCard_(j,'install'); }
 
 // render งานของวันหนึ่งแบบเต็ม (header + กลุ่มทีม + การ์ดเต็ม) — ใช้ทั้งมุมมองเต็มและโหมดเทียบ
 function dashRenderDayFull_(ds){
@@ -8944,7 +8978,7 @@ function dashCmpToggle(){
   if (b){
     b.textContent = _dashCmpMode ? '✕ เลิกเทียบ' : '⇄ เทียบ 2 วัน';
     b.style.background = _dashCmpMode ? 'var(--acc)' : '';
-    b.style.color = _dashCmpMode ? '#fff' : '';
+    b.style.color = _dashCmpMode ? 'var(--surf2)' : '';
   }
   if (!_dashCmpMode) _dashCalClicked = false;
   dashCalRender();
@@ -8954,38 +8988,55 @@ function dashCmpToggle(){
 function dashCalRenderPanel(){
   const p = document.getElementById('dashCalPanel'); if (!p) return;
   if (_dashCmpMode) { p.innerHTML = dashRenderCompare_(); return; }
-  const ds = _dashCalSel, today = pkTodayStr_();
+  const ds = _dashCalSel;
   const js = _dashCalJobs.filter(j => j.date === ds);
-  const full = _dashCalClicked;
-  const thd = (function(){ const x = ds.split('-'); return Number(x[2])+' '+PK_DASH_TH_M[Number(x[1])-1]+' '+(Number(x[0])+543); })();
-  let html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'
-    + '<div><div style="font-size:15px;font-weight:800;">📅 '+thd+(ds===today?' · วันนี้':'')+'</div>'
-    + '<div style="font-size:12px;color:var(--mu);">'+js.length+' งาน · <b style="color:var(--acc);">★ คะแนนรวม '+pkDashSumScore_(js)+'</b></div></div>'
-    + '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;'+(full?'background:#2a2410;color:var(--acc);':'background:#1d2740;color:var(--blu);')+'">'+(full?'รายละเอียดเต็ม':'มุมมองย่อ — กดวันเพื่อดูเต็ม')+'</span></div>';
-  html += dashDayNoteHtml_(ds);
+  let html = dashDayNoteHtml_(ds);
+  const noTeam=js.filter(j=>!String(j.team||'').trim()).length;
+  const noCf=js.filter(j=>j.sheetStatus!=='ยืนยันแล้ว').length;
+  const cont=js.filter(j=>j.status==='continue').length;
+  if(noTeam||noCf||cont){
+    html+='<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:14px;padding:10px;background:var(--surf2);border:1px solid var(--bdr);border-radius:var(--r-md);"><b style="font-size:12px;">ต้องจัดการ</b>'
+      +(noTeam?'<button class="btn btn-g btn-sm" onclick="dashSetAttentionFilter(\'team\')">'+noTeam+' งานยังไม่จัดทีม</button>':'')
+      +(noCf?'<button class="btn btn-g btn-sm" onclick="dashSetAttentionFilter(\'cf\')">'+noCf+' รอยืนยันคิว</button>':'')
+      +(cont?'<button class="btn btn-g btn-sm" onclick="dashSetAttentionFilter(\'continue\')">'+cont+' ต่องาน</button>':'')
+      +((_dashAttentionFilter||_dashTeamFilter)?'<button class="btn btn-g btn-sm" onclick="dashClearFilters()">ล้างตัวกรอง</button>':'')+'</div>';
+  }
+  const counts={pending:0,working:0,done:0,continue:0}; js.forEach(j=>{ const s=counts[j.status]===undefined?'pending':j.status; counts[s]++; });
+  const totalAmt=js.reduce((s,j)=>s+(Number(j.amount)||0),0);
+  html+='<div class="dash-stats" style="padding:0;margin-bottom:16px;">'
+    +'<div class="dstat"><div class="dstat-num">'+js.length+'</div><div class="dstat-lbl">งานทั้งหมด</div></div>'
+    +'<div class="dstat"><div class="dstat-num" style="color:var(--acc);">'+counts.pending+'</div><div class="dstat-lbl">รอรับงาน</div></div>'
+    +'<div class="dstat"><div class="dstat-num" style="color:var(--blu);">'+counts.working+'</div><div class="dstat-lbl">กำลังทำ</div></div>'
+    +'<div class="dstat"><div class="dstat-num" style="color:var(--grn);">'+counts.done+'</div><div class="dstat-lbl">จบงาน</div></div>'
+    +'<div class="dstat"><div class="dstat-num" style="color:var(--rd);">'+counts.continue+'</div><div class="dstat-lbl">ต่องาน</div></div>'
+    +'<div class="dstat"><div class="dstat-num" style="font-size:18px;color:var(--grn);">฿'+fmt(totalAmt)+'</div><div class="dstat-lbl">ยอดเงินรวม</div></div></div>';
   if (!js.length){ p.innerHTML = html + '<div class="loading-row">ไม่มีงานในวันนี้</div>'; return; }
   const grp = pkDashGroupTeam_(js);
-  grp.order.forEach(tm => {
-    const list = grp.g[tm], none = (tm==='__none__');
-    const col = none ? 'var(--rd)' : 'var(--blu)';
-    html += '<div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:.4px;margin:14px 0 8px;padding-left:8px;border-left:3px solid '+col+';color:'+col+';">'
-      + (none ? '⚠ ยังไม่จัดทีม' : '👷 '+escHtml(tm))
-      + ' <span style="color:var(--mu);font-weight:600;">· '+list.length+' งาน · ★'+pkDashSumScore_(list)+'</span></div>';
-    list.forEach(j => {
-      const badge = none ? ' <span style="font-size:10px;background:#3a2228;color:var(--rd);border:1px solid #54323a;border-radius:20px;padding:1px 8px;font-weight:800;">ยังไม่จัด</span>' : '';
-      const contBadge = (j.status==='continue') ? ' <span style="font-size:10px;background:#3a2228;color:var(--rd);border:1px solid #54323a;border-radius:20px;padding:1px 8px;font-weight:800;">➡ ต่องาน</span>' : '';
-      if (full){
-        html += dashJobCardFull_(j, none);
-            } else {
-        html += '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--bdr);font-size:14px;">'
-          + '<span style="font-weight:700;flex:1;min-width:0;">'+escHtml(j.name||'-')+badge+contBadge+'</span>'
-          + '<span style="color:var(--mu);font-size:12px;">📍 '+escHtml(pkExtractDistrict_(j.rawAddr))+'</span>'
-          + '<span style="color:var(--acc);font-weight:700;font-size:13px;white-space:nowrap;">★ '+(Number(j.score)||0)+'</span></div>';
-      }
-    });
+  grp.order.sort((a,b)=>{
+    if(a==='__none__') return -1; if(b==='__none__') return 1;
+    const pa=grp.g[a].filter(j=>j.status==='pending'||j.status==='working').length;
+    const pb=grp.g[b].filter(j=>j.status==='pending'||j.status==='working').length;
+    return (pb-pa)||String(a).localeCompare(String(b));
   });
+  html+='<div style="font-size:14px;font-weight:800;margin-bottom:8px;">ภาระทีม</div>';
+  grp.order.forEach(tm => {
+    const list=grp.g[tm], none=tm==='__none__', done=list.filter(j=>j.status==='done').length;
+    const key=none?'__none__':tm;
+    html+='<div class="dteam" role="button" tabindex="0" onclick="dashSetTeamFilter(\''+escAttr(key)+'\')" style="margin-bottom:8px;border-color:'+(none?'var(--rd)':'var(--bdr)')+';">'
+      +'<div class="dteam-name" style="margin-bottom:7px;">'+(none?'⚠ ยังไม่จัดทีม':'👷 '+escHtml(tm))+'<span style="margin-left:auto;font-size:11px;color:var(--mu);">กรอง</span></div>'
+      +pkDashStatusBar_(list,8)+'<div class="dteam-row"><span>'+list.length+' งาน · ★'+pkDashSumScore_(list)+'</span><b>เสร็จ '+done+'/'+list.length+'</b></div></div>';
+  });
+  let shown=js.filter(j=>!_dashAttentionFilter||(_dashAttentionFilter==='team'?!String(j.team||'').trim():_dashAttentionFilter==='cf'?j.sheetStatus!=='ยืนยันแล้ว':j.status==='continue'));
+  if(_dashTeamFilter) shown=shown.filter(j=>_dashTeamFilter==='__none__'?!String(j.team||'').trim():String(j.team||'').trim()===_dashTeamFilter);
+  const jobsGrp=pkDashGroupTeam_(shown);
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:18px 0 8px;"><b>รายการงาน</b><span style="font-size:12px;color:var(--mu);">'+shown.length+' งาน</span></div>';
+  jobsGrp.order.forEach(tm=>{ const list=jobsGrp.g[tm], none=tm==='__none__'; html+='<div style="font-size:12px;font-weight:800;color:'+(none?'var(--rd)':'var(--blu)')+';margin:12px 0 7px;">'+(none?'⚠ ยังไม่จัดทีม':'👷 '+escHtml(tm))+'</div>'; list.forEach(j=>{html+=dashJobCard_(j,'install');}); });
+  if(!shown.length) html+='<div class="loading-row">ไม่มีงานตรงกับตัวกรอง</div>';
   p.innerHTML = html;
 }
+function dashSetAttentionFilter(v){ _dashAttentionFilter=v; _dashTeamFilter=''; dashCalRenderPanel(); }
+function dashSetTeamFilter(v){ _dashTeamFilter=v; _dashAttentionFilter=''; dashCalRenderPanel(); }
+function dashClearFilters(){ _dashAttentionFilter=''; _dashTeamFilter=''; dashCalRenderPanel(); }
 function dashCalPick(ds){
   if (_dashCmpMode){
     if (ds === _dashCmpA) _dashCmpA = '';
@@ -8997,17 +9048,18 @@ function dashCalPick(ds){
     if (_dashCmpA && _dashCmpB){ const el=document.getElementById('dashCalPanel'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
     return;
   }
-  _dashCalSel = ds; _dashCalClicked = true; dashCalRender();
+  _dashCalSel = ds; _dashCalClicked = true; _dashAttentionFilter=''; _dashTeamFilter=''; dashCalRender();
   const el=document.getElementById('dashCalPanel'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
 }
-async function dashCalPrev(){ _dashCalM--; if(_dashCalM<0){_dashCalM=11;_dashCalY--;} dashCalRender(); await dashCalReload(); }
-async function dashCalNext(){ _dashCalM++; if(_dashCalM>11){_dashCalM=0;_dashCalY++;} dashCalRender(); await dashCalReload(); }
+async function dashCalPrev(){ if(_dashCalSpan==='week'){const d=new Date(_dashCalSel+'T00:00:00');d.setDate(d.getDate()-7);_dashCalSel=pkYmd_(d);_dashCalY=d.getFullYear();_dashCalM=d.getMonth();}else{_dashCalM--;if(_dashCalM<0){_dashCalM=11;_dashCalY--;}} dashCalRender(); await dashCalReload(); }
+async function dashCalNext(){ if(_dashCalSpan==='week'){const d=new Date(_dashCalSel+'T00:00:00');d.setDate(d.getDate()+7);_dashCalSel=pkYmd_(d);_dashCalY=d.getFullYear();_dashCalM=d.getMonth();}else{_dashCalM++;if(_dashCalM>11){_dashCalM=0;_dashCalY++;}} dashCalRender(); await dashCalReload(); }
 async function dashCalToday(){ const t=new Date(); _dashCalY=t.getFullYear(); _dashCalM=t.getMonth(); _dashCalSel=pkTodayStr_(); _dashCalClicked=false; dashCalRender(); await dashCalReload(); }
 // ════════════════════════════════════════
 //  📏 DASHBOARD — ปฏิทินคิววัดงาน (office) — Feature 1.1
 //  ดึง pk_officeMeasureQueue ครั้งเดียว (ทุกงาน+สถานะ) แล้ว filter เดือน/วัน ฝั่ง client
 // ════════════════════════════════════════
 let _measAllJobs = null, _measCalY = null, _measCalM = null, _measCalSel = '', _measCalLoaded = false, _measCalLoading = false;
+let _measCalSpan = 'month', _measAttentionFilter = '', _measTeamFilter = '';
 function dashSetMode(mode){
   const iv = document.getElementById('dashInstallView'), mv = document.getElementById('dashMeasureView');
   const bi = document.getElementById('dashModeInstall'), bm = document.getElementById('dashModeMeasure');
@@ -9016,8 +9068,10 @@ function dashSetMode(mode){
   if (mv) mv.style.display = measure ? '' : 'none';
   if (bi) bi.classList.toggle('on', !measure);
   if (bm) bm.classList.toggle('on', measure);
+  const head=document.getElementById('dashSelectedTitle'); if(head) head.textContent=pkDashDateTitle_(measure?_measCalSel:_dashCalSel);
   if (measure && !_measCalLoaded) measCalLoad();
   else if (measure) measCalReload(true);   // เข้าแท็บวัดงานซ้ำ → revalidate เบื้องหลัง (เห็นค่าที่แก้ในชีต)
+  else dashCalRender();
 }
 // ══ Dashboard: view ช่วงวันที่ (range list, READ-ONLY) — ก้อน B ══
 let _dashInstallView = 'cal';   // 'cal' | 'range'
@@ -9115,21 +9169,7 @@ function dashRangeRender(){
   out.innerHTML = html;
 }
 function dashRangeCard_(j, none){
-  const cont = (j.status==='continue') ? ' <span style="font-size:10px;background:#3a2228;color:var(--rd);border:1px solid #54323a;border-radius:20px;padding:1px 8px;font-weight:800;">➡ ต่องาน</span>' : '';
-  const dot = '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+pkDashTone_(j.status||j.sheetStatus)+';margin-right:6px;vertical-align:middle;"></span>';
-  return '<div style="background:var(--surf2);border:1px solid '+(none?'#54323a':'var(--bdr)')+';border-radius:10px;padding:11px 13px;margin-bottom:9px;">'
-    + '<div style="font-size:15px;font-weight:800;margin-bottom:5px;">'+dot+escHtml(j.name||'-')+cont+'</div>'
-    + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:30px;">📍</span><span>'+escHtml(j.rawAddr||'-')+'</span></div>'
-    + jobTelHtml(j.note)
-    + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:30px;">🔧</span><span>'+escHtml(j.job||'-')+'</span></div>'
-    + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:7px;padding-top:7px;border-top:1px solid var(--bdr);">'
-      + '<span style="color:var(--acc);font-weight:800;">★ '+(Number(j.score)||0)+'</span>'
-      + '<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount||0)+'</span></div>'
-    + jobMarkMeasBtn_(j)
-    + jobEditBtn_(j.id)
-    + jobContBtn_(j.id)
-    + jobDelBtn_(j.id)
-    + '</div>';
+  return dashJobCard_(j,'install');
 }
 function pkThaiDateFull_(ds){
   const x = ds.split('-');
@@ -9164,7 +9204,7 @@ async function qtMarkMeasure(id, mark){
     _dashRangeJobs = [];
     if (document.getElementById('dashCalGrid')) await dashCalReload();
     if (_dashInstallView === 'range') await dashRangeRun();
-    loadDashboard();
+    dashJobClose();
     qtBadgeRefresh();
   } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
@@ -9195,6 +9235,7 @@ async function officeMeasureToggle(id, markDone){
 function officeMeasureRecord(id){
   const j = (_measAllJobs||[]).concat(_measRangeJobs||[]).find(x => String(x.id) === String(id));
   if (!j){ toast('❌ หาข้อมูลงานวัดไม่เจอ ลองรีเฟรชปฏิทิน'); return; }
+  dashJobClose();
   recordOpenNew({ customerName:j.name||'', customerPhone:'', customerAddress:j.address||'', linkedJobId:j.id });
 }
 async function jobDeleteFromCal(id, sheet){
@@ -9213,8 +9254,8 @@ async function jobDeleteFromCal(id, sheet){
       _dashRangeJobs = [];
       if (document.getElementById('dashCalGrid')) await dashCalReload();
       if (_dashInstallView === 'range') await dashRangeRun();
-      loadDashboard();
     }
+    dashJobClose();
     cfBadgeRefresh();
     qtBadgeRefresh();
   } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
@@ -9224,6 +9265,7 @@ function jobContOpen(id){
   const pool = (_dashRangeJobs||[]).concat(_dashCalJobs||[]);
   const j = pool.find(x => String(x.id)===String(id));
   if (!j){ toast('ไม่พบงาน'); return; }
+  dashJobClose();
   contJobOpenCore({ id:j.id, name:j.name, amount:j.amount, continueNote:'' }, j.date, j.team||'', 'cal');
 }
 function jobEditOpen(id, sheet){
@@ -9232,6 +9274,7 @@ function jobEditOpen(id, sheet){
   const pool = isMeas ? (_measAllJobs||[]).concat(_measRangeJobs||[]) : (_dashRangeJobs||[]).concat(_dashCalJobs||[]);
   const j = pool.find(x => String(x.id)===String(id));
   if (!j){ toast((isMeas && _measCalLoading) ? '⏳ กำลังโหลดข้อมูลวัดงาน — รอสักครู่แล้วกดอีกครั้ง' : 'ไม่พบงาน'); return; }
+  dashJobClose();
   _jobEditCur = j;
   _jobEditSheet = isMeas ? 'measure' : 'install';
   const jt = document.getElementById('jeTitle');
@@ -9383,20 +9426,7 @@ function measRangeRender(){
   out.innerHTML=html;
 }
 function measRangeCard_(j){
-  const dot='<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+measTone_(j.status)+';margin-right:6px;vertical-align:middle;"></span>';
-  const map=j.mapLink ? ' <a href="'+j.mapLink+'" target="_blank" style="color:var(--blu);text-decoration:none;font-weight:700;">🗺</a>' : '';
-  return '<div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:11px 13px;margin-bottom:9px;">'
-    + '<div style="font-size:15px;font-weight:800;margin-bottom:5px;">'+dot+escHtml(j.name||'-')+map+'</div>'
-    + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:30px;">🔧</span><span>'+escHtml(j.job||'-')+'</span></div>'
-    + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:30px;">📍</span><span>'+escHtml(j.address||'-')+'</span></div>'
-    + jobTelHtml(j.note)
-      + '<div style="margin-top:6px;font-size:12px;color:'+measTone_(j.status)+';font-weight:700;">'+measStatusLabel_(j.status)
-        + (j.team ? ' <span style="color:var(--blu);">· 🚗 '+escHtml(j.team)+'</span>' : ' <span style="color:var(--rd);">· ⚠ ยังไม่จัดทีม</span>')+'</div>'
-    + jobMeasDoneBtn_(j)
-    + jobRecordBtn_(j.id)
-    + jobEditBtn_(j.id, 'measure')
-    + jobDelBtn_(j.id, 'measure')
-    + '</div>';
+  return dashJobCard_(j,'measure');
 }
 async function measCalLoad(){
   if (!document.getElementById('measCalGrid')) return;
@@ -9452,60 +9482,134 @@ function measCalRender(){
   const grid = document.getElementById('measCalGrid'); if (!grid) return;
   const today = pkTodayStr_();
   const byDay = {}; measMonthJobs_().forEach(j => { if (j.date) (byDay[j.date]=byDay[j.date]||[]).push(j); });
-  document.getElementById('measCalTitle').textContent = PK_DASH_TH_M[_measCalM] + ' ' + (_measCalY+543);
+  const title=document.getElementById('measCalTitle'); if(title) title.textContent = PK_DASH_TH_M[_measCalM] + ' ' + (_measCalY+543);
+  const head=document.getElementById('dashSelectedTitle'); if(head && document.getElementById('dashMeasureView').style.display!=='none') head.textContent=pkDashDateTitle_(_measCalSel);
+  const bm=document.getElementById('measSpanMonthBtn'), bw=document.getElementById('measSpanWeekBtn');
+  if(bm) bm.classList.toggle('on',_measCalSpan==='month'); if(bw) bw.classList.toggle('on',_measCalSpan==='week');
   let html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">';
-  PK_DASH_DOW.forEach(d => html += '<div style="text-align:center;font-size:12px;color:var(--mu);padding:4px 0;font-weight:600;">'+d+'</div>');
-  const first = new Date(_measCalY, _measCalM, 1).getDay(), days = new Date(_measCalY, _measCalM+1, 0).getDate();
-  for (let i=0;i<first;i++) html += '<div></div>';
-  for (let d=1; d<=days; d++){
-    const ds = _measCalY+'-'+String(_measCalM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-    const js = byDay[ds] || [], dow = new Date(_measCalY,_measCalM,d).getDay(), wk = (dow===0||dow===6);
-    let st = 'min-height:64px;background:'+(wk?'rgba(181,101,63,.08)':'var(--surf)')+';border:1px solid var(--bdr);border-radius:10px;padding:6px 7px;cursor:pointer;position:relative;';
-    if (ds===today) st += 'box-shadow:inset 0 0 0 2px var(--blu);';
-    if (ds===_measCalSel) st += 'box-shadow:inset 0 0 0 2px var(--acc);background:rgba(181,101,63,.14);';
-    const cnt = js.length ? '<span style="position:absolute;top:5px;right:6px;font-size:10px;background:var(--acc);color:#fff;border-radius:9px;padding:1px 6px;font-weight:800;">'+js.length+'</span>' : '';
-    const dots = js.slice(0,6).map(j => '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;margin:1px;background:'+measTone_(j.status)+';"></span>').join('');
-    html += '<div onclick="measCalPick(\''+ds+'\')" style="'+st+'"><span style="font-size:13px;font-weight:700;">'+d+'</span>'+cnt+'<div style="margin-top:22px;">'+dots+'</div></div>';
+  if(_measCalSpan==='month') PK_DASH_DOW.forEach(d => html += '<div style="text-align:center;font-size:12px;color:var(--mu);padding:4px 0;font-weight:600;">'+d+'</div>');
+  let dates=[];
+  if(_measCalSpan==='week'){
+    const base=new Date((_measCalSel||today)+'T00:00:00'); base.setDate(base.getDate()-base.getDay());
+    for(let i=0;i<7;i++){const q=new Date(base);q.setDate(base.getDate()+i);dates.push(pkYmd_(q));}
+  }else{
+    const first=new Date(_measCalY,_measCalM,1).getDay(),days=new Date(_measCalY,_measCalM+1,0).getDate();
+    for(let i=0;i<first;i++)dates.push(''); for(let d=1;d<=days;d++)dates.push(_measCalY+'-'+String(_measCalM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'));
   }
+  dates.forEach(ds=>{
+    if(!ds){html+='<div></div>';return;}
+    const x=ds.split('-'),d=Number(x[2]),dow=new Date(Number(x[0]),Number(x[1])-1,d).getDay(),js=byDay[ds]||[],wk=dow===0||dow===6;
+    let st='min-height:'+(_measCalSpan==='week'?'82':'70')+'px;background:'+(wk?'var(--acc-t)':'var(--surf)')+';border:1px solid '+(ds===_measCalSel?'var(--acc)':'var(--bdr)')+';border-radius:var(--r-md);padding:6px 7px;cursor:pointer;display:grid;grid-template-rows:auto 6px auto;gap:7px;';
+    const dayNum=ds===today?'<span style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 5px;border-radius:var(--r-pill);background:var(--acc);color:var(--surf2);font-weight:800;">'+d+'</span>':'<span style="font-weight:800;">'+d+'</span>';
+    html+='<div role="button" tabindex="0" onclick="measCalPick(\''+ds+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();measCalPick(\''+ds+'\')}" style="'+st+'">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;">'+(_measCalSpan==='week'?'<span style="color:var(--mu);font-weight:700;">'+PK_DASH_DOW[dow]+'</span>':'')+dayNum+(js.length?'<span class="badge bp">'+js.length+' งาน</span>':'')+'</div>'
+      +pkDashStatusBar_(js,6)+'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--mu);"><span>'+(js.length?'★ '+pkDashSumScore_(js):'')+'</span><span>'+(_dayNotes[ds]?'📝':'')+'</span></div></div>';
+  });
   html += '</div>';
   grid.innerHTML = html;
   measCalRenderPanel();
 }
+function measSetCalSpan(v){ _measCalSpan=v==='week'?'week':'month'; measCalRender(); }
 function measCalRenderPanel(){
   const p = document.getElementById('measCalPanel'); if (!p) return;
-  const ds = _measCalSel, today = pkTodayStr_();
+  const ds = _measCalSel;
   const js = (_measAllJobs||[]).filter(j => j.date === ds);
-  const thd = (function(){ const x = ds.split('-'); return Number(x[2])+' '+PK_DASH_TH_M[Number(x[1])-1]+' '+(Number(x[0])+543); })();
-  let html = '<div style="margin-bottom:12px;"><div style="font-size:15px;font-weight:800;">📏 '+thd+(ds===today?' · วันนี้':'')+'</div>'
-    + '<div style="font-size:12px;color:var(--mu);">'+js.length+' งานวัด</div></div>';
-  if (!js.length){ p.innerHTML = html + '<div class="loading-row">ไม่มีงานวัดในวันนี้</div>'; return; }
-  js.forEach(j => {
-    const tone = measTone_(j.status), lbl = measStatusLabel_(j.status);
-    const teamTag = j.team ? '<span style="color:var(--blu);font-weight:700;">🚗 '+escHtml(j.team)+'</span>' : '<span style="color:var(--rd);font-weight:700;">⚠ ยังไม่จัดทีม</span>';
-    const worker = (j.worker ? '👷 '+escHtml(j.worker) : '<span style="color:var(--mu);">— ยังไม่มีผู้รับในแอป</span>') + ' · ' + teamTag;
-    const mapBtn = j.mapLink ? '<a href="'+j.mapLink+'" target="_blank" style="color:var(--blu);text-decoration:none;font-weight:700;">🗺 แผนที่</a>' : '';
-    const sheetSt = j.sheetStatus ? '<span style="font-size:11px;color:var(--mu);">'+escHtml(j.sheetStatus)+'</span>' : '';
-    html += '<div style="background:var(--surf2);border:1px solid var(--bdr);border-left:4px solid '+tone+';border-radius:10px;padding:12px 14px;margin-bottom:10px;">'
-      + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
-        + '<span style="font-size:16px;font-weight:800;flex:1;min-width:0;">'+escHtml(j.name||'-')+'</span>'
-        + '<span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:'+tone+';color:#fff;">'+lbl+'</span></div>'
-      + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:54px;">🔧 รายการ</span><span>'+escHtml(j.job||'-')+'</span></div>'
-      + '<div style="font-size:13px;margin:3px 0;display:flex;gap:7px;"><span style="color:var(--mu);min-width:54px;">📍 ที่อยู่</span><span>'+escHtml(j.address||'-')+'</span></div>'
-      + jobTelHtml(j.note)
-      + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);align-items:center;font-size:13px;">'
-        + '<span style="font-weight:700;">'+worker+'</span>'+mapBtn+sheetSt+'</div>'
-      + jobMeasDoneBtn_(j)
-      + jobRecordBtn_(j.id)
-      + jobEditBtn_(j.id, 'measure')
-      + jobDelBtn_(j.id, 'measure')
-      + '</div>';
-  });
+  let html=dashDayNoteHtml_(ds), noTeam=js.filter(j=>!String(j.team||'').trim()).length, noCf=js.filter(j=>j.sheetStatus&&j.sheetStatus!=='ยืนยันแล้ว').length, cont=js.filter(j=>j.status==='continue').length;
+  if(noTeam||noCf||cont) html+='<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:14px;padding:10px;background:var(--surf2);border:1px solid var(--bdr);border-radius:var(--r-md);"><b style="font-size:12px;">ต้องจัดการ</b>'
+    +(noTeam?'<button class="btn btn-g btn-sm" onclick="measSetAttentionFilter(\'team\')">'+noTeam+' งานยังไม่จัดทีม</button>':'')
+    +(noCf?'<button class="btn btn-g btn-sm" onclick="measSetAttentionFilter(\'cf\')">'+noCf+' รอยืนยันคิว</button>':'')
+    +(cont?'<button class="btn btn-g btn-sm" onclick="measSetAttentionFilter(\'continue\')">'+cont+' ต่องาน</button>':'')
+    +((_measAttentionFilter||_measTeamFilter)?'<button class="btn btn-g btn-sm" onclick="measClearFilters()">ล้างตัวกรอง</button>':'')+'</div>';
+  const counts={pending:0,working:0,done:0,continue:0};js.forEach(j=>{const s=counts[j.status]===undefined?'pending':j.status;counts[s]++;});
+  html+='<div class="dash-stats" style="padding:0;margin-bottom:16px;">'
+    +'<div class="dstat"><div class="dstat-num">'+js.length+'</div><div class="dstat-lbl">งานทั้งหมด</div></div>'
+    +'<div class="dstat"><div class="dstat-num" style="color:var(--acc);">'+counts.pending+'</div><div class="dstat-lbl">รอรับงาน</div></div>'
+    +'<div class="dstat"><div class="dstat-num" style="color:var(--blu);">'+counts.working+'</div><div class="dstat-lbl">กำลังทำ</div></div>'
+    +'<div class="dstat"><div class="dstat-num" style="color:var(--grn);">'+counts.done+'</div><div class="dstat-lbl">จบงาน</div></div>'
+    +'<div class="dstat"><div class="dstat-num" style="color:var(--rd);">'+counts.continue+'</div><div class="dstat-lbl">ต่องาน</div></div>'
+    +'<div class="dstat"><div class="dstat-num" style="font-size:14px;color:var(--mu);">รอประเมินราคา</div><div class="dstat-lbl">ยอดงานวัด</div></div></div>';
+  if(!js.length){p.innerHTML=html+'<div class="loading-row">ไม่มีงานวัดในวันนี้</div>';return;}
+  const grp=pkDashGroupTeam_(js);grp.order.sort((a,b)=>{if(a==='__none__')return-1;if(b==='__none__')return 1;const pa=grp.g[a].filter(j=>j.status==='pending'||j.status==='working').length,pb=grp.g[b].filter(j=>j.status==='pending'||j.status==='working').length;return(pb-pa)||String(a).localeCompare(String(b));});
+  html+='<div style="font-size:14px;font-weight:800;margin-bottom:8px;">ภาระทีม</div>';
+  grp.order.forEach(tm=>{const list=grp.g[tm],none=tm==='__none__',done=list.filter(j=>j.status==='done').length,key=none?'__none__':tm;html+='<div class="dteam" role="button" tabindex="0" onclick="measSetTeamFilter(\''+escAttr(key)+'\')" style="margin-bottom:8px;border-color:'+(none?'var(--rd)':'var(--bdr)')+';"><div class="dteam-name" style="margin-bottom:7px;">'+(none?'⚠ ยังไม่จัดทีม':'👷 '+escHtml(tm))+'<span style="margin-left:auto;font-size:11px;color:var(--mu);">กรอง</span></div>'+pkDashStatusBar_(list,8)+'<div class="dteam-row"><span>'+list.length+' งาน · ★'+pkDashSumScore_(list)+'</span><b>เสร็จ '+done+'/'+list.length+'</b></div></div>';});
+  let shown=js.filter(j=>!_measAttentionFilter||(_measAttentionFilter==='team'?!String(j.team||'').trim():_measAttentionFilter==='cf'?j.sheetStatus&&j.sheetStatus!=='ยืนยันแล้ว':j.status==='continue'));if(_measTeamFilter)shown=shown.filter(j=>_measTeamFilter==='__none__'?!String(j.team||'').trim():String(j.team||'').trim()===_measTeamFilter);
+  const jobsGrp=pkDashGroupTeam_(shown);html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:18px 0 8px;"><b>รายการงาน</b><span style="font-size:12px;color:var(--mu);">'+shown.length+' งาน</span></div>';
+  jobsGrp.order.forEach(tm=>{const list=jobsGrp.g[tm],none=tm==='__none__';html+='<div style="font-size:12px;font-weight:800;color:'+(none?'var(--rd)':'var(--blu)')+';margin:12px 0 7px;">'+(none?'⚠ ยังไม่จัดทีม':'👷 '+escHtml(tm))+'</div>';list.forEach(j=>{html+=dashJobCard_(j,'measure');});});
+  if(!shown.length)html+='<div class="loading-row">ไม่มีงานตรงกับตัวกรอง</div>';
   p.innerHTML = html;
 }
-function measCalPick(ds){ _measCalSel = ds; measCalRender(); const el=document.getElementById('measCalPanel'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
-function measCalPrev(){ _measCalM--; if(_measCalM<0){_measCalM=11;_measCalY--;} measCalRender(); }
-function measCalNext(){ _measCalM++; if(_measCalM>11){_measCalM=0;_measCalY++;} measCalRender(); }
+function measSetAttentionFilter(v){_measAttentionFilter=v;_measTeamFilter='';measCalRenderPanel();}
+function measSetTeamFilter(v){_measTeamFilter=v;_measAttentionFilter='';measCalRenderPanel();}
+function measClearFilters(){_measAttentionFilter='';_measTeamFilter='';measCalRenderPanel();}
+function measCalPick(ds){ _measCalSel = ds; _measAttentionFilter='';_measTeamFilter='';measCalRender(); const el=document.getElementById('measCalPanel'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+function measCalPrev(){ if(_measCalSpan==='week'){const d=new Date(_measCalSel+'T00:00:00');d.setDate(d.getDate()-7);_measCalSel=pkYmd_(d);_measCalY=d.getFullYear();_measCalM=d.getMonth();}else{_measCalM--;if(_measCalM<0){_measCalM=11;_measCalY--;}} measCalRender(); }
+function measCalNext(){ if(_measCalSpan==='week'){const d=new Date(_measCalSel+'T00:00:00');d.setDate(d.getDate()+7);_measCalSel=pkYmd_(d);_measCalY=d.getFullYear();_measCalM=d.getMonth();}else{_measCalM++;if(_measCalM>11){_measCalM=0;_measCalY++;}} measCalRender(); }
 function measCalToday(){ const t=new Date(); _measCalY=t.getFullYear(); _measCalM=t.getMonth(); _measCalSel=pkTodayStr_(); measCalRender(); }
+// ── Dashboard job detail modal ──
+let _dashModalJob=null, _dashModalMode='install', _dashProdLoadToken=0;
+function dashJobKey_(event,id,mode){ if(event.key==='Enter'||event.key===' '){event.preventDefault();dashJobOpen(id,mode);} }
+function dashJobClose(){ const m=document.getElementById('dashJobModal');if(m)m.classList.remove('on');_dashProdLoadToken++; }
+function dashJobOpen(id,mode){
+  mode=mode==='measure'?'measure':'install';
+  const pool=mode==='measure'?(_measAllJobs||[]).concat(_measRangeJobs||[]):(_dashCalJobs||[]).concat(_dashRangeJobs||[]);
+  const j=pool.find(x=>String(x.id)===String(id));if(!j){toast('ไม่พบงาน ลองรีเฟรชปฏิทิน');return;}
+  _dashModalJob=j;_dashModalMode=mode;window._tdmJobs=[j];window._tdmSheet=mode;
+  const m=document.getElementById('dashJobModal'),title=document.getElementById('dashJobModalTitle'),body=document.getElementById('dashJobModalBody');if(!m||!body)return;
+  const tel=telNorm(jobTel(j.note)||''),addr=pkDashCleanAddr_(mode==='measure'?(j.address||j.rawAddr):j.rawAddr),flagged=String(j.note||'').indexOf('[qtmeasure]')!==-1;
+  const amount=mode==='measure'?'รอประเมินราคา':'฿ '+fmt(j.amount);
+  const queue=j.sheetStatus==='ยืนยันแล้ว'?'ยืนยันแล้ว':(j.sheetStatus||'รอ CF');
+  if(title)title.textContent=(mode==='measure'?'📏 ':'🔧 ')+(j.name||'รายละเอียดงาน');
+  let html='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;"><div><div style="font-size:18px;font-weight:800;">'+escHtml(j.name||'-')+'</div><div style="font-size:11px;color:var(--mu);margin-top:3px;">'+escHtml(j.id||'-')+(j.orderStr?' · งานที่ '+escHtml(String(j.orderStr)):'')+' · '+escHtml(j.date||'-')+'</div></div><span class="badge" style="color:'+pkDashTone_(j.status)+';background:var(--surf);border:1px solid '+pkDashTone_(j.status)+';">'+pkDashStatusLabel_(j.status)+'</span></div>'
+    +(tel?'<div style="padding:7px 0;border-bottom:1px solid var(--bdr);">📞 <a href="tel:'+escAttr(tel)+'" style="color:var(--blu);font-weight:700;text-decoration:none;">'+escHtml(telFmt(tel))+'</a></div>':'')
+    +'<div style="padding:7px 0;border-bottom:1px solid var(--bdr);display:flex;align-items:flex-start;gap:8px;"><span style="flex:1;">📍 '+escHtml(addr||'-')+'</span>'+dashMapBtn_(j)+'</div>'
+    +'<div style="padding:7px 0;border-bottom:1px solid var(--bdr);">🔧 '+escHtml(j.job||'-')+'</div>'
+    +'<div style="padding:7px 0;border-bottom:1px solid var(--bdr);display:flex;gap:12px;flex-wrap:wrap;"><span>👷 '+escHtml(j.team||'ยังไม่จัดทีม')+'</span><span>★ '+(Number(j.score)||0)+'</span><b style="margin-left:auto;color:'+(mode==='measure'?'var(--mu)':'var(--grn)')+';">'+amount+'</b></div>'
+    +'<div style="padding:7px 0;border-bottom:1px solid var(--bdr);display:flex;gap:8px;flex-wrap:wrap;"><span>สถานะคิว: <b>'+escHtml(queue)+'</b></span>'+(flagged?'<span class="badge bw">📐 ระบุเป็นงานวัด</span>':'')+'</div>'
+    +(j.status==='continue'&&j.continueNote?'<div style="padding:8px;margin-top:9px;background:var(--acc-t);border-left:3px solid var(--rd);">📝 '+escHtml(j.continueNote)+'</div>':'')
+    +(mode==='install'?'<div id="dashJobProd" style="margin-top:14px;padding:12px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r-md);"><div class="loading-row">กำลังตรวจสถานะใบผลิต...</div></div>':'')
+    +dashJobActions_(j,mode);
+  body.innerHTML=html;m.classList.add('on');setTimeout(()=>{const b=document.getElementById('dashJobCloseBtn');if(b)b.focus();},0);
+  if(mode==='install')dashJobProdLoad_(j);
+}
+function dashJobActions_(j,mode){
+  if(!isOfficeLevel())return '';
+  let html='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:16px;padding-top:12px;border-top:1px solid var(--bdr);">'
+    +'<button class="btn btn-g btn-sm" onclick="jobEditOpen(\''+escAttr(j.id)+'\',\''+mode+'\')">✏️ แก้ไขงาน</button>';
+  if(mode==='install')html+='<button class="btn btn-g btn-sm" onclick="jobContOpen(\''+escAttr(j.id)+'\')">📅 ลงวันต่องาน</button>';
+  html+='<button class="btn btn-g btn-sm" onclick="tdmPinGeo(\''+escAttr(j.id)+'\')">📌 ปักพิกัด</button>';
+  if(mode==='install'){
+    const flagged=String(j.note||'').indexOf('[qtmeasure]')!==-1,hidden=j.showAmtTech===false;
+    html+='<button class="btn btn-g btn-sm" onclick="qtMarkMeasure(\''+escAttr(j.id)+'\','+(!flagged)+')">'+(flagged?'↩️ ยกเลิกงานวัด':'📐 ระบุเป็นงานวัด')+'</button>'
+      // ป้ายบอก "สถานะตอนนี้ + สิ่งที่จะเกิดเมื่อกด" (ข้อความ/สีตรงกับ dashShowAmtBtn เดิม — ห้ามสลับความหมาย)
+      +'<button class="btn btn-g btn-sm" style="color:'+(hidden?'var(--rd)':'var(--grn)')+';border-color:'+(hidden?'var(--rd)':'var(--grn)')+';" onclick="dashToggleShowAmt(\''+escAttr(j.id)+'\','+(hidden)+')">'+(hidden?'🚫 ช่างไม่เห็นยอด · แตะเพื่อโชว์':'👁 ช่างเห็นยอด · แตะเพื่อซ่อน')+'</button>';
+  }else{
+    html+='<button class="btn btn-g btn-sm" onclick="officeMeasureRecord(\''+escAttr(j.id)+'\')">📐 จดขนาด</button>'
+      +'<button class="btn btn-g btn-sm" onclick="measToInstall(_dashModalJob);dashJobClose()">🔧 ลงคิวติดตั้ง</button>';
+  }
+  return html+'<button class="btn btn-g btn-sm" style="color:var(--rd);border-color:var(--rd);" onclick="jobDeleteFromCal(\''+escAttr(j.id)+'\',\''+mode+'\')">🗑 ลบงาน</button></div>';
+}
+function dashJobProdStep_(label,state){
+  const symbol=state==='done'?'✓':state==='active'?'●':state==='wait'?'!':'○',color=state==='done'?'var(--grn)':state==='active'?'var(--blu)':state==='wait'?'var(--rd)':'var(--mu)';
+  return '<div style="flex:1;min-width:92px;text-align:center;color:'+color+';"><div style="font-size:18px;font-weight:800;">'+symbol+'</div><div style="font-size:10px;font-weight:700;">'+label+'</div></div>';
+}
+function dashJobProdRender_(r,j){
+  if(!r||!r.ok)return '<div style="color:var(--mu);">ตรวจสถานะใบผลิตไม่สำเร็จ</div>';
+  if(r.match==='none')return '<div style="color:var(--mu);">ไม่พบใบผลิตที่ตรงกับงานนี้</div>';
+  if(r.match==='ambiguous')return '<div style="color:var(--rd);">พบใบผลิตหลายใบที่ชื่อ+วันติดตั้งตรงกัน ('+(Number(r.count)||0)+' ใบ) — เปิดดูที่แท็บใบผลิต</div>';
+  if(r.match!=='one'||!r.woId)return '<div style="color:var(--mu);">ตรวจสถานะใบผลิตไม่สำเร็จ</div>';
+  const confirmed=j.sheetStatus==='ยืนยันแล้ว',prodDone=r.prodStatus==='ผลิตเสร็จแล้ว'||r.status==='done',issued=!!String(r.equipIssued||'').trim()&&String(r.equipIssued||'').trim()!=='[]',taken=j.status==='working'||j.status==='done'||j.status==='continue',done=j.status==='done';
+  const states=[confirmed?'done':'active',prodDone?'done':confirmed?'active':'future',issued?'done':prodDone?'active':'future',taken?'done':issued?'active':'future',done?'done':taken?'active':'wait'];
+  let html='<div style="font-size:13px;font-weight:800;margin-bottom:9px;">สถานะใบผลิต</div><div style="display:flex;gap:5px;flex-wrap:wrap;">';
+  ['ยืนยันคิว','ใบผลิต','จ่ายอุปกรณ์','ช่างรับงาน','จบงาน'].forEach((x,i)=>{html+=dashJobProdStep_(x,states[i]);});
+  html+='</div><div style="font-size:12px;color:var(--mu);margin-top:10px;">ใบผลิต '+escHtml(r.woId)+' · '+escHtml(r.prodStatus||r.status||'-')+(r.rush?' · ด่วน':'')+'</div>';
+  if(CURRENT_USER&&CURRENT_USER.role==='manager'&&typeof pkpOpen==='function')html+='<button class="btn btn-g btn-sm" style="margin-top:9px;" onclick="pkpOpen(\''+escAttr(r.woId)+'\')">เปิดใบผลิต</button>';
+  return html;
+}
+async function dashJobProdLoad_(j){
+  const token=++_dashProdLoadToken,box=document.getElementById('dashJobProd');if(!box)return;
+  try{const r=await Promise.race([getJobProdFast(j.name,j.date),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),12000))]);if(token!==_dashProdLoadToken)return;box.innerHTML=dashJobProdRender_(r,j);}catch(e){if(token===_dashProdLoadToken)box.innerHTML='<div style="color:var(--mu);">ตรวจสถานะใบผลิตไม่สำเร็จ</div>';}
+}
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){const m=document.getElementById('dashJobModal');if(m&&m.classList.contains('on'))dashJobClose();}});
 // ── Feature 1.2: ปุ่ม toggle โชว์/ซ่อนยอดให้ tech (office เท่านั้น) บนการ์ดงานติดตั้ง ──
 function dashMapBtn_(j){
   var url = '', pin = false;
@@ -9550,6 +9654,7 @@ async function dashToggleShowAmt(id, show){
       const j = _dashCalJobs.find(x => x.id === id);
       if (j) j.showAmtTech = (r.show === true);
       dashCalRenderPanel();
+      dashJobClose();
     } else {
       alert('บันทึกไม่สำเร็จ: ' + ((r && r.error) || 'unknown'));
     }
