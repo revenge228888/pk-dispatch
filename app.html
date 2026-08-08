@@ -16371,10 +16371,14 @@ function fuRender(){
         + '<b style="font-family:var(--mono);">' + escHtml(q.quoteNo || q.id) + '</b>'
         + '<span style="margin-left:auto;font-weight:700;color:var(--grn);">฿' + fmt(q.totalAmount || 0) + '</span>'
         + '<span style="font-size:12px;font-weight:700;color:' + lateColor + ';">⏳ ค้าง ' + Number(q.ageDays || 0) + ' วัน</span></div>'
+        // เคยกด "ตามแล้ว" มาก่อน แล้วครบกำหนดเตือนใหม่ → บอกให้รู้ว่านี่คือรอบตามซ้ำ
+        + (Number(q.lastFollowedAt) ? '<div style="font-size:11.5px;color:var(--amb);margin-top:4px;">🔁 เคยตามแล้วเมื่อ '
+            + escHtml(fuWhen_(q.lastFollowedAt)) + (q.lastFollowedBy ? ' โดย ' + escHtml(q.lastFollowedBy) : '') + '</div>' : '')
         + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">'
         + '<button class="btn btn-g btn-sm" onclick="quoteOpenView(\'' + escAttr(q.id) + '\')">👁 ดูใบ</button>'
         + '<button class="btn btn-g btn-sm" onclick="fuBook(' + idx + ')">🔧 ลงคิว</button>'
-        + '<button class="btn btn-p btn-sm" onclick="fuDone(\'' + escAttr(q.id) + '\')">✅ ติดตามแล้ว</button>'
+        + '<button class="btn btn-g btn-sm" onclick="fuDone(\'' + escAttr(q.id) + '\',\'snooze\')" title="ตามลูกค้าแล้ว ยังไม่สรุป — ให้เตือนอีกครั้งใน ' + _fuDays + ' วัน">🔁 ตามแล้ว · เตือนอีกใน ' + _fuDays + ' วัน</button>'
+        + '<button class="btn btn-p btn-sm" onclick="fuDone(\'' + escAttr(q.id) + '\',\'closed\')" title="ปิดเรื่องนี้ ไม่ต้องตามอีก">🏁 จบงานแล้ว</button>'
         + '</div></div>';
     }).join('');
     return '<div class="card" style="padding:13px 14px;margin-bottom:10px;">'
@@ -16385,15 +16389,28 @@ function fuRender(){
   fuUpdateBadge_();
 }
 
-async function fuDone(id){
-  if (!confirm('ยืนยันว่าติดตามใบเสนอราคานี้แล้ว?')) return;
+function fuWhen_(ts){
+  const n = Number(ts) || 0; if (!n) return '';
+  const days = Math.floor((Date.now() - n) / 86400000);
+  if (days <= 0) return 'วันนี้';
+  if (days === 1) return 'เมื่อวาน';
+  if (days < 30) return days + ' วันก่อน';
+  try { return new Date(n).toLocaleDateString('th-TH', { day:'2-digit', month:'short' }); } catch(e){ return days + ' วันก่อน'; }
+}
+//  action 'snooze' = ตามแล้ว ให้กลับมาเตือนอีกใน N วัน · 'closed' = จบงานแล้ว ไม่ต้องตามอีก
+async function fuDone(id, action){
+  action = action === 'snooze' ? 'snooze' : 'closed';
+  const ask = action === 'snooze'
+    ? 'ตามลูกค้ารายนี้แล้ว — ให้ระบบเตือนอีกครั้งใน ' + _fuDays + ' วัน?'
+    : 'ปิดใบเสนอราคานี้ (จบงานแล้ว ไม่ต้องตามอีก)?';
+  if (!confirm(ask)) return;
   try {
-    const out = await call({action:'pk_quoteFollowupDone', id:id});
+    const out = await call({action:'pk_quoteFollowupDone', id:id, action:action});
     if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกไม่สำเร็จ');
     _fuQuotes = _fuQuotes.filter(function(q){ return q.id !== id; });
     fuRender();
     fuUpdateBadge_();
-    toast('✅ บันทึกว่าติดตามแล้ว');
+    toast(action === 'snooze' ? '🔁 บันทึกแล้ว — จะเตือนอีกใน ' + (out.days || _fuDays) + ' วัน' : '🏁 ปิดงานแล้ว');
   } catch(e){ toast('❌ ' + e.message); }
 }
 
