@@ -9594,14 +9594,32 @@ function dashJobProdStep_(label,state){
 }
 function dashJobProdRender_(r,j){
   if(!r||!r.ok)return '<div style="color:var(--mu);">ตรวจสถานะใบผลิตไม่สำเร็จ</div>';
-  if(r.match==='none')return '<div style="color:var(--mu);">ไม่พบใบผลิตที่ตรงกับงานนี้</div>';
-  if(r.match==='ambiguous')return '<div style="color:var(--rd);">พบใบผลิตหลายใบที่ชื่อ+วันติดตั้งตรงกัน ('+(Number(r.count)||0)+' ใบ) — เปิดดูที่แท็บใบผลิต</div>';
+  if(r.match==='none')return '<div style="color:var(--mu);">ไม่พบใบผลิตของลูกค้ารายนี้</div>';
+  if(r.match==='ambiguous'){
+    // เจอหลายใบ → ไม่เดาให้ แต่ลิสต์ให้เลือกเอง (ผู้จัดการกดเปิดใบได้เลย)
+    const canOpen=CURRENT_USER&&CURRENT_USER.role==='manager'&&typeof pkpOpen==='function';
+    let h='<div style="color:var(--amb);font-weight:700;margin-bottom:8px;">พบใบผลิตของลูกค้ารายนี้ '+(Number(r.count)||0)+' ใบ — เลือกใบที่ตรงกับงานนี้</div>';
+    (r.candidates||[]).forEach(function(c){
+      h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid var(--bdr);font-size:12.5px;">'
+        +'<b>'+escHtml(c.woId||'-')+'</b><span style="color:var(--mu);">'+escHtml(c.customerName||'-')+'</span>'
+        +'<span style="color:var(--mu);">📅 '+escHtml(c.installDate||'ไม่ระบุวันติดตั้ง')+'</span>'
+        +'<span class="badge bp">'+escHtml(c.prodStatus||'-')+'</span>'
+        +(canOpen?'<button class="btn btn-g btn-sm" style="margin-left:auto;" onclick="pkpOpen(\''+escAttr(c.woId)+'\')">เปิดใบ</button>':'')
+        +'</div>';
+    });
+    return h;
+  }
   if(r.match!=='one'||!r.woId)return '<div style="color:var(--mu);">ตรวจสถานะใบผลิตไม่สำเร็จ</div>';
   const confirmed=j.sheetStatus==='ยืนยันแล้ว',prodDone=r.prodStatus==='ผลิตเสร็จแล้ว'||r.status==='done',issued=!!String(r.equipIssued||'').trim()&&String(r.equipIssued||'').trim()!=='[]',taken=j.status==='working'||j.status==='done'||j.status==='continue',done=j.status==='done';
   const states=[confirmed?'done':'active',prodDone?'done':confirmed?'active':'future',issued?'done':prodDone?'active':'future',taken?'done':issued?'active':'future',done?'done':taken?'active':'wait'];
   let html='<div style="font-size:13px;font-weight:800;margin-bottom:9px;">สถานะใบผลิต</div><div style="display:flex;gap:5px;flex-wrap:wrap;">';
   ['ยืนยันคิว','ใบผลิต','จ่ายอุปกรณ์','ช่างรับงาน','จบงาน'].forEach((x,i)=>{html+=dashJobProdStep_(x,states[i]);});
   html+='</div><div style="font-size:12px;color:var(--mu);margin-top:10px;">ใบผลิต '+escHtml(r.woId)+' · '+escHtml(r.prodStatus||r.status||'-')+(r.rush?' · ด่วน':'')+'</div>';
+  // จับคู่ไม่ได้เป๊ะ (ชื่อตรงแต่วันไม่ตรง / ชื่อใกล้เคียง) → บอกให้ผู้ใช้ตรวจเอง ไม่กลืนเงียบ
+  if(r.via&&r.via!=='exact'){
+    html+='<div style="font-size:11.5px;color:var(--amb);margin-top:5px;">⚠ จับคู่จากชื่อลูกค้า'+(r.via==='partial'?'ที่ใกล้เคียง':'')
+      +' — ใบนี้ระบุวันติดตั้ง '+escHtml(r.installDate||'(ไม่ระบุ)')+(r.customerName?' · ชื่อในใบ: '+escHtml(r.customerName):'')+' · กรุณาตรวจว่าตรงกับงานนี้</div>';
+  }
   if(CURRENT_USER&&CURRENT_USER.role==='manager'&&typeof pkpOpen==='function')html+='<button class="btn btn-g btn-sm" style="margin-top:9px;" onclick="pkpOpen(\''+escAttr(r.woId)+'\')">เปิดใบผลิต</button>';
   return html;
 }
