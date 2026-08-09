@@ -2014,6 +2014,7 @@ function renderOfficeShell(){
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn btn-g btn-sm" id="esAuditBtn" onclick="esAuditRun()" style="display:none;">🧾 ตรวจตัดย้อนหลัง</button>
               <button class="btn btn-g btn-sm" id="esRecBtn" onclick="esRecOpen()" style="display:none;">📋 ปรับเทียบจากการนับจริง</button>
+              <button class="btn btn-g btn-sm" id="esChkBtn" onclick="esLedgerCheck()" style="display:none;">🩺 ตรวจสต็อก vs ประวัติ</button>
               <button class="btn btn-g btn-sm" onclick="esLoad()">↻ รีเฟรช</button>
             </div>
           </div>
@@ -10257,7 +10258,41 @@ async function equipCatalogFetch(){
   });
   _equipCatalog=cat;
 }
-async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; var ab=document.getElementById('esAuditBtn'); if(ab&&CURRENT_USER&&CURRENT_USER.role==='manager')ab.style.display='inline-flex'; var rb=document.getElementById('esRecBtn'); if(rb&&CURRENT_USER&&CURRENT_USER.role==='manager')rb.style.display='inline-flex'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); }
+async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; var ab=document.getElementById('esAuditBtn'); if(ab&&CURRENT_USER&&CURRENT_USER.role==='manager')ab.style.display='inline-flex'; var rb=document.getElementById('esRecBtn'); if(rb&&CURRENT_USER&&CURRENT_USER.role==='manager')rb.style.display='inline-flex'; var kb=document.getElementById('esChkBtn'); if(kb&&CURRENT_USER&&CURRENT_USER.role==='manager')kb.style.display='inline-flex'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); }
+
+// 🩺 ตรวจสต็อก vs ผลรวมประวัติ — ตรงกัน = ระบบบันทึกครบ (ส่วนต่างกับของจริงมาจากการเคลื่อนไหวนอกระบบ)
+async function esLedgerCheck(){
+  if(!CURRENT_USER||CURRENT_USER.role!=='manager'){ toast('เฉพาะผู้จัดการ'); return; }
+  showLoad('กำลังตรวจ...');
+  var r; try{ r=await call({action:'pk_equipLedgerCheck'}); } catch(e){ r={ok:false,error:'เชื่อมต่อไม่ได้'}; }
+  hideLoad();
+  if(!r||!r.ok){ toast('❌ '+((r&&r.error)||'ตรวจไม่สำเร็จ')); return; }
+  var m=document.getElementById('esChkModal');
+  if(!m){ m=document.createElement('div'); m.id='esChkModal'; m.className='modal-bg';
+    m.onclick=function(e){ if(e.target===m) m.classList.remove('on'); }; document.body.appendChild(m); }
+  var body;
+  if(r.healthy){
+    body='<div style="padding:18px;"><div style="color:var(--grn);font-weight:800;font-size:15px;">✅ ระบบบันทึกครบทุกรายการ</div>'
+      +'<div style="margin-top:8px;font-size:13px;color:var(--mu);">ยอดในคลังตรงกับผลรวมประวัติทั้งหมด ('+(r.moveRows||0)+' รายการเคลื่อนไหว)<br><br>'
+      +'แปลว่า <b>ไม่มีบั๊กที่ทำให้สต็อกเพี้ยนเงียบ ๆ</b> — ส่วนต่างกับของที่นับได้จริง เกิดจากการเคลื่อนไหวที่ไม่ได้ผ่านระบบ '
+      +'เช่น ใช้ของโดยไม่มีใบผลิต · ใบที่ติ๊ก “วัสดุมาเอง” · ของเสีย/ทำพัง · เบิกเผื่อไปหน้างานแล้วไม่คืน · ของคืนเข้าคลังโดยไม่ได้บันทึกรับเข้า</div></div>';
+  } else {
+    body='<div style="padding:14px 18px;"><div style="color:var(--rd);font-weight:800;font-size:15px;">⚠ พบ '+r.mismatch.length+' รายการที่ยอดไม่ตรงกับประวัติ</div>'
+      +'<div style="margin-top:6px;font-size:12.5px;color:var(--mu);">แปลว่ามีการเขียนสต็อกที่ไม่ได้ลงประวัติ (บั๊กระบบ) — ส่งรายการนี้ให้ผู้ดูแลระบบ</div>'
+      +'<div style="margin-top:10px;max-height:300px;overflow:auto;font-size:13px;">'
+      +r.mismatch.map(function(x){
+        return '<div style="padding:6px 0;border-bottom:1px solid var(--bdr);">'+escHtml(x.name)+(x.color?' ['+escHtml(x.color)+']':'')
+          +'<br><span style="color:var(--mu);font-size:12px;">คลัง '+(x.stock===null?'(ไม่มีแถว)':x.stock)+' · ประวัติรวม '+x.ledger
+          +' · <b style="color:var(--rd);">ต่าง '+(x.diff>0?'+':'')+x.diff+'</b> · '+x.moves+' ครั้ง</span></div>'; }).join('')
+      +'</div></div>';
+  }
+  m.innerHTML='<div class="modal" style="max-width:560px;">'
+    +'<div class="card-head"><span>🩺 ตรวจสต็อก vs ประวัติ</span>'
+    +'<button onclick="document.getElementById(\'esChkModal\').classList.remove(\'on\')" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button></div>'
+    +body
+    +'<div style="padding:12px 18px;"><button class="btn btn-g" onclick="document.getElementById(\'esChkModal\').classList.remove(\'on\')">ปิด</button></div></div>';
+  m.classList.add('on');
+}
 
 // ════════ 📋 ปรับเทียบสต็อกจากการนับจริง (manager) — กรอกยอดนับ → ดูส่วนต่าง → ยืนยันจึงปรับ ════════
 //  เรียงตามใบนับกระดาษของหน้างาน (ข้อต่อ → ล้อ → ตัวดึง → ตาไก่ทอง → แผ่นแยกกลาง)
