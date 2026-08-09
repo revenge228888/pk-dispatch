@@ -2013,6 +2013,7 @@ function renderOfficeShell(){
             <div style="font-weight:800;font-size:16px;">🔩 คลังอุปกรณ์</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn btn-g btn-sm" id="esAuditBtn" onclick="esAuditRun()" style="display:none;">🧾 ตรวจตัดย้อนหลัง</button>
+              <button class="btn btn-g btn-sm" id="esRecBtn" onclick="esRecOpen()" style="display:none;">📋 ปรับเทียบจากการนับจริง</button>
               <button class="btn btn-g btn-sm" onclick="esLoad()">↻ รีเฟรช</button>
             </div>
           </div>
@@ -10256,7 +10257,110 @@ async function equipCatalogFetch(){
   });
   _equipCatalog=cat;
 }
-async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; var ab=document.getElementById('esAuditBtn'); if(ab&&CURRENT_USER&&CURRENT_USER.role==='manager')ab.style.display='inline-flex'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); }
+async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; var ab=document.getElementById('esAuditBtn'); if(ab&&CURRENT_USER&&CURRENT_USER.role==='manager')ab.style.display='inline-flex'; var rb=document.getElementById('esRecBtn'); if(rb&&CURRENT_USER&&CURRENT_USER.role==='manager')rb.style.display='inline-flex'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); }
+
+// ════════ 📋 ปรับเทียบสต็อกจากการนับจริง (manager) — กรอกยอดนับ → ดูส่วนต่าง → ยืนยันจึงปรับ ════════
+//  เรียงตามใบนับกระดาษของหน้างาน (ข้อต่อ → ล้อ → ตัวดึง → ตาไก่ทอง → แผ่นแยกกลาง)
+var ES_REC_ITEMS = [
+  ['ข้อต่อรางธรรมดา','ดำ','ข้อต่อธรรมดา สีดำ'],
+  ['ข้อต่อรางธรรมดา','ขาว','ข้อต่อธรรมดา สีขาว'],
+  ['ข้อต่อรางเตี้ย-ซ้าย','ดำ','ข้อต่อรางเตี้ย ดำซ้าย'],
+  ['ข้อต่อรางเตี้ย-ขวา','ดำ','ข้อต่อรางเตี้ย ดำขวา'],
+  ['ข้อต่อรางเตี้ย-ซ้าย','ขาว','ข้อต่อรางเตี้ย ขาวซ้าย'],
+  ['ข้อต่อรางเตี้ย-ขวา','ขาว','ข้อต่อรางเตี้ย ขาวขวา'],
+  ['ล้อรางธรรมดา-ซ้าย','ดำ','ล้อธรรมดา ดำซ้าย'],
+  ['ล้อรางธรรมดา-ขวา','ดำ','ล้อธรรมดา ดำขวา'],
+  ['ล้อรางธรรมดา-ซ้าย','ขาว','ล้อธรรมดา ขาวซ้าย'],
+  ['ล้อรางธรรมดา-ขวา','ขาว','ล้อธรรมดา ขาวขวา'],
+  ['ล้อรางเตี้ย-ซ้าย','ดำ','ล้อรางเตี้ย ดำซ้าย'],
+  ['ล้อรางเตี้ย-ขวา','ดำ','ล้อรางเตี้ย ดำขวา'],
+  ['ล้อรางเตี้ย-ซ้าย','ขาว','ล้อรางเตี้ย ขาวซ้าย'],
+  ['ล้อรางเตี้ย-ขวา','ขาว','ล้อรางเตี้ย ขาวขวา'],
+  ['ตัวดึงเชือก','','ตัวดึงเชือก'],
+  ['ตัวดึงสลิง','','ตัวดึงสลิง'],
+  ['ตาไก่ทอง','','ตาไก่ทอง'],
+  ['แผ่นแยกกลาง','','แผ่นแยกกลาง']
+];
+function esRecOpen(){
+  if(!CURRENT_USER||CURRENT_USER.role!=='manager'){ toast('เฉพาะผู้จัดการ'); return; }
+  var m=document.getElementById('esRecModal');
+  if(!m){ m=document.createElement('div'); m.id='esRecModal'; m.className='modal-bg';
+    m.onclick=function(e){ if(e.target===m) m.classList.remove('on'); }; document.body.appendChild(m); }
+  var rows=ES_REC_ITEMS.map(function(it,i){
+    var sys=equipQty(it[0],it[1]);
+    return '<tr style="border-bottom:1px solid var(--bdr);">'
+      +'<td style="padding:7px 8px;">'+escHtml(it[2])+'</td>'
+      +'<td style="padding:7px 8px;text-align:right;font-family:var(--mono);color:var(--mu);" id="esRecSys'+i+'">'+sys+'</td>'
+      +'<td style="padding:7px 8px;text-align:right;"><input id="esRecIn'+i+'" type="number" inputmode="numeric" min="0" step="1" style="width:88px;text-align:right;" class="fi" oninput="esRecDiff('+i+')"></td>'
+      +'<td style="padding:7px 8px;text-align:right;font-family:var(--mono);font-weight:800;" id="esRecDf'+i+'">—</td></tr>';
+  }).join('');
+  m.innerHTML='<div class="modal" style="max-width:620px;">'
+    +'<div class="card-head"><span>📋 ปรับเทียบสต็อกจากการนับจริง</span>'
+    +'<button onclick="document.getElementById(\'esRecModal\').classList.remove(\'on\')" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button></div>'
+    +'<div style="padding:12px 16px;font-size:12.5px;color:var(--mu);">กรอกยอดที่นับได้จริง แล้วกด “ตรวจส่วนต่าง” — ระบบจะแสดงให้ดูก่อน ยังไม่แก้ข้อมูล</div>'
+    +'<div style="padding:0 16px;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">'
+    +'<thead><tr style="border-bottom:1px solid var(--bdr);font-size:11.5px;color:var(--mu);">'
+    +'<th style="text-align:left;padding:6px 8px;">รายการ</th><th style="text-align:right;padding:6px 8px;">ในระบบ</th>'
+    +'<th style="text-align:right;padding:6px 8px;">นับได้</th><th style="text-align:right;padding:6px 8px;">ส่วนต่าง</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody></table></div>'
+    +'<div id="esRecMsg" style="padding:10px 16px;font-size:12.5px;"></div>'
+    +'<div style="display:flex;gap:8px;padding:12px 16px;flex-wrap:wrap;">'
+    +'<button class="btn btn-g" onclick="document.getElementById(\'esRecModal\').classList.remove(\'on\')">ยกเลิก</button>'
+    +'<button class="btn btn-p" id="esRecCheckBtn" onclick="esRecCheck()" style="margin-left:auto;">ตรวจส่วนต่าง</button></div></div>';
+  m.classList.add('on');
+}
+function esRecDiff(i){
+  var el=document.getElementById('esRecIn'+i), d=document.getElementById('esRecDf'+i);
+  if(!el||!d) return;
+  var v=el.value.trim();
+  if(v===''){ d.textContent='—'; d.style.color='var(--mu)'; return; }
+  var diff=Math.round(Number(v))-equipQty(ES_REC_ITEMS[i][0],ES_REC_ITEMS[i][1]);
+  d.textContent=(diff>0?'+':'')+diff;
+  d.style.color = diff===0?'var(--grn)':(diff<0?'var(--rd)':'var(--amb)');
+}
+function esRecCollect_(){
+  var out=[], blank=0;
+  ES_REC_ITEMS.forEach(function(it,i){
+    var v=(document.getElementById('esRecIn'+i)||{}).value;
+    v=String(v==null?'':v).trim();
+    if(v===''){ blank++; return; }                       // ไม่กรอก = ไม่แตะรายการนั้น
+    out.push({name:it[0], color:it[1], qty:Math.round(Number(v))});
+  });
+  return {counts:out, blank:blank};
+}
+async function esRecCheck(){
+  var c=esRecCollect_(), msg=document.getElementById('esRecMsg');
+  if(!c.counts.length){ toast('กรอกยอดนับอย่างน้อย 1 รายการ'); return; }
+  var btn=document.getElementById('esRecCheckBtn'); if(btn) btn.disabled=true;
+  showLoad('กำลังตรวจส่วนต่าง...');
+  var r; try{ r=await call({action:'pk_equipReconcile', counts:c.counts}); } catch(e){ r={ok:false,error:'เชื่อมต่อไม่ได้'}; }
+  hideLoad(); if(btn) btn.disabled=false;
+  if(!r||!r.ok){ msg.innerHTML='<span style="color:var(--rd);">❌ '+escHtml((r&&r.error)||'ตรวจไม่สำเร็จ')+'</span>'; return; }
+  var chg=(r.rows||[]).filter(function(x){ return x.diff!==0; });
+  var miss=(r.rows||[]).filter(function(x){ return x.missingRow; });
+  var h='<b>ผลตรวจ:</b> ต้องปรับ '+chg.length+' รายการ'+(c.blank?' · ไม่ได้กรอก '+c.blank+' รายการ (จะไม่แตะ)':'');
+  if(chg.length) h+='<div style="margin-top:6px;max-height:150px;overflow:auto;">'+chg.map(function(x){
+      return '<div>• '+escHtml(x.name)+(x.color?' ['+escHtml(x.color)+']':'')+': ระบบ '+x.system+' → นับได้ '+x.counted
+        +' <b style="color:'+(x.diff<0?'var(--rd)':'var(--amb)')+';">('+(x.diff>0?'+':'')+x.diff+')</b></div>'; }).join('')+'</div>';
+  if(miss.length) h+='<div style="margin-top:6px;color:var(--amb);">⚠ ไม่มีแถวนี้ในคลัง (จะสร้างใหม่): '+miss.map(function(x){return escHtml(x.name)+(x.color?' ['+escHtml(x.color)+']':'');}).join(', ')+'</div>';
+  if((r.others||[]).length) h+='<div style="margin-top:6px;color:var(--amb);">⚠ แถวอื่นในคลังที่ยังมีของ (ไม่อยู่ในใบนับ — เช็คว่าชื่อ/สีตรงกันไหม): '
+      +r.others.map(function(x){return escHtml(x.name)+(x.color?' ['+escHtml(x.color)+']':'')+' = '+x.qty;}).join(' · ')+'</div>';
+  if(!chg.length){ h+='<div style="margin-top:6px;color:var(--grn);">✅ ตรงกันหมด ไม่ต้องปรับ</div>'; msg.innerHTML=h; return; }
+  h+='<div style="margin-top:10px;"><button class="btn btn-p" onclick="esRecApply()">ยืนยันปรับ '+chg.length+' รายการ</button></div>';
+  msg.innerHTML=h;
+}
+async function esRecApply(){
+  var c=esRecCollect_();
+  if(!c.counts.length) return;
+  if(!confirm('ปรับสต็อกตามยอดนับจริง?\nระบบจะบันทึกประวัติว่า "ปรับเทียบนับจริง" ให้ทุกรายการที่เปลี่ยน')) return;
+  showLoad('กำลังปรับสต็อก...');
+  var r; try{ r=await call({action:'pk_equipReconcile', counts:c.counts, apply:true}); } catch(e){ r={ok:false,error:'เชื่อมต่อไม่ได้'}; }
+  hideLoad();
+  if(!r||!r.ok){ toast('❌ '+((r&&r.error)||'ปรับไม่สำเร็จ')); return; }
+  var m=document.getElementById('esRecModal'); if(m) m.classList.remove('on');
+  toast('✅ ปรับแล้ว '+(r.adjusted||0)+' รายการ'+((r.errors&&r.errors.length)?' · ผิดพลาด '+r.errors.length:''));
+  await esLoad();
+}
 // ── ตรวจ/ซ่อมการตัด stock ย้อนหลัง (manager): dry-run โชว์รายงาน → ยืนยัน → ลงมือจริง ──
 async function esAuditRun(){
   showLoad('กำลังตรวจการตัดย้อนหลัง...');
