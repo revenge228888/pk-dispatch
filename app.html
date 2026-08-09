@@ -2015,6 +2015,7 @@ function renderOfficeShell(){
               <button class="btn btn-g btn-sm" id="esAuditBtn" onclick="esAuditRun()" style="display:none;">🧾 ตรวจตัดย้อนหลัง</button>
               <button class="btn btn-g btn-sm" id="esRecBtn" onclick="esRecOpen()" style="display:none;">📋 ปรับเทียบจากการนับจริง</button>
               <button class="btn btn-g btn-sm" id="esChkBtn" onclick="esLedgerCheck()" style="display:none;">🩺 ตรวจสต็อก vs ประวัติ</button>
+              <button class="btn btn-g btn-sm" id="esMissBtn" onclick="esMissedScan()" style="display:none;">🔎 ใบที่เลยวันติดตั้งแต่ยังไม่หักของ</button>
               <button class="btn btn-g btn-sm" onclick="esLoad()">↻ รีเฟรช</button>
             </div>
           </div>
@@ -10258,7 +10259,46 @@ async function equipCatalogFetch(){
   });
   _equipCatalog=cat;
 }
-async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; var ab=document.getElementById('esAuditBtn'); if(ab&&CURRENT_USER&&CURRENT_USER.role==='manager')ab.style.display='inline-flex'; var rb=document.getElementById('esRecBtn'); if(rb&&CURRENT_USER&&CURRENT_USER.role==='manager')rb.style.display='inline-flex'; var kb=document.getElementById('esChkBtn'); if(kb&&CURRENT_USER&&CURRENT_USER.role==='manager')kb.style.display='inline-flex'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); }
+async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; var ab=document.getElementById('esAuditBtn'); if(ab&&CURRENT_USER&&CURRENT_USER.role==='manager')ab.style.display='inline-flex'; var rb=document.getElementById('esRecBtn'); if(rb&&CURRENT_USER&&CURRENT_USER.role==='manager')rb.style.display='inline-flex'; var kb=document.getElementById('esChkBtn'); if(kb&&CURRENT_USER&&CURRENT_USER.role==='manager')kb.style.display='inline-flex'; var mb=document.getElementById('esMissBtn'); if(mb&&CURRENT_USER&&CURRENT_USER.role==='manager')mb.style.display='inline-flex'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); }
+
+// 🔎 ใบผลิตที่เลยวันติดตั้งแล้วแต่ยังไม่เคยหักอุปกรณ์ (อ่านอย่างเดียว — ช่องโหว่ที่ 🧾 audit จับไม่ได้)
+async function esMissedScan(){
+  if(!CURRENT_USER||CURRENT_USER.role!=='manager'){ toast('เฉพาะผู้จัดการ'); return; }
+  showLoad('กำลังตรวจ...');
+  var r; try{ r=await call({action:'pk_equipMissedScan'}); } catch(e){ r={ok:false,error:'เชื่อมต่อไม่ได้'}; }
+  hideLoad();
+  if(!r||!r.ok){ toast('❌ '+((r&&r.error)||'ตรวจไม่สำเร็จ')); return; }
+  var m=document.getElementById('esMissModal');
+  if(!m){ m=document.createElement('div'); m.id='esMissModal'; m.className='modal-bg';
+    m.onclick=function(e){ if(e.target===m) m.classList.remove('on'); }; document.body.appendChild(m); }
+  var body;
+  if(!r.count){
+    body='<div style="padding:18px;"><div style="color:var(--grn);font-weight:800;font-size:15px;">✅ ไม่มีใบตกค้าง</div>'
+      +'<div style="margin-top:8px;font-size:13px;color:var(--mu);">ทุกใบที่เลยวันติดตั้งไปแล้ว ถูกหักอุปกรณ์ครบ</div></div>';
+  } else {
+    body='<div style="padding:14px 18px;">'
+      +'<div style="color:var(--amb);font-weight:800;font-size:15px;">⚠ พบ '+r.count+' ใบ ที่เลยวันติดตั้งแล้วแต่ยังไม่เคยหักของ</div>'
+      +'<div style="margin-top:6px;font-size:12.5px;color:var(--mu);">ถ้างานพวกนี้ทำไปจริง = ของออกจากคลังแล้วแต่ระบบไม่ได้หัก (ทำให้ระบบมากกว่าของจริง)</div>'
+      +'<div style="margin-top:12px;font-weight:800;font-size:13px;">รวมของที่น่าจะหายไป</div>'
+      +'<div style="margin-top:5px;font-size:13px;">'+(r.byItem||[]).map(function(x){
+          return '<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--bdr);"><span>'+escHtml(x.name)+(x.color?' ['+escHtml(x.color)+']':'')
+            +'</span><b style="margin-left:auto;font-family:var(--mono);">'+x.qty+'</b></div>'; }).join('')||'<span style="color:var(--mu);">(ใบเก่าไม่มีข้อมูลรายการ)</span>'
+      +'</div>'
+      +'<div style="margin-top:14px;font-weight:800;font-size:13px;">รายการใบ (เก่าสุดก่อน)</div>'
+      +'<div style="margin-top:5px;max-height:240px;overflow:auto;font-size:12.5px;">'
+      +(r.docs||[]).map(function(d){
+        return '<div style="padding:6px 0;border-bottom:1px solid var(--bdr);"><b>'+escHtml(d.woId)+'</b> · '+escHtml(d.customerName||'-')
+          +'<br><span style="color:var(--mu);">ติดตั้ง '+escHtml(d.installDate)+' · '+escHtml(d.prodStatus||'-')
+          +(d.noNeedData?' · <span style="color:var(--rd);">ใบเก่าไม่มีข้อมูลอุปกรณ์</span>':' · '+d.items+' รายการ รวม '+d.qty+' ชิ้น')+'</span></div>'; }).join('')
+      +'</div>'
+      +'<div style="margin-top:12px;font-size:12.5px;color:var(--mu);">วิธีจัดการ: เปิดใบผลิตที่ทำไปแล้วจริง → เลื่อนสถานะให้ถึง “จัดอุปกรณ์แล้ว” ระบบจะหักให้อัตโนมัติ · ใบที่ยกเลิก/ไม่ได้ทำ ให้ลบใบทิ้ง</div></div>';
+  }
+  m.innerHTML='<div class="modal" style="max-width:600px;">'
+    +'<div class="card-head"><span>🔎 ใบที่เลยวันติดตั้งแต่ยังไม่หักของ</span>'
+    +'<button onclick="document.getElementById(\'esMissModal\').classList.remove(\'on\')" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button></div>'
+    +body+'<div style="padding:12px 18px;"><button class="btn btn-g" onclick="document.getElementById(\'esMissModal\').classList.remove(\'on\')">ปิด</button></div></div>';
+  m.classList.add('on');
+}
 
 // 🩺 ตรวจสต็อก vs ผลรวมประวัติ — ตรงกัน = ระบบบันทึกครบ (ส่วนต่างกับของจริงมาจากการเคลื่อนไหวนอกระบบ)
 async function esLedgerCheck(){
