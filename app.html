@@ -2653,7 +2653,7 @@ function renderOfficeShell(){
           <div class="fg">
             <label class="fl">ใบแจ้งหนี้ (ถ้ามี · ไม่เกิน 5MB)</label>
             <div style="display:flex;gap:8px;align-items:center;">
-              <input class="fi" id="expFile" type="file" accept="image/*,application/pdf" onchange="expenseFilePicked(this)">
+              <input class="fi" id="expFile" type="file" accept="image/*,application/pdf" multiple onchange="expenseFilePicked(this)">
               <button type="button" class="btn btn-g" style="white-space:nowrap;" onclick="document.getElementById('expCamera').click()">📷 ถ่ายรูป</button>
               <input id="expCamera" type="file" accept="image/*" capture="environment" style="display:none;" onchange="expenseFilePicked(this)">
             </div>
@@ -3004,30 +3004,48 @@ function _expFileToBase64(file){
   });
 }
 
-let _expPreviewUrl = '', _expPickedFile = null;
+// ── ใบแจ้งหนี้: แนบได้หลายรูป (สะสมจากทั้งเลือกไฟล์และถ่ายรูป) ──
+const EXP_MAX_FILES = 6;
+let _expPickedFiles = [], _expPreviewUrls = [];
 function expenseFilePicked(input){
-  const file = input && input.files && input.files[0];
-  _expPickedFile = file || null;
-  const main = document.getElementById('expFile');
-  const camera = document.getElementById('expCamera');
-  if (file && input !== main && main && typeof DataTransfer !== 'undefined') {
-    const dt = new DataTransfer(); dt.items.add(file); main.files = dt.files;
-  }
-  if (_expPreviewUrl) { URL.revokeObjectURL(_expPreviewUrl); _expPreviewUrl = ''; }
+  const picked = input && input.files ? Array.prototype.slice.call(input.files) : [];
+  if (!picked.length) return;
+  let over = 0;
+  picked.forEach(f => {
+    if (_expPickedFiles.length >= EXP_MAX_FILES) { over++; return; }
+    // กันไฟล์ซ้ำ (ชื่อ+ขนาดเดียวกัน) — กดถ่าย/เลือกซ้ำจะไม่เพิ่มซ้ำ
+    if (_expPickedFiles.some(x => x.name === f.name && x.size === f.size)) return;
+    _expPickedFiles.push(f);
+  });
+  if (over) toast('แนบได้สูงสุด ' + EXP_MAX_FILES + ' รูป');
+  ['expFile','expCamera'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });   // ให้เลือกไฟล์เดิมซ้ำได้
+  expenseFileRender();
+}
+function expenseFileRender(){
   const box = document.getElementById('expFilePreview');
   if (!box) return;
-  if (!file) { box.innerHTML = ''; return; }
-  _expPreviewUrl = URL.createObjectURL(file);
-  const preview = String(file.type||'').indexOf('image/') === 0
-    ? '<img src="' + _expPreviewUrl + '" style="max-width:120px;max-height:120px;border-radius:6px;vertical-align:middle;">'
-    : '<span>📄 ' + escHtml(file.name) + '</span>';
-  box.innerHTML = preview + ' <button type="button" class="btn btn-g" style="padding:4px 8px;" onclick="expenseFileClear()">✕ ล้างไฟล์</button>';
-  if (camera && input === main) camera.value = '';
+  _expPreviewUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch(e){} });
+  _expPreviewUrls = [];
+  if (!_expPickedFiles.length) { box.innerHTML = ''; return; }
+  const items = _expPickedFiles.map((f, i) => {
+    const isImg = String(f.type || '').indexOf('image/') === 0;
+    let thumb;
+    if (isImg) { const u = URL.createObjectURL(f); _expPreviewUrls.push(u);
+      thumb = '<img src="' + u + '" style="width:76px;height:76px;object-fit:cover;border-radius:6px;display:block;">';
+    } else { thumb = '<div style="width:76px;height:76px;display:grid;place-items:center;background:var(--surf2);border-radius:6px;font-size:11px;text-align:center;padding:4px;">📄<br>' + escHtml(f.name.slice(0, 14)) + '</div>'; }
+    return '<div style="position:relative;">' + thumb
+      + '<button type="button" title="ลบรูปนี้" onclick="expenseFileRemove(' + i + ')" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid var(--bdr);background:var(--surf2);color:var(--rd);cursor:pointer;font-weight:800;line-height:1;">×</button></div>';
+  }).join('');
+  box.innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">' + items + '</div>'
+    + '<div style="margin-top:6px;font-size:12px;color:var(--mu);">แนบ ' + _expPickedFiles.length + '/' + EXP_MAX_FILES + ' รูป '
+    + '<button type="button" class="btn btn-g btn-sm" onclick="expenseFileClear()">✕ ล้างทั้งหมด</button></div>';
 }
+function expenseFileRemove(i){ _expPickedFiles.splice(i, 1); expenseFileRender(); }
 function expenseFileClear(){
-  _expPickedFile = null;
+  _expPickedFiles = [];
   ['expFile','expCamera'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
-  if (_expPreviewUrl) { URL.revokeObjectURL(_expPreviewUrl); _expPreviewUrl = ''; }
+  _expPreviewUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch(e){} });
+  _expPreviewUrls = [];
   const box=document.getElementById('expFilePreview'); if (box) box.innerHTML='';
 }
 
@@ -3353,16 +3371,18 @@ async function expenseSubmit(){
   if (formData.mainCat !== 'ค่าเดินทาง' && !formData.payee){ toast('เลือกผู้รับเงิน'); return; }
 
   _expSubmitBusy = true;
-  let fileData = null;
-  const fileEl = document.getElementById('expFile');
-  if (_expPickedFile || (fileEl && fileEl.files && fileEl.files[0])){
-    const file = _expPickedFile || fileEl.files[0];
-    if (file.size > 5*1024*1024){ _expSubmitBusy = false; toast('ไฟล์ใหญ่เกิน 5MB'); return; }
-    try { fileData = await _expFileToBase64(file); }
+  // ใบแจ้งหนี้: แนบได้หลายรูป → ส่งเป็น filesData (backend รองรับ fileData เดี่ยวของเดิมด้วย)
+  let filesData = null;
+  if (_expPickedFiles.length){
+    const big = _expPickedFiles.find(f => f.size > 5*1024*1024);
+    if (big){ _expSubmitBusy = false; toast('ไฟล์ "' + big.name + '" ใหญ่เกิน 5MB'); return; }
+    const total = _expPickedFiles.reduce((s,f) => s + f.size, 0);
+    if (total > 18*1024*1024){ _expSubmitBusy = false; toast('รวมทุกไฟล์ใหญ่เกิน 18MB — ลบบางรูปออกก่อน'); return; }
+    try { filesData = await Promise.all(_expPickedFiles.map(f => _expFileToBase64(f))); }
     catch(e){ _expSubmitBusy = false; toast('อ่านไฟล์ไม่ได้'); return; }
   }
 
-  const payload = { action:'pk_expenseSubmit', formData, fileData };
+  const payload = { action:'pk_expenseSubmit', formData, filesData };
   const label = _expLabel_(formData);
   // optimistic: เคลียร์ฟอร์มทันที — ไม่บล็อกจอ กรอกรายการถัดไปได้เลย
   expenseResetForm();
@@ -3721,7 +3741,7 @@ function expenseCardHtml(it){
     (it.payee ? '<div style="font-size:13px;font-weight:600;margin-top:4px;">👤 ' + it.payee + '</div>'
               : (it.vehicle ? '<div style="font-size:13px;margin-top:4px;">🚗 ' + it.vehicle + '</div>' : '')) +
     '<div class="exp-card-desc">' + (it.detail||'-') + '</div>' +
-    '<div class="exp-card-foot">' + (it.jobRef ? '🔗 ' + escHtml(it.jobRef) + ' · ' : '') + (it.invoiceUrl ? '🧾 ' : '') + (it.slipUrl ? '💳 ' : '') + 'ดูรายละเอียด →</div>' +
+    '<div class="exp-card-foot">' + (it.jobRef ? '🔗 ' + escHtml(it.jobRef) + ' · ' : '') + (it.invoiceUrl ? ('🧾' + (expUrlList_(it.invoiceUrl).length > 1 ? '×' + expUrlList_(it.invoiceUrl).length : '') + ' ') : '') + (it.slipUrl ? '💳 ' : '') + 'ดูรายละเอียด →</div>' +
     (CURRENT_USER.role === 'manager' && it.status === 'รออนุมัติ'
       ? '<div style="display:flex;gap:6px;margin-top:8px;">' +
         '<button class="btn btn-p btn-sm" style="flex:1;" onclick="event.stopPropagation();expenseQuickApprove(\'' + it.id + '\')">✅ อนุมัติ</button>' +
@@ -3749,6 +3769,18 @@ async function expenseQuickApprove(id){
   } catch(e){ it.status = prev; expenseRenderActive_(); toast('❌ เชื่อมต่อไม่ได้ — ยังไม่อนุมัติ'); }
 }
 
+// ใบแจ้งหนี้แนบได้หลายรูป — เก็บหลาย URL ในช่องเดียว คั่นด้วยขึ้นบรรทัด/ช่องว่าง (ของเก่า 1 URL ใช้ได้เหมือนเดิม)
+function expUrlList_(url){
+  return String(url || '').split(/[\n\r,\s]+/).map(s => s.trim()).filter(Boolean);
+}
+function expThumbsHtml_(url, label){
+  const list = expUrlList_(url);
+  if (!list.length) return '';
+  if (list.length === 1) return expThumbHtml_(list[0], label);
+  return '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+    + list.map((u, i) => expThumbHtml_(u, (label || 'ไฟล์') + ' ' + (i + 1))).join('')
+    + '</div><div style="font-size:11px;color:var(--mu);margin-top:3px;">' + list.length + ' รูป</div>';
+}
 function expThumbHtml_(url, label){
   if (!url) return '';
   const safe = escAttr(url), text = escHtml(label || 'เปิดไฟล์');
@@ -3811,7 +3843,8 @@ function expenseDetailOpen(id){
       '<div class="exp-dt-row" style="border:none;padding:3px 0;"><span class="k">เลขบัญชี</span><span class="v" style="font-family:var(--mono);">' + (it.payeeAccount||'-') + (it.payeeAccount ? ' <button type="button" onclick="pkCopyAccount(\'' + String(it.payeeAccount).replace(/'/g,"\\'") + '\',this)" style="background:var(--surf2);border:1px solid var(--bdr);border-radius:6px;color:var(--blu);cursor:pointer;font-size:11px;padding:2px 8px;margin-left:8px;">📋 คัดลอก</button>' : '') + '</span></div></div>';
   }
 
-  const invoice  = it.invoiceUrl ? '<div class="exp-dt-row"><span class="k">ใบแจ้งหนี้</span><span class="v">' + expThumbHtml_(it.invoiceUrl, 'ใบแจ้งหนี้') + '</span></div>' : '';
+  const _invN = expUrlList_(it.invoiceUrl).length;
+  const invoice  = _invN ? '<div class="exp-dt-row"><span class="k">ใบแจ้งหนี้' + (_invN > 1 ? ' (' + _invN + ')' : '') + '</span><span class="v">' + expThumbsHtml_(it.invoiceUrl, 'ใบแจ้งหนี้') + '</span></div>' : '';
   const slip     = it.slipUrl ? '<div class="exp-dt-row"><span class="k">สลิปโอน</span><span class="v">' + expThumbHtml_(it.slipUrl, 'สลิปโอน') + '</span></div>' : '';
   const approved = it.approvedBy ? '<div class="exp-dt-row"><span class="k">ผู้ตรวจ</span><span class="v">' + it.approvedBy + (ad?(' · '+ad):'') + '</span></div>' : '';
   const note     = it.note ? '<div style="margin-top:10px;font-size:12px;color:var(--mu);white-space:pre-wrap;border-top:1px solid var(--bdr);padding-top:8px;">📝 ' + it.note + '</div>' : '';
