@@ -16617,7 +16617,8 @@ async function fuDone(id, action){
     : 'ปิดใบเสนอราคานี้ (จบงานแล้ว ไม่ต้องตามอีก)?';
   if (!confirm(ask)) return;
   try {
-    const out = await call({action:'pk_quoteFollowupDone', id:id, action:action});
+    // ⚠ ห้ามใช้ key ชื่อ 'action' เป็นพารามิเตอร์ — มันคือชื่อ router action จะทับกันเอง (บั๊ก "unknown action: closed")
+    const out = await call({action:'pk_quoteFollowupDone', id:id, mode:action});
     if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกไม่สำเร็จ');
     _fuQuotes = _fuQuotes.filter(function(q){ return q.id !== id; });
     fuRender();
