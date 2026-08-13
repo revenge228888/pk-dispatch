@@ -444,7 +444,8 @@ async function api(path, body){
 async function apiGas(action, body){
   const res = await fetch(WORKER + '/api', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(Object.assign({ action: action }, body, { username: S.user.username, token: S.user.token }))
+    // action ต้องอยู่หลัง body เสมอ — ถ้า body มี key action จะทับชื่อ router action (บั๊ก "unknown action")
+    body: JSON.stringify(Object.assign({}, body, { action: action, username: S.user.username, token: S.user.token }))
   });
   return res.json();
 }
