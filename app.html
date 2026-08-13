@@ -1035,7 +1035,7 @@ async function getProdListFast(opts){
       console.warn('[getProdListFast] /prod-list error → fallback GAS:', e.message);
     }
   }
-  const _g = await call({ action:'pk_prodList', ...opts });   // GAS เดิม
+  const _g = await call({ ...opts, action:'pk_prodList' });   // GAS เดิม · action อยู่หลัง spread เสมอ (กัน opts.action ทับ)
   _markJobSource('gas');
   return _g;
 }
@@ -1046,7 +1046,7 @@ let USE_SHEETS_RECORD = true;   // ON: ใบจดขนาด /record-list
 async function getRecordListFast(opts, cacheOpts){
   opts = opts || {}; cacheOpts = cacheOpts || {};
   const useCache = !!cacheOpts.cache && CACHEABLE_ACTIONS.has('pk_recordList') && !cacheOpts.bypassCache;
-  const ckey = useCache ? _cacheKey({ action:'pk_recordList', ...opts }) : null;
+  const ckey = useCache ? _cacheKey({ ...opts, action:'pk_recordList' }) : null;
   if (useCache) { const hit = _apiCache.get(ckey); if (hit && hit.expires > Date.now()) return hit.data; }
   let result = null;
   if (USE_SHEETS_RECORD && CURRENT_USER) {
@@ -1061,7 +1061,7 @@ async function getRecordListFast(opts, cacheOpts){
       else console.warn('[getRecordListFast] /record-list ไม่ ok → fallback GAS:', data && data.error);
     } catch(e){ console.warn('[getRecordListFast] error → fallback GAS:', e.message); }
   }
-  if (!result) { result = await call({ action:'pk_recordList', ...opts }); _markJobSource('gas'); }
+  if (!result) { result = await call({ ...opts, action:'pk_recordList' }); _markJobSource('gas'); }
   if (useCache && result && result.ok) _apiCache.set(ckey, { data: result, expires: Date.now() + CACHE_TTL_MS });
   return result;
 }
@@ -1071,7 +1071,7 @@ let USE_SHEETS_QUOTE = true;    // ON: คำนวณราคา /quote-list
 async function getQuoteListFast(opts, cacheOpts){
   opts = opts || {}; cacheOpts = cacheOpts || {};
   const useCache = !!cacheOpts.cache && CACHEABLE_ACTIONS.has('pk_quoteList') && !cacheOpts.bypassCache;
-  const ckey = useCache ? _cacheKey({ action:'pk_quoteList', ...opts }) : null;
+  const ckey = useCache ? _cacheKey({ ...opts, action:'pk_quoteList' }) : null;
   if (useCache) { const hit = _apiCache.get(ckey); if (hit && hit.expires > Date.now()) return hit.data; }
   let result = null;
   if (USE_SHEETS_QUOTE && CURRENT_USER) {
@@ -1086,7 +1086,7 @@ async function getQuoteListFast(opts, cacheOpts){
       else console.warn('[getQuoteListFast] /quote-list ไม่ ok → fallback GAS:', data && data.error);
     } catch(e){ console.warn('[getQuoteListFast] error → fallback GAS:', e.message); }
   }
-  if (!result) { result = await call({ action:'pk_quoteList', ...opts }); _markJobSource('gas'); }
+  if (!result) { result = await call({ ...opts, action:'pk_quoteList' }); _markJobSource('gas'); }
   if (useCache && result && result.ok) _apiCache.set(ckey, { data: result, expires: Date.now() + CACHE_TTL_MS });
   return result;
 }
@@ -1238,7 +1238,7 @@ async function getTaskListFast(opts){
     } catch(e){ console.warn('[getTaskListFast] error → fallback GAS:', e.message); }
   }
   const action = (CURRENT_USER && CURRENT_USER.role === 'manager') ? 'pk_taskListAll' : 'pk_taskListMine';
-  const _g = await call({ action:action, ...opts }); _markJobSource('gas'); return _g;
+  const _g = await call({ ...opts, action:action }); _markJobSource('gas'); return _g;
 }
 
 let USE_SHEETS_RECORD_GET = true;
@@ -1342,7 +1342,7 @@ async function getExpenseListAllFast(opts){
       console.warn('[getExpenseListAllFast] /expense-list-all error → fallback GAS:', e.message);
     }
   }
-  const _g = await call({ action:'pk_expenseListAll', ...opts });
+  const _g = await call({ ...opts, action:'pk_expenseListAll' });
   _markJobSource('gas');
   return _g;
 }
@@ -1404,7 +1404,7 @@ async function getExpenseGroupSummaryFast(opts){
       console.warn('[getExpenseGroupSummaryFast] /expense-group-summary ไม่ ok → fallback GAS:', data && data.error);
     } catch(e){ console.warn('[getExpenseGroupSummaryFast] error → fallback GAS:', e.message); }
   }
-  const out = await call({ action:'pk_expenseGroupSummary', ...opts });
+  const out = await call({ ...opts, action:'pk_expenseGroupSummary' });
   _markJobSource('gas'); return out;
 }
 
@@ -1421,7 +1421,7 @@ async function getExpenseEmployeeReconFast(opts){
       console.warn('[getExpenseEmployeeReconFast] /expense-employee-recon ไม่ ok → fallback GAS:', data && data.error);
     } catch(e){ console.warn('[getExpenseEmployeeReconFast] error → fallback GAS:', e.message); }
   }
-  const out = await call({ action:'pk_expenseEmployeeRecon', ...opts });
+  const out = await call({ ...opts, action:'pk_expenseEmployeeRecon' });
   _markJobSource('gas'); return out;
 }
 
@@ -9985,7 +9985,7 @@ function ptSet(woId, patch){
   var prev={}; Object.keys(patch).forEach(function(k){ prev[k]=j[k]; });
   Object.assign(j, patch); ptSetView(_ptView);
   if(patch.prodStatus==='จัดอุปกรณ์แล้ว') ptIssueEquip(woId);
-  call(Object.assign({action:'pk_prodSetTrack',woId:woId},patch)).then(function(r){
+  call(Object.assign({woId:woId}, patch, {action:'pk_prodSetTrack'})).then(function(r){   // action ท้ายสุดเสมอ (กัน patch.action ทับ)
     if(!(r&&r.ok)){ Object.assign(j,prev); ptSetView(_ptView); toast((r&&r.error)||'บันทึกไม่สำเร็จ'); }
   }).catch(function(e){ Object.assign(j,prev); ptSetView(_ptView); toast('บันทึกไม่สำเร็จ: '+(e&&e.message||e)); });
 }
@@ -10572,8 +10572,8 @@ function ceSave(i){
   var p=_cePrices[i]; if(!p)return; var v=ceCollect(i);
   if(!v.name){ toast('ต้องมีชื่อ'); return; }
   Object.assign(p,v);
-  if(p._row){ call(Object.assign({action:'pk_costSetRow',row:p._row},v)).then(function(r){ if(r&&r.ok){ toast('บันทึกแล้ว'); ceRender(); } else toast((r&&r.error)||'บันทึกไม่สำเร็จ'); }); }
-  else { call(Object.assign({action:'pk_costAddRow'},v)).then(function(r){ if(r&&r.ok){ p._row=r.row; toast('เพิ่มแล้ว'); ceRender(); } else toast((r&&r.error)||'เพิ่มไม่สำเร็จ'); }); }
+  if(p._row){ call(Object.assign({row:p._row}, v, {action:'pk_costSetRow'})).then(function(r){ if(r&&r.ok){ toast('บันทึกแล้ว'); ceRender(); } else toast((r&&r.error)||'บันทึกไม่สำเร็จ'); }); }
+  else { call(Object.assign({}, v, {action:'pk_costAddRow'})).then(function(r){ if(r&&r.ok){ p._row=r.row; toast('เพิ่มแล้ว'); ceRender(); } else toast((r&&r.error)||'เพิ่มไม่สำเร็จ'); }); }
 }
 function ceDelete(i){
   var p=_cePrices[i]; if(!p)return;
@@ -11596,9 +11596,9 @@ async function recordSubmit(){
   try {
     let r;
     if (_recForm.mode === 'edit') {
-      r = await call({ action:'pk_recordUpdate', id: _recForm.id, ...body });
+      r = await call({ id: _recForm.id, ...body, action:'pk_recordUpdate' });
     } else {
-      r = await call({ action:'pk_recordCreate', ...body });
+      r = await call({ ...body, action:'pk_recordCreate' });
     }
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
@@ -13250,9 +13250,9 @@ async function quoteSubmit(){
   try {
     let r;
     if (_quoForm.mode === 'edit') {
-      r = await call({ action:'pk_quoteUpdate', id: _quoForm.id, ...body });
+      r = await call({ id: _quoForm.id, ...body, action:'pk_quoteUpdate' });
     } else {
-      r = await call({ action:'pk_quoteCreate', ...body });
+      r = await call({ ...body, action:'pk_quoteCreate' });
     }
     hideLoad();
     if (!r.ok) { toast('❌ ' + (r.error||'ผิดพลาด')); return; }
@@ -13598,7 +13598,7 @@ async function getPOListFast(opts){
       console.warn('[getPOListFast] ไม่ ok → fallback GAS:', data && data.error);
     } catch(e){ console.warn('[getPOListFast] error → fallback GAS:', e.message); }
   }
-  const g = await call({ action:'pk_poList', ...opts }); _markJobSource('gas'); return g;
+  const g = await call({ ...opts, action:'pk_poList' }); _markJobSource('gas'); return g;
 }
 async function getPOGetFast(id){
   if (USE_SHEETS_PO_GET && CURRENT_USER && id) {
@@ -14301,8 +14301,8 @@ async function poSubmit(){
     status: f.status || 'draft'
   };
   let r;
-  if (f.mode === 'edit' && f.id) { payload.id = f.id; r = await call({ action:'pk_poUpdate', ...payload }); }
-  else { r = await call({ action:'pk_poCreate', ...payload }); }
+  if (f.mode === 'edit' && f.id) { payload.id = f.id; r = await call({ ...payload, action:'pk_poUpdate' }); }
+  else { r = await call({ ...payload, action:'pk_poCreate' }); }
   if (btn){ btn.disabled=false; btn.textContent='💾 บันทึก'; }
   if (r && r.ok) { toast(f.mode==='edit' ? 'บันทึกแล้ว' : 'สร้างใบสั่งซื้อแล้ว'); poCloseModal(); poFetchSuppliers(); poLoad(); }
   else { toast('บันทึกไม่สำเร็จ: '+((r&&r.error)||'?')); }
@@ -15778,8 +15778,8 @@ async function pkpSave(){
   var sv=document.getElementById('pkpSaveBtn'); if(sv){sv.disabled=true;sv.textContent='กำลังบันทึก...';}
   try{
     var r;
-    if(pkpEditingWO){ b.woId=pkpEditingWO; if(pkpLoadedStatus)b.status=pkpLoadedStatus; r=await call({ action:'pk_prodUpdate', ...b }); }
-    else { r=await call({ action:'pk_prodCreate', ...b }); }
+    if(pkpEditingWO){ b.woId=pkpEditingWO; if(pkpLoadedStatus)b.status=pkpLoadedStatus; r=await call({ ...b, action:'pk_prodUpdate' }); }
+    else { r=await call({ ...b, action:'pk_prodCreate' }); }
     if(!r.ok){ toast('❌ '+(r.error||'บันทึกไม่สำเร็จ')); return; }
     delete pkpWoCache[r.woId];   // ล้าง cache ใบนี้ — กันพิมพ์/จัดตัดรางได้ข้อมูลก่อนแก้
     pkpEditingWO=r.woId;
