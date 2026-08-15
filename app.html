@@ -1765,12 +1765,12 @@ function renderOfficeShell(){
           <a class="sidebar-item" data-tab="production" href="#tab=production" onclick="return pkNavTab(event,'production',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 21V10l6 4V10l6 4V7h6v14z"/></svg></span><span class="sidebar-label">ใบผลิต</span></a>
           <a class="sidebar-item" data-tab="prodtrack" href="#tab=prodtrack" onclick="return pkNavTab(event,'prodtrack',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 7-8"/><path d="M17 7h4v4"/></svg></span><span class="sidebar-label">ติดตามงานผลิต</span></a>
           <a class="sidebar-item" data-tab="railstock" href="#tab=railstock" onclick="return pkNavTab(event,'railstock',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg></span><span class="sidebar-label">คลังราง</span></a>
-          <a class="sidebar-item" data-tab="equipstock" href="#tab=equipstock" onclick="return pkNavTab(event,'equipstock',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></span><span class="sidebar-label">คลังอุปกรณ์</span></a>
+          <a class="sidebar-item" data-tab="equipstock" href="#tab=equipstock" onclick="return pkNavTab(event,'equipstock',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></span><span class="sidebar-label">คลังอุปกรณ์</span><span id="esMissBadge" class="exp-badge"></span></a>
           <a class="sidebar-item" data-tab="costedit" href="#tab=costedit" onclick="return pkNavTab(event,'costedit',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9v6M18 9v6"/></svg></span><span class="sidebar-label">แก้ไขทุน</span></a>` : (CURRENT_USER.role === 'office' ? `
           <div class="sidebar-group">ผลิต & สต็อก</div>
           <a class="sidebar-item" data-tab="prodtrack" href="#tab=prodtrack" onclick="return pkNavTab(event,'prodtrack',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 7-8"/><path d="M17 7h4v4"/></svg></span><span class="sidebar-label">ติดตามงานผลิต</span></a>
           <a class="sidebar-item" data-tab="railstock" href="#tab=railstock" onclick="return pkNavTab(event,'railstock',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg></span><span class="sidebar-label">คลังราง</span></a>
-          <a class="sidebar-item" data-tab="equipstock" href="#tab=equipstock" onclick="return pkNavTab(event,'equipstock',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></span><span class="sidebar-label">คลังอุปกรณ์</span></a>
+          <a class="sidebar-item" data-tab="equipstock" href="#tab=equipstock" onclick="return pkNavTab(event,'equipstock',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></span><span class="sidebar-label">คลังอุปกรณ์</span><span id="esMissBadge" class="exp-badge"></span></a>
           <a class="sidebar-item" data-tab="costedit" href="#tab=costedit" onclick="return pkNavTab(event,'costedit',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9v6M18 9v6"/></svg></span><span class="sidebar-label">แก้ไขทุน</span></a>` : '')}
 
                     <a class="sidebar-item" data-tab="po" href="#tab=po" onclick="return pkNavTab(event,'po',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M5 4h14l-1 8H6z"/><path d="M6 12l-2 6h16"/><circle cx="9" cy="20" r="1.4"/><circle cx="16" cy="20" r="1.4"/></svg></span><span class="sidebar-label">ใบสั่งซื้อ (PO)</span></a>
@@ -2849,6 +2849,7 @@ function officeInit(){
   tmgrBadgeRefresh(); // badge งานมอบหมายที่รอตรวจ
   qtBadgeRefresh();   // badge งานวัดเสร็จแล้วยังไม่มีใบเสนอ
   fuLoad();           // badge ใบเสนอราคาค้าง (Worker-first)
+  esMissBadgeLoad();  // badge ใบผลิตที่ติดตั้งแล้วแต่ยังไม่หักอุปกรณ์ (กันสต็อกเพี้ยนสะสม)
 }
 
 // ════════════════════════════════════════
@@ -10293,7 +10294,21 @@ async function equipCatalogFetch(){
   });
   _equipCatalog=cat;
 }
-async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; var ab=document.getElementById('esAuditBtn'); if(ab&&CURRENT_USER&&CURRENT_USER.role==='manager')ab.style.display='inline-flex'; var rb=document.getElementById('esRecBtn'); if(rb&&CURRENT_USER&&CURRENT_USER.role==='manager')rb.style.display='inline-flex'; var kb=document.getElementById('esChkBtn'); if(kb&&CURRENT_USER&&CURRENT_USER.role==='manager')kb.style.display='inline-flex'; var mb=document.getElementById('esMissBtn'); if(mb&&CURRENT_USER&&CURRENT_USER.role==='manager')mb.style.display='inline-flex'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); }
+async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; var ab=document.getElementById('esAuditBtn'); if(ab&&CURRENT_USER&&CURRENT_USER.role==='manager')ab.style.display='inline-flex'; var rb=document.getElementById('esRecBtn'); if(rb&&CURRENT_USER&&CURRENT_USER.role==='manager')rb.style.display='inline-flex'; var kb=document.getElementById('esChkBtn'); if(kb&&CURRENT_USER&&CURRENT_USER.role==='manager')kb.style.display='inline-flex'; var mb=document.getElementById('esMissBtn'); if(mb&&CURRENT_USER&&(CURRENT_USER.role==='office'||CURRENT_USER.role==='manager'))mb.style.display='inline-flex'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); }
+
+// 🔔 ตัวเตือน: มีใบผลิตที่ติดตั้งไปแล้วแต่ยังไม่เคยหักอุปกรณ์กี่ใบ (ขึ้นเป็นตัวเลขแดงบนเมนูคลังอุปกรณ์)
+//   นับเฉพาะใบที่ติดตั้ง "หลังวันปรับเทียบสต็อกล่าสุด" — ใบเก่ากว่านั้นของถูกนับรวมตอนปรับยอดแล้ว หักอีกจะซ้ำ
+let _esMissCount=0;
+async function esMissBadgeLoad(){
+  if(!CURRENT_USER||!(CURRENT_USER.role==='office'||CURRENT_USER.role==='manager'))return;
+  try{
+    const r=await call({action:'pk_equipMissedScan'});
+    if(!r||!r.ok)return;
+    _esMissCount=Number(r.count)||0;
+    const el=document.getElementById('esMissBadge');
+    if(el){ el.textContent=_esMissCount>0?_esMissCount:''; el.title=_esMissCount?('มี '+_esMissCount+' ใบผลิตที่ติดตั้งไปแล้วแต่ยังไม่ได้หักอุปกรณ์ — กดเข้าคลังอุปกรณ์เพื่อดู'):''; }
+  }catch(e){ /* fail-soft: badge ไม่ขึ้นดีกว่าทำหน้าอื่นพัง */ }
+}
 
 // 📑 ประวัติตัดอุปกรณ์รายใบผลิต — ก่อนตัด / ตัดไป / คงเหลือ · เอาไว้กระทบยอดกับใบเบิกอุปกรณ์
 let _esWoLog=[];
@@ -10352,7 +10367,7 @@ function esWoLogRender(){
 
 // 🔎 ใบผลิตที่เลยวันติดตั้งแล้วแต่ยังไม่เคยหักอุปกรณ์ (อ่านอย่างเดียว — ช่องโหว่ที่ 🧾 audit จับไม่ได้)
 async function esMissedScan(){
-  if(!CURRENT_USER||CURRENT_USER.role!=='manager'){ toast('เฉพาะผู้จัดการ'); return; }
+  if(!CURRENT_USER||!(CURRENT_USER.role==='office'||CURRENT_USER.role==='manager')){ toast('เฉพาะออฟฟิศ/ผู้จัดการ'); return; }
   showLoad('กำลังตรวจ...');
   var r; try{ r=await call({action:'pk_equipMissedScan'}); } catch(e){ r={ok:false,error:'เชื่อมต่อไม่ได้'}; }
   hideLoad();
@@ -10368,6 +10383,7 @@ async function esMissedScan(){
     body='<div style="padding:14px 18px;">'
       +'<div style="color:var(--amb);font-weight:800;font-size:15px;">⚠ พบ '+r.count+' ใบ ที่เลยวันติดตั้งแล้วแต่ยังไม่เคยหักของ</div>'
       +'<div style="margin-top:6px;font-size:12.5px;color:var(--mu);">ถ้างานพวกนี้ทำไปจริง = ของออกจากคลังแล้วแต่ระบบไม่ได้หัก (ทำให้ระบบมากกว่าของจริง)</div>'
+      +(r.since?'<div style="margin-top:5px;font-size:12px;color:var(--grn);">✔ นับเฉพาะใบที่ติดตั้งตั้งแต่ '+escHtml(r.since)+' (วันปรับเทียบสต็อกล่าสุด) — ใบเก่ากว่านั้นข้ามให้แล้ว '+(r.skippedOld||0)+' ใบ กันหักซ้ำ · ใบในรายการนี้เลื่อนสถานะเป็น “จัดอุปกรณ์แล้ว” ได้เลย</div>':'')
       +'<div style="margin-top:12px;font-weight:800;font-size:13px;">รวมของที่น่าจะหายไป</div>'
       +'<div style="margin-top:5px;font-size:13px;">'+(r.byItem||[]).map(function(x){
           return '<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--bdr);"><span>'+escHtml(x.name)+(x.color?' ['+escHtml(x.color)+']':'')
@@ -10523,7 +10539,7 @@ async function esRecApply(){
   if(!r||!r.ok){ toast('❌ '+((r&&r.error)||'ปรับไม่สำเร็จ')); return; }
   var m=document.getElementById('esRecModal'); if(m) m.classList.remove('on');
   toast('✅ ปรับแล้ว '+(r.adjusted||0)+' รายการ'+((r.errors&&r.errors.length)?' · ผิดพลาด '+r.errors.length:''));
-  await esLoad();
+  await esLoad(); esMissBadgeLoad();   // ปรับเทียบแล้ว = ตั้งต้นใหม่ → ตัวเตือนต้องนับใหม่จากวันนี้
 }
 // ── ตรวจ/ซ่อมการตัด stock ย้อนหลัง (manager): dry-run โชว์รายงาน → ยืนยัน → ลงมือจริง ──
 async function esAuditRun(){
