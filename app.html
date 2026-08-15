@@ -2016,6 +2016,7 @@ function renderOfficeShell(){
               <button class="btn btn-g btn-sm" id="esRecBtn" onclick="esRecOpen()" style="display:none;">📋 ปรับเทียบจากการนับจริง</button>
               <button class="btn btn-g btn-sm" id="esChkBtn" onclick="esLedgerCheck()" style="display:none;">🩺 ตรวจสต็อก vs ประวัติ</button>
               <button class="btn btn-g btn-sm" id="esMissBtn" onclick="esMissedScan()" style="display:none;">🔎 ใบที่เลยวันติดตั้งแต่ยังไม่หักของ</button>
+              <button class="btn btn-g btn-sm" onclick="esWoLogOpen()">📑 ประวัติตัดอุปกรณ์ตามใบผลิต</button>
               <button class="btn btn-g btn-sm" onclick="esLoad()">↻ รีเฟรช</button>
             </div>
           </div>
@@ -10293,6 +10294,61 @@ async function equipCatalogFetch(){
   _equipCatalog=cat;
 }
 async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; var ab=document.getElementById('esAuditBtn'); if(ab&&CURRENT_USER&&CURRENT_USER.role==='manager')ab.style.display='inline-flex'; var rb=document.getElementById('esRecBtn'); if(rb&&CURRENT_USER&&CURRENT_USER.role==='manager')rb.style.display='inline-flex'; var kb=document.getElementById('esChkBtn'); if(kb&&CURRENT_USER&&CURRENT_USER.role==='manager')kb.style.display='inline-flex'; var mb=document.getElementById('esMissBtn'); if(mb&&CURRENT_USER&&CURRENT_USER.role==='manager')mb.style.display='inline-flex'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); }
+
+// 📑 ประวัติตัดอุปกรณ์รายใบผลิต — ก่อนตัด / ตัดไป / คงเหลือ · เอาไว้กระทบยอดกับใบเบิกอุปกรณ์
+let _esWoLog=[];
+async function esWoLogOpen(){
+  showLoad('กำลังโหลดประวัติ...');
+  var r; try{ r=await call({action:'pk_equipWoLog', limit:40}); } catch(e){ r={ok:false,error:'เชื่อมต่อไม่ได้'}; }
+  hideLoad();
+  if(!r||!r.ok){ toast('❌ '+((r&&r.error)||'โหลดไม่สำเร็จ')); return; }
+  _esWoLog=r.wos||[];
+  var m=document.getElementById('esWoModal');
+  if(!m){ m=document.createElement('div'); m.id='esWoModal'; m.className='modal-bg';
+    m.onclick=function(e){ if(e.target===m) m.classList.remove('on'); }; document.body.appendChild(m); }
+  m.innerHTML='<div class="modal" style="max-width:720px;">'
+    +'<div class="card-head"><span>📑 ประวัติตัดอุปกรณ์ตามใบผลิต</span>'
+    +'<button onclick="document.getElementById(\'esWoModal\').classList.remove(\'on\')" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button></div>'
+    +'<div style="padding:12px 16px 6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+    +'<input id="esWoSearch" class="fi" style="flex:1;min-width:180px;" placeholder="🔍 ค้นหาเลขใบผลิต หรือ ชื่อลูกค้า" oninput="esWoLogRender()">'
+    +'<span style="font-size:12px;color:var(--mu);">แสดง '+(r.shown||0)+' จาก '+(r.total||0)+' ใบ</span></div>'
+    +'<div id="esWoBody" style="padding:6px 16px 16px;max-height:62vh;overflow:auto;"></div>'
+    +'<div style="padding:12px 16px;"><button class="btn btn-g" onclick="document.getElementById(\'esWoModal\').classList.remove(\'on\')">ปิด</button></div></div>';
+  m.classList.add('on');
+  esWoLogRender();
+}
+function esWoLogRender(){
+  var box=document.getElementById('esWoBody'); if(!box) return;
+  var q=String((document.getElementById('esWoSearch')||{}).value||'').trim().toLowerCase();
+  var list=_esWoLog.filter(function(g){ return !q || g.woId.toLowerCase().indexOf(q)!==-1 || String(g.customerName||'').toLowerCase().indexOf(q)!==-1; });
+  if(!list.length){ box.innerHTML='<div style="padding:26px;text-align:center;color:var(--mu);">ไม่พบใบผลิตที่ตรงกับที่ค้นหา</div>'; return; }
+  box.innerHTML=list.map(function(g){
+    var rows=g.items.map(function(it){
+      var out=it.delta<0, sign=out?'−':'+';
+      return '<tr style="border-bottom:1px solid var(--bdr);">'
+        +'<td style="padding:6px 8px;">'+escHtml(it.name)+(it.color?' <span style="color:var(--mu);">['+escHtml(it.color)+']</span>':'')
+        +(it.kind!=='ออกอุปกรณ์'?' <span class="badge bp" style="font-size:10px;">'+escHtml(it.kind)+'</span>':'')+'</td>'
+        +'<td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:var(--mu);">'+it.before+'</td>'
+        +'<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:800;color:'+(out?'var(--rd)':'var(--grn)')+';">'+sign+Math.abs(it.delta)+'</td>'
+        +'<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:800;">'+it.after+'</td></tr>';
+    }).join('');
+    var when=g.lastTs?new Date(g.lastTs).toLocaleString('th-TH',{day:'2-digit',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'-';
+    return '<div style="border:1px solid var(--bdr);border-radius:var(--r-md);margin-bottom:12px;overflow:hidden;">'
+      +'<div style="background:var(--surf2);padding:9px 12px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;">'
+        +'<b style="font-family:var(--mono);">'+escHtml(g.woId)+'</b>'
+        +'<span>'+escHtml(g.customerName||'-')+'</span>'
+        +(g.installDate?'<span style="font-size:12px;color:var(--mu);">ติดตั้ง '+escHtml(g.installDate)+'</span>':'')
+        +(g.deleted?'<span class="badge" style="background:var(--rd);color:#fff;font-size:10px;">ใบถูกลบ</span>':'')
+        +'<span style="margin-left:auto;font-size:11.5px;color:var(--mu);">'+escHtml(when)+'</span></div>'
+      +'<div style="padding:4px 6px;font-size:12px;color:var(--mu);">ตัดออกรวม <b style="color:var(--rd);">'+g.totalOut+'</b> ชิ้น'
+        +(g.totalBack?' · คืน <b style="color:var(--grn);">'+g.totalBack+'</b> ชิ้น':'')
+        +(g.estimated?' · <span style="color:var(--amb);" title="แถวเก่าไม่ได้บันทึกยอดก่อน/หลังไว้ ระบบคำนวณย้อนจากยอดปัจจุบัน">ยอดก่อน/หลังคำนวณย้อน</span>':'')+'</div>'
+      +'<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;">'
+      +'<thead><tr style="font-size:11px;color:var(--mu);text-align:right;"><th style="text-align:left;padding:4px 8px;">อุปกรณ์</th>'
+      +'<th style="padding:4px 8px;">ก่อนตัด</th><th style="padding:4px 8px;">ตัด/คืน</th><th style="padding:4px 8px;">คงเหลือ</th></tr></thead>'
+      +'<tbody>'+rows+'</tbody></table></div></div>';
+  }).join('');
+}
 
 // 🔎 ใบผลิตที่เลยวันติดตั้งแล้วแต่ยังไม่เคยหักอุปกรณ์ (อ่านอย่างเดียว — ช่องโหว่ที่ 🧾 audit จับไม่ได้)
 async function esMissedScan(){
