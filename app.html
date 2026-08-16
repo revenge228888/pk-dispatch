@@ -8861,12 +8861,12 @@ function dashDayNoteHtml_(ds){
 }
 async function dashCalLoad(){
   if (!document.getElementById('dashCalGrid')) return;
-  if (_dashCalY === null){ const t = new Date(); _dashCalY = t.getFullYear(); _dashCalM = t.getMonth(); }
-  if (!_dashCalSel) _dashCalSel = pkTodayStr_();
+  dashCalEnsureInit_();
   dashCalRender();           // วาดปฏิทินทันที — กันค้างที่ "กำลังโหลด"
   await dashCalReload();
 }
 async function dashCalReload(){
+  dashCalEnsureInit_();   // กันดึงข้อมูลเดือน "null-NaN" ตอนถูกเรียกก่อน dashCalLoad
   dashNotesLoad();   // โหลดหมายเหตุรายวันคู่ขนาน (มาแล้ววาดทับ — ไม่บล็อกปฏิทิน)
   const month = _dashCalY + '-' + String(_dashCalM+1).padStart(2,'0');
   const cached = _dashCalCache[month];
@@ -8915,8 +8915,18 @@ async function dashCalFetch(){
   _dashCalLoading = false;
   return _ok;
 }
+// ตั้งค่าปี/เดือน/วันที่เลือก ถ้ายังว่าง — เรียกได้ทุกที่ ปลอดภัย (idempotent)
+//  ⚠ ต้องเรียกใน render ด้วย: dashNotesLoad()/dashDayNoteEdit() เรียก dashCalRender() ได้ก่อน dashCalLoad()
+//    ถ้าไม่ตั้งค่า _dashCalY จะเป็น null → หัวปฏิทินขึ้น "มกราคม 543" (null+543) และตารางว่างเปล่า
+function dashCalEnsureInit_(){
+  if (_dashCalY === null || _dashCalM === null || !isFinite(_dashCalY) || !isFinite(_dashCalM)){
+    const t = new Date(); _dashCalY = t.getFullYear(); _dashCalM = t.getMonth();
+  }
+  if (!_dashCalSel) _dashCalSel = pkTodayStr_();
+}
 function dashCalRender(){
   const grid = document.getElementById('dashCalGrid'); if (!grid) return;
+  dashCalEnsureInit_();
   const today = pkTodayStr_();
   const byDay = {}; _dashCalJobs.forEach(j => { if (j.date) (byDay[j.date]=byDay[j.date]||[]).push(j); });
   const title=document.getElementById('dashCalTitle'); if(title) title.textContent = PK_DASH_TH_M[_dashCalM] + ' ' + (_dashCalY+543);
@@ -9468,8 +9478,7 @@ function measRangeCard_(j){
 }
 async function measCalLoad(){
   if (!document.getElementById('measCalGrid')) return;
-  if (_measCalY === null){ const t = new Date(); _measCalY = t.getFullYear(); _measCalM = t.getMonth(); }
-  if (!_measCalSel) _measCalSel = pkTodayStr_();
+  measCalEnsureInit_();
   measCalRender();
   await measCalReload();
 }
@@ -9516,8 +9525,16 @@ function measMonthJobs_(){
 }
 function measStatusLabel_(st){ return st==='working' ? '▶ รับงานแล้ว' : st==='done' ? '✅ จบงาน' : st==='continue' ? '➡ ต่องาน' : '⏳ ยังไม่รับงาน'; }
 function measTone_(st){ return st==='working' ? 'var(--blu)' : st==='done' ? 'var(--grn)' : 'var(--rd)'; }   // Feature 1.3: pending/continue = แดง(ยังไม่รับ) · working = ฟ้า(รับแล้ว) · done = เขียว
+// เหตุผลเดียวกับ dashCalEnsureInit_ — dashNotesLoad() เรียก measCalRender() ได้ก่อน measCalLoad
+function measCalEnsureInit_(){
+  if (_measCalY === null || _measCalM === null || !isFinite(_measCalY) || !isFinite(_measCalM)){
+    const t = new Date(); _measCalY = t.getFullYear(); _measCalM = t.getMonth();
+  }
+  if (!_measCalSel) _measCalSel = pkTodayStr_();
+}
 function measCalRender(){
   const grid = document.getElementById('measCalGrid'); if (!grid) return;
+  measCalEnsureInit_();
   const today = pkTodayStr_();
   const byDay = {}; measMonthJobs_().forEach(j => { if (j.date) (byDay[j.date]=byDay[j.date]||[]).push(j); });
   const title=document.getElementById('measCalTitle'); if(title) title.textContent = PK_DASH_TH_M[_measCalM] + ' ' + (_measCalY+543);
