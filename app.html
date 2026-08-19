@@ -962,16 +962,56 @@ const API          = 'https://pk-discord-relay.revenge2288.workers.dev/api';
 // USE_SHEETS_JOBS=false → ใช้ GAS เดิมทุกอย่าง · =true → ลอง /jobs ก่อน, พลาดเมื่อไหร่ fallback GAS อัตโนมัติ (ไม่ downtime)
 let USE_SHEETS_JOBS = true;   // ON: office /jobs
 // ── ป้ายบอกแหล่งข้อมูล (มุมล่างซ้าย) — เห็นได้โดยไม่ต้องเปิด Console ──
+//  19 ส.ค. 2026: เดิมขึ้นแค่ "🐌 GAS" ไม่บอกว่าเรื่องไหนช้า และไม่รู้ว่าเกิดกี่ครั้ง
+//  → บอกชื่อเรื่องเป็นภาษาคน + นับจำนวนครั้งที่ถอยไป GAS + กดดูรายละเอียดได้
+let _pkLastGasAction = '';        // call() เป็นคนตั้งให้ (รู้ชื่อ action อยู่แล้ว ไม่ต้องแก้จุดเรียกทั้ง 35 จุด)
+let _pkFallbackCount = 0;
+const _pkFallbackBy = {};
+const PK_SRC_LABEL = {
+  pk_bootstrap:'ข้อมูลหลัก', pk_getJobs:'คิวงาน', pk_dashboard:'แดชบอร์ด', pk_installMonth:'ปฏิทินติดตั้ง',
+  pk_outstandingList:'ค้างชำระ', pk_cfPendingList:'งานรอยืนยัน', pk_dayNoteList:'หมายเหตุรายวัน',
+  pk_listUsers:'ผู้ใช้', pk_expenseBootstrap:'ใบเบิก', pk_expenseListMy:'ใบเบิก', pk_expenseListAll:'ใบเบิก',
+  pk_expenseMonthSummary:'ใบเบิก', pk_expenseGroupSummary:'ใบเบิก', pk_expenseEmployeeRecon:'ใบเบิก',
+  pk_wbList:'กระดาน', pk_custList:'ทะเบียนลูกค้า', pk_custProfile:'ทะเบียนลูกค้า',
+  pk_quoteFollowupList:'ติดตามใบเสนอ', pk_quoteTrackList:'ติดตามใบเสนอ',
+  pk_recordList:'ใบจดขนาด', pk_recordGet:'ใบจดขนาด', pk_quoteList:'ใบเสนอราคา', pk_quoteGet:'ใบเสนอราคา',
+  pk_prodList:'ใบผลิต', pk_prodGet:'ใบผลิต', pk_jobProdStatus:'ใบผลิต', pk_prodTrackList:'ใบผลิต',
+  pk_poList:'ใบสั่งซื้อ', pk_poGet:'ใบสั่งซื้อ', pk_slipList:'สลิป',
+  pk_taskListMine:'งานมอบหมาย', pk_taskListAll:'งานมอบหมาย', pk_taskDashboard:'งานมอบหมาย',
+  pk_payListTimeLog:'เงินเดือน', pk_payListEmployees:'เงินเดือน', pk_payCalcSalary:'เงินเดือน', pk_paySalaryRuns:'เงินเดือน',
+  pk_equipStockList:'คลังอุปกรณ์', pk_railStockList:'คลังราง', pk_costListPrices:'ราคาต้นทุน',
+  pk_salesGetMeasureJobs:'งานวัด', pk_officeMeasureQueue:'งานวัด', pk_techGetJobs:'งานช่าง', pk_techBootstrap:'งานช่าง',
+  pk_sheetCapStatus:'ความจุชีต'
+};
+function _pkSrcLabel(a){ return PK_SRC_LABEL[a] || String(a || '').replace(/^pk_/, ''); }
+function _pkSrcDetail(){
+  const rows = Object.keys(_pkFallbackBy).sort((a,b)=>_pkFallbackBy[b]-_pkFallbackBy[a])
+                     .map(k => '· ' + k + ' — ' + _pkFallbackBy[k] + ' ครั้ง');
+  if (!rows.length) return 'รอบนี้ยังไม่มีการถอยไปทางช้าเลย ✅';
+  return 'ถอยไปทางช้า (GAS) รวม ' + _pkFallbackCount + ' ครั้งรอบนี้:\n' + rows.join('\n')
+       + '\n\nทางเร็วปกติตอบใน ~0.5 วิ · ทางช้าประมาณ 3-6 วิ\nถ้าขึ้นบ่อยผิดปกติ แจ้งได้เลยครับ';
+}
 function _markJobSource(src, ms){
   try{
     let el = document.getElementById('pk-src-badge');
     if(!el){
       el = document.createElement('div'); el.id='pk-src-badge';
-      el.style.cssText='position:fixed;left:8px;bottom:8px;z-index:99999;font-size:11px;line-height:1;padding:4px 9px;border-radius:11px;font-family:ui-monospace,monospace;opacity:.9;pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,.3);';
+      el.style.cssText='position:fixed;left:8px;bottom:8px;z-index:99999;font-size:11px;line-height:1;padding:4px 9px;border-radius:11px;font-family:ui-monospace,monospace;opacity:.9;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.3);';
+      el.onclick = function(){ try{ alert(_pkSrcDetail()); }catch(e){} };
       document.body.appendChild(el);
     }
-    if(src==='sheets'){ el.textContent='⚡ Sheets API'+(ms!=null?' · '+ms+'ms':''); el.style.background='#10391f'; el.style.color='#5be584'; }
-    else { el.textContent='🐌 GAS'; el.style.background='#3a2607'; el.style.color='#ffb84d'; }
+    if(src==='sheets'){
+      el.textContent = '⚡ เร็ว' + (ms!=null ? ' · '+ms+'ms' : '') + (_pkFallbackCount ? ' · ถอย '+_pkFallbackCount : '');
+      el.style.background='#10391f'; el.style.color='#5be584';
+      el.title = 'อ่านจากทางเร็ว — กดดูสรุป';
+    } else {
+      const who = _pkSrcLabel(_pkLastGasAction);
+      _pkFallbackCount++;
+      _pkFallbackBy[who] = (_pkFallbackBy[who] || 0) + 1;
+      el.textContent = '🐌 ช้า: ' + who + ' · ' + _pkFallbackCount + ' ครั้ง';
+      el.style.background='#3a2607'; el.style.color='#ffb84d';
+      el.title = 'ทางเร็วใช้ไม่ได้ ต้องถอยไปทางช้า — กดดูสรุป';
+    }
   }catch(e){}
 }
 
@@ -979,7 +1019,7 @@ async function getJobsFast(team, date){
   if (USE_SHEETS_JOBS && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/jobs'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ team, date, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -1001,7 +1041,7 @@ async function getTechJobsFast(date){
   if (USE_SHEETS_TECH && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/tech-jobs'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ date, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -1024,7 +1064,7 @@ async function getProdListFast(opts){
   if (USE_SHEETS_PROD && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/prod-list'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -1052,7 +1092,7 @@ async function getRecordListFast(opts, cacheOpts){
   if (USE_SHEETS_RECORD && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/record-list'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -1077,7 +1117,7 @@ async function getQuoteListFast(opts, cacheOpts){
   if (USE_SHEETS_QUOTE && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/quote-list'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -1097,7 +1137,7 @@ async function getQuoteTrackFast(opts, cacheOpts){
   if (USE_SHEETS_QTRACK && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/qtrack-list'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -1112,9 +1152,21 @@ async function getQuoteTrackFast(opts, cacheOpts){
 // ── [FAST 19 ก.ค. 2026] 6 จุดที่เคยดึง GAS ตรงทุกครั้ง — Worker-first + GAS fallback อัตโนมัติ ──
 // bootstrap/expense-bootstrap/cf-pending โดนทุก login · day-notes โดนทุกครั้งเปิดหน้าแรก
 let USE_SHEETS_BOOT = true;
+// ⏱ 19 ส.ค. 2026 — เพดานเวลาของ "ทางอ่านเร็ว" (worker)
+//  ปกติ worker ตอบใน ~0.45 วิ · ถ้าเกิน 8 วิ = ฝั่ง worker/Sheets มีปัญหา → ยอมถอยไป GAS ทันที
+//  เดิมไม่มีเพดานเลย พอ GAS ตันหน้าจอค้างยาวถึง 100+ วิ (Cloudflare: ผู้ใช้ทิ้งสาย 71 ครั้ง/15 นาที)
+//  ⛔ ห้ามใช้กับทางบันทึกข้อมูล (call()/_fetchCall) — ตัดสายกลางคันแล้วจะไม่รู้ว่าบันทึกไปหรือยัง
+const PK_READ_TIMEOUT_MS = 8000;
+function _pkReadSignal_(ms){
+  try {
+    const c = new AbortController();
+    setTimeout(function(){ try { c.abort(); } catch(e){} }, ms || PK_READ_TIMEOUT_MS);
+    return c.signal;
+  } catch(e){ return undefined; }   // เบราว์เซอร์เก่าไม่รองรับ → ทำงานแบบเดิม ไม่พัง
+}
 async function _pkFastPost_(path, extra){
   const r = await fetch(API.replace(/\/api$/, path), {
-    method:'POST', redirect:'follow',
+    method:'POST', redirect:'follow', signal:_pkReadSignal_(),
     headers:{ 'Content-Type':'application/json' },
     body: JSON.stringify(Object.assign({ username:CURRENT_USER.username, token:CURRENT_USER.token }, extra||{}))
   });
@@ -1228,7 +1280,7 @@ async function getTaskListFast(opts){
   if (USE_SHEETS_TASK && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/task-list'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -1246,7 +1298,7 @@ async function getRecordGetFast(id){
   if (USE_SHEETS_RECORD_GET && CURRENT_USER && id) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/record-get'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ id, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -1263,7 +1315,7 @@ async function getQuoteGetFast(id){
   if (USE_SHEETS_QUOTE_GET && CURRENT_USER && id) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/quote-get'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ id, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -1280,7 +1332,7 @@ async function getProdGetFast(woId){
   if (USE_SHEETS_PROD_GET && CURRENT_USER && woId) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/prod-get'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ woId, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -1311,7 +1363,7 @@ async function getExpenseListMyFast(statusFilter){
   if (USE_SHEETS_EXP && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/expense-list-my'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ statusFilter, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -1331,7 +1383,7 @@ async function getExpenseListAllFast(opts){
   if (USE_SHEETS_EXP && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/expense-list-all'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -1353,7 +1405,7 @@ async function getDashboardFast(date){
   if (USE_SHEETS_DASH && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/dashboard'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ date, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -1375,7 +1427,7 @@ async function getExpenseMonthSummaryFast(month){
   if (USE_SHEETS_EXPSUM && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/expense-month-summary'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ month, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -1396,7 +1448,7 @@ async function getExpenseGroupSummaryFast(opts){
   if (USE_SHEETS_EXPSUM && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/expense-group-summary'), {
-        method:'POST', redirect:'follow', headers:{ 'Content-Type':'application/json' },
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(), headers:{ 'Content-Type':'application/json' },
         body:JSON.stringify({ month:opts.month, groupBy:opts.groupBy, status:opts.status, mainCat:opts.mainCat, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -1413,7 +1465,7 @@ async function getExpenseEmployeeReconFast(opts){
   if (USE_SHEETS_EXPSUM && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/expense-employee-recon'), {
-        method:'POST', redirect:'follow', headers:{ 'Content-Type':'application/json' },
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(), headers:{ 'Content-Type':'application/json' },
         body:JSON.stringify({ empId:opts.empId, empName:opts.empName, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -1511,6 +1563,7 @@ async function _fetchCall(body, timeoutMs){
 }
 async function call(body, opts){
   opts = opts || {};
+  _pkLastGasAction = body && body.action;   // ให้ป้ายมุมล่างซ้ายบอกได้ว่า "เรื่องไหน" ที่ถอยมาทางช้า
   // Auto-attach username + token (ยกเว้น pk_login ที่ส่ง username/password)
   if (CURRENT_USER && body.action !== 'pk_login') {
     if (body.username == null) body.username = CURRENT_USER.username;
@@ -4082,7 +4135,7 @@ async function getPayTimeLogFast(){
   if (USE_SHEETS_PAY && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/payroll-timelog'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -4101,7 +4154,7 @@ async function getPayEmployeesFast(){
   if (USE_SHEETS_PAY && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/payroll-employees'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -4131,7 +4184,7 @@ async function getPaySalaryV2Fast(empId, from, to, gross){
   if (!(USE_SHEETS_PAY && CURRENT_USER)) { const g = await call(args); _markJobSource('gas'); return g; }
   const wfetch = (async () => {
     const r = await fetch(API.replace(/\/api$/, '/payroll-calc'), {
-      method:'POST', redirect:'follow',
+      method:'POST', redirect:'follow', signal:_pkReadSignal_(),
       headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({ empId: empId, from: from, to: to, gross: Number(gross) || 0, username:CURRENT_USER.username, token:CURRENT_USER.token })
     });
@@ -4416,7 +4469,7 @@ async function getPaySalaryRunsFast(empId){
   if (USE_SHEETS_PAY && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/payroll-runs'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ empId: empId, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -5373,7 +5426,7 @@ async function gpsMapLoad(targetId){
   body.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
   try {
     const res = await fetch(API.replace(/\/api$/, '/gps-vehicles'), {
-      method:'POST', redirect:'follow', headers:{ 'Content-Type':'application/json' },
+      method:'POST', redirect:'follow', signal:_pkReadSignal_(), headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token })
     });
     const r = await res.json();
@@ -5851,7 +5904,8 @@ async function tdmPinGeo(jobId){
     toast('กำลังตามลิงก์หาพิกัด...');
     try {
       const res = await fetch(API.replace(/\/api$/, '/resolve-link'), {
-        method:'POST', headers:{'Content-Type':'application/json'},
+        method:'POST', signal:_pkReadSignal_(12000),   // ตามลิงก์ย่อ Google ช้ากว่าปกติ → ให้ 12 วิ
+        headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ url:String(txt).trim(), username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const d = await res.json();
@@ -6273,8 +6327,8 @@ async function qmmOpen(dateKey, recTeam){
     try {
       const body = JSON.stringify({ team: '', date: ymd, username: CURRENT_USER.username, token: CURRENT_USER.token });
       const [ri, rm] = await Promise.all([
-        fetch(API.replace(/\/api$/, '/install-jobs'), { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'application/json' }, body }).then(r => r.json()),
-        fetch(API.replace(/\/api$/, '/measure-jobs'), { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'application/json' }, body }).then(r => r.json())
+        fetch(API.replace(/\/api$/, '/install-jobs'), { method: 'POST', redirect: 'follow', signal:_pkReadSignal_(), headers: { 'Content-Type': 'application/json' }, body }).then(r => r.json()),
+        fetch(API.replace(/\/api$/, '/measure-jobs'), { method: 'POST', redirect: 'follow', signal:_pkReadSignal_(), headers: { 'Content-Type': 'application/json' }, body }).then(r => r.json())
       ]);
       hideLoad();
       if (!ri.ok || !rm.ok) { toast('❌ โหลดแผนที่ไม่ได้: ' + ((ri.error || rm.error) || '?')); return; }
@@ -6285,7 +6339,7 @@ async function qmmOpen(dateKey, recTeam){
   // ตารางโซน (static) โหลดครั้งเดียวต่อ session — ใช้เดาเขตงานที่ไม่มีพิกัด · ล้มเหลว = ข้าม feature นี้เงียบ ๆ
   if (_qmmZones === null) {
     try {
-      const rz = await fetch(API.replace(/\/api$/, '/zone-master'), { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: CURRENT_USER.username, token: CURRENT_USER.token }) }).then(r => r.json());
+      const rz = await fetch(API.replace(/\/api$/, '/zone-master'), { method: 'POST', redirect: 'follow', signal:_pkReadSignal_(), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: CURRENT_USER.username, token: CURRENT_USER.token }) }).then(r => r.json());
       _qmmZones = (rz && rz.ok && Array.isArray(rz.zones)) ? rz.zones : [];
     } catch (e) { _qmmZones = []; }
   }
@@ -13678,7 +13732,7 @@ async function getPOListFast(opts){
   if (USE_SHEETS_PO && CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/po-list'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ ...opts, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -13693,7 +13747,7 @@ async function getPOGetFast(id){
   if (USE_SHEETS_PO_GET && CURRENT_USER && id) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/po-get'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ id, username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -13722,7 +13776,7 @@ async function poFetchCatalog(){
   if (CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/cost-prices'), {
-        method:'POST', redirect:'follow',
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(),
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
@@ -16245,7 +16299,7 @@ async function slpGetListFast(){
   if (CURRENT_USER) {
     try {
       const r = await fetch(API.replace(/\/api$/, '/slip-list'), {
-        method:'POST', redirect:'follow', headers:{ 'Content-Type':'application/json' },
+        method:'POST', redirect:'follow', signal:_pkReadSignal_(), headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ username:CURRENT_USER.username, token:CURRENT_USER.token })
       });
       const data = await r.json();
@@ -16455,8 +16509,54 @@ function shcRender_(r){
       r.auto.map(a => '<div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--bdr);">' +
         '<span>' + escHtml(a.name) + '</span><span style="color:var(--mu);">' + a.used.toLocaleString() + ' แถว · ✅ โตอัตโนมัติ</span></div>').join('') + '</div>';
   }
+  // 🗄 ตัดยอดบันทึกการใช้งาน (AuditLog) — ยิ่งยาว ทุกคำสั่งยิ่งช้า (ดู Runbook #66)
+  h += '<div style="font-size:13px;font-weight:700;margin:16px 0 8px;">บันทึกการใช้งาน (AuditLog)</div>' +
+    '<div style="background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:14px;">' +
+      '<div style="font-size:12px;color:var(--mu);line-height:1.6;margin-bottom:10px;">' +
+        'ทุกครั้งที่มีการ<b>แก้ข้อมูล</b> ระบบจะจดไว้ 1 บรรทัด · ชีตนี้ยิ่งยาว การบันทึกทุกอย่างจะยิ่งช้าลง<br>' +
+        'ปุ่มนี้ย้ายบันทึกเก่าไปเก็บอีกชีต (<b>ไม่ลบทิ้ง</b> — ย้อนดูได้ตลอด)</div>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+        '<span style="font-size:13px;">เก็บย้อนหลัง</span>' +
+        '<select class="fi" id="audArcMonths" style="width:110px;"><option value="3">3 เดือน</option><option value="6">6 เดือน</option><option value="12">12 เดือน</option></select>' +
+        '<button class="btn btn-g btn-sm" onclick="audArcCheck()">🔍 ตรวจดูก่อน</button>' +
+      '</div>' +
+      '<div id="audArcOut" style="margin-top:10px;font-size:13px;"></div>' +
+    '</div>';
   h += '</div>';
   box.innerHTML = h;
+}
+// ── 🗄 ตัดยอด AuditLog: ตรวจก่อน (dry-run) → ค่อยยืนยันย้ายจริง ──
+let _audArcPlan = null;
+async function audArcCheck(){
+  const months = parseInt((document.getElementById('audArcMonths')||{}).value, 10) || 3;
+  const out = document.getElementById('audArcOut');
+  out.innerHTML = 'กำลังตรวจ...';
+  try {
+    const r = await call({ action:'pk_auditArchive', months:months, apply:false });
+    if (!r.ok){ out.innerHTML = '<span style="color:var(--dg);">❌ ' + escHtml(r.error||'ตรวจไม่สำเร็จ') + '</span>'; return; }
+    _audArcPlan = { months:months, willMove:r.willMove||0 };
+    out.innerHTML = '<div style="background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:10px;">' +
+      'ตอนนี้มีทั้งหมด <b>' + (r.total||0).toLocaleString() + '</b> บรรทัด<br>' +
+      'เก่ากว่า ' + escHtml(r.cutoff||'') + ' → <b>' + (r.willMove||0).toLocaleString() + '</b> บรรทัด<br>' +
+      'ย้ายแล้วจะเหลือใช้งาน <b>' + (r.remain||0).toLocaleString() + '</b> บรรทัด' +
+      ((r.willMove||0) > 0
+        ? '<div style="margin-top:10px;"><button class="btn btn-p btn-sm" onclick="audArcApply()">✅ ย้ายเลย (ไม่ลบทิ้ง)</button></div>'
+        : '<div style="margin-top:8px;color:var(--mu);">ยังไม่ต้องตัด</div>') +
+      '</div>';
+  } catch(e){ out.innerHTML = '<span style="color:var(--dg);">❌ เชื่อมต่อไม่ได้</span>'; }
+}
+async function audArcApply(){
+  if (!_audArcPlan) return;
+  if (!confirm('ย้ายบันทึกเก่า ' + _audArcPlan.willMove.toLocaleString() + ' บรรทัด ไปชีต "AuditLog_เก็บ"?\n\nไม่ได้ลบทิ้ง — ย้อนดูได้ตลอด')) return;
+  showLoad('กำลังย้าย...');
+  try {
+    const r = await call({ action:'pk_auditArchive', months:_audArcPlan.months, apply:true });
+    hideLoad();
+    if (!r.ok){ toast('❌ ' + (r.error||'ย้ายไม่สำเร็จ')); return; }
+    toast('✅ ' + (r.msg || 'ย้ายเรียบร้อย'));
+    _audArcPlan = null;
+    audArcCheck();
+  } catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
 async function shcExtend(key, name){
   if (!confirm('ขยายแถวชีต "' + name + '" ให้ถึงเพดานระบบ?\n(เพิ่มแถวว่างท้ายชีต — ไม่แตะข้อมูลเดิม)')) return;
