@@ -11172,7 +11172,18 @@ function recordsRender(){
 // ════════════════════════════════════════
 //  📐 RECORD FORM MODAL (C2)
 // ════════════════════════════════════════
-const REC_MAX_ENTRIES = 100;   // ต้องเท่ากับ PK_RECORDS_MAX_ENTRIES ฝั่ง GAS เสมอ (คู่กับใบเสนอราคา 100)
+// ⛔ 21 ส.ค. 2026: ใบจดขนาด + ใบเสนอราคา "ไม่จำกัดจำนวนรายการ" แล้ว (เดิม 50 → 100 → ไม่จำกัด)
+//  ไม่มีตัวกั้นการเพิ่มรายการอีกต่อไป · เหลือแค่เตือนครั้งเดียวเมื่อใบเริ่มยาวมาก
+//  ทำไมต้องเตือน: ตอน "กดเพิ่มรายการ" ระบบวาดฟอร์มใหม่ทั้งใบ → ยิ่งยาวยิ่งหน่วงตอนกดเพิ่ม
+//  (พิมพ์แก้ในช่องคำนวณเฉพาะแถวนั้น ไม่วาดใหม่ → ไม่หน่วงตามจำนวนรายการ)
+//  ฝั่ง GAS มีแค่วาล์วกันข้อมูลเพี้ยนที่ PK_*_ENTRY_GUARD (5000) ไม่ใช่เพดานการใช้งาน
+const PK_ENTRY_WARN_AT = 150;
+const _pkEntryWarned = {};
+function pkEntryWarn_(kind, next){
+  if (_pkEntryWarned[kind] || next < PK_ENTRY_WARN_AT) return;
+  _pkEntryWarned[kind] = true;
+  toast('⚠️ ใบนี้เกิน ' + PK_ENTRY_WARN_AT + ' รายการแล้ว — ตอนกดเพิ่มรายการจะเริ่มหน่วง แต่ใช้งาน/บันทึก/พิมพ์ได้ตามปกติ');
+}
 
 // State
 // guard กันเปิด modal ซ้อน/กดซ้ำ (ใช้ร่วมกับ record + quote)
@@ -11651,9 +11662,7 @@ function recordSetRang(idx, val){
 }
 
 function recordAddEntry(){
-  if (_recForm.entries.length >= REC_MAX_ENTRIES) {
-    toast('สูงสุด ' + REC_MAX_ENTRIES + ' รายการ'); return;
-  }
+  pkEntryWarn_('rec', _recForm.entries.length + 1);   // ไม่จำกัดจำนวนแล้ว — เตือนครั้งเดียวเมื่อเริ่มยาว
   _recForm.entries.push(recordEmptyEntry(_recForm.entries.length + 1));
   _recForm.dirty = true;
   recordRenderForm();
@@ -12293,7 +12302,7 @@ function quoteCloseCust(){ const m = document.getElementById('quoCustModal'); if
 // ════════════════════════════════════════
 //  💰 QUOTE FORM MODAL (D3)
 // ════════════════════════════════════════
-const QUO_MAX_ENTRIES = 100;   // ต้องเท่ากับ PK_QUOTES_MAX_ENTRIES ฝั่ง GAS เสมอ
+// (เพดานจำนวนรายการถูกยกเลิกแล้ว — ดู PK_ENTRY_WARN_AT / pkEntryWarn_ ด้านบน)
 const QUO_TYPE_ORDER = [
   'jeeb_single','jeeb_split','jeeb_free','jeeb_h4',
   'slide','open','fixed','slide_split','open_split'
@@ -13224,9 +13233,7 @@ function quoteSetEntryKind(idx, kind){
 }
 
 function quoteAddEntry(){
-  if (_quoForm.entries.length >= QUO_MAX_ENTRIES) {
-    toast('สูงสุด ' + QUO_MAX_ENTRIES + ' รายการ'); return;
-  }
+  pkEntryWarn_('quo', _quoForm.entries.length + 1);   // ไม่จำกัดจำนวนแล้ว — เตือนครั้งเดียวเมื่อเริ่มยาว
   _quoForm.entries.push(quoteEmptyEntry(_quoForm.entries.length + 1));
   _quoForm.dirty = true;
   quoteRenderForm();
