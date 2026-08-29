@@ -227,9 +227,15 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;}
 .lnk:hover{text-decoration:underline;}
 
 /* MODAL */
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:200;display:none;align-items:center;justify-content:center;padding:16px;}
+/* 22 ส.ค. 2026 — มือถือ: เลื่อนในหน้าต่างที่เด้งขึ้นมา แล้วหน้าหลังเลื่อนตาม (scroll chaining)
+   พอปิดหน้าต่าง หน้าหลักเลื่อนไปที่อื่นแล้ว → กดโดนปุ่มผิดตำแหน่ง
+   overscroll-behavior:contain = เลื่อนสุดขอบในหน้าต่างแล้วให้หยุด ไม่ส่งต่อไปหน้าหลัง
+   (คู่กับตัวล็อกหน้าหลังใน pkModalScrollLock — CSS อย่างเดียวไม่พอบน iOS) */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:200;display:none;align-items:center;justify-content:center;padding:16px;overscroll-behavior:contain;touch-action:manipulation;}
+/* หน้าหลักตอนมีหน้าต่างเปิด — ตรึงไว้กับที่ (ค่า top ถูกตั้งจาก JS = ตำแหน่งที่เลื่อนอยู่เดิม) */
+body.pk-modal-open{position:fixed;left:0;right:0;width:100%;overflow:hidden;}
 .modal-bg.on{display:flex;}
-.modal{background:var(--surf2);border:1px solid var(--bdr);border-radius:var(--r-lg);width:100%;max-width:420px;max-height:90vh;overflow-y:auto;}
+.modal{background:var(--surf2);border:1px solid var(--bdr);border-radius:var(--r-lg);width:100%;max-width:420px;max-height:90vh;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
 .modal.large{max-width:560px;}
 .map-box{height:380px;border-radius:0 0 14px 14px;}
 
@@ -991,6 +997,53 @@ function _pkSrcDetail(){
   return 'ถอยไปทางช้า (GAS) รวม ' + _pkFallbackCount + ' ครั้งรอบนี้:\n' + rows.join('\n')
        + '\n\nทางเร็วปกติตอบใน ~0.5 วิ · ทางช้าประมาณ 3-6 วิ\nถ้าขึ้นบ่อยผิดปกติ แจ้งได้เลยครับ';
 }
+// ════════ 📱 ตรึงหน้าหลักตอนเปิดหน้าต่าง (22 ส.ค. 2026) ════════
+//  อาการที่ผู้ใช้เจอบนมือถือ: กดอนุมัติใบเบิก / แนบสลิป แล้วเลื่อนดูในหน้าต่าง
+//  → หน้าหลักด้านหลังเลื่อนตามไปด้วย → พอปิดหน้าต่าง หน้าหลักอยู่คนละที่ กดโดนปุ่มผิด
+//  วิธีแก้: ตอนหน้าต่างเปิด ตรึง body ด้วย position:fixed + จำตำแหน่งเดิมไว้ที่ top
+//          ปิดแล้วคืนตำแหน่งเดิมเป๊ะด้วย scrollTo — ผู้ใช้กลับมาอยู่จุดเดิมเสมอ
+//  ⚠ ทำไมใช้ position:fixed ไม่ใช่ overflow:hidden เฉย ๆ — Safari บน iOS ไม่สนใจ overflow:hidden
+//     ของ body (ยังลากเลื่อนได้) ซึ่งเป็นต้นเหตุเดิมของบั๊กนี้
+//  ⚠ ทำไมใช้ตัวเฝ้าแทนการแก้ทุกจุด — หน้าต่างเปิด/ปิดกระจายอยู่ 120+ จุดทั่วไฟล์
+//     (บางตัวสร้างขึ้นตอนใช้งาน เช่นหน้าต่างจัดตัดราง) แก้ทีละจุด = ตกหล่นแน่นอน
+let _pkScrollY = 0, _pkOpenModals = 0;
+function pkModalScrollLock(on){
+  const b = document.body;
+  if (on){
+    if (_pkOpenModals++ > 0) return;                 // ซ้อนหลายชั้น → ล็อกครั้งเดียวพอ
+    _pkScrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+    b.style.top = (-_pkScrollY) + 'px';
+    b.classList.add('pk-modal-open');
+  } else {
+    if (_pkOpenModals > 0) _pkOpenModals--;
+    if (_pkOpenModals > 0) return;                   // ยังมีหน้าต่างอื่นเปิดอยู่ ยังไม่ปลด
+    b.classList.remove('pk-modal-open');
+    b.style.top = '';
+    window.scrollTo(0, _pkScrollY);                  // คืนตำแหน่งเดิมเป๊ะ
+  }
+}
+// เฝ้าคลาส 'on' ของ .modal-bg ทุกตัว — ครอบทั้งที่มีอยู่และที่สร้างเพิ่มภายหลัง
+function pkModalWatchInit(){
+  const open = new Set();
+  const sync = () => {
+    document.querySelectorAll('.modal-bg').forEach(el => {
+      const isOn = el.classList.contains('on');
+      if (isOn && !open.has(el)) { open.add(el); pkModalScrollLock(true); }
+      else if (!isOn && open.has(el)) { open.delete(el); pkModalScrollLock(false); }
+    });
+    // หน้าต่างที่ถูกลบทิ้งทั้งก้อนขณะยังเปิดอยู่ → ต้องปลดล็อกให้ด้วย ไม่งั้นหน้าค้างเลื่อนไม่ได้
+    open.forEach(el => { if (!el.isConnected) { open.delete(el); pkModalScrollLock(false); } });
+  };
+  try {
+    new MutationObserver(sync).observe(document.body, {
+      subtree: true, childList: true, attributes: true, attributeFilter: ['class']
+    });
+    sync();
+  } catch(e){ /* fail-soft: ไม่รองรับก็ใช้งานได้เหมือนเดิม แค่ไม่ล็อก */ }
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pkModalWatchInit);
+else pkModalWatchInit();
+
 function _markJobSource(src, ms){
   try{
     let el = document.getElementById('pk-src-badge');
@@ -11382,7 +11435,6 @@ async function recordOpenEdit(id){
 
 function recordOpenModal(){
   document.getElementById('recmModal').classList.add('on');
-  document.body.style.overflow = 'hidden';
 }
 
 function recordCloseModal(){
@@ -11391,7 +11443,6 @@ function recordCloseModal(){
   }
   recordStopAutosave();
   document.getElementById('recmModal').classList.remove('on');
-  document.body.style.overflow = '';
 }
 
 async function recordLoadRecentJobs(){
@@ -11761,7 +11812,6 @@ async function recordSubmit(){
     _recForm.dirty = false;
     recordStopAutosave();
     document.getElementById('recmModal').classList.remove('on');
-    document.body.style.overflow = '';
     recordsLoad(false);
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
@@ -12548,7 +12598,6 @@ async function quoteOpenEdit(id){
 
 function quoteOpenModal(){
   document.getElementById('quomModal').classList.add('on');
-  document.body.style.overflow = 'hidden';
 }
 
 function quoteCloseModal(){
@@ -12557,7 +12606,6 @@ function quoteCloseModal(){
   }
   quoteStopAutosave();
   document.getElementById('quomModal').classList.remove('on');
-  document.body.style.overflow = '';
 }
 
 async function quoteLoadRecentJobs(){
@@ -13412,7 +13460,6 @@ async function quoteSubmit(){
     _quoForm.dirty = false;
     quoteStopAutosave();
     document.getElementById('quomModal').classList.remove('on');
-    document.body.style.overflow = '';
     quotesLoad(false);
   } catch(e) { hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); }
 }
