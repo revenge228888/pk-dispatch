@@ -2,8 +2,18 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>PK Dispatch</title>
+<!-- 📱 ติดตั้งเป็นแอปได้ (22 ส.ค. 2026) — ไฟล์เสริมล้วน ไม่แตะระบบเดิม ลบทิ้งได้ทันทีถ้าไม่เอา
+     ทำไมต้องเต็มจอ: แถบที่อยู่ของ Chrome ซ่อน-โผล่ตอนเลื่อน ทำให้หน้าเขยิบ = กดโดนปุ่มผิด (ญาติกับ Runbook #70) -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1c2733">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PK Dispatch">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -997,6 +1007,47 @@ function _pkSrcDetail(){
   return 'ถอยไปทางช้า (GAS) รวม ' + _pkFallbackCount + ' ครั้งรอบนี้:\n' + rows.join('\n')
        + '\n\nทางเร็วปกติตอบใน ~0.5 วิ · ทางช้าประมาณ 3-6 วิ\nถ้าขึ้นบ่อยผิดปกติ แจ้งได้เลยครับ';
 }
+// ════════ 📱 ติดตั้งเป็นแอปได้ (PWA) — 22 ส.ค. 2026 ════════
+//  ลงทะเบียนตัวช่วยเบื้องหลัง: ทำให้ Chrome ขึ้นปุ่ม "ติดตั้ง" + เปิดแอปได้ตอนสัญญาณไม่ดี
+//  ⛔ นโยบาย "เช็กของใหม่ก่อนเสมอ" อยู่ใน pwa/sw.js — ห้ามเปลี่ยนเป็น cache-first
+//     เพราะระบบนี้ deploy แก้บั๊กบ่อย ทีมค้างเวอร์ชันเก่า = อันตรายกว่าช้า
+//  fail-soft ทุกชั้น: ลงทะเบียนไม่ได้ (เบราว์เซอร์เก่า/ไม่ใช่ https) → ใช้งานเหมือนเดิมทุกอย่าง
+function pkPwaInit(){
+  if (!('serviceWorker' in navigator)) return;
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost') return;   // ไฟล์ในเครื่อง = ข้าม
+  try {
+    navigator.serviceWorker.register('sw.js').then(function(reg){
+      // เจอเวอร์ชันใหม่ระหว่างใช้งาน → ให้ตัวใหม่ทำงานแทนทันทีในการเปิดครั้งถัดไป
+      reg.addEventListener('updatefound', function(){
+        var w = reg.installing;
+        if (w) w.addEventListener('statechange', function(){
+          if (w.state === 'installed' && navigator.serviceWorker.controller) {
+            try { w.postMessage('pk-skip-waiting'); } catch(e){}
+          }
+        });
+      });
+    }).catch(function(){});
+  } catch(e){}
+  // ปุ่มติดตั้งของ Chrome (Android/เดสก์ท็อป) — เก็บไว้ให้ผู้ใช้กดจากเมนูได้เอง
+  window.addEventListener('beforeinstallprompt', function(ev){
+    ev.preventDefault();
+    _pkInstallEvent = ev;
+    try { document.querySelectorAll('.pk-install-btn').forEach(function(b){ b.style.display=''; }); } catch(e){}
+  });
+}
+let _pkInstallEvent = null;
+function pkInstallApp(){
+  if (!_pkInstallEvent){
+    alert('ถ้าไม่มีปุ่มติดตั้งอัตโนมัติ:\n\n• iPhone (Safari): กดปุ่มแชร์ ⬆️ ด้านล่าง → "เพิ่มไปยังหน้าจอโฮม"\n• Android (Chrome): เมนู ⋮ มุมขวาบน → "ติดตั้งแอป" หรือ "เพิ่มลงในหน้าจอหลัก"');
+    return;
+  }
+  _pkInstallEvent.prompt();
+  _pkInstallEvent = null;
+  try { document.querySelectorAll('.pk-install-btn').forEach(function(b){ b.style.display='none'; }); } catch(e){}
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pkPwaInit);
+else pkPwaInit();
+
 // ════════ 📱 ตรึงหน้าหลักตอนเปิดหน้าต่าง (22 ส.ค. 2026) ════════
 //  อาการที่ผู้ใช้เจอบนมือถือ: กดอนุมัติใบเบิก / แนบสลิป แล้วเลื่อนดูในหน้าต่าง
 //  → หน้าหลักด้านหลังเลื่อนตามไปด้วย → พอปิดหน้าต่าง หน้าหลักอยู่คนละที่ กดโดนปุ่มผิด
@@ -1905,6 +1956,7 @@ function renderOfficeShell(){
         </div>
         <div class="sidebar-bottom">
           <div class="sidebar-user"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></span><span class="sidebar-label">${CURRENT_USER.name || CURRENT_USER.username}</span></div>
+          <button class="sidebar-item pk-install-btn" onclick="pkInstallApp()" style="display:none;"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 17v3h16v-3"/></svg></span><span class="sidebar-label">ติดตั้งเป็นแอป</span></button>
           <button class="sidebar-item" onclick="logout()"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M9 4H5v16h4"/><path d="M16 8l4 4-4 4M20 12H9"/></svg></span><span class="sidebar-label">ออกจากระบบ</span></button>
         </div>
       </nav>
@@ -6484,6 +6536,7 @@ function renderQuoteShell(){
         </div>
         <div class="sidebar-bottom">
           <div class="sidebar-user"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></span><span class="sidebar-label">${CURRENT_USER.name || CURRENT_USER.username}</span></div>
+          <button class="sidebar-item pk-install-btn" onclick="pkInstallApp()" style="display:none;"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 17v3h16v-3"/></svg></span><span class="sidebar-label">ติดตั้งเป็นแอป</span></button>
           <button class="sidebar-item" onclick="logout()"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M9 4H5v16h4"/><path d="M16 8l4 4-4 4M20 12H9"/></svg></span><span class="sidebar-label">ออกจากระบบ</span></button>
         </div>
       </nav>
@@ -6539,6 +6592,7 @@ function renderSalesStub(){
         </div>
         <div class="sidebar-bottom">
           <div class="sidebar-user"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></span><span class="sidebar-label">${CURRENT_USER.name || CURRENT_USER.username}</span></div>
+          <button class="sidebar-item pk-install-btn" onclick="pkInstallApp()" style="display:none;"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 17v3h16v-3"/></svg></span><span class="sidebar-label">ติดตั้งเป็นแอป</span></button>
           <button class="sidebar-item" onclick="logout()"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M9 4H5v16h4"/><path d="M16 8l4 4-4 4M20 12H9"/></svg></span><span class="sidebar-label">ออกจากระบบ</span></button>
         </div>
       </nav>
