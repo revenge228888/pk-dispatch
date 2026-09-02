@@ -10,7 +10,9 @@
  *    เป็นคนละโดเมน (cross-origin) และเป็น POST → ปล่อยผ่านหมด ไม่ cache ไม่ยุ่ง
  *    (ถ้าเผลอ cache ข้อมูลพวกนี้ = ทีมเห็นยอดเงิน/คิวงานเก่า อันตรายมาก)
  */
-const VERSION = 'pk-shell-v1';
+// ⚠ ต้องเปลี่ยนเลขทุกครั้งที่ไฟล์ใน SHELL เปลี่ยน (เช่นเปลี่ยนไอคอน)
+//   ไม่งั้นเครื่องที่ติดตั้งไปแล้วจะใช้สำเนาเก่าต่อ — v2 = ใส่โลโก้ร้านจริง (2 ก.ย. 2026)
+const VERSION = 'pk-shell-v2';
 const NET_TIMEOUT_MS = 4000;          // เน็ตอืดเกินนี้ → ใช้สำเนาที่เก็บไว้ เพื่อให้เปิดแอปได้
 const SCOPE_PATH = '/pk-dispatch/';
 
@@ -21,7 +23,9 @@ const SHELL = [
   SCOPE_PATH + 'map-day.html',
   SCOPE_PATH + 'manifest.webmanifest',
   SCOPE_PATH + 'icon-192.png',
-  SCOPE_PATH + 'icon-512.png'
+  SCOPE_PATH + 'icon-512.png',
+  SCOPE_PATH + 'icon-maskable-192.png',
+  SCOPE_PATH + 'icon-maskable-512.png'
 ];
 
 self.addEventListener('install', (e) => {
