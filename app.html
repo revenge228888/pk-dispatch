@@ -137,7 +137,29 @@ a.sidebar-item{text-decoration:none;-webkit-user-drag:none;}   /* เมนู�
 .cal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;max-width:330px;}
 .cal-head button{background:var(--surf2);border:1px solid var(--bdr);color:var(--tx);width:32px;height:32px;border-radius:var(--r-md);cursor:pointer;font-size:16px;}
 .cal-month{font-weight:700;font-size:14px;}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-width:330px;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;max-width:330px;}
+/* ปฏิทิน 7 วัน บนจอแคบ (2 ก.ย. 2026) — มือถือบางเครื่องเห็นแค่ อา.–ศ. คอลัมน์เสาร์ตกขอบ
+   สาเหตุ: grid `1fr` = `minmax(auto,1fr)` → คอลัมน์แคบกว่า "เนื้อหาขั้นต่ำ" ไม่ได้
+   ช่องวันมีเลขวัน + ป้าย "N งาน" → ขั้นต่ำ ~88px ต่อคอลัมน์ × 7 ≈ 650px ล้นจอ 360-400px
+   แก้: minmax(0,1fr) ให้บีบได้ + min-width:0 ทุกชั้น + จอแคบย่อ padding/ฟอนต์ และซ่อนคำว่า "งาน" */
+.pkcal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}
+.pkcal-cell{min-width:0;overflow:hidden;}
+.pkcal-cell>div{min-width:0;}
+.pkcal-cell .badge{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+@media (max-width:430px){
+  .pkcal-grid{gap:3px;}
+  .pkcal-cell{padding:4px 3px !important;}
+  .pkcal-top{font-size:10px !important;gap:2px;}
+  .pkcal-bot{font-size:9px !important;}
+  .pkcal-cell .badge{padding:0 3px !important;font-size:9px !important;}
+  .pkcal-unit{display:none;}                                   /* เหลือแค่ตัวเลข ไม่ต้องมีคำว่า "งาน" */
+  .pkcal-cell [style*="min-width:24px"]{min-width:19px !important;height:19px !important;padding:0 2px !important;}
+}
+@media (max-width:360px){
+  .pkcal-grid{gap:2px;}
+  .pkcal-cell{padding:3px 2px !important;}
+  .pkcal-top{font-size:9px !important;}
+}
 .cal-dow{text-align:center;font-size:10px;color:var(--mu);font-weight:600;padding:4px 0;}
 .cal-day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:var(--r-md);font-size:13px;cursor:pointer;border:1px solid transparent;background:var(--bg);transition:all .12s;font-family:var(--mono);max-width:44px;}
 .cal-day:hover{border-color:var(--acc);}
@@ -9094,7 +9116,7 @@ function dashCalRender(){
   const head=document.getElementById('dashSelectedTitle'),iv=document.getElementById('dashInstallView'); if(head&&(!iv||iv.style.display!=='none')) head.textContent=pkDashDateTitle_(_dashCalSel);
   const bm=document.getElementById('dashSpanMonthBtn'), bw=document.getElementById('dashSpanWeekBtn');
   if(bm) bm.classList.toggle('on',_dashCalSpan==='month'); if(bw) bw.classList.toggle('on',_dashCalSpan==='week');
-  let html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">';
+  let html = '<div class="pkcal-grid">';
   if(_dashCalSpan==='month') PK_DASH_DOW.forEach(d => html += '<div style="text-align:center;font-size:12px;color:var(--mu);padding:4px 0;font-weight:600;">'+d+'</div>');
   let dates=[];
   if(_dashCalSpan==='week'){
@@ -9115,10 +9137,10 @@ function dashCalRender(){
       else if (ds===_dashCmpB) st += 'border-color:var(--acc);box-shadow:inset 0 0 0 2px var(--acc);';
     }
     const dayNum=ds===today?'<span style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 5px;border-radius:var(--r-pill);background:var(--acc);color:var(--surf2);font-weight:800;">'+d+'</span>':'<span style="font-weight:800;">'+d+'</span>';
-    html+='<div role="button" tabindex="0" onclick="dashCalPick(\''+ds+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();dashCalPick(\''+ds+'\')}" style="'+st+'">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;">'+(_dashCalSpan==='week'?'<span style="color:var(--mu);font-weight:700;">'+PK_DASH_DOW[dow]+'</span>':'')+dayNum+(js.length?'<span class="badge bp">'+js.length+' งาน</span>':'')+'</div>'
+    html+='<div class="pkcal-cell" role="button" tabindex="0" onclick="dashCalPick(\''+ds+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();dashCalPick(\''+ds+'\')}" style="'+st+'">'
+      +'<div class="pkcal-top" style="display:flex;align-items:center;justify-content:space-between;font-size:12px;">'+(_dashCalSpan==='week'?'<span style="color:var(--mu);font-weight:700;">'+PK_DASH_DOW[dow]+'</span>':'')+dayNum+(js.length?'<span class="badge bp">'+js.length+'<span class="pkcal-unit"> งาน</span></span>':'')+'</div>'
       +pkDashStatusBar_(js,6)
-      +'<div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--mu);"><span>'+(js.length?'★ '+pkDashSumScore_(js):'')+'</span><span>'+(_dayNotes[ds]?'📝':'')+'</span></div></div>';
+      +'<div class="pkcal-bot" style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--mu);"><span>'+(js.length?'★ '+pkDashSumScore_(js):'')+'</span><span>'+(_dayNotes[ds]?'📝':'')+'</span></div></div>';
   });
   html += '</div>';
   grid.innerHTML = html;
@@ -9702,7 +9724,7 @@ function measCalRender(){
   const head=document.getElementById('dashSelectedTitle'); if(head && document.getElementById('dashMeasureView').style.display!=='none') head.textContent=pkDashDateTitle_(_measCalSel);
   const bm=document.getElementById('measSpanMonthBtn'), bw=document.getElementById('measSpanWeekBtn');
   if(bm) bm.classList.toggle('on',_measCalSpan==='month'); if(bw) bw.classList.toggle('on',_measCalSpan==='week');
-  let html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">';
+  let html = '<div class="pkcal-grid">';
   if(_measCalSpan==='month') PK_DASH_DOW.forEach(d => html += '<div style="text-align:center;font-size:12px;color:var(--mu);padding:4px 0;font-weight:600;">'+d+'</div>');
   let dates=[];
   if(_measCalSpan==='week'){
@@ -9717,9 +9739,9 @@ function measCalRender(){
     const x=ds.split('-'),d=Number(x[2]),dow=new Date(Number(x[0]),Number(x[1])-1,d).getDay(),js=byDay[ds]||[],wk=dow===0||dow===6;
     let st='min-height:'+(_measCalSpan==='week'?'82':'70')+'px;background:'+(wk?'var(--acc-t)':'var(--surf)')+';border:1px solid '+(ds===_measCalSel?'var(--acc)':'var(--bdr)')+';border-radius:var(--r-md);padding:6px 7px;cursor:pointer;display:grid;grid-template-rows:auto 6px auto;gap:7px;';
     const dayNum=ds===today?'<span style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 5px;border-radius:var(--r-pill);background:var(--acc);color:var(--surf2);font-weight:800;">'+d+'</span>':'<span style="font-weight:800;">'+d+'</span>';
-    html+='<div role="button" tabindex="0" onclick="measCalPick(\''+ds+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();measCalPick(\''+ds+'\')}" style="'+st+'">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;">'+(_measCalSpan==='week'?'<span style="color:var(--mu);font-weight:700;">'+PK_DASH_DOW[dow]+'</span>':'')+dayNum+(js.length?'<span class="badge bp">'+js.length+' งาน</span>':'')+'</div>'
-      +pkDashStatusBar_(js,6)+'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--mu);"><span>'+(js.length?'★ '+pkDashSumScore_(js):'')+'</span><span>'+(_dayNotes[ds]?'📝':'')+'</span></div></div>';
+    html+='<div class="pkcal-cell" role="button" tabindex="0" onclick="measCalPick(\''+ds+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();measCalPick(\''+ds+'\')}" style="'+st+'">'
+      +'<div class="pkcal-top" style="display:flex;align-items:center;justify-content:space-between;font-size:12px;">'+(_measCalSpan==='week'?'<span style="color:var(--mu);font-weight:700;">'+PK_DASH_DOW[dow]+'</span>':'')+dayNum+(js.length?'<span class="badge bp">'+js.length+'<span class="pkcal-unit"> งาน</span></span>':'')+'</div>'
+      +pkDashStatusBar_(js,6)+'<div class="pkcal-bot" style="display:flex;justify-content:space-between;font-size:11px;color:var(--mu);"><span>'+(js.length?'★ '+pkDashSumScore_(js):'')+'</span><span>'+(_dayNotes[ds]?'📝':'')+'</span></div></div>';
   });
   html += '</div>';
   grid.innerHTML = html;
@@ -9927,7 +9949,7 @@ function pkRenderCalendar(opts){
     + '<div style="display:flex;align-items:center;gap:10px;"><div style="font-weight:700;font-size:16px;">'+PK_TH_MONTHS[m]+' '+y+'</div>'
     + '<button class="btn btn-g btn-sm" onclick="'+opts.onTodayFn+'()">วันนี้</button></div>'
     + '<button class="btn btn-g btn-sm" style="border-radius:50%;width:32px;" onclick="'+opts.onNextFn+'()">›</button></div>';
-  let dow = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:5px;">'
+  let dow = '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin-bottom:5px;">'
     + PK_DOW.map((d,i) => '<div style="text-align:center;font-size:11px;font-weight:700;color:'+((i===0||i===6)?'#8190a8':'var(--mu)')+';">'+d+'</div>').join('') + '</div>';
   let cells = '';
   for (let i=0;i<startDow;i++) cells += '<div></div>';
@@ -9948,7 +9970,7 @@ function pkRenderCalendar(opts){
       + '<div style="font-size:13px;font-weight:600;color:'+dcol+';">'+d+'</div>'
       + (dots?'<div style="display:flex;gap:3px;flex-wrap:wrap;position:absolute;left:5px;bottom:6px;">'+dots+'</div>':'') + cnt + '</div>';
   }
-  return head + dow + '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;">'+cells+'</div>';
+  return head + dow + '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;">'+cells+'</div>';
 }
 
 function pkAgHeader_(left, right, kind){
@@ -10314,7 +10336,7 @@ function ptRenderCal(){
   var h='<div style="display:flex;align-items:center;justify-content:center;gap:14px;margin:2px 0 12px;">'
     +'<button class="btn btn-g btn-sm" onclick="ptCalPrev()">‹</button><span style="font-size:17px;font-weight:800;">'+PT_TH_MF[_ptCM]+' '+(_ptCY+543)+'</span>'
     +'<button class="btn btn-g btn-sm" onclick="ptCalToday()">วันนี้</button><button class="btn btn-g btn-sm" onclick="ptCalNext()">›</button></div>';
-  h+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">';
+  h+='<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;">';
   PT_DOW.forEach(function(d){ h+='<div style="text-align:center;font-size:12px;color:var(--mu);padding:4px 0;font-weight:600;">'+d+'</div>'; });
   var first=new Date(_ptCY,_ptCM,1).getDay(), days=new Date(_ptCY,_ptCM+1,0).getDate(), today=pkTodayStr_();
   for(var i=0;i<first;i++) h+='<div></div>';
