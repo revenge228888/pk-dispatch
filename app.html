@@ -14697,6 +14697,11 @@ function pkpRailCount(t){
 }
 function pkpIsReqScreen(t){ return !!pkpREQ[t]; }  // มุ้งจีบที่ทำใบเบิกได้
 // items = รายการ WO, mainAlu = สีอลูหลัก (ใช้เมื่อ item.cAlu ว่าง)
+// ค่าสำรองเมื่อรายการยังไม่ได้กรอกสีอลู — ⛔ ต้องมีที่เดียวในไฟล์
+//   ตัวสร้าง (pkpRequisition/pkpRailPieces/pkpCutSetsFrom_/pkpScutCollect) กับตัวตรวจ (pkpIsNoColor_)
+//   ต้องอ้างค่าเดียวกัน ไม่งั้นแก้ค่าแล้วการตรวจ 'ยังไม่ระบุสี' จะพังเงียบ ๆ
+var PKP_NO_COLOR='(ไม่ระบุสี)';
+function pkpIsNoColor_(c){ return String(c||'').trim()===PKP_NO_COLOR; }
 function pkpRequisition(items, mainAlu){
   var eq={ wheel:[0,0,0,0,0,0,0,0], ropePull:0, slingPull:0, joint:[0,0,0,0,0,0], plate:0, eyelet:0,
            ropeLen:0, ropeCount:0, magLen:0, magCount:0, pvcLen:0, pvcCount:0 };
@@ -14707,7 +14712,7 @@ function pkpRequisition(items, mainAlu){
     if(!pkpIsReqScreen(t)){ nonScreen.push(it); return; }
     var c=pkpCalcItem(it); if(!c.calculable){ incomplete++; return; }
     var f=c.fields, R=pkpREQ[t];
-    var col=(it.cAlu||mainAlu||'(ไม่ระบุสี)'), white=(col==='อบขาว');
+    var col=(it.cAlu||mainAlu||PKP_NO_COLOR), white=(col==='อบขาว');
     totalSets++; byColor[col]=(byColor[col]||0)+1;
     var wo=white?0:4; for(var k=0;k<4;k++) eq.wheel[wo+k]+=R.w[k];
     eq.ropePull+=R.p[0]; eq.slingPull+=R.p[1];
@@ -14745,22 +14750,28 @@ async function pkpLoadCostPrices(force){
   pkpCostPrices=r.prices||[]; return pkpCostPrices;
 }
 function pkpRailName_(rail){ return {handle:'รางมือจับ',side:'รางข้าง',topbot:'รางบน-ล่าง',low:'รางเตี้ย'}[rail]||rail; }
+// สตริงที่ pkpRailPieces/pkpScutCollect ใช้เมื่อรายการนั้นยังไม่ได้กรอกสีอลู
 function pkpPriceOf_(prices,name){ var p=prices.find(function(x){return x.name===name;}); return p?p.unitPrice:0; }
 function pkpRailPriceList_(prices,railName,color){
   return prices.filter(function(x){return x.name===railName && x.color===color;})
     .map(function(x){return {size:x.divisor, buyPrice:x.buyPrice};});
 }
 // ต้นทุนอะลูมิเนียมของมุ้งบานเลื่อน/บานเปิด — ใช้สูตรตัดเดิม + จัดลงเส้นแบบเดียวกับรางมุ้งจีบ
-// คืน { lines:[...], total:number, missing:[...], sets:number, pieces:number }
+// คืน { lines:[...], total:number, missing:[...], needColor:[...], sets:number, pieces:number }
 function pkpScutCostLines_(items, mainAlu, prices, kerf){
   var pieces=pkpScutCollect(items, mainAlu, {}), byPC={};
   pieces.forEach(function(p){ var k=p.profile+'|'+p.color; (byPC[k]||(byPC[k]=[])).push(p); });
   var railSize=parseFloat((document.getElementById('pkpRailSize')||{}).value)||6;
-  var lines=[], total=0, missing=[], R2=function(n){return Math.round(n*100)/100;};
+  var lines=[], total=0, missing=[], needColor=[], R2=function(n){return Math.round(n*100)/100;};
   Object.keys(byPC).forEach(function(k){
     var group=byPC[k], profile=group[0].profile, color=group[0].color;
     var pl=pkpRailPriceList_(prices, profile, color);
     if(!pl.length){
+      // fallback สตริงไว้ให้ชุดทดสอบเดิมที่แยกฟังก์ชันนี้ไปรันเดี่ยว ๆ โดยไม่โหลด helper รอบข้าง
+      var noColor=pkpIsNoColor_(color);   // ⚠ ห้ามเขียนสตริง '(ไม่ระบุสี)' ซ้ำที่นี่ — ต้องอ้าง PKP_NO_COLOR ที่เดียว
+      if(noColor){
+        lines.push({label:profile, note:'ยังไม่ได้ระบุสีอลู', qty:0, cost:0}); needColor.push(profile); return;
+      }
       var miss=profile+' ['+color+']';
       lines.push({label:miss, note:'ไม่มีราคา', qty:0, cost:0}); missing.push(miss); return;
     }
@@ -14773,7 +14784,7 @@ function pkpScutCostLines_(items, mainAlu, prices, kerf){
   var sets=0;
   (items||[]).forEach(function(it){ if(it.type&&pkpScutIs(it.type)&&!it.noReq&&pkpScutPieces(it).length) sets++; });
   var pieceCount=pieces.reduce(function(s,p){return s+p.qty;},0);
-  return {lines:lines,total:total,missing:missing,sets:sets,pieces:pieceCount};
+  return {lines:lines,total:total,missing:missing,needColor:needColor.filter(function(x,i,a){return a.indexOf(x)===i;}),sets:sets,pieces:pieceCount};
 }
 async function pkpCostCalc(){
   showLoad('คำนวณต้นทุน...');
@@ -14782,7 +14793,7 @@ async function pkpCostCalc(){
   var mainAlu=(document.getElementById('pkpMainAlu')||{}).value||'';
   var req=pkpRequisition(pkpItems, mainAlu), eq=req.eq;
   var P=function(n){return pkpPriceOf_(prices,n);};
-  var lines=[], missing=[];
+  var lines=[], missing=[], needColor=[];
   function add(label,qty,unitPrice,unit){ if(qty<=0)return; lines.push({label:label,qty:qty,unit:unit,unitPrice:unitPrice,cost:qty*unitPrice}); if(unitPrice<=0)missing.push(label); }
   // อุปกรณ์ชิ้น
   add('ล้อรางธรรมดา', eq.wheel[0]+eq.wheel[1]+eq.wheel[4]+eq.wheel[5], P('ล้อรางธรรมดา'),'ตัว');
@@ -14812,7 +14823,10 @@ async function pkpCostCalc(){
   Object.keys(byRC).forEach(function(k){
     var parts=k.split('|'), rail=parts[0], color=parts[1], rn=pkpRailName_(rail);
     var pl=pkpRailPriceList_(prices, rn, color);
-    if(!pl.length){ railLines.push({label:rn+' ['+color+']', note:'ไม่มีราคา', cost:0}); missing.push(rn+' ['+color+']'); return; }
+    if(!pl.length){
+      if(pkpIsNoColor_(color)){ railLines.push({label:rn, note:'ยังไม่ได้ระบุสีอลู', cost:0}); needColor.push(rn); return; }
+      railLines.push({label:rn+' ['+color+']', note:'ไม่มีราคา', cost:0}); missing.push(rn+' ['+color+']'); return;
+    }
     var pr=pl.find(function(x){return x.size===railSize;}) || pl[0];   // เลือกขนาดที่กำหนด ถ้าไม่มีใช้ที่มี
     var fb=(pr.size!==railSize) ? ' (ไม่มี '+railSize+'ม. ใช้ '+pr.size+'ม.)' : '';
     var ffd=pkpCutFFD(byRC[k], pr.size*100, kerf), cost=ffd.usedStock*pr.buyPrice;
@@ -14820,18 +14834,22 @@ async function pkpCostCalc(){
     railLines.push({label:rn+' ['+color+']'+fb, qty:ffd.usedStock, unit:'เส้น ×'+pr.size+'ม.', unitPrice:pr.buyPrice, cost:cost, detail:'ใช้จริง '+R2(ffd.totalLen/100)+' ม. · เศษ '+R2(ffd.waste/100)+' ม.'});
   });
   var partTotal=lines.reduce(function(s,l){return s+l.cost;},0);
+  var allNeedColor=needColor.concat(scut.needColor).filter(function(x,i,a){return a.indexOf(x)===i;});
   pkpCostRender({lines:lines, railLines:railLines, partTotal:partTotal, railTotal:railTotal, scutLines:scut.lines, scutTotal:scut.total,
-                 grand:partTotal+railTotal+scut.total, missing:missing.concat(scut.missing), sets:req.totalSets, scutSets:scut.sets});
+                 grand:partTotal+railTotal+scut.total, missing:missing.concat(scut.missing), needColor:allNeedColor, sets:req.totalSets, scutSets:scut.sets});
   } finally { hideLoad(); }
 }
 var _pkpCostResult=null;
 function pkpCostRender(d){
-  _pkpCostResult={ calculatedAt:Date.now(), grand:d.grand, partTotal:d.partTotal, railTotal:d.railTotal, scutTotal:d.scutTotal, lines:d.lines, railLines:d.railLines, scutLines:d.scutLines, missing:d.missing, sets:d.sets, scutSets:d.scutSets };
+  _pkpCostResult={ calculatedAt:Date.now(), grand:d.grand, partTotal:d.partTotal, railTotal:d.railTotal, scutTotal:d.scutTotal, lines:d.lines, railLines:d.railLines, scutLines:d.scutLines, missing:d.missing, needColor:d.needColor||[], sets:d.sets, scutSets:d.scutSets };
   var box=document.getElementById('pkpCostWrap'); if(!box)return;
   var baht=function(n){return '฿'+(Math.round((n||0)*100)/100).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});};
   var row=function(l){ return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--line,#1e2535);"><span>'+l.label+(l.note?' <span style="color:var(--rd,#ff453a);">('+l.note+')</span>':' <span style="color:var(--mu,#6b7a94);">'+l.qty+' '+l.unit+' × '+baht(l.unitPrice)+'</span>')+'</span><b>'+baht(l.cost)+'</b></div>'; };
   var h='<div style="background:var(--surf2,#1e2535);border-radius:10px;padding:14px;margin-top:10px;">';
-  var setText=d.scutSets?'ต้นทุนรวม มุ้งจีบ '+d.sets+' ชุด · บานเลื่อน/บานเปิด '+d.scutSets+' รายการ':'ต้นทุนรวม '+d.sets+' ชุด';
+  var setParts=[];
+  if(d.sets) setParts.push('มุ้งจีบ '+d.sets+' ชุด');
+  if(d.scutSets) setParts.push('บานเลื่อน/บานเปิด '+d.scutSets+' รายการ');
+  var setText='ต้นทุนรวม'+(setParts.length?' '+setParts.join(' · '):'');
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span style="font-size:12px;color:var(--mu,#6b7a94);">'+setText+'</span><b style="font-size:22px;color:var(--acc,#B5653F);">'+baht(d.grand)+'</b></div>';
   // ⛔ ใบที่ไม่มีมุ้งจีบเลย ห้ามขึ้นหัวข้อ "อุปกรณ์ — ฿0.00" / "ราง — ฿0.00"
   //   เพราะอ่านแล้วเข้าใจว่า "ค่าอุปกรณ์เป็นศูนย์จริง" ทั้งที่ความจริงคือ "ยังไม่ได้คำนวณให้"
@@ -14848,7 +14866,8 @@ function pkpCostRender(d){
     d.scutLines.forEach(function(l){ h+=row(l); if(l.detail) h+='<div style="font-size:10px;color:var(--mu,#6b7a94);padding:0 0 3px 4px;">'+l.detail+'</div>'; });
     h+='<div style="margin-top:10px;padding:8px 10px;background:rgba(255,159,67,.12);border:1px solid var(--acc,#ff9f43);border-radius:8px;font-size:11px;color:var(--acc,#ff9f43);">⚠️ หมวดนี้เป็นค่าอะลูมิเนียมเท่านั้น ยังไม่รวมค่าอุปกรณ์ (ล้อ/มือจับ/ผ้ามุ้ง/ยาง)</div>';
   }
-  if(d.missing.length) h+='<div style="margin-top:10px;font-size:11px;color:var(--rd,#ff453a);">⚠️ ไม่มีราคาในชีต: '+d.missing.join(', ')+' — เพิ่มในชีต "ราคาต้นทุน" แล้วกดอัปเดตราคา</div>';
+  if(d.needColor && d.needColor.length) h+='<div style="margin-top:10px;padding:8px 10px;background:rgba(255,159,67,.12);border:1px solid var(--acc,#ff9f43);border-radius:8px;font-size:11px;color:var(--acc,#ff9f43);">⚠️ ยังไม่ได้ระบุสีอลูมิเนียม: '+d.needColor.join(', ')+' — กรอกช่อง "สีอลู" ในรายการ หรือตั้ง "สีหลัก" ของใบ แล้วกดคำนวณต้นทุนใหม่</div>';
+  if(d.missing && d.missing.length) h+='<div style="margin-top:10px;font-size:11px;color:var(--rd,#ff453a);">⚠️ ไม่มีราคาในชีต: '+d.missing.join(', ')+' — เพิ่มในชีต "ราคาต้นทุน" แล้วกดอัปเดตราคา</div>';
   h+='</div>';
   box.innerHTML=h;
 }
@@ -14876,7 +14895,7 @@ function pkpRailPieces(items, mainAlu, meta){
     var t=it.type; if(!t||!pkpIsReqScreen(t)) return;
     if(it.noReq) return;
     var c=pkpCalcItem(it); if(!c.calculable) return;
-    var f=c.fields, rc=pkpRailCount(t), col=(it.cAlu||mainAlu||'(ไม่ระบุสี)');
+    var f=c.fields, rc=pkpRailCount(t), col=(it.cAlu||mainAlu||PKP_NO_COLOR);
     // ♻ หักเส้นที่ดึงจากชุดค้างมาใช้แล้ว (B · 21 ก.ค. 2026) — เหลือเฉพาะเส้นที่ยังต้องตัดใหม่
     // lsCovered=[{rail,len,lsId}] · หักตาม rail+len (เส้นชุดค้างครอบ) · ไม่หัก = ตัด/คิดต้นทุนเกิน
     var covered={};
@@ -15217,7 +15236,7 @@ function pkpCutSetsFrom_(items, mainAlu, meta){
     var w=it.w||'', h=it.h||'', wl=it.wl||'', wr=it.wr||'';
     out.push({wo:meta.wo||'',name:meta.name||'',setNo:idx+1,type:t,
       size:pkpIsSplit(t)?((wl+'/'+wr)+'×'+h):(w+'×'+h),
-      color:String(it.cAlu||mainAlu||'').trim()||'(ไม่ระบุสี)'});
+      color:String(it.cAlu||mainAlu||'').trim()||PKP_NO_COLOR});
   });
   return out;
 }
@@ -15531,7 +15550,7 @@ function pkpScutCollect(items, mainAlu, meta){
   (items||[]).forEach(function(it,idx){
     if(!it.type||!pkpScutIs(it.type)) return;
     if(it.noReq) return;   // ไม่เบิกอุปกรณ์ = ไม่เข้าแผนจัดตัดราง (เหมือน pkpRailPieces)
-    var col=String(it.cAlu||mainAlu||'').trim()||'(ไม่ระบุสี)';
+    var col=String(it.cAlu||mainAlu||'').trim()||PKP_NO_COLOR;
     pkpScutPieces(it).forEach(function(p){
       out.push({rail:p.profile,profile:p.profile,len:p.len,qty:p.qty,color:col,wo:meta.wo||'',name:meta.name||'',setNo:idx+1,type:it.type});
     });
