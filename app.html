@@ -12361,6 +12361,7 @@ function quotesRender(){
         ${isOffice && q.createdBy !== CURRENT_USER.username ? `<div style="font-size:11px;color:var(--mu);margin-bottom:6px;">โดย ${q.createdBy}</div>` : ''}
         <div class="rec-btns">
           <button class="btn btn-g" onclick="quoteOpenView('${q.id}')">👁 ดู</button>
+          ${CURRENT_USER.role === 'manager' ? `<button class="btn btn-g" onclick="quoCostOpen('${q.id}')">💰 ต้นทุน</button>` : ''}
           <button class="btn btn-g" onclick="quoteDuplicate('${q.id}')">📋 ทำซ้ำ</button>
           ${(!q.quoteNo && canEdit) ? `<button class="btn" style="background:var(--acc);color:#fff;" onclick="quoteRunNo('${q.id}')">🏷 รันเลข</button>` : ''}
           ${canEdit ? `<button class="btn btn-p" onclick="quoteOpenEdit('${q.id}')">✏️ แก้</button>` : ''}
@@ -15013,6 +15014,86 @@ function pkpCostRender(d){
   if(d.missing && d.missing.length) h+='<div style="margin-top:10px;font-size:11px;color:var(--rd,#ff453a);">⚠️ ไม่มีราคาในชีต: '+d.missing.join(', ')+' — เพิ่มในชีต "ราคาต้นทุน" แล้วกดอัปเดตราคา</div>';
   h+='</div>';
   box.innerHTML=h;
+}
+// ════════ ต้นทุนประมาณการจากใบเสนอราคา — หน้าจอสำหรับ manager เท่านั้น ════════
+function quoCostModalEl_(){
+  var m=document.getElementById('quoCostModal');
+  if(!m){
+    m=document.createElement('div'); m.className='modal-bg'; m.id='quoCostModal';
+    m.onclick=function(e){ if(e.target===m) quoCostClose(); };
+    document.body.appendChild(m);
+  }
+  return m;
+}
+function quoCostClose(){ var m=document.getElementById('quoCostModal'); if(m) m.classList.remove('on'); }
+function quoCostColorLabel_(id){
+  var key=String(id||'').trim(); if(!key) return '';
+  var colors=Array.isArray(_recColors)?_recColors:[];
+  var found=colors.find(function(c){ return String(c.id||'')===key || String(c.label||'')===key; });
+  return found?String(found.label||''):'';
+}
+function quoCostRender_(quote,r){
+  var m=quoCostModalEl_(), baht=function(n){return '฿'+(Math.round((Number(n)||0)*100)/100).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});};
+  var unmapped=(r&&r.unmapped)||[], cost=(r&&r.cost)||null, h='';
+  if(quote&&quote.linkedJobId){
+    h+='<div style="padding:10px 12px;background:rgba(74,158,255,.12);border:1px solid var(--blu,#4a9eff);border-radius:9px;margin-bottom:12px;color:var(--blu,#4a9eff);font-size:12px;">🔗 ใบนี้ผูกกับงาน <b>'+escHtml(quote.linkedJobId)+'</b> แล้ว — ถ้าออกใบผลิตแล้ว ให้ดูต้นทุนจริงจากใบผลิตแทน ตัวเลขนี้เป็นแค่ประมาณการ</div>';
+  }
+  h+='<div style="font-size:24px;font-weight:800;line-height:1.25;color:var(--acc,#ff9f43);margin-bottom:10px;">🧮 ต้นทุนประมาณการ (ไม่ใช่ต้นทุนจริง)</div>';
+  h+='<div style="padding:11px 12px;background:rgba(255,159,67,.12);border:2px solid var(--acc,#ff9f43);border-radius:9px;margin-bottom:14px;font-size:13px;line-height:1.65;">ใบเสนอราคาไม่ได้ระบุว่าเป็นรางธรรมดา/รางเตี้ย หรือเชือก/สลิง ระบบจึงเลือกแบบที่แพงที่สุดให้ · ตัวเลขจริงจะรู้เมื่อออกใบผลิต</div>';
+  if(!r||!r.ok){
+    h+='<div style="padding:12px;background:rgba(255,69,58,.12);border:1px solid var(--rd,#ff453a);border-radius:9px;color:var(--rd,#ff453a);font-weight:700;">❌ '+escHtml((r&&r.error)||'คำนวณต้นทุนไม่ได้')+'</div>';
+  }else{
+    h+='<div style="background:var(--surf2,#1e2535);border:1px solid var(--bdr,#30394b);border-radius:10px;padding:14px;margin-bottom:14px;">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;"><b>ยอดรวมประมาณการ</b><b style="font-size:25px;color:var(--acc,#ff9f43);">'+baht(cost.grand)+'</b></div>';
+    var cats=[];
+    function cat(label,total,lines){ if((lines&&lines.length)||(Number(total)||0)!==0) cats.push({label:label,total:total}); }
+    cat('อุปกรณ์มุ้งจีบ',cost.partTotal,cost.lines);
+    cat('รางมุ้งจีบ',cost.railTotal,cost.railLines);
+    cat('อะลูมิเนียมบานเลื่อน/บานเปิด',cost.scutTotal,cost.scutLines);
+    cat('อุปกรณ์บานเลื่อน/บานเปิด',cost.scutEqTotal,cost.scutEqLines);
+    cats.forEach(function(c){ h+='<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid var(--line,#30394b);font-size:12px;"><span>'+c.label+'</span><b>'+baht(c.total)+'</b></div>'; });
+    h+='</div>';
+    h+='<div style="font-weight:700;margin-bottom:7px;">ชนิดที่ระบบเลือกคิดต้นทุนในแต่ละบรรทัด</div>';
+    h+='<div style="overflow-x:auto;margin-bottom:14px;"><table style="width:100%;min-width:500px;border-collapse:collapse;"><thead><tr><th>บรรทัดที่</th><th>ชนิดที่ระบบเลือกคิดต้นทุน</th><th>จำนวนชุด</th></tr></thead><tbody>';
+    (r.perEntry||[]).forEach(function(p){ h+='<tr><td style="text-align:center;">'+escHtml(p.no)+'</td><td>'+escHtml((p.typeNames||[]).join(' + '))+'</td><td style="text-align:center;">'+escHtml(p.qty)+'</td></tr>'; });
+    h+='</tbody></table></div>';
+    if(cost.needColor&&cost.needColor.length) h+='<div style="margin-top:10px;padding:8px 10px;background:rgba(255,159,67,.12);border:1px solid var(--acc,#ff9f43);border-radius:8px;font-size:11px;color:var(--acc,#ff9f43);">⚠️ ยังไม่ได้ระบุสีอลูมิเนียม: '+cost.needColor.map(escHtml).join(', ')+' — กรอกช่อง "สีอลู" ในรายการ หรือตั้ง "สีหลัก" ของใบ แล้วคำนวณใหม่</div>';
+    if(cost.missing&&cost.missing.length) h+='<div style="margin-top:10px;padding:8px 10px;background:rgba(255,69,58,.1);border:1px solid var(--rd,#ff453a);border-radius:8px;font-size:11px;color:var(--rd,#ff453a);">⚠️ ไม่มีราคาในชีต: '+cost.missing.map(escHtml).join(', ')+' — เพิ่มในชีต "ราคาต้นทุน" แล้วกดอัปเดตราคา</div>';
+  }
+  if(unmapped.length){
+    h+='<div style="margin-top:10px;padding:10px 12px;background:rgba(255,159,67,.12);border:1px solid var(--acc,#ff9f43);border-radius:8px;font-size:12px;color:var(--acc,#ff9f43);"><b>⚠️ บรรทัดที่แปลงไม่ได้ (ยังไม่รวมในยอด)</b>';
+    unmapped.forEach(function(u){ h+='<div style="margin-top:5px;">บรรทัดที่ '+escHtml(u.no)+' — '+escHtml(u.reason)+'</div>'; });
+    h+='</div>';
+  }
+  h+='<div style="margin-top:12px;padding:8px 10px;background:rgba(255,159,67,.12);border:1px solid var(--acc,#ff9f43);border-radius:8px;font-size:11px;color:var(--acc,#ff9f43);">⚠️ ยังไม่รวม: ผ้ามุ้ง · ยางอัดมุ้ง · ขนแปรง · สกรู</div>';
+  h+='<div style="display:flex;justify-content:flex-end;margin-top:16px;"><button class="btn btn-g" onclick="quoCostClose()">ปิด</button></div>';
+  m.innerHTML='<div class="modal large" style="max-width:760px;"><div style="padding:18px;">'+h+'</div></div>';
+  m.classList.add('on');
+}
+async function quoCostOpen(id){
+  if(!CURRENT_USER||CURRENT_USER.role!=='manager'){ toast('ไม่มีสิทธิ์ดูต้นทุน'); return; }
+  showLoad('กำลังคำนวณต้นทุน...');
+  try{
+    var got=await getQuoteGetFast(id);
+    if(!got||!got.ok||!got.quote){ toast('❌ '+((got&&got.error)||'โหลดใบเสนอราคาไม่ได้')); return; }
+    var prices=await pkpLoadCostPrices(false);
+    if(!prices){ toast('❌ โหลดราคาต้นทุนไม่ได้'); return; }
+    if(!Array.isArray(_recColors)){
+      var cr=await call({action:'pk_quoteColors'},{cache:true});
+      if(!cr||!cr.ok||!Array.isArray(cr.colors)){ toast('❌ โหลดรายการสีไม่ได้'); return; }
+      _recColors=cr.colors;
+    }
+    var quote=got.quote, doc=quote.doc||{};
+    var mainColorId=doc.mainColorId||doc.mainColor||quote.mainColorId||quote.mainColor||'';
+    var mainAlu=quoCostColorLabel_(mainColorId);
+    var result=pkqEstimateCost_(quote.entries||[],{
+      mainAlu:mainAlu, railSize:6, kerf:pkpCutSet_().kerf, prices:prices,
+      // สีที่หาไม่พบต้องเข้ารายงาน needColor — ห้ามย้อนกลับไปเดาสีหลักของใบ
+      colorLabelOf:function(colorId){ return quoCostColorLabel_(colorId)||PKP_NO_COLOR; }
+    });
+    quoCostRender_(quote,result);
+  }catch(e){ toast('❌ คำนวณต้นทุนไม่ได้: '+(e&&e.message?e.message:'เชื่อมต่อไม่ได้')); }
+  finally{ hideLoad(); }
 }
 async function pkpUpdateCostPrices(){
   showLoad('อัปเดตราคาล่าสุด...');
