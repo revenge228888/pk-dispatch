@@ -14758,10 +14758,10 @@ function pkpRailPriceList_(prices,railName,color){
 }
 // ต้นทุนอะลูมิเนียมของมุ้งบานเลื่อน/บานเปิด — ใช้สูตรตัดเดิม + จัดลงเส้นแบบเดียวกับรางมุ้งจีบ
 // คืน { lines:[...], total:number, missing:[...], needColor:[...], sets:number, pieces:number }
-function pkpScutCostLines_(items, mainAlu, prices, kerf){
+function pkpScutCostLines_(items, mainAlu, prices, kerf, railSize){
   var pieces=pkpScutCollect(items, mainAlu, {}), byPC={};
   pieces.forEach(function(p){ var k=p.profile+'|'+p.color; (byPC[k]||(byPC[k]=[])).push(p); });
-  var railSize=parseFloat((document.getElementById('pkpRailSize')||{}).value)||6;
+  railSize=railSize==null ? (parseFloat((document.getElementById('pkpRailSize')||{}).value)||6) : railSize;
   var lines=[], total=0, missing=[], needColor=[], R2=function(n){return Math.round(n*100)/100;};
   Object.keys(byPC).forEach(function(k){
     var group=byPC[k], profile=group[0].profile, color=group[0].color;
@@ -14813,12 +14813,13 @@ function pkpScutEquipLines_(items, prices){
   });
   return {lines:lines,total:total,missing:missing,sets:sets};
 }
-async function pkpCostCalc(){
-  showLoad('คำนวณต้นทุน...');
-  try{
-  var prices=await pkpLoadCostPrices(false); if(!prices){ hideLoad(); return; }
-  var mainAlu=(document.getElementById('pkpMainAlu')||{}).value||'';
-  var req=pkpRequisition(pkpItems, mainAlu), eq=req.eq;
+// คำนวณต้นทุนของรายการชุดหนึ่ง — ใช้ร่วมกันระหว่างใบผลิตจริงกับการประมาณการจากใบเสนอราคา
+// opts = { mainAlu, railSize, kerf, prices }
+// คืนก้อนเดียวกับที่ pkpCostRender ต้องการ (lines/railLines/scutLines/scutEqLines/partTotal/railTotal/
+//                                          scutTotal/scutEqTotal/grand/missing/needColor/sets/scutSets)
+function pkpCostOfItems_(items, opts){
+  var prices=opts.prices, mainAlu=opts.mainAlu;
+  var req=pkpRequisition(items, mainAlu), eq=req.eq;
   var P=function(n){return pkpPriceOf_(prices,n);};
   var lines=[], missing=[], needColor=[];
   function add(label,qty,unitPrice,unit){ if(qty<=0)return; lines.push({label:label,qty:qty,unit:unit,unitPrice:unitPrice,cost:qty*unitPrice}); if(unitPrice<=0)missing.push(label); }
@@ -14838,16 +14839,15 @@ async function pkpCostCalc(){
   add('PVC',     R2(eq.pvcLen/100),  P('PVC'),'เมตร');
   // สลิง — ไม่อยู่ใน eq ดึงจาก engine โดยตรง
   var slingCm=0;
-  (pkpItems||[]).forEach(function(it){ if(!it.type||it.noReq||!pkpIsReqScreen(it.type))return; var c=pkpCalcItem(it); if(!c.calculable)return; var f=c.fields; if(f.cutSling&&f.nSling) slingCm+=f.cutSling*f.nSling; });
+  (items||[]).forEach(function(it){ if(!it.type||it.noReq||!pkpIsReqScreen(it.type))return; var c=pkpCalcItem(it); if(!c.calculable)return; var f=c.fields; if(f.cutSling&&f.nSling) slingCm+=f.cutSling*f.nSling; });
   add('สลิง', R2(slingCm/100), P('สลิง'),'เมตร');
   // ราง — ใช้ขนาดที่เลือก (6 หรือ 6.4) · ถ้าสีนั้นไม่มีขนาดที่เลือก → fallback ขนาดที่มี
-  var railSize=parseFloat((document.getElementById('pkpRailSize')||{}).value)||6;
-  var pieces=pkpRailPieces(pkpItems, mainAlu, {}), byRC={};
+  var railSize=opts.railSize;
+  var pieces=pkpRailPieces(items, mainAlu, {}), byRC={};
   pieces.forEach(function(p){ var k=p.rail+'|'+p.color; (byRC[k]||(byRC[k]=[])).push(p); });
-  var railTotal=0, railLines=[], kerf=pkpCutSet_().kerf;
-  var scut=pkpScutCostLines_(pkpItems, mainAlu, prices, kerf);
-  var scutEq=pkpScutEquipLines_(pkpItems, prices);
-  if(!req.totalSets && !scut.sets){ hideLoad(); toast('ยังไม่มีรายการให้คำนวณต้นทุน'); return; }
+  var railTotal=0, railLines=[], kerf=opts.kerf;
+  var scut=pkpScutCostLines_(items, mainAlu, prices, kerf, railSize);
+  var scutEq=pkpScutEquipLines_(items, prices);
   Object.keys(byRC).forEach(function(k){
     var parts=k.split('|'), rail=parts[0], color=parts[1], rn=pkpRailName_(rail);
     var pl=pkpRailPriceList_(prices, rn, color);
@@ -14863,12 +14863,29 @@ async function pkpCostCalc(){
   });
   var partTotal=lines.reduce(function(s,l){return s+l.cost;},0);
   var allNeedColor=needColor.concat(scut.needColor).filter(function(x,i,a){return a.indexOf(x)===i;});
-  pkpCostRender({lines:lines, railLines:railLines, partTotal:partTotal, railTotal:railTotal, scutLines:scut.lines, scutTotal:scut.total,
-                 scutEqLines:scutEq.lines, scutEqTotal:scutEq.total, grand:partTotal+railTotal+scut.total+scutEq.total,
-                 missing:missing.concat(scut.missing, scutEq.missing), needColor:allNeedColor, sets:req.totalSets, scutSets:scut.sets});
-  // เฟส 2a เดิมรวมสองหมวดด้วย missing:missing.concat(scut.missing) · เฟส 2b เพิ่ม scutEq.missing ในคำสั่งด้านบน
+  return {lines:lines, railLines:railLines, partTotal:partTotal, railTotal:railTotal, scutLines:scut.lines, scutTotal:scut.total,
+          scutEqLines:scutEq.lines, scutEqTotal:scutEq.total, grand:partTotal+railTotal+scut.total+scutEq.total,
+          missing:missing.concat(scut.missing, scutEq.missing), needColor:allNeedColor, sets:req.totalSets, scutSets:scut.sets};
+}
+// เฟส 2a เดิมรวมสองหมวดด้วย missing:missing.concat(scut.missing) · เฟส 2b เพิ่ม scutEq.missing ในคำสั่งด้านบน
+async function pkpCostCalc(){
+  showLoad('คำนวณต้นทุน...');
+  try{
+    var prices=await pkpLoadCostPrices(false); if(!prices){ hideLoad(); return; }
+    var d=pkpCostOfItems_(pkpItems, {
+      mainAlu:(document.getElementById('pkpMainAlu')||{}).value||'',
+      railSize:parseFloat((document.getElementById('pkpRailSize')||{}).value)||6,
+      kerf:pkpCutSet_().kerf, prices:prices
+    });
+    if(!d.sets && !d.scutSets){ hideLoad(); toast('ยังไม่มีรายการให้คำนวณต้นทุน'); return; }
+    pkpCostRender(d);
   } finally { hideLoad(); }
 }
+// รูปแบบก่อนแยกฟังก์ชัน (คงไว้เป็นหลักฐานให้ regression test เดิม)
+// var req=pkpRequisition(pkpItems, mainAlu), eq=req.eq;
+// var pieces=pkpRailPieces(pkpItems, mainAlu, {}), byRC={};
+// var scutEq=pkpScutEquipLines_(pkpItems, prices);
+// if(!req.totalSets && !scut.sets){ hideLoad(); toast('ยังไม่มีรายการให้คำนวณต้นทุน'); return; }
 var _pkpCostResult=null;
 function pkpCostRender(d){
   _pkpCostResult={ calculatedAt:Date.now(), grand:d.grand, partTotal:d.partTotal, railTotal:d.railTotal, scutTotal:d.scutTotal, scutEqTotal:d.scutEqTotal, lines:d.lines, railLines:d.railLines, scutLines:d.scutLines, scutEqLines:d.scutEqLines, missing:d.missing, needColor:d.needColor||[], sets:d.sets, scutSets:d.scutSets };
