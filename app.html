@@ -14786,6 +14786,33 @@ function pkpScutCostLines_(items, mainAlu, prices, kerf){
   var pieceCount=pieces.reduce(function(s,p){return s+p.qty;},0);
   return {lines:lines,total:total,missing:missing,needColor:needColor.filter(function(x,i,a){return a.indexOf(x)===i;}),sets:sets,pieces:pieceCount};
 }
+// ค่าอุปกรณ์ของมุ้งบานเลื่อน/บานเปิด — นับตามจำนวนบาน (ไม่ผันตามขนาด)
+// คืน { lines:[...], total:number, missing:[...], sets:number }
+function pkpScutEquipLines_(items, prices){
+  var need={}, order=[], missing=[], sets=0;
+  (items||[]).forEach(function(it){
+    if(!it.type||!pkpScutIs(it.type)||it.noReq||!pkpScutPieces(it).length) return;
+    sets++;
+    var req=PKP_SCUT_REQ[it.type];
+    if(!req){
+      var msg='ยังไม่มีตารางอุปกรณ์: '+it.type;
+      if(missing.indexOf(msg)<0) missing.push(msg);
+      return;
+    }
+    req.forEach(function(r){
+      if(!Object.prototype.hasOwnProperty.call(need,r.name)){ need[r.name]=0; order.push(r.name); }
+      need[r.name]+=r.qty;
+    });
+  });
+  var total=0;
+  var lines=order.map(function(name){
+    var qty=need[name], up=pkpPriceOf_(prices,name), cost=qty*up;
+    if(up<=0) missing.push(name);
+    total+=cost;
+    return {label:name,qty:qty,unit:'ตัว',unitPrice:up,cost:cost};
+  });
+  return {lines:lines,total:total,missing:missing,sets:sets};
+}
 async function pkpCostCalc(){
   showLoad('คำนวณต้นทุน...');
   try{
@@ -14819,6 +14846,7 @@ async function pkpCostCalc(){
   pieces.forEach(function(p){ var k=p.rail+'|'+p.color; (byRC[k]||(byRC[k]=[])).push(p); });
   var railTotal=0, railLines=[], kerf=pkpCutSet_().kerf;
   var scut=pkpScutCostLines_(pkpItems, mainAlu, prices, kerf);
+  var scutEq=pkpScutEquipLines_(pkpItems, prices);
   if(!req.totalSets && !scut.sets){ hideLoad(); toast('ยังไม่มีรายการให้คำนวณต้นทุน'); return; }
   Object.keys(byRC).forEach(function(k){
     var parts=k.split('|'), rail=parts[0], color=parts[1], rn=pkpRailName_(rail);
@@ -14836,12 +14864,14 @@ async function pkpCostCalc(){
   var partTotal=lines.reduce(function(s,l){return s+l.cost;},0);
   var allNeedColor=needColor.concat(scut.needColor).filter(function(x,i,a){return a.indexOf(x)===i;});
   pkpCostRender({lines:lines, railLines:railLines, partTotal:partTotal, railTotal:railTotal, scutLines:scut.lines, scutTotal:scut.total,
-                 grand:partTotal+railTotal+scut.total, missing:missing.concat(scut.missing), needColor:allNeedColor, sets:req.totalSets, scutSets:scut.sets});
+                 scutEqLines:scutEq.lines, scutEqTotal:scutEq.total, grand:partTotal+railTotal+scut.total+scutEq.total,
+                 missing:missing.concat(scut.missing, scutEq.missing), needColor:allNeedColor, sets:req.totalSets, scutSets:scut.sets});
+  // เฟส 2a เดิมรวมสองหมวดด้วย missing:missing.concat(scut.missing) · เฟส 2b เพิ่ม scutEq.missing ในคำสั่งด้านบน
   } finally { hideLoad(); }
 }
 var _pkpCostResult=null;
 function pkpCostRender(d){
-  _pkpCostResult={ calculatedAt:Date.now(), grand:d.grand, partTotal:d.partTotal, railTotal:d.railTotal, scutTotal:d.scutTotal, lines:d.lines, railLines:d.railLines, scutLines:d.scutLines, missing:d.missing, needColor:d.needColor||[], sets:d.sets, scutSets:d.scutSets };
+  _pkpCostResult={ calculatedAt:Date.now(), grand:d.grand, partTotal:d.partTotal, railTotal:d.railTotal, scutTotal:d.scutTotal, scutEqTotal:d.scutEqTotal, lines:d.lines, railLines:d.railLines, scutLines:d.scutLines, scutEqLines:d.scutEqLines, missing:d.missing, needColor:d.needColor||[], sets:d.sets, scutSets:d.scutSets };
   var box=document.getElementById('pkpCostWrap'); if(!box)return;
   var baht=function(n){return '฿'+(Math.round((n||0)*100)/100).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});};
   var row=function(l){ return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--line,#1e2535);"><span>'+l.label+(l.note?' <span style="color:var(--rd,#ff453a);">('+l.note+')</span>':' <span style="color:var(--mu,#6b7a94);">'+l.qty+' '+l.unit+' × '+baht(l.unitPrice)+'</span>')+'</span><b>'+baht(l.cost)+'</b></div>'; };
@@ -14864,7 +14894,12 @@ function pkpCostRender(d){
   if(d.scutLines && d.scutLines.length){
     h+='<div style="font-size:11px;color:var(--mu,#6b7a94);text-transform:uppercase;margin:10px 0 2px;">อะลูมิเนียม — บานเลื่อน/บานเปิด — '+baht(d.scutTotal)+'</div>';
     d.scutLines.forEach(function(l){ h+=row(l); if(l.detail) h+='<div style="font-size:10px;color:var(--mu,#6b7a94);padding:0 0 3px 4px;">'+l.detail+'</div>'; });
-    h+='<div style="margin-top:10px;padding:8px 10px;background:rgba(255,159,67,.12);border:1px solid var(--acc,#ff9f43);border-radius:8px;font-size:11px;color:var(--acc,#ff9f43);">⚠️ หมวดนี้เป็นค่าอะลูมิเนียมเท่านั้น ยังไม่รวมค่าอุปกรณ์ (ล้อ/มือจับ/ผ้ามุ้ง/ยาง)</div>';
+    // เฟส 2a เคยแสดง "หมวดนี้เป็นค่าอะลูมิเนียมเท่านั้น ยังไม่รวมค่าอุปกรณ์" — เฟส 2b ห้ามแสดงข้อความเดิมเพราะคิดค่าอุปกรณ์แล้ว
+  }
+  if(d.scutEqLines && d.scutEqLines.length){
+    h+='<div style="font-size:11px;color:var(--mu,#6b7a94);text-transform:uppercase;margin:10px 0 2px;">อุปกรณ์ — บานเลื่อน/บานเปิด — '+baht(d.scutEqTotal)+'</div>';
+    d.scutEqLines.forEach(function(l){ h+=row(l); });
+    h+='<div style="margin-top:10px;padding:8px 10px;background:rgba(255,159,67,.12);border:1px solid var(--acc,#ff9f43);border-radius:8px;font-size:11px;color:var(--acc,#ff9f43);">⚠️ ต้นทุนบานเลื่อน/บานเปิด ยังไม่รวม: ผ้ามุ้ง · ยางอัดมุ้ง · ขนแปรง · สกรู</div>';
   }
   if(d.needColor && d.needColor.length) h+='<div style="margin-top:10px;padding:8px 10px;background:rgba(255,159,67,.12);border:1px solid var(--acc,#ff9f43);border-radius:8px;font-size:11px;color:var(--acc,#ff9f43);">⚠️ ยังไม่ได้ระบุสีอลูมิเนียม: '+d.needColor.join(', ')+' — กรอกช่อง "สีอลู" ในรายการ หรือตั้ง "สีหลัก" ของใบ แล้วกดคำนวณต้นทุนใหม่</div>';
   if(d.missing && d.missing.length) h+='<div style="margin-top:10px;font-size:11px;color:var(--rd,#ff453a);">⚠️ ไม่มีราคาในชีต: '+d.missing.join(', ')+' — เพิ่มในชีต "ราคาต้นทุน" แล้วกดอัปเดตราคา</div>';
@@ -15485,6 +15520,20 @@ function pkpCutDocHTML(pieces, ids, set, mode, scutPieces, lotInfo){
 }
 // ════════ มุ้งบานเลื่อน/บานเปิด — ใบผลิตแยก + ใบตัดราง (สูตรจาก pk_screen_multi_cut.html · frontend-only ไม่แตะ stock) ════════
 // key = ชื่อชนิดใน dropdown ใบผลิต · 'มุ้งบานเลื่อนแยกกลาง UPVC' ใช้สูตร "มุ้งบานเลื่อน UPVC แยกกลาง" ของ tool (ชื่อฟอร์มเดิม)
+// อุปกรณ์ต่อ 1 บาน ของมุ้งบานเลื่อน/บานเปิด — เจ้าของกรอกเอง 8 ก.ย. 2026 (docs/bom-scut-v2.csv)
+// ⛔ ชื่อในนี้ต้องตรงกับชีต "ราคาต้นทุน" เป๊ะ ๆ · เจ้าของยืนยันแล้วว่าแต่ละชื่อคือของคนละตัว
+//    (ล้อ/มือจับ/ฉากมุม ของอลูมิเนียม · UPVC · บานเปิด แยกกันหมด ใช้แทนกันไม่ได้)
+// ⚠ ทุกตัวคิดแบบ "ต่อ 1 บาน" คงที่ ไม่ผันตามขนาด
+var PKP_SCUT_REQ={
+ 'มุ้งบานเลื่อน':[{name:'ล้อบานเลื่อน',qty:4},{name:'มือจับบานเลื่อน',qty:2},{name:'ฉากมุมบานเลื่อน',qty:4}],
+ 'มุ้งบานเลื่อนแยกกลาง':[{name:'ล้อบานเลื่อน',qty:8},{name:'มือจับบานเลื่อน',qty:4},{name:'ฉากมุมบานเลื่อน',qty:8}],
+ 'มุ้งบานเลื่อน เสริมกล่อง 3 ด้าน':[{name:'ล้อบานเลื่อน',qty:4},{name:'มือจับบานเลื่อน',qty:2},{name:'ฉากมุมบานเลื่อน',qty:4}],
+ 'มุ้งบานเลื่อน เสริมกล่อง 4 ด้าน':[{name:'ล้อบานเลื่อน',qty:4},{name:'มือจับบานเลื่อน',qty:2},{name:'ฉากมุมบานเลื่อน',qty:4}],
+ 'มุ้งบานเลื่อน UPVC':[{name:'ล้อบานเลื่อน UPVC',qty:4},{name:'มือจับบานเลื่อน UPVC',qty:2},{name:'ฉากมุม UPVC',qty:4}],
+ 'มุ้งบานเลื่อนแยกกลาง UPVC':[{name:'ล้อบานเลื่อน UPVC',qty:8},{name:'มือจับบานเลื่อน UPVC',qty:4},{name:'ฉากมุม UPVC',qty:8}],
+ 'มุ้งหน้าต่างบานเปิด':[{name:'บานพับหน้าต่าง',qty:4},{name:'กลอนหน้าต่าง',qty:1},{name:'มือจับบานเปิด',qty:1},{name:'ฉากมุมบานเปิด',qty:4}],
+ 'มุ้งประตูบานเปิด':[{name:'บานพับประตู',qty:4},{name:'กลอนประตู',qty:1},{name:'มือจับบานเปิด',qty:1},{name:'ฉากมุมบานเปิด',qty:4}]
+};
 var PKP_SCUT_ORDER=['กล่อง 1x1','ราง T','ราง U','เส้นมุ้งบานเลื่อน','เส้นมุ้งบานเลื่อน UPVC','เส้นหน้าต่าง','เส้นประตู','เส้นกลาง','เส้นกลาง UPVC','ประกบกลางบานเลื่อน','ประกบกลางบานเลื่อน UPVC'];
 var PKP_SCUT_SEGC=['#f0c84a','#8fc1f0','#7fd6ab','#ec9ec5','#b9a7e8','#f2a25c','#7fd0d6','#c9d67f','#e8a7a7','#a7c8e8','#d6b97f'];
 var PKP_SCUT={
