@@ -14813,6 +14813,97 @@ function pkpScutEquipLines_(items, prices){
   });
   return {lines:lines,total:total,missing:missing,sets:sets};
 }
+// ── ตารางจับคู่: ชนิดในใบเสนอราคา → ชนิดในใบผลิตที่เป็นไปได้ ──
+// ⛔ กฎจากเจ้าของธุรกิจ (8 ก.ย. 2026): ใบเสนอราคาไม่ได้ระบุว่าเป็นรางธรรมดา/รางเตี้ย หรือเชือก/สลิง
+//    → ให้ "ลองทุกแบบในกลุ่มแล้วยึดอันที่แพงที่สุด" (ประมาณการต้องไม่ต่ำกว่าจริง ไม่งั้นตั้งราคาขายขาดทุน)
+// ⛔ บานเลื่อนไม่เอา "เสริมกล่อง"/"UPVC" มาเทียบ — 2 อย่างนั้นลูกค้าเลือกเอง ไม่ใช่ความกำกวม
+var PKQ_COST_MAP = {
+  jeeb_single: ['มุ้งจีบมีรางธรรมดาบานเดี่ยว','มุ้งจีบมีรางธรรมดาสลิงบานเดี่ยว','มุ้งจีบรางเตี้ยบานเดี่ยวซ้าย','มุ้งจีบรางเตี้ยบานเดี่ยวขวา'],
+  jeeb_split:  ['มุ้งจีบมีรางธรรมดาบานคู่','มุ้งจีบมีรางธรรมดาสลิงบานคู่','มุ้งจีบรางเตี้ยบานคู่','มุ้งจีบมีรางธรรมดาแยกกลางไม่เท่ากัน','มุ้งจีบมีรางธรรมดาสลิงแยกกลางไม่เท่ากัน','มุ้งจีบรางเตี้ยแยกกลางไม่เท่ากัน'],
+  jeeb_free:   ['มุ้งจีบมีรางธรรมดาบานอิสระ','มุ้งจีบมีรางธรรมดาสลิงบานอิสระ','มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ'],
+  jeeb_h4:     ['มุ้งจีบมีรางธรรมดาบานอิสระ 4 มือจับ','มุ้งจีบมีรางธรรมดาสลิงบานอิสระ 4 มือจับ','มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ 4 มือจับ'],
+  slide:       ['มุ้งบานเลื่อน'],
+  slide_split: ['มุ้งบานเลื่อนแยกกลาง'],
+  open:        '__OPEN__',        // ตัดสินด้วยความสูง
+  fixed:       '__OPEN__',        // มุ้งบานตาย — เจ้าของยังไม่ระบุ ใช้กฎเดียวกับบานเปิด (ยึดราคาสูง)
+  open_split:  '__OPEN_SPLIT__'   // กว้าง÷2 แล้วคิดเป็น 2 ชุด
+};
+// ⛔ กฎเจ้าของ: มุ้งบานเปิดสูงเกิน 170 ซม. = ประตู · ไม่เกิน = หน้าต่าง (อุปกรณ์คนละราคา)
+var PKQ_OPEN_DOOR_H = 170;
+function pkqOpenType_(h){ return (Number(h)||0) > PKQ_OPEN_DOOR_H ? 'มุ้งประตูบานเปิด' : 'มุ้งหน้าต่างบานเปิด'; }
+
+// สร้างชุดสมมติของหนึ่งหน่วยสินค้า · หลายชนิดในบรรทัดเดียวต้องนำมาคิดรวมกัน
+function pkqEntryCandidates_(entry){
+  entry=entry||{};
+  var out={cands:[],unmapped:[]}, no=entry.no;
+  var w=Number(entry.width), h=Number(entry.height);
+  if(!isFinite(w)||!isFinite(h)||w<=0||h<=0){
+    out.unmapped.push({no:no,reason:'ขนาดกว้าง/สูงไม่ครบ'});
+    return out;
+  }
+  var types=Array.isArray(entry.types)?entry.types:[];
+  if(!types.length){
+    out.unmapped.push({no:no,reason:entry.kind==='manual'?'รายการพิมพ์ราคาเองไม่มีชนิดสินค้า':'ไม่ได้ระบุชนิดสินค้า'});
+    return out;
+  }
+  var combined=[[]], mapped=0;
+  types.forEach(function(id){
+    var map=PKQ_COST_MAP[id], variants=[];
+    if(map==='__OPEN__'){
+      variants=[[{type:pkqOpenType_(h),w:w,h:h}]];
+    }else if(map==='__OPEN_SPLIT__'){
+      variants=[[{type:pkqOpenType_(h),w:w/2,h:h},{type:pkqOpenType_(h),w:w/2,h:h}]];
+    }else if(Array.isArray(map)){
+      variants=map.map(function(type){return [{type:type,w:w,h:h}];});
+    }else{
+      out.unmapped.push({no:no,reason:'ไม่พบชนิดสินค้าในตารางต้นทุน: '+id});
+      return;
+    }
+    mapped++;
+    var next=[];
+    combined.forEach(function(base){
+      variants.forEach(function(variant){next.push(base.concat(variant));});
+    });
+    combined=next;
+  });
+  if(mapped) out.cands=combined;
+  return out;
+}
+
+// ทดลองต้นทุนทีละชุดสมมติ เพื่อเลือกชนิดที่แพงที่สุดของบรรทัดนั้น
+function pkqPickCostliest_(cands, colorName, opts){
+  var best={items:[],grand:0,typeNames:[]}, found=false;
+  (cands||[]).forEach(function(cand){
+    var items=cand.map(function(x){return {type:x.type,w:String(x.w),h:String(x.h),cAlu:colorName};});
+    var cost=pkpCostOfItems_(items, opts);
+    if(!found||cost.grand>best.grand){
+      found=true;
+      best={items:items,grand:cost.grand,typeNames:items.map(function(x){return x.type;})};
+    }
+  });
+  return best;
+}
+
+// เลือกชนิดแพงสุดแยกแต่ละบรรทัดก่อน แล้วรวมทั้งหมดคำนวณครั้งเดียวเพื่อจัดรางลงเส้นร่วมกัน
+function pkqEstimateCost_(entries, opts){
+  opts=opts||{};
+  var allItems=[], perEntry=[], unmapped=[], entriesCounted=0;
+  (entries||[]).forEach(function(entry){
+    var built=pkqEntryCandidates_(entry);
+    unmapped=unmapped.concat(built.unmapped);
+    if(!built.cands.length) return;
+    var colorName=opts.mainAlu||'';
+    if(entry.colorId && typeof opts.colorLabelOf==='function') colorName=opts.colorLabelOf(entry.colorId)||opts.mainAlu||'';
+    var picked=pkqPickCostliest_(built.cands, colorName, opts);
+    if(!picked.items.length) return;
+    var qty=Number(entry.qty); if(!qty) qty=1;
+    for(var i=0;i<qty;i++) picked.items.forEach(function(item){allItems.push(Object.assign({},item));});
+    perEntry.push({no:entry.no,typeNames:picked.typeNames,qty:qty});
+    entriesCounted++;
+  });
+  if(!allItems.length) return {ok:false,error:'ไม่มีรายการที่คำนวณต้นทุนได้',unmapped:unmapped};
+  return {ok:true,cost:pkpCostOfItems_(allItems, opts),perEntry:perEntry,unmapped:unmapped,entriesCounted:entriesCounted};
+}
 // คำนวณต้นทุนของรายการชุดหนึ่ง — ใช้ร่วมกันระหว่างใบผลิตจริงกับการประมาณการจากใบเสนอราคา
 // opts = { mainAlu, railSize, kerf, prices }
 // คืนก้อนเดียวกับที่ pkpCostRender ต้องการ (lines/railLines/scutLines/scutEqLines/partTotal/railTotal/
