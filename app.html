@@ -14758,12 +14758,12 @@ function pkpRailPriceList_(prices,railName,color){
     .map(function(x){return {size:x.divisor, buyPrice:x.buyPrice};});
 }
 // ต้นทุนอะลูมิเนียมของมุ้งบานเลื่อน/บานเปิด — ใช้สูตรตัดเดิม + จัดลงเส้นแบบเดียวกับรางมุ้งจีบ
-// คืน { lines:[...], total:number, missing:[...], needColor:[...], sets:number, pieces:number }
+// คืน { lines:[...], total:number, totalByMeter:number, missing:[...], needColor:[...], sets:number, pieces:number }
 function pkpScutCostLines_(items, mainAlu, prices, kerf, railSize){
   var pieces=pkpScutCollect(items, mainAlu, {}), byPC={};
   pieces.forEach(function(p){ var k=p.profile+'|'+p.color; (byPC[k]||(byPC[k]=[])).push(p); });
   railSize=railSize==null ? (parseFloat((document.getElementById('pkpRailSize')||{}).value)||6) : railSize;
-  var lines=[], total=0, missing=[], needColor=[], R2=function(n){return Math.round(n*100)/100;};
+  var lines=[], total=0, totalByMeter=0, missing=[], needColor=[], R2=function(n){return Math.round(n*100)/100;};
   Object.keys(byPC).forEach(function(k){
     var group=byPC[k], profile=group[0].profile, color=group[0].color;
     var pl=pkpRailPriceList_(prices, profile, color);
@@ -14779,13 +14779,17 @@ function pkpScutCostLines_(items, mainAlu, prices, kerf, railSize){
     var pr=pl.find(function(x){return x.size===railSize;}) || pl[0];
     var fb=(pr.size!==railSize) ? ' (ไม่มี '+railSize+'ม. ใช้ '+pr.size+'ม.)' : '';
     var ffd=pkpCutFFD(group, pr.size*100, kerf), cost=ffd.usedStock*pr.buyPrice;
+    // ตัวเลขแบบเมตรมีไว้เทียบเท่านั้น · ยอดที่จ่ายจริงยังยึด cost แบบจำนวนเส้นที่ต้องซื้อ
+    var meters=R2(ffd.totalLen/100), wasteM=R2(ffd.waste/100), perMeter=R2(pr.buyPrice/pr.size);
+    var costByMeter=R2(meters*perMeter);
     total+=cost;
-    lines.push({label:profile+' ['+color+']'+fb, qty:ffd.usedStock, unit:'เส้น ×'+pr.size+'ม.', unitPrice:pr.buyPrice, cost:cost, detail:'ใช้จริง '+R2(ffd.totalLen/100)+' ม. · เศษ '+R2(ffd.waste/100)+' ม.'});
+    totalByMeter+=costByMeter;
+    lines.push({label:profile+' ['+color+']'+fb, qty:ffd.usedStock, unit:'เส้น ×'+pr.size+'ม.', unitPrice:pr.buyPrice, cost:cost, detail:'ใช้จริง '+meters+' ม. · เศษ '+wasteM+' ม.', meters:meters, wasteM:wasteM, perMeter:perMeter, costByMeter:costByMeter});
   });
   var sets=0;
   (items||[]).forEach(function(it){ if(it.type&&pkpScutIs(it.type)&&!it.noReq&&pkpScutPieces(it).length) sets++; });
   var pieceCount=pieces.reduce(function(s,p){return s+p.qty;},0);
-  return {lines:lines,total:total,missing:missing,needColor:needColor.filter(function(x,i,a){return a.indexOf(x)===i;}),sets:sets,pieces:pieceCount};
+  return {lines:lines,total:total,totalByMeter:R2(totalByMeter),missing:missing,needColor:needColor.filter(function(x,i,a){return a.indexOf(x)===i;}),sets:sets,pieces:pieceCount};
 }
 // ค่าอุปกรณ์ของมุ้งบานเลื่อน/บานเปิด — นับตามจำนวนบาน (ไม่ผันตามขนาด)
 // คืน { lines:[...], total:number, missing:[...], sets:number }
@@ -14950,12 +14954,16 @@ function pkpCostOfItems_(items, opts){
     var pr=pl.find(function(x){return x.size===railSize;}) || pl[0];   // เลือกขนาดที่กำหนด ถ้าไม่มีใช้ที่มี
     var fb=(pr.size!==railSize) ? ' (ไม่มี '+railSize+'ม. ใช้ '+pr.size+'ม.)' : '';
     var ffd=pkpCutFFD(byRC[k], pr.size*100, kerf), cost=ffd.usedStock*pr.buyPrice;
+    // ตัวเลขแบบเมตรมีไว้เทียบเท่านั้น · ยอดที่จ่ายจริงยังยึด cost แบบจำนวนเส้นที่ต้องซื้อ
+    var meters=R2(ffd.totalLen/100), wasteM=R2(ffd.waste/100), perMeter=R2(pr.buyPrice/pr.size);
+    var costByMeter=R2(meters*perMeter);
     railTotal+=cost;
-    railLines.push({label:rn+' ['+color+']'+fb, qty:ffd.usedStock, unit:'เส้น ×'+pr.size+'ม.', unitPrice:pr.buyPrice, cost:cost, detail:'ใช้จริง '+R2(ffd.totalLen/100)+' ม. · เศษ '+R2(ffd.waste/100)+' ม.'});
+    railLines.push({label:rn+' ['+color+']'+fb, qty:ffd.usedStock, unit:'เส้น ×'+pr.size+'ม.', unitPrice:pr.buyPrice, cost:cost, detail:'ใช้จริง '+meters+' ม. · เศษ '+wasteM+' ม.', meters:meters, wasteM:wasteM, perMeter:perMeter, costByMeter:costByMeter});
   });
   var partTotal=lines.reduce(function(s,l){return s+l.cost;},0);
+  var railTotalByMeter=R2(railLines.reduce(function(s,l){return s+(Number(l.costByMeter)||0);},0));
   var allNeedColor=needColor.concat(scut.needColor).filter(function(x,i,a){return a.indexOf(x)===i;});
-  return {lines:lines, railLines:railLines, partTotal:partTotal, railTotal:railTotal, scutLines:scut.lines, scutTotal:scut.total,
+  return {lines:lines, railLines:railLines, partTotal:partTotal, railTotal:railTotal, railTotalByMeter:railTotalByMeter, scutLines:scut.lines, scutTotal:scut.total, scutTotalByMeter:scut.totalByMeter,
           scutEqLines:scutEq.lines, scutEqTotal:scutEq.total, grand:partTotal+railTotal+scut.total+scutEq.total,
           missing:missing.concat(scut.missing, scutEq.missing), needColor:allNeedColor, sets:req.totalSets, scutSets:scut.sets};
 }
@@ -14980,10 +14988,17 @@ async function pkpCostCalc(){
 // if(!req.totalSets && !scut.sets){ hideLoad(); toast('ยังไม่มีรายการให้คำนวณต้นทุน'); return; }
 var _pkpCostResult=null;
 function pkpCostRender(d){
-  _pkpCostResult={ calculatedAt:Date.now(), grand:d.grand, partTotal:d.partTotal, railTotal:d.railTotal, scutTotal:d.scutTotal, scutEqTotal:d.scutEqTotal, lines:d.lines, railLines:d.railLines, scutLines:d.scutLines, scutEqLines:d.scutEqLines, missing:d.missing, needColor:d.needColor||[], sets:d.sets, scutSets:d.scutSets };
+  _pkpCostResult={ calculatedAt:Date.now(), grand:d.grand, partTotal:d.partTotal, railTotal:d.railTotal, railTotalByMeter:d.railTotalByMeter, scutTotal:d.scutTotal, scutTotalByMeter:d.scutTotalByMeter, scutEqTotal:d.scutEqTotal, lines:d.lines, railLines:d.railLines, scutLines:d.scutLines, scutEqLines:d.scutEqLines, missing:d.missing, needColor:d.needColor||[], sets:d.sets, scutSets:d.scutSets };
   var box=document.getElementById('pkpCostWrap'); if(!box)return;
   var baht=function(n){return '฿'+(Math.round((n||0)*100)/100).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});};
   var row=function(l){ return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--line,#1e2535);"><span>'+l.label+(l.note?' <span style="color:var(--rd,#ff453a);">('+l.note+')</span>':' <span style="color:var(--mu,#6b7a94);">'+l.qty+' '+l.unit+' × '+baht(l.unitPrice)+'</span>')+'</span><b>'+baht(l.cost)+'</b></div>'; };
+  // snapshot เก่าไม่มียอดแบบเมตร · ถ้าไม่มีฟิลด์ใหม่ให้ข้ามส่วนเปรียบเทียบโดยไม่กระทบการแสดงเดิม
+  var compare=function(total,byMeter){
+    if(typeof byMeter!=='number'||!isFinite(byMeter)) return '';
+    var waste=Math.round(((Number(total)||0)-byMeter)*100)/100;
+    return '<div style="font-size:10px;line-height:1.55;color:var(--mu,#6b7a94);padding:3px 0 5px;">ยอดที่ใช้จริง <b>คิดตามเส้นที่ต้องซื้อ '+baht(total)+'</b> · ข้อมูลเปรียบเทียบ คิดตามเมตรที่ใช้จริง '+baht(byMeter)+' · ส่วนต่าง (ค่าเศษ) '+baht(waste)+'</div>';
+  };
+  var detail=function(l){ return (l.detail||'')+(typeof l.costByMeter==='number'?' · ≈ '+baht(l.costByMeter)+' ถ้าคิดตามเมตร':''); };
   var h='<div style="background:var(--surf2,#1e2535);border-radius:10px;padding:14px;margin-top:10px;">';
   var setParts=[];
   if(d.sets) setParts.push('มุ้งจีบ '+d.sets+' ชุด');
@@ -14998,11 +15013,13 @@ function pkpCostRender(d){
     h+='<div style="font-size:11px;color:var(--mu,#6b7a94);text-transform:uppercase;margin:8px 0 2px;">อุปกรณ์ — '+baht(d.partTotal)+'</div>';
     (d.lines||[]).forEach(function(l){ h+=row(l); });
     h+='<div style="font-size:11px;color:var(--mu,#6b7a94);text-transform:uppercase;margin:10px 0 2px;">ราง (จัดตัดแล้ว) — '+baht(d.railTotal)+'</div>';
-    (d.railLines||[]).forEach(function(l){ h+=row(l); if(l.detail) h+='<div style="font-size:10px;color:var(--mu,#6b7a94);padding:0 0 3px 4px;">'+l.detail+'</div>'; });
+    h+=compare(d.railTotal,d.railTotalByMeter);
+    (d.railLines||[]).forEach(function(l){ h+=row(l); if(l.detail) h+='<div style="font-size:10px;color:var(--mu,#6b7a94);padding:0 0 3px 4px;">'+detail(l)+'</div>'; });
   }
   if(d.scutLines && d.scutLines.length){
     h+='<div style="font-size:11px;color:var(--mu,#6b7a94);text-transform:uppercase;margin:10px 0 2px;">อะลูมิเนียม — บานเลื่อน/บานเปิด — '+baht(d.scutTotal)+'</div>';
-    d.scutLines.forEach(function(l){ h+=row(l); if(l.detail) h+='<div style="font-size:10px;color:var(--mu,#6b7a94);padding:0 0 3px 4px;">'+l.detail+'</div>'; });
+    h+=compare(d.scutTotal,d.scutTotalByMeter);
+    d.scutLines.forEach(function(l){ h+=row(l); if(l.detail) h+='<div style="font-size:10px;color:var(--mu,#6b7a94);padding:0 0 3px 4px;">'+detail(l)+'</div>'; });
     // เฟส 2a เคยแสดง "หมวดนี้เป็นค่าอะลูมิเนียมเท่านั้น ยังไม่รวมค่าอุปกรณ์" — เฟส 2b ห้ามแสดงข้อความเดิมเพราะคิดค่าอุปกรณ์แล้ว
   }
   if(d.scutEqLines && d.scutEqLines.length){
@@ -15046,12 +15063,34 @@ function quoCostRender_(quote,r){
     h+='<div style="background:var(--surf2,#1e2535);border:1px solid var(--bdr,#30394b);border-radius:10px;padding:14px;margin-bottom:14px;">';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;"><b>ยอดรวมประมาณการ</b><b style="font-size:25px;color:var(--acc,#ff9f43);">'+baht(cost.grand)+'</b></div>';
     var cats=[];
-    function cat(label,total,lines){ if((lines&&lines.length)||(Number(total)||0)!==0) cats.push({label:label,total:total}); }
+    // เขียนตัวแสดงรายการแยกสำหรับโมดัลนี้ · ไม่เรียก pkpCostRender ที่ผูกกับหน้าจอใบผลิต
+    function itemRow(l){
+      var info=l.note
+        ? ' <span style="color:var(--rd,#ff453a);">('+escHtml(l.note)+')</span>'
+        : ' <span style="color:var(--mu,#6b7a94);">· '+escHtml(l.qty)+' '+escHtml(l.unit)+' × '+baht(l.unitPrice)+'</span>';
+      return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:4px 0;border-bottom:1px solid var(--line,#30394b);"><span>'+escHtml(l.label)+info+'</span><b style="white-space:nowrap;">→ '+baht(l.cost)+'</b></div>';
+    }
+    function compare(total,byMeter){
+      if(typeof byMeter!=='number'||!isFinite(byMeter)) return '';
+      var waste=Math.round(((Number(total)||0)-byMeter)*100)/100;
+      return '<div style="font-size:10px;line-height:1.55;color:var(--mu,#6b7a94);padding:3px 0 5px;">ยอดที่ใช้จริง <b>คิดตามเส้นที่ต้องซื้อ '+baht(total)+'</b> · ข้อมูลเปรียบเทียบ คิดตามเมตรที่ใช้จริง '+baht(byMeter)+' · ส่วนต่าง (ค่าเศษ) '+baht(waste)+'</div>';
+    }
+    function itemDetail(l){ return (l.detail||'')+(typeof l.costByMeter==='number'?' · ≈ '+baht(l.costByMeter)+' ถ้าคิดตามเมตร':''); }
+    var totalsByMeter={'รางมุ้งจีบ':cost.railTotalByMeter,'อะลูมิเนียมบานเลื่อน/บานเปิด':cost.scutTotalByMeter};
+    function cat(label,total,lines){ if((lines&&lines.length)||(Number(total)||0)!==0) cats.push({label:label,total:total,lines:lines||[],totalByMeter:totalsByMeter[label]}); }
     cat('อุปกรณ์มุ้งจีบ',cost.partTotal,cost.lines);
     cat('รางมุ้งจีบ',cost.railTotal,cost.railLines);
     cat('อะลูมิเนียมบานเลื่อน/บานเปิด',cost.scutTotal,cost.scutLines);
     cat('อุปกรณ์บานเลื่อน/บานเปิด',cost.scutEqTotal,cost.scutEqLines);
-    cats.forEach(function(c){ h+='<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid var(--line,#30394b);font-size:12px;"><span>'+c.label+'</span><b>'+baht(c.total)+'</b></div>'; });
+    cats.forEach(function(c){
+      if(!c.lines.length) return;   // ยอดผิดสภาพที่ไม่มีบรรทัด ห้ามขึ้นหัวข้อให้เข้าใจว่าเป็นยอดจริง
+      h+='<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0 3px;border-top:1px solid var(--line,#30394b);font-size:12px;"><b>'+c.label+'</b><b>'+baht(c.total)+'</b></div>';
+      h+=compare(c.total,c.totalByMeter);
+      c.lines.forEach(function(l){
+        h+=itemRow(l);
+        if(l.detail) h+='<div style="font-size:10px;color:var(--mu,#6b7a94);padding:0 0 4px 4px;">'+escHtml(itemDetail(l))+'</div>';
+      });
+    });
     h+='</div>';
     h+='<div style="font-weight:700;margin-bottom:7px;">ชนิดที่ระบบเลือกคิดต้นทุนในแต่ละบรรทัด</div>';
     h+='<div style="overflow-x:auto;margin-bottom:14px;"><table style="width:100%;min-width:500px;border-collapse:collapse;"><thead><tr><th>บรรทัดที่</th><th>ชนิดที่ระบบเลือกคิดต้นทุน</th><th>จำนวนชุด</th></tr></thead><tbody>';
