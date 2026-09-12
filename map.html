@@ -1713,9 +1713,30 @@ function simInput(simId, simField, simValue){
   if (S.simChoice && S.simChoice.id === simId) S.simChoice = null;
   simRenderBox();
 }
+function simScoreLive(simId, simValue){
+  const simRow = S.simRows.find(sim => sim.id === simId);
+  if (!simRow || simRow.score === simValue) return;
+  simRow.score = simValue;
+  simRow.request++;
+  simRow.busy = false;
+  simRow.suggestions = [];
+  simRow.message = '';
+  const simJob = S.sims.find(sim => sim.id === simId);
+  if (simJob){ simJob.score = simValue; simJob.recTeam = ''; }
+  if (S.simChoice && S.simChoice.id === simId) S.simChoice = null;
+  const simElement = $('simRows').querySelector('[data-row="' + CSS.escape(simId) + '"]');
+  if (!simElement) return;
+  simElement.querySelector('.sim-sugg-btn').disabled = !simScoreOk(simValue);
+  simElement.querySelector('.sim-status').textContent = simScoreOk(simValue) ? '' : 'กรอกคะแนน 1–10 ทีละ 0.5 ก่อนหาวันแนะนำ';
+  simElement.querySelector('.sim-sugg-list').textContent = '';
+}
 async function simSuggest(simId){
   const simRow = S.simRows.find(sim => sim.id === simId);
-  if (!simRow || !simRow.selected || simRow.busy || !simScoreOk(simRow.score)) return;
+  if (!simRow || !simRow.selected || simRow.busy) return;
+  if (!simScoreOk(simRow.score)) return (
+    simRow.message = 'กรอกคะแนน 1–10 ทีละ 0.5 ก่อนหาวันแนะนำ',
+    simRenderBox()
+  );
   const simRequest = ++simRow.request;
   let simAddress = String(simRow.job.address || '');
   const simGeo = jobGeo(simRow.job);
@@ -1838,7 +1859,7 @@ function simRenderBox(){
   if (S.sims.length) $('simBox').hidden = false;
   $('simRows').innerHTML = S.simRows.map(simRow => {
     const simGeo = jobGeo(simRow.job);
-    let simHtml = '<div class="sim-row"><label><input type="checkbox" data-sim="' + esc(simRow.id) + '"' +
+    let simHtml = '<div class="sim-row" data-row="' + esc(simRow.id) + '"><label><input type="checkbox" data-sim="' + esc(simRow.id) + '"' +
       (simRow.selected ? ' checked' : '') + ' onchange="simSelect(this.dataset.sim,this.checked)"> ' + esc(simRow.job.name || simRow.job.id) +
       '</label><div class="sim-address" title="' + esc(simRow.job.address) + '">' + esc(simRow.job.address) +
       '</div><div>' + esc((simRow.job.team || 'ไม่ระบุทีม') + ' · ' + ({ done:'✓ วัดแล้ว', working:'กำลังวัด' }[simRow.job.status] || 'รอคิว')) +
@@ -1846,19 +1867,19 @@ function simRenderBox(){
         '⚠ ไม่มีพิกัด — หาวันแนะนำได้ แต่วางบนแผนที่ไม่ได้') + '</div>';
     if (simRow.selected){
       simHtml += '<label>คะแนนขนาดงาน 1–10 <input type="number" required min="1" max="10" step="0.5" value="' + esc(simRow.score) +
-        '" data-sim="' + esc(simRow.id) + '" onchange="simInput(this.dataset.sim,\'score\',this.value)"></label>' +
+        '" data-sim="' + esc(simRow.id) + '" oninput="simScoreLive(this.dataset.sim,this.value)" inputmode="decimal"></label>' +
         '<label><input type="checkbox" data-sim="' + esc(simRow.id) + '"' + (simRow.glass ? ' checked' : '') +
         ' onchange="simInput(this.dataset.sim,\'glass\',this.checked)"> งานกระจก</label>' +
-        '<button class="btn" data-sim="' + esc(simRow.id) + '" onclick="simSuggest(this.dataset.sim)"' +
+        '<button class="btn sim-sugg-btn" data-sim="' + esc(simRow.id) + '" onclick="simSuggest(this.dataset.sim)"' +
         (simRow.busy || !simScoreOk(simRow.score) ? ' disabled' : '') + '>📅 หาวันแนะนำ</button>' +
-        '<div class="sim-hint" role="status">' + esc(!simScoreOk(simRow.score) ? 'กรอกคะแนน 1–10 ทีละ 0.5 ก่อนหาวันแนะนำ' : simRow.message) + '</div>';
-      simHtml += simRow.suggestions.map((simSuggestion, simIndex) =>
+        '<div class="sim-hint sim-status" role="status">' + esc(!simScoreOk(simRow.score) ? 'กรอกคะแนน 1–10 ทีละ 0.5 ก่อนหาวันแนะนำ' : simRow.message) + '</div>';
+      simHtml += '<div class="sim-sugg-list">' + simRow.suggestions.map((simSuggestion, simIndex) =>
         '<button class="btn sim-suggestion" data-sim="' + esc(simRow.id) + '" data-index="' + esc(simIndex) +
         '" onclick="simChooseDate(this.dataset.sim,\'\',this.dataset.index)">' +
         esc((simIndex === 0 ? '⭐ ' : '') + simSuggestion.dateKey + ' · ' + (simSuggestion.recommendedTeam || 'ยังไม่มีทีมแนะนำ')) +
         '<br>' + esc(simLoadText(simSuggestion)) + '<br>' +
         esc((Array.isArray(simSuggestion.reasons) ? simSuggestion.reasons.join(' · ') : simSuggestion.reasons || '') +
-          (simSuggestion.dayNote ? ' · ' + simSuggestion.dayNote : '')) + '</button>').join('');
+          (simSuggestion.dayNote ? ' · ' + simSuggestion.dayNote : '')) + '</button>').join('') + '</div>';
       simHtml += '<label>หรือพิมพ์วันเอง <input type="date" data-sim="' + esc(simRow.id) +
         '" value="' + esc(S.simAssignmentDate === S.date ? S.date : '') +
         '" onchange="simChooseDate(this.dataset.sim,this.value)"></label>';
