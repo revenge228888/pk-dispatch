@@ -222,7 +222,7 @@ header{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 18px;
 
 /* จำลองงานวัด: เว้นพื้นที่ปุ่มซูมและคำอธิบายแผนที่ */
 body.embed header .logo{display:none}
-#simBox{position:absolute;top:56px;left:56px;width:340px;max-width:calc(100% - 68px);max-height:calc(100% - 200px);z-index:1001;background:rgba(255,253,249,.97);backdrop-filter:blur(6px);border:1px solid var(--bdr);border-radius:12px;box-shadow:0 6px 24px #0002;display:flex;flex-direction:column;font-size:12px}
+#simBox{position:absolute;top:56px;left:56px;width:400px;max-width:calc(100% - 68px);max-height:calc(100% - 200px);z-index:1001;background:rgba(255,253,249,.97);backdrop-filter:blur(6px);border:1px solid var(--bdr);border-radius:12px;box-shadow:0 6px 24px #0002;display:flex;flex-direction:column;font-size:13px;line-height:1.45}
 #simBox[hidden]{display:none}
 .sim-head{padding:10px;border-bottom:1px solid var(--bdr);flex:none}
 .sim-head .btn{padding:4px 7px}
@@ -249,11 +249,54 @@ body.embed header .logo{display:none}
 .sim-note{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:calc(100% - 40px);color:var(--mu)}.sim-info{position:absolute;right:1px;bottom:1px;min-width:40px;min-height:40px;border:0;background:transparent;color:var(--acc);font:inherit;cursor:pointer}.sim-details{padding:6px;overflow-wrap:anywhere}
 .sim-job-head{display:flex;align-items:center;gap:6px;min-width:0}.sim-job-head label{display:flex;align-items:center;gap:5px;min-width:0;flex:1}.sim-job-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sim-job-status{flex:none}.sim-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sim-controls label{display:flex;align-items:center;gap:4px}.sim-controls input[type=number]{width:56px}
 .sim-handle{display:block;margin:-7px auto 0;width:48px;height:16px;border:0;background:transparent;cursor:pointer}.sim-handle:after{content:'';display:block;width:28px;height:4px;background:var(--bdr);border-radius:3px;margin:auto}
-.sim-selected{display:flex;align-items:center;gap:4px;padding:0 6px;min-width:0;flex:none}.sim-selected[hidden]{display:none}.sim-selected span{flex:1;min-width:0;text-align:center;overflow-wrap:anywhere}.sim-selected .btn{min-width:40px;min-height:40px}#simBox.sim-peek .sim-body,#simBox.sim-peek .sim-banner{display:none}
-#simBox input,#simBox select,#simBox button{font-size:12px}#simBox{overflow-wrap:anywhere}
+.sim-selected{display:flex;align-items:center;gap:4px;padding:0 6px;min-width:0;flex:none}.sim-selected[hidden]{display:none}.sim-selected span{flex:1;min-width:0;text-align:center;overflow-wrap:anywhere}.sim-selected .btn{min-width:40px;min-height:40px}#simBox.sim-peek .sim-body,#simBox.sim-peek .sim-tabs{display:none}
+#simBox input,#simBox select,#simBox button{font:inherit}#simBox{overflow-wrap:anywhere}
 @media(max-width:760px){
  #simBox{max-height:calc(100% - 56px)}#simBox.sim-half{height:50vh}#simBox.sim-full{height:calc(88vh - 56px)}#simBox.sim-peek{height:auto}
  #simBox .btn,#simBox input:not([type=checkbox]),#simBox select,.sim-controls label,.sim-job-head label{min-height:40px}#simBox .sim-handle{height:40px;margin:-10px auto -10px}#simBox .sim-head{padding:6px 10px}.sim-body{overflow-x:hidden}#simBox input[type=date]{min-width:0;max-width:100%;box-sizing:border-box}
+}
+/* Simulation tabs keep the header fixed and the steps independently readable. */
+.sim-title-row{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.sim-head-actions{display:flex;gap:2px;margin-left:auto}
+#simBox .sim-head-actions .btn{width:40px;height:40px;padding:0;min-width:40px}
+#simBanner{font-size:11px;border-radius:20px;background:#fff0d8;padding:3px 6px;margin:0}
+#simBox [hidden]{display:none}
+.sim-tabs{display:flex;gap:3px;flex:none;margin:8px 10px 0;padding:3px;background:var(--bdr);border-radius:9px}
+.sim-tabs button{flex:1;min-width:0;min-height:40px;border:0;border-radius:7px;background:transparent;color:var(--mu);cursor:pointer;padding:4px}
+.sim-tabs button[aria-selected=true]{background:var(--surf);color:var(--acc);font-weight:700;box-shadow:0 1px 3px #0002}
+.sim-tabs span{font-size:11px}
+.sim-row{border:1px solid var(--bdr);border-radius:9px;padding:10px;margin:8px 0 10px;min-width:0}
+.sim-job-name{font-size:14px;font-weight:700}
+.sim-job-status{font-size:11px;padding:2px 6px;border-radius:12px;background:#eee;color:var(--mu)}
+.sim-job-status.sim-done{background:#e6f5ea;color:#16803c}.sim-job-status.sim-missing{background:#fff0d8;color:#b65a00}
+.sim-address,.sim-hint,.sim-note,.sim-details{font-size:12px;color:var(--mu)}
+.sim-controls{flex-wrap:nowrap;gap:6px;justify-content:space-between}
+.sim-controls label{white-space:nowrap;gap:3px}
+#simBox .sim-controls input[type=number]{box-sizing:border-box;width:48px;min-width:0;padding:3px}
+#simBox .sim-controls .btn{padding:4px 6px;white-space:nowrap}
+.sim-load-row{display:flex;align-items:center;gap:5px;min-width:0}
+.sim-load-row label{white-space:nowrap}.sim-load-row input{flex:1;width:0;min-width:0;padding:3px}
+.sim-load-row .btn{padding:4px 8px;white-space:nowrap}
+.sim-link{display:inline-flex;align-items:center;min-height:40px;padding:0;border:0;background:transparent;color:var(--acc);cursor:pointer;text-align:left}
+#simBox .sim-link{font-size:12px}.sim-chips{display:flex;gap:6px;overflow:auto;margin-bottom:10px}
+.sim-chips button{flex:none;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:40px}
+.sim-chips button[aria-pressed=true]{background:var(--acc);color:white}
+.sim-section-title{font-size:12px;font-weight:700;color:var(--mu);margin:10px 0}
+.sim-manual{display:flex;align-items:center;gap:6px;margin-top:12px}.sim-manual input{flex:1;width:0;min-width:0}
+.sim-assignment-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}.sim-assignment-head b{flex:1;min-width:0}.sim-assignment-head .sim-link{flex:none}
+.sim-row .sim-team-option{display:flex;align-items:center;gap:5px;min-height:40px;padding:6px;margin:4px 0;border:1px solid var(--bdr);border-radius:7px;cursor:pointer}
+.sim-team-option.sim-team-selected{border-color:var(--sim-color);background:color-mix(in srgb,var(--sim-color) 10%,var(--surf))}
+.sim-team-option input{margin:0;accent-color:var(--sim-color)}.sim-team-dot{color:var(--sim-color)}
+.sim-team-name{min-width:0;flex:1}.sim-team-rec{font-size:11px;color:#16803c}.sim-team-km{white-space:nowrap;font-variant-numeric:tabular-nums}
+.sim-summary-table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.sim-summary-table th,.sim-summary-table td{text-align:right;padding:8px 4px;border-bottom:1px solid var(--bdr)}
+.sim-summary-table th:first-child,.sim-summary-table td:first-child{text-align:left}.sim-summary-table th{color:var(--mu)}
+.sim-load-bars{display:flex;flex-direction:column;gap:8px;margin:12px 0}.sim-load-bar{display:flex;align-items:center;gap:7px;font-size:12px}
+.sim-warning{font-size:12px;color:#b65a00;margin:10px 0}
+@media(min-width:761px){#simBox .sim-handle{display:none}}
+@media(max-width:760px){
+ #simBox{font-size:14px}#simBox button,#simBox input:not([type=checkbox]):not([type=radio]){min-height:40px}
+ #simBox .sim-head{flex:none}.sim-body{padding:10px}.sim-title-row{gap:4px}
 }
 </style>
 </head>
@@ -320,20 +363,32 @@ body.embed header .logo{display:none}
     <section id="simBox" hidden aria-label="จำลองงานวัด">
       <div class="sim-head">
         <button class="sim-handle" onclick="simFold()" aria-label="ปรับขนาดกล่องจำลอง"></button>
-        <div id="simBanner" class="sim-banner" hidden>🧪 โหมดจำลอง — ไม่บันทึกอะไรลงระบบ</div>
-        <b>📐 จำลองงานวัด</b>
-        <button class="btn" onclick="simFold()">พับ/ขยาย</button>
-        <button class="btn" onclick="simClose()">ปิด</button>
-        <button class="btn" id="simClearBtn" onclick="simClear()" hidden>ล้างการจำลอง</button>
+        <div class="sim-title-row"><b>📐 จำลอง</b>
+          <span id="simBanner" class="sim-banner" title="โหมดจำลอง — ไม่บันทึกอะไรลงระบบ" hidden>🧪 ไม่บันทึก</span>
+          <div class="sim-head-actions">
+            <button class="btn" onclick="simFold()" title="ปรับขนาดกล่องจำลอง" aria-label="ปรับขนาดกล่องจำลอง">⤢</button>
+            <button class="btn" id="simClearBtn" onclick="simClear()" title="ล้างการจำลอง" aria-label="ล้างการจำลอง" hidden>🗑</button>
+            <button class="btn" onclick="simClose()" title="ปิด" aria-label="ปิด">✕</button>
+          </div>
+        </div>
       </div>
       <div id="simSelected" class="sim-selected" hidden></div>
+      <div id="simTabs" class="sim-tabs" role="tablist" aria-label="ขั้นตอนจำลอง">
+        <button id="simTabJobs" role="tab" aria-controls="simJobsPane" aria-selected="true" onclick="simSwitchTab('jobs')">① งานวัด <span id="simJobsCount">0</span></button>
+        <button id="simTabDates" role="tab" aria-controls="simDatesPane" aria-selected="false" onclick="simSwitchTab('dates')">② เลือกวัน</button>
+        <button id="simTabTeams" role="tab" aria-controls="simTeamsPane" aria-selected="false" onclick="simSwitchTab('teams')">③ จัดทีม <span id="simTeamsCount">0</span></button>
+      </div>
       <div class="sim-body" id="simBody">
-        <label>งานวัดวันที่ <input type="date" id="simMeasureDate" onchange="simLoadMeasures()"></label>
-        <button class="btn" onclick="simLoadMeasures()">โหลดงานวัด</button>
-        <div id="simLoadStatus" role="status"></div>
-        <div id="simRows"></div>
-        <div id="simAssignments"></div>
-        <div id="simSummary"></div>
+        <div id="simJobsPane" role="tabpanel" aria-labelledby="simTabJobs">
+          <div class="sim-load-row"><label for="simMeasureDate">งานวัดวันที่</label><input type="date" id="simMeasureDate" onchange="simLoadMeasures()"><button class="btn" onclick="simLoadMeasures()">โหลด</button></div>
+          <div id="simLoadStatus" class="sim-hint" role="status"></div>
+          <div id="simRows"></div>
+        </div>
+        <div id="simDatesPane" role="tabpanel" aria-labelledby="simTabDates" hidden></div>
+        <div id="simTeamsPane" role="tabpanel" aria-labelledby="simTabTeams" hidden>
+          <div id="simAssignments"></div>
+          <div id="simSummary"></div>
+        </div>
       </div>
     </section>
     <div class="nogeo" id="nogeoBox" style="display:none">
@@ -403,6 +458,7 @@ const S = {
   sims: [],                 // งานจำลองแยกขาดจากงานจริง ห้ามส่งเข้าฟังก์ชันเขียน
   paused: false,
   simRows: [], simSerial: 0, simLoadToken: 0, simDayToken: 0,
+  simTab: 'jobs', simFocus: '',
   simSheet: 'half', simDayCache: {}, simDayQueue: [], simDayActive: 0, simCacheToken: 0,
   simLoaded: false, simChoice: null, simAssignmentDate: '', simDayReady: false,
   jobs: {},                 // key = kind:id → job
@@ -1673,6 +1729,7 @@ function simSetSheet(simLevel){
   S.simSheet = simLevel;
   ['peek','half','full'].forEach(sim => $('simBox').classList.toggle('sim-' + sim, sim === simLevel));
   $('simBody').hidden = simLevel === 'peek';
+  $('simTabs').hidden = simLevel === 'peek';
 }
 function simFold(){ simSetSheet(({ peek:'half', half:'full', full:'peek' })[S.simSheet] || 'half'); }
 function simClose(){
@@ -1736,7 +1793,7 @@ function simInput(simId, simField, simValue){
   const simJob = S.sims.find(sim => sim.id === simId);
   if (simJob){ simJob[simField] = simValue; simJob.recTeam = ''; }
   if (S.simChoice && S.simChoice.id === simId) S.simChoice = null;
-  simRenderBox();
+  simUpdateInput(simRow);
 }
 function simScoreLive(simId, simValue){
   const simRow = S.simRows.find(sim => sim.id === simId);
@@ -1752,8 +1809,17 @@ function simScoreLive(simId, simValue){
   const simElement = $('simRows').querySelector('[data-row="' + CSS.escape(simId) + '"]');
   if (!simElement) return;
   simElement.querySelector('.sim-sugg-btn').disabled = !simScoreOk(simValue);
-  simElement.querySelector('.sim-status').textContent = simScoreOk(simValue) ? '' : 'กรอกคะแนน 1–10 ทีละ 0.5 ก่อนหาวันแนะนำ';
-  simElement.querySelector('.sim-sugg-list').textContent = '';
+  simUpdateInput(simRow);
+}
+function simUpdateInput(simRow){
+  const simElement = $('simRows').querySelector('[data-row="' + CSS.escape(simRow.id) + '"]');
+  if (simElement){
+    simElement.querySelector('.sim-sugg-btn').disabled = !simScoreOk(simRow.score);
+    simElement.querySelector('.sim-status').textContent = simScoreOk(simRow.score) ? '' : 'กรอกคะแนน 1–10 ทีละ 0.5 ก่อนหาวันแนะนำ';
+    simElement.querySelector('.sim-dates-link').hidden = true;
+  }
+  const simDates = $('simDatesPane').querySelector('[data-row="' + CSS.escape(simRow.id) + '"]');
+  if (simDates) simDates.querySelector('.sim-sugg-list').textContent = '';
   simRenderSelected();
 }
 async function simSuggest(simId){
@@ -1777,6 +1843,9 @@ async function simSuggest(simId){
     if (!simResult || !simResult.ok) throw new Error((simResult && simResult.error) || 'หาวันแนะนำไม่สำเร็จ');
     const simSuggestions = Array.isArray(simResult.suggestions) ? simResult.suggestions : [];
     simRow.suggestions = simSuggestions.filter(sim => sim && simDateKey(sim.dateKey));
+    S.simTab = 'dates';
+    $('simBody').scrollTop = 0;
+    S.simFocus = simId;
     simPrefetchDays(simRow, simRequest);
     simRow.message = simRow.suggestions.length !== simSuggestions.length
       ? 'ข้ามวันแนะนำที่รูปแบบหรือวันที่ไม่ถูกต้อง' : (simRow.suggestions.length ? '' : 'ไม่พบวันแนะนำ — เลือกวันเองได้');
@@ -1793,6 +1862,9 @@ async function simChooseDate(simId, simValue, simIndex){
   const simDate = simSuggestion ? simDateKey(simSuggestion.dateKey) : simValidYmd(simValue);
   if (!simDate){ simRow.message = 'วันที่ไม่ถูกต้อง กรุณาเลือกใหม่'; simUpdateCompare(simRow); return; }
   S.simChoice = { id:simId, date:simDate, suggestion:simSuggestion };
+  S.simTab = 'teams';
+  S.simFocus = simId;
+  simRenderTabs();
   if (window.matchMedia('(max-width:760px)').matches) simSetSheet('peek');
   S.simAssignmentDate = '';
   S.date = simDate;
@@ -1940,10 +2012,15 @@ function simRenderSelected(){
   const sim = simRows[simIndex];
   const simButton = (simStep, simText) => '<button class="btn" data-sim="' + esc(simChoice.id) + '" data-index="' + esc(simIndex + simStep) + '" onclick="simChooseDate(this.dataset.sim,\'\',this.dataset.index)"' +
     (simIndex + simStep < 0 || simIndex + simStep >= simRows.length ? ' disabled' : '') + '>' + esc(simText) + '</button>';
-  simBar.innerHTML = (sim ? simButton(-1, '◀') : '') + '<span>' + esc(simShortDate(simChoice.date) + (sim ? (simIndex === 0 ? ' ⭐' : '') + ' · ' + (sim.team || 'ยังไม่มีทีมแนะนำ') + ' · ' + simKmText(simRow, sim) + ' (' + (simIndex + 1) + '/' + simRows.length + ')' : '')) + '</span>' + (sim ? simButton(1, '▶') : '');
+  // เปลี่ยนทีมเองในแท็บ ③ → แถบต้องบอกทีมที่เลือกจริง + กม.ของทีมนั้น (ไม่ใช่ทีมที่ระบบแนะนำ — เคยทำให้อ่านผิด)
+  const simJob = S.sims.find(x => x.id === simChoice.id);
+  const simOwn = simJob && simJob.team && (!sim || simJob.team !== sim.team);
+  const simTeamText = simOwn ? simJob.team + ' (เลือกเอง) · +' + simExtraKm(simJob, simJob.team).toFixed(1) + ' กม.'
+    : sim ? (sim.team || 'ยังไม่มีทีมแนะนำ') + ' · ' + simKmText(simRow, sim) : '';
+  simBar.innerHTML = (sim ? simButton(-1, '◀') : '') + '<span>' + esc(simShortDate(simChoice.date) + (sim && simIndex === 0 ? ' ⭐' : '') + (simTeamText ? ' · ' + simTeamText : '') + (sim ? ' (' + (simIndex + 1) + '/' + simRows.length + ')' : '')) + '</span>' + (sim ? simButton(1, '▶') : '');
 }
 function simUpdateCompare(simRow){
-  const simElement = $('simRows').querySelector('[data-row="' + CSS.escape(simRow.id) + '"]');
+  const simElement = $('simDatesPane').querySelector('[data-row="' + CSS.escape(simRow.id) + '"]');
   const simList = simElement && simElement.querySelector('.sim-sugg-list');
   if (simList) simList.innerHTML = simCompareHtml(simRow);
   simRenderSelected();
@@ -2007,7 +2084,7 @@ function simRenderBox(){
     const simGeo = jobGeo(simRow.job);
     let simHtml = '<div class="sim-row" data-row="' + esc(simRow.id) + '"><div class="sim-job-head"><label><input type="checkbox" data-sim="' + esc(simRow.id) + '"' +
       (simRow.selected ? ' checked' : '') + ' onchange="simSelect(this.dataset.sim,this.checked)"><span class="sim-job-name">' + esc(simRow.job.name || simRow.job.id) +
-      '</span></label><span class="sim-job-status">' + esc(({ done:'✓ วัดแล้ว', working:'กำลังวัด' }[simRow.job.status] || 'รอคิว') + (simGeo ? '' : ' ⚠')) +
+      '</span></label><span class="sim-job-status ' + (!simGeo ? 'sim-missing' : simRow.job.status === 'done' ? 'sim-done' : '') + '">' + esc(!simGeo ? '⚠ ไม่มีพิกัด' : ({ done:'✓ วัดแล้ว', working:'กำลังวัด' }[simRow.job.status] || 'รอคิว')) +
       '</span></div><div class="sim-address" title="' + esc((simRow.job.address || '') + ' · ' + (simGeo ? simGeo.lat.toFixed(6) + ', ' + simGeo.lng.toFixed(6) : 'ไม่มีพิกัด')) + '">' + esc(simRow.job.address) + '</div>';
     if (simRow.selected){
       simHtml += '<div class="sim-controls"><label>' + esc('คะแนน') + ' <input type="number" required min="1" max="10" step="0.5" value="' + esc(simRow.score) +
@@ -2017,32 +2094,83 @@ function simRenderBox(){
         '<button class="btn sim-sugg-btn" data-sim="' + esc(simRow.id) + '" onclick="simSuggest(this.dataset.sim)"' +
         (simRow.busy || !simScoreOk(simRow.score) ? ' disabled' : '') + '>' + esc('📅 หาวัน') + '</button></div>' +
         '<div class="sim-hint sim-status" role="status">' + esc(!simScoreOk(simRow.score) ? 'กรอกคะแนน 1–10 ทีละ 0.5 ก่อนหาวันแนะนำ' : simRow.message) + '</div>';
-      simHtml += '<div class="sim-sugg-list">' + simCompareHtml(simRow) + '</div>';
-      simHtml += '<label>' + esc('หรือพิมพ์วันเอง') + ' <input type="date" data-sim="' + esc(simRow.id) +
-        '" value="' + esc(S.simAssignmentDate === S.date ? S.date : '') +
-        '" onchange="simChooseDate(this.dataset.sim,this.value)"></label>';
+      simHtml += '<button class="sim-link sim-dates-link" data-sim="' + esc(simRow.id) + '" onclick="simSwitchTab(\'dates\',this.dataset.sim)"' +
+        (simRow.suggestions.length ? '' : ' hidden') + '>' + esc('ดู ' + simRow.suggestions.length + ' วันแนะนำ →') + '</button>';
     }
     return simHtml + '</div>';
   }).join('');
-  $('simAssignments').innerHTML = S.sims.map(sim => '<div class="sim-row"><b>' + esc('★ จำลอง · ' + sim.name) +
-    '</b><label>เลือกทีมช่าง <select data-sim="' + esc(sim.id) + '" onchange="simSetTeam(this.dataset.sim,this.value)">' +
-    '<option value="">ยังไม่เลือกทีม</option>' + simTeams().map(simTeam => '<option value="' + esc(simTeam) + '"' +
-      (sim.team === simTeam ? ' selected' : '') + '>' + esc(simTeam + ' (+' + simExtraKm(sim,simTeam).toFixed(1) + ' กม.)') + '</option>').join('') +
-    '</select></label>' + (sim.recTeam ? '<div class="sim-hint">' + esc('⭐ ระบบแนะนำ: ' + sim.recTeam) + '</div>' : '') +
-    '<button class="btn" data-sim="' + esc(sim.id) + '" onclick="simOpen(this.dataset.sim)">ดูหมุด</button></div>').join('');
+  simRenderDates();
+  simRenderTeams();
+  simRenderTabs();
+}
+function simSwitchTab(simTab, simId){
+  if (!['jobs','dates','teams'].includes(simTab)) return;
+  S.simTab = simTab;
+  if (simId) S.simFocus = simId;
+  simRenderDates();
+  simRenderTeams();
+  simRenderTabs();
+  $('simBody').scrollTop = 0;
+}
+function simRenderTabs(){
+  const simSelected = S.simRows.filter(sim => sim.selected);
+  if (!simSelected.some(sim => sim.id === S.simFocus)) S.simFocus = simSelected.length ? simSelected[0].id : '';
+  ['jobs','dates','teams'].forEach(simTab => {
+    const simName = simTab[0].toUpperCase() + simTab.slice(1);
+    $('sim' + simName + 'Pane').hidden = S.simTab !== simTab;
+    $('simTab' + simName).setAttribute('aria-selected', String(S.simTab === simTab));
+  });
+  $('simJobsCount').textContent = simSelected.length;
+  $('simTeamsCount').textContent = S.sims.length;
+}
+function simRenderDates(){
+  const simRows = S.simRows.filter(sim => sim.selected);
+  if (!simRows.some(sim => sim.id === S.simFocus)) S.simFocus = simRows.length ? simRows[0].id : '';
+  const simRow = simRows.find(sim => sim.id === S.simFocus);
+  if (!simRow){ $('simDatesPane').innerHTML = '<p class="sim-hint">' + esc('ติ๊กงานในแท็บ ① ก่อน') + '</p>'; return; }
+  const simChips = simRows.length > 1 ? '<div class="sim-chips">' + simRows.map(sim =>
+    '<button class="btn" data-sim="' + esc(sim.id) + '" aria-pressed="' + esc(sim.id === S.simFocus) + '" title="' + esc(sim.job.name || sim.job.id) +
+    '" onclick="simSwitchTab(\'dates\',this.dataset.sim)">' + esc(sim.job.name || sim.job.id) + '</button>').join('') + '</div>' : '';
+  $('simDatesPane').innerHTML = simChips + '<div data-row="' + esc(simRow.id) + '"><h4 class="sim-section-title">' + esc(simRow.job.name || simRow.job.id) +
+    '</h4><div class="sim-sugg-list">' + simCompareHtml(simRow) + '</div>' +
+    (!simRow.suggestions.length ? '<p class="sim-hint">' + esc(simRow.message || 'ยังไม่ได้หาวันแนะนำ') + '</p><button class="sim-link" onclick="simSwitchTab(\'jobs\')">' + esc('ไปใส่คะแนน') + '</button>' : '') +
+    '<label class="sim-manual">' + esc('หรือพิมพ์วันเอง') + ' <input type="date" data-sim="' + esc(simRow.id) +
+    '" value="' + esc(S.simAssignmentDate === S.date ? S.date : '') + '" onchange="simChooseDate(this.dataset.sim,this.value)"></label></div>';
+}
+function simRenderTeams(){
+  $('simAssignments').innerHTML = S.sims.length ? S.sims.map(sim => {
+    const simOptions = simTeams().map(simTeam => ({ team:simTeam, km:simExtraKm(sim, simTeam) })).sort((simA,simB) => simA.km - simB.km);
+    return '<div class="sim-row"><div class="sim-assignment-head"><b>' + esc('★ ' + sim.name) + '</b><button class="sim-link" data-sim="' + esc(sim.id) +
+      '" onclick="simOpen(this.dataset.sim)">' + esc('📍 ดูหมุด') + '</button></div><div role="radiogroup" aria-label="' + esc('เลือกทีม · ' + sim.name) + '">' +
+      simOptions.map(simOption => '<label class="sim-team-option' + (sim.team === simOption.team ? ' sim-team-selected' : '') + '" style="--sim-color:' + esc(teamColor(simOption.team)) +
+        '"><input type="radio" name="' + esc('simTeam-' + sim.id) + '" data-sim="' + esc(sim.id) + '" value="' + esc(simOption.team) + '"' +
+        (sim.team === simOption.team ? ' checked' : '') + ' onchange="simSetTeam(this.dataset.sim,this.value)"><span class="sim-team-dot">●</span><span class="sim-team-name">' + esc(simOption.team) +
+        (sim.recTeam === simOption.team ? ' <span class="sim-team-rec">' + esc('⭐แนะนำ') + '</span>' : '') + '</span><span class="sim-team-km">' + esc('+' + simOption.km.toFixed(1) + ' กม.') + '</span></label>').join('') +
+      '</div><button class="sim-link" data-sim="' + esc(sim.id) + '" onclick="simSetTeam(this.dataset.sim,\'\')" aria-pressed="' + esc(!sim.team) + '">' + esc('ยังไม่เลือกทีม') + '</button></div>';
+  }).join('') : '<p class="sim-hint">' + esc('เลือกวันในแท็บ ② ก่อน · งานที่ไม่มีพิกัดวางบนแผนที่ไม่ได้') + '</p>';
   const simSummaryTeams = S.sims.length ? simTeams().filter(simTeam =>
     S.sims.some(sim => sim.team === simTeam) || Object.values(S.jobs).some(sim => sim.team === simTeam)) : [];
-  $('simSummary').innerHTML = (S.sims.length ? '<p>' + esc('ระยะเส้นตรงโดยประมาณ · วันที่ ' + S.date +
-    (S.simDayReady ? '' : ' · ข้อมูลงานวันนี้ยังโหลดไม่ครบ')) + '</p>' : '') +
+  $('simSummary').innerHTML = S.sims.length ? '<h4 class="sim-section-title">' + esc('สรุป ' + simShortDate(S.date) + ' (ระยะเส้นตรงโดยประมาณ)') +
+    '</h4><table class="sim-summary-table"><thead><tr>' + ['ทีม','งาน','ระยะรวม','+จำลอง'].map(sim => '<th scope="col">' + esc(sim) + '</th>').join('') + '</tr></thead><tbody>' +
     simSummaryTeams.map(simTeam => {
       const simBase = simDistance(simRoute(simTeam, '', false).seq);
       const simTotal = simDistance(simRoute(simTeam, '', true).seq);
-      return '<p>' + esc(simTeam + ': งานจริง ' + Object.values(S.jobs).filter(sim => sim.team === simTeam).length +
-        ' + จำลอง ' + S.sims.filter(sim => sim.team === simTeam).length + ' · ระยะรวมประมาณ ' + simTotal.toFixed(1) +
-        ' กม. (+' + Math.max(0,simTotal - simBase).toFixed(1) + ' กม. จากงานจำลอง)') + '</p>';
-    }).join('') + (S.sims.length && S.simChoice && S.simChoice.date === S.date ?
-      '<p>' + esc('ภาระจากวันแนะนำ: ' + simLoadText(S.simChoice.suggestion)) + '</p>' : '');
+      const simExtra = Math.max(0,simTotal - simBase);
+      return '<tr><td><span style="color:' + esc(teamColor(simTeam)) + '">●</span> ' + esc(simTeam) + '</td><td>' +
+        esc(Object.values(S.jobs).filter(sim => sim.team === simTeam).length + ' + ★' + S.sims.filter(sim => sim.team === simTeam).length) + '</td><td>' +
+        esc(simTotal.toFixed(1) + ' กม.') + '</td><td>' + esc(simExtra ? '+' + simExtra.toFixed(1) : '–') + '</td></tr>';
+    }).join('') + '</tbody></table>' + simLoadBars(S.simChoice && S.simChoice.date === S.date ? S.simChoice.suggestion : null) +
+    (S.simDayReady ? '' : '<p class="sim-warning">' + esc('ข้อมูลงานวันนี้ยังโหลดไม่ครบ') + '</p>') : '';
 }
+function simLoadBars(simSuggestion){
+  if (!simSuggestion || !Array.isArray(simSuggestion.perTeamLoad)) return '';
+  return '<div class="sim-load-bars">' + simSuggestion.perTeamLoad.map(sim => {
+    const simPct = Number(sim.cap) > 0 ? Math.min(100, Math.max(0, Number(sim.load) / Number(sim.cap) * 100)) : 0;
+    return '<div class="sim-load-bar" style="--sim-color:' + esc(teamColor(sim.team)) + '" title="' + esc((sim.over ? 'เกินกำลัง ' : '') + (sim.backup ? 'สำรอง' : '')) + '"><span>' + esc(sim.team) +
+      '</span><span class="sim-meter"><span class="sim-meter-fill" style="width:' + esc(Number.isFinite(simPct) ? simPct : 0) + '%"></span></span><span>' + esc((sim.load ?? '–') + '/' + (sim.cap ?? '–')) + '</span></div>';
+  }).join('') + '</div>';
+}
+
 function simRefresh(){
   if (S.simPanelId && !S.openTeamName && $('panel').textContent.includes('🧪 โหมดจำลอง')) closePanel();
   S.simPanelId = '';
@@ -2053,6 +2181,8 @@ function simRefresh(){
   }
 }
 function simClear(){
+  S.simTab = 'jobs';
+  S.simFocus = '';
   S.sims = [];
   S.simChoice = null;
   S.simAssignmentDate = '';
