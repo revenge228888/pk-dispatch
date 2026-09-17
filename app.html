@@ -16664,7 +16664,10 @@ async function pkpFileDiag(woId){
     if(r.detail && r.detail.errors.length) h+=line('รายละเอียดข้อผิดพลาด',r.detail.errors.join(' · '));
     h+=line('สิ่งที่จะแก้ให้',r.fixPlan.length?r.fixPlan.join(' · '):'ไม่มีรายการที่ซ่อมอัตโนมัติได้');
     if(r.canFix) h+='<button class="btn btn-p pkp-file-fix">🔧 ซ่อมให้</button>';
+    if(r.cause==='empty' || r.cause==='bad-json') h+='<button class="btn btn-g pkp-file-versions">📜 ดูประวัติไฟล์ (กู้ข้อมูล)</button>';
     content.innerHTML=h;
+    var historyBtn=content.querySelector('.pkp-file-versions');
+    if(historyBtn) historyBtn.onclick=function(){pkpFileVersions(woId);};
     var btn=content.querySelector('.pkp-file-fix');
     if(btn) btn.onclick=async function(){
       if(!confirm('ซ่อมไฟล์ใบผลิต '+woId+'?\n'+r.fixPlan.join('\n'))) return;
@@ -16680,6 +16683,45 @@ async function pkpFileDiag(woId){
       finally{ btn.disabled=false; }
     };
   }catch(e){ content.textContent='ตรวจไฟล์ไม่สำเร็จ: '+e.message; }
+}
+
+function pkpFileRevTime_(value){
+  var date=new Date(value);
+  return value && !isNaN(date.getTime())?date.toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}):'-';
+}
+async function pkpFileVersions(woId){
+  if(!(CURRENT_USER && CURRENT_USER.role==='manager')) return;
+  var bg=document.getElementById('pkpFileDiagModal'), content=bg.querySelector('.pkp-file-diag-body');
+  content.textContent='กำลังอ่านประวัติไฟล์...';
+  var fallback='กู้อัตโนมัติไม่ได้ กรุณาเปิดไฟล์ '+woId+'.json ใน Google Drive แล้วดูประวัติเวอร์ชันด้วยตนเอง';
+  try{
+    var r=await call({action:'pk_prodFileVersions',woId:woId});
+    if(!r.ok){content.textContent=(r.error||'อ่านประวัติไฟล์ไม่สำเร็จ')+' — '+fallback;return;}
+    var h='<p><b>'+escHtml(woId)+'</b> · วันที่และเวลาไทย</p><div style="overflow-x:auto;"><table style="width:100%;"><thead><tr><th>วันที่-เวลา</th><th>ขนาด</th><th>เปิดได้ไหม</th><th>ลูกค้า</th><th>รายการ</th><th></th></tr></thead><tbody>';
+    (r.versions||[]).forEach(function(v,i){
+      var eligible=v.jsonOk && v.woIdInFile===woId;
+      h+='<tr><td>'+escHtml(pkpFileRevTime_(v.modifiedTime))+'</td><td>'+escHtml(String(v.size))+' ไบต์</td><td>'+escHtml(v.jsonOk?(eligible?'เปิดได้':'เป็นของใบอื่น'):(v.previewed?'เปิดไม่ได้':(v.size>0?'ยังไม่ได้ตรวจ':'ไฟล์ว่าง')))+'</td><td>'+escHtml(v.customerName||'-')+'</td><td>'+escHtml(v.itemCount>=0?String(v.itemCount):'-')+'</td><td>'+(eligible?'<button class="btn btn-p btn-sm pkp-file-restore" data-version="'+i+'">กู้เวอร์ชันนี้</button>':'')+'</td></tr>';
+    });
+    h+='</tbody></table></div><p>ตรวจเนื้อหาเฉพาะ 5 เวอร์ชันล่าสุดที่มีข้อมูล</p>';
+    if(!r.canRestore) h+='<p>'+escHtml(fallback)+'</p>';
+    content.innerHTML=h;
+    content.querySelectorAll('.pkp-file-restore').forEach(function(btn){
+      btn.onclick=async function(){
+        var v=r.versions[Number(btn.dataset.version)];
+        var state=r.current.cause==='empty'?'ไฟล์ปัจจุบันว่างอยู่':(r.current.cause==='bad-json'?'ไฟล์ปัจจุบันเสียอยู่':'ระบบจะตรวจไฟล์ปัจจุบันอีกครั้งก่อนกู้');
+        if(!confirm('จะเขียนข้อมูลเวอร์ชันวันที่ '+pkpFileRevTime_(v.modifiedTime)+' กลับเข้าใบ '+woId+' ('+state+')')) return;
+        var buttons=content.querySelectorAll('.pkp-file-restore');
+        buttons.forEach(function(b){b.disabled=true;});
+        try{
+          var restored=await call({action:'pk_prodFileRestore',woId:woId,revisionId:v.id});
+          if(!restored.ok){toast('❌ '+(restored.error||'กู้ข้อมูลไม่สำเร็จ'));return;}
+          delete pkpWoCache[woId]; bg.classList.remove('on');
+          toast('✅ กู้ข้อมูลใบผลิต '+woId+' สำเร็จ'); await pkpOpen(woId,true);
+        }catch(e){toast('❌ กู้ข้อมูลไม่สำเร็จ: '+e.message);}
+        finally{buttons.forEach(function(b){b.disabled=false;});}
+      };
+    });
+  }catch(e){content.textContent='อ่านประวัติไฟล์ไม่สำเร็จ: '+e.message+' — '+fallback;}
 }
 
 // ── ลบ (soft) ──
