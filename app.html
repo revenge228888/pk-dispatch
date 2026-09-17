@@ -16107,6 +16107,7 @@ async function pkpBatchApprove(){
     var r=await call({ action:'pk_prodBatchApprove', woIds:ids });
     if(!r.ok){ toast('❌ '+(r.error||'อนุมัติไม่สำเร็จ')); return; }
     var msg='✅ อนุมัติ '+r.approvedCount+' ใบ'+(r.skippedCount?(' · ข้าม '+r.skippedCount+' ใบ'):'');
+    if(r.healed) msg+=' · ซ่อมการเชื่อมไฟล์ให้แล้ว';
     toast(msg);
     if(r.skippedCount && r.skipped && r.skipped.length){
       alert('ข้าม '+r.skippedCount+' ใบ:\n\n'+r.skipped.map(function(s){return '• '+s.woId+' — '+s.reason;}).join('\n'));
@@ -16535,6 +16536,7 @@ async function pkpSave(){
     var woEl=document.getElementById('pkpWoLabel'); if(woEl)woEl.textContent=r.woId+(pkpLoadedStatus?' · '+pkpLoadedStatus:'');
     if(sv)sv.textContent='💾 บันทึกการแก้ไข';
     var _svMsg='✅ บันทึกแล้ว — '+r.woId+(r.status?' ('+r.status+')':'');
+    if(r.healed) _svMsg+=' · ซ่อมการเชื่อมไฟล์ให้แล้ว';
     if(r.equip&&r.equip.adjusted) _svMsg+=' · 📦 ปรับสต็อกตามส่วนต่าง '+r.equip.adjusted+' รายการ'+(r.equip.warnings&&r.equip.warnings.length?' ⚠ ติดลบ: '+r.equip.warnings.join(', '):'');
     if(r.equip&&r.equip.error) _svMsg+=' · ❌ ปรับสต็อกไม่สำเร็จ ('+r.equip.error+') — กด 🧾 ตรวจตัดย้อนหลัง ในคลังอุปกรณ์';
     toast(_svMsg);
@@ -16588,6 +16590,7 @@ async function pkpLoadList(){
           +'<div style="font-size:12px;color:var(--mu,#6b7a94);">ออก '+(o.issueDate||'-')+' · ติดตั้ง '+(o.installDate||'-')+' · '+o.itemCount+' รายการ · '+(o.status||'-')+'</div>'
           +(setChips?'<div>'+setChips+'</div>':'')
         +'</div>'
+        +(isMgr?'<button class="btn btn-g btn-sm" title="🔧 ตรวจไฟล์" data-wo="'+escHtml(o.woId)+'" onclick="event.stopPropagation();pkpFileDiag(this.dataset.wo)">🔧</button>':'')
         +'<button class="btn btn-g btn-sm" onclick="event.stopPropagation();pkpDelete(\''+o.woId+'\')" style="color:var(--rd,#ff453a);flex:none;">ลบ</button>'
       +'</div>';
     });
@@ -16597,12 +16600,16 @@ async function pkpLoadList(){
 }
 
 // ── เปิดใบมาแก้ ──
-async function pkpOpen(woId){
+async function pkpOpen(woId, fresh){
   if(_pkpSandbox) pkpSandboxExit();   // เปิดใบจริงระหว่างทดคำนวณ → ออกจากโหมดทดก่อน (กระดาษทดถูกจำไว้แล้ว)
   showLoad('กำลังเปิดใบผลิต...');
   try{
-    var r=await getProdGetFast(woId);
-    if(!r.ok){ toast('❌ '+(r.error||'เปิดไม่ได้')); return; }
+    var r=fresh?await call({action:'pk_prodGet',woId:woId}):await getProdGetFast(woId);
+    if(!r.ok){
+      toast('❌ '+(r.error||'เปิดไม่ได้'));
+      if(/ไฟล์/.test(r.error||'') && CURRENT_USER && CURRENT_USER.role==='manager'){ hideLoad(); await pkpFileDiag(woId); }
+      return;
+    }
     var o=r.order;
     pkpEditingWO=o.woId; pkpLoadedStatus=o.status||'';
     var set=function(id,v){var e=document.getElementById(id); if(e)e.value=v||'';};
@@ -16624,9 +16631,55 @@ async function pkpOpen(woId){
     if(o.costSnapshot) pkpShowSnapshot(o.costSnapshot);                     // แสดงราคา ณ ตอนบันทึก (ถ้ามี)
     if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
     if(window.scrollTo)window.scrollTo(0,0);
-    toast('เปิด '+o.woId+' แล้ว');
+    toast('เปิด '+o.woId+' แล้ว'+(r.healed?' · ซ่อมการเชื่อมไฟล์ให้แล้ว':'')+(r.cause==='trashed'?' · ไฟล์อยู่ในถังขยะ — กด 🔧 ตรวจไฟล์ เพื่อกู้คืน':''));
   }catch(e){ toast('❌ เชื่อมต่อไม่ได้'); }
   finally{ hideLoad(); }
+}
+
+function pkpFileCause_(cause){
+  return ({'no-id':'ไม่มีรหัสไฟล์','not-found':'หาไฟล์ไม่เจอ (อาจถูกลบ)','bad-json':'ไฟล์เสีย เปิดไม่ออก',
+    'empty':'ไฟล์ว่าง','trashed':'ไฟล์อยู่ในถังขยะ','wrong-wo':'ไฟล์ที่เจอเป็นของใบอื่น',
+    'index-missing':'ไม่พบใบผลิตในชีต','repair-failed':'ซ่อมการเชื่อมไฟล์ไม่สำเร็จ'})[cause]||'ไฟล์เปิดได้ตามปกติ';
+}
+async function pkpFileDiag(woId){
+  if(!(CURRENT_USER && CURRENT_USER.role==='manager')) return;
+  var bg=document.getElementById('pkpFileDiagModal');
+  if(!bg){ bg=document.createElement('div'); bg.id='pkpFileDiagModal'; bg.className='modal-bg'; document.body.appendChild(bg); }
+  bg.innerHTML='<div class="modal" style="padding:18px;max-width:620px;overflow-wrap:anywhere;"><h3>🔧 ตรวจไฟล์ใบผลิต</h3><div class="pkp-file-diag-body">กำลังตรวจไฟล์...</div><button class="btn btn-g" onclick="document.getElementById(\'pkpFileDiagModal\').classList.remove(\'on\')">ปิด</button></div>';
+  bg.classList.add('on');
+  var content=bg.querySelector('.pkp-file-diag-body');
+  try{
+    var r=await call({action:'pk_prodFileDiag',woId:woId});
+    if(!r.ok){ content.textContent=r.error||'ตรวจไฟล์ไม่สำเร็จ'; return; }
+    var line=function(label,value){return '<p><b>'+escHtml(label)+'</b> '+escHtml(String(value==null?'-':value))+'</p>';};
+    var fileText=function(f){return (f.id||'-')+' · แก้ล่าสุด '+(f.lastUpdated||'-')+' · '+f.size+' ไบต์ · '+(f.jsonOk?'เปิดได้':'เปิดไม่ได้')+' · '+f.itemCount+' รายการ'+(f.trashed?' · อยู่ในถังขยะ':'')+(f.cause==='wrong-wo'?' · ไฟล์ที่เจอเป็นของใบอื่น':'');};
+    var h=line('ใบผลิต',r.woId)+line('อยู่ในชีต',r.index?'พบแถวที่ '+r.index.rowIdx:'ไม่พบ')
+      +line('รหัสไฟล์ที่บันทึกไว้',r.index?(r.index.fileId||'ไม่มีรหัสไฟล์'):'-');
+    if(r.index) h+=line('ลูกค้า',r.index.customerName)+line('สถานะ',r.index.status)+(r.index.deletedAt?line('ใบถูกลบเมื่อ',new Date(r.index.deletedAt).toLocaleString('th-TH')):'');
+    h+=line('ไฟล์ตามรหัสที่บันทึก',r.file.found?fileText(r.file):'หาไฟล์ไม่เจอ');
+    h+=line('ไฟล์ชื่อเดียวกันในโฟลเดอร์',(r.candidates||[]).length+' ไฟล์');
+    (r.candidates||[]).forEach(function(f){h+=line('ไฟล์',fileText(f));});
+    h+=line('สาเหตุ',pkpFileCause_(r.cause));
+    if(r.warning) h+=line('คำเตือน',r.warning);
+    if(r.detail && r.detail.errors.length) h+=line('รายละเอียดข้อผิดพลาด',r.detail.errors.join(' · '));
+    h+=line('สิ่งที่จะแก้ให้',r.fixPlan.length?r.fixPlan.join(' · '):'ไม่มีรายการที่ซ่อมอัตโนมัติได้');
+    if(r.canFix) h+='<button class="btn btn-p pkp-file-fix">🔧 ซ่อมให้</button>';
+    content.innerHTML=h;
+    var btn=content.querySelector('.pkp-file-fix');
+    if(btn) btn.onclick=async function(){
+      if(!confirm('ซ่อมไฟล์ใบผลิต '+woId+'?\n'+r.fixPlan.join('\n'))) return;
+      btn.disabled=true;
+      try{
+        var fixed=await call({action:'pk_prodFileDiag',woId:woId,apply:true});
+        if(!fixed.ok || fixed.canFix || fixed.cause==='wrong-wo' || !fixed.applied.length){
+          toast('❌ '+(fixed.error||fixed.warning||'ข้อมูลไฟล์เปลี่ยนไป กรุณาตรวจใหม่')); await pkpFileDiag(woId); return;
+        }
+        delete pkpWoCache[woId]; bg.classList.remove('on');
+        toast(fixed.applied.join(' · ')); await pkpOpen(woId,true);
+      }catch(e){ toast('❌ เชื่อมต่อไม่ได้'); }
+      finally{ btn.disabled=false; }
+    };
+  }catch(e){ content.textContent='ตรวจไฟล์ไม่สำเร็จ: '+e.message; }
 }
 
 // ── ลบ (soft) ──
