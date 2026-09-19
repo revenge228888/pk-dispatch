@@ -8683,11 +8683,13 @@ function mtRenderSlipList_(items){
   const el = document.getElementById('mtSlipList');
   if (!el) return;
   if (!items.length){ el.style.display='none'; el.innerHTML=''; return; }
+  const t = (_myTasks || []).find(x => String(x.taskId) === String(_mtSubmitId));
+  const done = t && Array.isArray(t.slipDone) ? t.slipDone : [];
   el.style.display='block';
   el.style.marginBottom='12px';
   el.innerHTML='<div class="fl" style="margin-bottom:4px;">🧾 แนบสลิปรายยอด (กดเลือกรูปของแต่ละยอด)</div>'
     +'<div style="font-size:12px;color:#1e6f3a;background:rgba(52,199,89,.08);border:1px solid rgba(52,199,89,.3);border-radius:6px;padding:6px 10px;margin-bottom:8px;">💾 รูปแต่ละยอด<b>บันทึกทันทีเมื่อกดยืนยัน</b> (ระบบเช็คให้ว่ายอดนั้นมีคนส่งแล้วหรือยัง) · กด <b>ส่งผลงาน</b> เมื่อแนบครบ/หมดยอดที่หาได้แล้ว เพื่อปิดงานให้ผู้จัดการตรวจ</div>'
-    +items.map(x=>'<div style="padding:9px 10px;margin-bottom:7px;border:1px solid var(--bdr);border-radius:7px;"><div style="font-weight:600;margin-bottom:6px;">฿'+escHtml(slpFmtAmt(x.amount))+(x.date?' · '+escHtml(x.date):'')+(x.time?' '+escHtml(x.time):'')+'</div><input type="file" accept="image/*" onchange="mtSlipPick(this,\''+escAttr(x.id)+'\')"><span id="mtSlipSt_'+escAttr(x.id)+'" style="margin-left:7px;color:var(--mu);">—</span></div>').join('');
+    +items.map(x=>'<div style="padding:9px 10px;margin-bottom:7px;border:1px solid var(--bdr);border-radius:7px;"><div style="font-weight:600;margin-bottom:6px;">฿'+escHtml(slpFmtAmt(x.amount))+(x.date?' · '+escHtml(x.date):'')+(x.time?' '+escHtml(x.time):'')+'</div>'+ (done.indexOf(x.id) !== -1 ? '' : '<input type="file" accept="image/*" onchange="mtSlipPick(this,\''+escAttr(x.id)+'\')">')+'<span id="mtSlipSt_'+escAttr(x.id)+'" style="margin-left:7px;color:'+ (done.indexOf(x.id) !== -1 ? '#1e6f3a' : 'var(--mu)')+';">'+ (done.indexOf(x.id) !== -1 ? '💾 แนบแล้ว (บันทึกไว้แล้ว)' : '—')+'</span></div>').join('');
 }
 function mtSlipStatus_(id, msg){
   const el=document.getElementById('mtSlipSt_'+id); if(!el)return;
@@ -8719,9 +8721,14 @@ async function mtSlipPick(inp,id){
   const item=mtSlipItems_(task).find(x=>x.id===id);
   _mtCompressFile(file, async dataURL=>{
     if(_mtSubmitId!==taskId)return;
-    const choice=await slpConfirmImage_(dataURL,'ยอดที่ขอ ฿'+slpFmtAmt(item&&item.amount)+' · '+((item&&item.date)||'')+' · '+((item&&item.time)||''),{replace:true,amount:item&&item.amount});
+    const choice=await slpConfirmImage_(dataURL,'ยอดที่ขอ ฿'+slpFmtAmt(item&&item.amount)+' · '+((item&&item.date)||'')+' · '+((item&&item.time)||''),{replace:true});
     if(choice==='replace'){inp.click();return;}
-    if(choice!=='confirm'||_mtSubmitId!==taskId)return;
+    if(_mtSubmitId!==taskId)return;
+    if(choice!=='confirm'){
+      toast('⚠ ยังไม่ได้บันทึกรูปสลิป — กดแนบรูปใหม่แล้วกด "ยืนยันแนบ"');
+      mtSlipStatus_(id,'<span style="color:#B45309;">'+escHtml('⚠ เลือกรูปแล้วแต่ยังไม่ได้ยืนยัน — ยังไม่บันทึก')+'</span>');
+      return;
+    }
     _mtSlipPhotos[id]={img:dataURL,saved:false};
     mtSlipStatus_(id,'⏳ กำลังบันทึก...');
     try{
@@ -8855,7 +8862,10 @@ async function mtSubmit(){
   // ส่งเฉพาะรูปที่ยังไม่ถูกบันทึกทันที (แนบ inline สำเร็จแล้ว = อยู่ในระบบแล้ว ไม่ส่งซ้ำ)
   const slipPhotos = Object.keys(_mtSlipPhotos).filter(id=>!_mtSlipPhotos[id].saved).map(id=>({id, img:_mtSlipPhotos[id].img}));
   const _t = (_myTasks||[]).find(x=>String(x.taskId)===String(_mtSubmitId));
-  const isSlipTask = mtSlipItems_(_t).length > 0;
+  const slipItems = mtSlipItems_(_t);
+  const isSlipTask = slipItems.length > 0;
+  const missingSlips = slipItems.filter(x=>!_mtSlipPhotos[x.id] || _mtSlipPhotos[x.id].saved !== true);
+  if (missingSlips.length && !confirm('ยังไม่ได้แนบสลิป '+missingSlips.length+' ยอด ('+missingSlips.map(x=>'฿'+slpFmtAmt(x.amount)).join(' , ')+')\n\nส่งงานเลยไหม? (ยอดที่ยังไม่แนบจะยังค้างอยู่)')) return;
   if (!result && !photos.length && !slipPhotos.length && !isSlipTask){ toast('กรอกผลงานหรือแนบรูปอย่างน้อย 1 อย่าง'); return; }
   showLoad(photos.length || slipPhotos.length ? 'กำลังอัปโหลดรูปและส่ง...' : 'กำลังส่ง...');
   try {
@@ -17325,19 +17335,17 @@ async function slpMarkSelected(on, ids){
   }
 }
 function slpAttach(id){_slpAttachId=id;const inp=slpEl('slpImgInput');inp.oncancel=()=>{_slpAttachId='';};inp.click();}
-// หน้าต่างยืนยันใช้รูปที่กำลังจะบันทึกจริง ผล OCR เป็นเพียงคำเตือน
+// หน้าต่างยืนยันใช้รูปที่กำลังจะบันทึกจริง — ตรวจยอดหลังบันทึกสำเร็จ
 function slpConfirmImage_(src,label,opts){
   opts=opts||{};
   return new Promise(resolve=>{
     const m=document.createElement('div');m.className='modal-bg';m.id='slpConfirmImage'+(_slpTempSeq++);
-    m.innerHTML='<div class="modal" style="max-width:560px"><h3>'+escHtml(label)+'</h3><img src="'+escAttr(src)+'" alt="สลิปที่เลือก" style="display:block;max-width:100%;max-height:60vh;object-fit:contain;margin:auto;cursor:zoom-in"><p class="slpConfirmOcr"></p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" data-choice="confirm">✓ ยืนยันแนบ</button>'+(opts.replace?'<button type="button" data-choice="replace">เลือกรูปใหม่</button>':'')+'<button type="button" data-choice="cancel">ยกเลิก</button></div></div>';
+    m.innerHTML='<div class="modal" style="max-width:560px"><h3>'+escHtml(label)+'</h3><img src="'+escAttr(src)+'" alt="สลิปที่เลือก" style="display:block;max-width:100%;max-height:60vh;object-fit:contain;margin:auto;cursor:zoom-in"><p style="color:#B45309;">'+escHtml('⚠ ยังไม่บันทึก — กดปุ่มเขียวด้านล่างเพื่อบันทึกรูปนี้เข้าระบบ')+'</p><div style="position:sticky;bottom:0;background:var(--surf2);padding:12px;display:flex;gap:8px;flex-wrap:wrap;z-index:1"><button type="button" data-choice="confirm" style="width:100%;background:#15803d;color:#fff;border:0;border-radius:8px;padding:14px;font-size:16px;font-weight:700;cursor:pointer">'+escHtml('✓ ยืนยันแนบ (บันทึกเลย)')+'</button>'+(opts.replace?'<button type="button" class="btn" data-choice="replace">'+escHtml('เลือกรูปใหม่')+'</button>':'')+'<button type="button" class="btn" data-choice="cancel">'+escHtml('ยกเลิก')+'</button></div></div>';
     document.body.appendChild(m);m.classList.add('on');
+    const close=choice=>{m.classList.remove('on');m.remove();resolve(choice);};
     m.querySelector('img').onclick=()=>slpPreviewImage_(src);
-    m.querySelectorAll('[data-choice]').forEach(btn=>{btn.onclick=()=>{m.classList.remove('on');m.remove();resolve(btn.dataset.choice);};});
-    if(opts.amount!=null&&typeof slpOcrExtract==='function'){
-      const out=m.querySelector('.slpConfirmOcr');out.textContent='กำลังอ่านยอดในรูป…';
-      slpOcrExtract(src).then(o=>{out.textContent=o.amount==null?'อ่านยอดจากรูปไม่ได้':slpEqAmt(opts.amount,o.amount)?'✅ ยอดในรูปตรง':'⚠ ยอดในรูป ฿'+slpFmtAmt(o.amount)+' ไม่ตรง';}).catch(()=>{out.textContent='อ่านยอดจากรูปไม่ได้';});
-    }
+    m.querySelectorAll('[data-choice]').forEach(btn=>{btn.onclick=()=>close(btn.dataset.choice);});
+    m.onclick=e=>{if(e.target===m)close('cancel');};
   });
 }
 function slpPreviewImage_(src){
