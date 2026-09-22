@@ -127,7 +127,7 @@ a.sidebar-item{text-decoration:none;-webkit-user-drag:none;}   /* เมนู�
 .exp-card-foot{font-size:12px;color:var(--acc);margin-top:10px;text-align:right;}
 .exp-dt-row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--bdr);font-size:13px;}
 .exp-dt-row .k{color:var(--mu);flex-shrink:0;}
-.exp-dt-row .v{font-weight:600;text-align:right;word-break:break-word;}
+.exp-dt-row .v{font-weight:600;text-align:right;word-break:break-word;min-width:0;}
 .exp-bank-box{background:rgba(10,132,255,.08);border:1px solid rgba(10,132,255,.25);border-radius:var(--r-md);padding:10px;margin:10px 0;}
 .wt-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
 .wt{padding:10px 6px;border-radius:var(--r-md);border:1px solid var(--bdr);background:var(--bg);color:var(--mu);font-size:12px;font-weight:600;cursor:pointer;text-align:center;font-family:var(--sans);transition:all .15s;}
@@ -2821,7 +2821,7 @@ function renderOfficeShell(){
 
           <div class="fg">
             <label class="fl">รายละเอียด</label>
-            <input class="fi" id="expDetail" type="text" placeholder="ระบุรายละเอียดค่าใช้จ่าย">
+            <textarea class="fi" id="expDetail" rows="2" style="resize:vertical;" placeholder="ระบุรายละเอียดค่าใช้จ่าย"></textarea>
           </div>
 
           <div class="fg">
@@ -3578,6 +3578,7 @@ async function expenseSubmit(){
     if (!r || !r.ok){ _expPushFailed_(payload, label, (r&&r.error)||'บันทึกไม่ได้'); toast('❌ บันทึกไม่สำเร็จ — กู้คืนได้ที่หัวฟอร์ม'); return; }
     if (r.payeeAdded) _expApplyPayeeAdded_(formData);
     toast('✅ ตั้งเบิกสำเร็จ ' + r.id + (r.payeeAdded ? ' · เพิ่มผู้รับใหม่แล้ว' : ''));
+    expenseReloadActive();   // เดิมลืมรีเฟรชลิสต์ — ตั้งเบิกสำเร็จแต่หน้า "เบิกของฉัน" ไม่ขึ้นจนกว่าจะกดรีเฟรชเอง
   }).catch(e => {
     _expPushFailed_(payload, label, (e&&e.message)||'เชื่อมต่อไม่ได้');
     toast('❌ บันทึกไม่สำเร็จ — กู้คืนได้ที่หัวฟอร์ม');
@@ -3622,6 +3623,7 @@ function _expRetryFailed_(idx){
     if (!r || !r.ok){ _expPushFailed_(item.payload, item.label, (r&&r.error)||'บันทึกไม่ได้'); toast('❌ ยังส่งไม่สำเร็จ'); return; }
     if (r.payeeAdded) _expApplyPayeeAdded_(item.payload.formData);
     toast('✅ ตั้งเบิกสำเร็จ ' + r.id);
+    expenseReloadActive();
   }).catch(e => {
     _expPushFailed_(item.payload, item.label, (e&&e.message)||'เชื่อมต่อไม่ได้');
     toast('❌ ยังส่งไม่สำเร็จ');
@@ -3683,6 +3685,7 @@ function expDupConfirm(){
     if (!r || !r.ok){ _expPushFailed_(p.payload, p.label, (r&&r.error)||'บันทึกไม่ได้'); toast('❌ บันทึกไม่สำเร็จ — กู้คืนได้ที่หัวฟอร์ม'); return; }
     if (r.payeeAdded) _expApplyPayeeAdded_(p.payload.formData);
     toast('✅ ตั้งเบิกสำเร็จ ' + r.id);
+    expenseReloadActive();
   }).catch(e => {
     _expPushFailed_(p.payload, p.label, (e&&e.message)||'เชื่อมต่อไม่ได้');
     toast('❌ บันทึกไม่สำเร็จ — กู้คืนได้ที่หัวฟอร์ม');
@@ -3926,7 +3929,7 @@ function expenseCardHtml(it){
     '<div class="exp-card-cat">' + catIcon + ' ' + (it.mainCat||'') + ' · ' + (it.subType||'') + '</div>' +
     (it.payee ? '<div style="font-size:13px;font-weight:600;margin-top:4px;">👤 ' + it.payee + '</div>'
               : (it.vehicle ? '<div style="font-size:13px;margin-top:4px;">🚗 ' + it.vehicle + '</div>' : '')) +
-    '<div class="exp-card-desc">' + (it.detail||'-') + '</div>' +
+    '<div class="exp-card-desc">' + escHtml(it.detail||'-') + '</div>' +
     '<div class="exp-card-foot">' + (it.jobRef ? '🔗 ' + escHtml(it.jobRef) + ' · ' : '') + (it.invoiceUrl ? ('🧾' + (expUrlList_(it.invoiceUrl).length > 1 ? '×' + expUrlList_(it.invoiceUrl).length : '') + ' ') : '') + (it.slipUrl ? '💳 ' : '') + 'ดูรายละเอียด →</div>' +
     (CURRENT_USER.role === 'manager' && it.status === 'รออนุมัติ'
       ? '<div style="display:flex;gap:6px;margin-top:8px;">' +
@@ -4070,7 +4073,7 @@ function expenseDetailOpen(id){
     // 4. รายละเอียด
     '<div class="exp-dt-row"><span class="k">หมวด</span><span class="v">' + (it.mainCat||'-') + ' · ' + (it.subType||'-') + '</span></div>' +
     (it.jobRef ? '<div class="exp-dt-row"><span class="k">🔗 งาน</span><span class="v" style="font-family:var(--mono);">' + escHtml(it.jobRef) + '</span></div>' : '') +
-    '<div class="exp-dt-row"><span class="k">รายละเอียด</span><span class="v">' + (it.detail||'-') + '</span></div>' +
+    '<div class="exp-dt-row"><span class="k">รายละเอียด</span><span class="v" style="white-space:pre-wrap;text-align:left;">' + escHtml(it.detail||'-') + '</span></div>' +
     // 5. ยอดเงิน (เด่น)
     '<div style="text-align:center;margin:16px 0 6px;"><div style="font-size:12px;color:var(--mu);">ยอดเงิน</div>' +
       '<div style="font-size:30px;font-weight:700;color:var(--acc);">฿' + amt + '</div></div>' +
@@ -4097,7 +4100,7 @@ function expenseOwnEditOpen(id){
   const date = it.date ? new Date(it.date).toISOString().slice(0,10) : '';
   document.getElementById('expOwnEditBody').innerHTML =
     '<div class="fg"><label class="fl">วันที่</label><input class="fi" id="expOwnDate" type="date" value="'+escAttr(date)+'"></div>' +
-    '<div class="fg"><label class="fl">รายละเอียด</label><input class="fi" id="expOwnDetail" value="'+escAttr(it.detail||'')+'"></div>' +
+    '<div class="fg"><label class="fl">รายละเอียด</label><textarea class="fi" id="expOwnDetail" rows="2" style="resize:vertical;">'+escHtml(it.detail||'')+'</textarea></div>' +
     '<div class="fg"><label class="fl">ยอดเงิน</label><input class="fi" id="expOwnAmount" type="number" min="0.01" step="0.01" value="'+escAttr(it.amount)+'"></div>' +
     '<div class="fg"><label class="fl">ผู้รับเงิน</label><input class="fi" id="expOwnPayee" value="'+escAttr(it.payee||'')+'"></div>' +
     '<div style="display:flex;gap:8px;"><div class="fg" style="flex:1;"><label class="fl">ธนาคาร</label><input class="fi" id="expOwnBank" value="'+escAttr(it.payeeBank||'')+'"></div><div class="fg" style="flex:1;"><label class="fl">เลขบัญชี</label><input class="fi" id="expOwnAccount" value="'+escAttr(it.payeeAccount||'')+'"></div></div>' +
