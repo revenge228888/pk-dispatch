@@ -1950,8 +1950,9 @@ function renderOfficeShell(){
           <div class="sidebar-group">ผลิต & สต็อก</div>
           <a class="sidebar-item" data-tab="prodtrack" href="#tab=prodtrack" onclick="return pkNavTab(event,'prodtrack',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 7-8"/><path d="M17 7h4v4"/></svg></span><span class="sidebar-label">ติดตามงานผลิต</span></a>
           <a class="sidebar-item" data-tab="railstock" href="#tab=railstock" onclick="return pkNavTab(event,'railstock',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg></span><span class="sidebar-label">คลังราง</span></a>
-          <a class="sidebar-item" data-tab="equipstock" href="#tab=equipstock" onclick="return pkNavTab(event,'equipstock',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></span><span class="sidebar-label">คลังอุปกรณ์</span><span id="esMissBadge" class="exp-badge"></span></a>
-          <a class="sidebar-item" data-tab="costedit" href="#tab=costedit" onclick="return pkNavTab(event,'costedit',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9v6M18 9v6"/></svg></span><span class="sidebar-label">แก้ไขทุน</span></a>` : '')}
+          <a class="sidebar-item" data-tab="equipstock" href="#tab=equipstock" onclick="return pkNavTab(event,'equipstock',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></span><span class="sidebar-label">คลังอุปกรณ์</span><span id="esMissBadge" class="exp-badge"></span></a>` : '')}
+          <!-- 22 ก.ย. 2026: เจ้าของสั่งปิดแท็บ "แก้ไขทุน" (ดู/แก้ราคาต้นทุน) จาก office — เหลือเฉพาะ manager (ยังอยู่ในบล็อกด้านบน) -->
+          <!-- ⚠ ห้ามเพิ่มลิงก์ costedit กลับเข้าบล็อกของ office โดยไม่ถามเจ้าของก่อน (เรื่องเงิน) -->
 
                     <a class="sidebar-item" data-tab="po" href="#tab=po" onclick="return pkNavTab(event,'po',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M5 4h14l-1 8H6z"/><path d="M6 12l-2 6h16"/><circle cx="9" cy="20" r="1.4"/><circle cx="16" cy="20" r="1.4"/></svg></span><span class="sidebar-label">ใบสั่งซื้อ (PO)</span></a>
 
@@ -10864,7 +10865,10 @@ async function ceFetch(){
   }
   try{ var g=await call({action:'pk_costListPrices'}); _cePrices=(g&&g.ok)?(g.prices||[]):[]; if(!(g&&g.ok))console.warn('[cost] GAS:',g&&g.error); }catch(e){ _cePrices=[]; }
 }
-async function ceLoad(){ if(!document.getElementById('ceBody'))return; document.getElementById('ceBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; await ceFetch(); ceRender(); }
+async function ceLoad(){ if(!document.getElementById('ceBody'))return;
+  // 22 ก.ย. 2026: แท็บนี้ปิดสำหรับ office แล้ว — กันไว้อีกชั้นเผื่อเข้าทาง #tab=costedit ตรง ๆ (ลิงก์เมนูเอาออกแล้ว)
+  if(!(CURRENT_USER&&CURRENT_USER.role==='manager')){ document.getElementById('ceBody').innerHTML='<div class="loading-row">หน้านี้สำหรับผู้จัดการเท่านั้น</div>'; return; }
+  document.getElementById('ceBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; await ceFetch(); ceRender(); }
 function ceUnit(p){ var d=Number(p.divisor)||1; if(d<=0)d=1; return Math.round((Number(p.buyPrice)||0)/d*10000)/10000; }
 function ceRender(){
   if(!document.getElementById('ceBody'))return;
