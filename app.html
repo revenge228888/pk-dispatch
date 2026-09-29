@@ -752,6 +752,7 @@ tbody tr:nth-child(even){background:rgba(120,96,72,.04);}
       <div class="fg"><label class="fl">วันที่</label><input class="fi" id="jeDate" type="date"></div>
       <div class="fg"><label class="fl">ที่อยู่</label><textarea class="fi" id="jeAddr" rows="2"></textarea></div>
       <div class="fg"><label class="fl">รายการงาน</label><textarea class="fi" id="jeJob" rows="2"></textarea></div>
+      <div class="fg"><label class="fl">เลขที่ใบจอง <span style="color:var(--mu);font-weight:400;">(ให้ตรงกับใบผลิต — จับคู่สถานะได้ตรงตัว)</span></label><input class="fi" id="jeRef" autocomplete="off"></div>
       <div class="row-form">
         <div class="fg"><label class="fl">ยอด (บาท)</label><input class="fi" id="jeAmount" type="number" inputmode="decimal"></div>
         <div class="fg"><label class="fl">คะแนน</label><input class="fi" id="jeScore" type="number" inputmode="decimal"></div>
@@ -1471,17 +1472,19 @@ async function getProdGetFast(woId){
 }
 
 // Dashboard: สถานะใบผลิตต้องจับคู่ชื่อ+วันติดตั้งแบบ 1:1 เท่านั้น
-async function getJobProdFast(name, date){
+// ref = เลขที่ใบจองของงาน (tag [ref:]) — มีแล้ว server จับคู่กับ refNo ของใบผลิตก่อน (แม่นสุด) ไม่เจอค่อยใช้ชื่อ+วันที่
+async function getJobProdFast(name, date, ref){
+  ref = String(ref||'').trim();
   if (USE_SHEETS_PROD_GET && CURRENT_USER && name && date) {
     try {
-      const d = await _pkFastPost_('/job-prod', { name:name, date:date });
+      const d = await _pkFastPost_('/job-prod', { name:name, date:date, ref:ref });
       if (d && d.ok && (d.match === 'one' || d.match === 'none' || d.match === 'ambiguous')) {
         _markJobSource('sheets', d.ms); return d;
       }
       console.warn('[getJobProdFast] worker not ok, falling back to GAS:', d && d.error);
     } catch(e){ console.warn('[getJobProdFast] worker error, falling back to GAS:', e.message); }
   }
-  const _g = await call({ action:'pk_jobProdStatus', name:name, date:date }); _markJobSource('gas'); return _g;
+  const _g = await call({ action:'pk_jobProdStatus', name:name, date:date, ref:ref }); _markJobSource('gas'); return _g;
 }
 
 let USE_SHEETS_EXP = true;   // ON: เบิกจ่าย /expense-list-*
@@ -2373,6 +2376,12 @@ function renderOfficeShell(){
               <div class="fg" style="flex:1;width:100%;">
                 <label class="fl">รายการงาน</label>
                 <input class="fi" id="bkJob" type="text" placeholder="เช่น ติดตั้งมุ้งจีบ 3 ช่อง">
+              </div>
+            </div>
+            <div class="row-form" style="margin-bottom:10px;">
+              <div class="fg" style="flex:1;width:100%;">
+                <label class="fl">เลขที่ใบจอง <span style="color:var(--mu);font-weight:400;">(ไม่บังคับ — ใส่แล้วสถานะใบผลิตจะจับคู่ได้ตรงกว่า)</span></label>
+                <input class="fi" id="bkRef" type="text" autocomplete="off" placeholder="เลขเดียวกับที่จะใส่ในใบผลิต">
               </div>
             </div>
             <div class="row-form" style="margin-bottom:10px;">
@@ -5096,6 +5105,7 @@ function measToInstall(j){
   setTab('booking',btn); setBookingType('install'); setBookingMode('form');
   const put=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
   put('bkCustomer',j.name||''); put('bkAddress',j.address||j.rawAddr||''); put('bkPhone',jobTel(j.note)||''); put('bkJob',j.job||''); put('bkScore',''); put('bkAmount','');
+  put('bkRef',jobRef(j.note)||'');   // งานวัดที่มีเลขใบจองแล้ว → ติดไปงานติดตั้งด้วย (ไม่ต้องพิมพ์ซ้ำ)
   toast('🔧 ดึงข้อมูลงานวัด '+j.id+' แล้ว — กรอกคะแนนและยอดก่อนลงคิวติดตั้ง');
 }
 
@@ -5126,13 +5136,14 @@ async function submitBooking(){
     const score    = document.getElementById('bkScore').value;
     const amount   = document.getElementById('bkAmount').value;
     const team     = document.getElementById('bkTeam').value;
+    const ref      = (document.getElementById('bkRef')||{}).value ? document.getElementById('bkRef').value.trim() : '';
     if (!date || !customer) { toast('กรอก วันที่ และ ชื่อลูกค้า'); return; }
     if (score === '' || score == null) { toast('กรอกคะแนนก่อน (บังคับลงคะแนน)'); return; }
     { const _sc = Number(score); if (isNaN(_sc) || _sc < 1 || _sc > 10) { toast('คะแนนต้องอยู่ระหว่าง 1-10'); return; } }
     // ติ๊กงานกระจก → ต่อท้าย JOB ด้วย [กระจก] (ใช้เป็น flag จังหวะ2)
     const _glassChk = document.getElementById('bkGlass');
     const job2 = (_glassChk && _glassChk.checked && job.indexOf('[กระจก]') === -1) ? (job + ' [กระจก]').trim() : job;
-    Object.assign(body, { date, customer, address, phone, job: job2, score, amount, team });
+    Object.assign(body, { date, customer, address, phone, job: job2, score, amount, team, ref });
     if (_bkType === 'install' && _bkLinkedMeasureId) body.linkedMeasureId = _bkLinkedMeasureId;
   } else {
     const raw = document.getElementById('bkRawText').value.trim();
@@ -5556,6 +5567,7 @@ function clearBookingForm_impl(){
     document.getElementById('bkScore').value = '';
     document.getElementById('bkAmount').value = '';
     document.getElementById('bkTeam').value = '';
+    const _br = document.getElementById('bkRef'); if (_br) _br.value = '';
   } else {
     document.getElementById('bkRawText').value = '';
   }
@@ -9207,11 +9219,12 @@ function dashSetCalSpan(v){ _dashCalSpan=v==='week'?'week':'month'; dashCalRende
 function dashJobCard_(j, mode){
   mode=mode==='measure'?'measure':'install';
   const none=!String(j.team||'').trim(), tel=telNorm(jobTel(j.note)||''), addr=pkDashCleanAddr_(mode==='measure'?(j.address||j.rawAddr):j.rawAddr);
-  const type=mode==='measure'?'📏 งานวัด':'🔧 ติดตั้ง', flagged=String(j.note||'').indexOf('[qtmeasure]')!==-1;
+  const type=mode==='measure'?'📏 งานวัด':'🔧 ติดตั้ง', flagged=String(j.note||'').indexOf('[qtmeasure]')!==-1, ref=jobRef(j.note);
   const queue=j.sheetStatus&&j.sheetStatus!=='ยืนยันแล้ว'?'<span class="badge bp">'+escHtml(j.sheetStatus)+'</span>':'';
   const amount=mode==='measure'?'<span style="color:var(--mu);font-weight:700;">รอประเมินราคา</span>':'<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount)+'</span>';
   return '<div class="card" role="button" tabindex="0" onclick="dashJobOpen(\''+escAttr(j.id)+'\',\''+mode+'\')" onkeydown="dashJobKey_(event,\''+escAttr(j.id)+'\',\''+mode+'\')" style="padding:13px 14px;margin-bottom:10px;cursor:pointer;border-color:'+(none?'var(--rd)':'var(--bdr)')+';">'
     +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;"><div style="font-size:16px;font-weight:800;">'+escHtml(j.name||'-')+'</div><span class="badge '+(mode==='measure'?'bw':'bp')+'">'+type+'</span></div>'
+    +(ref?'<div style="margin-top:4px;font-size:12px;color:var(--mu);">🔖 ใบจอง <b style="color:var(--tx);font-family:var(--mono);">'+escHtml(ref)+'</b></div>':'')
     +(tel?'<div style="margin-top:5px;"><a href="tel:'+escAttr(tel)+'" onclick="event.stopPropagation()" style="color:var(--blu);font-weight:700;text-decoration:none;">📞 '+escHtml(telFmt(tel))+'</a></div>':'')
     +'<div style="font-size:13px;margin-top:5px;">📍 '+escHtml(addr||'-')+'</div>'
     +'<div style="font-size:13px;margin-top:5px;">🔧 '+escHtml(j.job||'-')+'</div>'
@@ -9573,6 +9586,7 @@ function jobEditOpen(id, sheet){
   document.getElementById('jeDate').value   = j.date||'';
   document.getElementById('jeAddr').value   = j.rawAddr||'';
   document.getElementById('jeJob').value    = j.job||'';
+  document.getElementById('jeRef').value    = jobRef(j.note||'');
   document.getElementById('jeAmount').value = (j.amount!=null ? j.amount : '');
   document.getElementById('jeScore').value  = (j.score!=null ? j.score : '');
   document.getElementById('jeOrder').value  = (j.orderStr!=null ? String(j.orderStr).replace(/[^0-9]/g,'') : '');
@@ -9629,6 +9643,8 @@ async function jobEditSave(){
   const phoneV = gv('jePhone');
   const curPhone = jobTel(cur.note||'');
   if (phoneV !== curPhone) payload.phone = phoneV;
+  const refV = gv('jeRef').trim();
+  if (refV !== jobRef(cur.note||'')) payload.ref = refV;   // ว่าง = ลบเลขใบจอง (server ลบ tag)
   const curAmt = (cur.amount!=null ? Number(cur.amount) : 0);
   if (amtEl.value!=='' && Number(amtEl.value) !== curAmt) payload.amount = amtEl.value;
   const curOrd = (cur.orderStr!=null ? String(cur.orderStr).replace(/[^0-9]/g,'') : '');
@@ -9853,7 +9869,9 @@ function dashJobOpen(id,mode){
   const amount=mode==='measure'?'รอประเมินราคา':'฿ '+fmt(j.amount);
   const queue=j.sheetStatus==='ยืนยันแล้ว'?'ยืนยันแล้ว':(j.sheetStatus||'รอ CF');
   if(title)title.textContent=(mode==='measure'?'📏 ':'🔧 ')+(j.name||'รายละเอียดงาน');
+  const ref=jobRef(j.note);
   let html='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;"><div><div style="font-size:18px;font-weight:800;">'+escHtml(j.name||'-')+'</div><div style="font-size:11px;color:var(--mu);margin-top:3px;">'+escHtml(j.id||'-')+(j.orderStr?' · งานที่ '+escHtml(String(j.orderStr)):'')+' · '+escHtml(j.date||'-')+'</div></div><span class="badge" style="color:'+pkDashTone_(j.status)+';background:var(--surf);border:1px solid '+pkDashTone_(j.status)+';">'+pkDashStatusLabel_(j.status)+'</span></div>'
+    +'<div style="padding:7px 0;border-bottom:1px solid var(--bdr);">🔖 เลขที่ใบจอง: '+(ref?'<b style="font-family:var(--mono);">'+escHtml(ref)+'</b>':'<span style="color:var(--mu);">ยังไม่ได้ใส่ — กด ✏️ แก้ไขงาน เพื่อเพิ่ม (จะจับคู่ใบผลิตได้ตรงกว่า)</span>')+'</div>'
     +(tel?'<div style="padding:7px 0;border-bottom:1px solid var(--bdr);">📞 <a href="tel:'+escAttr(tel)+'" style="color:var(--blu);font-weight:700;text-decoration:none;">'+escHtml(telFmt(tel))+'</a></div>':'')
     +'<div style="padding:7px 0;border-bottom:1px solid var(--bdr);display:flex;align-items:flex-start;gap:8px;"><span style="flex:1;">📍 '+escHtml(addr||'-')+'</span>'+dashMapBtn_(j)+'</div>'
     +'<div style="padding:7px 0;border-bottom:1px solid var(--bdr);">🔧 '+escHtml(j.job||'-')+'</div>'
@@ -9888,15 +9906,18 @@ function dashJobProdStep_(label,state){
 }
 function dashJobProdRender_(r,j){
   if(!r||!r.ok)return '<div style="color:var(--mu);">ตรวจสถานะใบผลิตไม่สำเร็จ</div>';
-  if(r.match==='none')return '<div style="color:var(--mu);">ไม่พบใบผลิตของลูกค้ารายนี้</div>';
+  // งานยังไม่มีเลขที่ใบจอง → แนะนำวิธีให้จับคู่ได้ตรง (ใส่เลขเดียวกันทั้งในงานนี้และช่อง "เลขที่ใบจอง" ของใบผลิต)
+  const refHint=jobRef(j&&j.note)?'':'<div style="font-size:11.5px;color:var(--mu);margin-top:6px;">💡 ใส่เลขที่ใบจองในงานนี้ (✏️ แก้ไขงาน) ให้ตรงกับช่อง "เลขที่ใบจอง" ในใบผลิต — ระบบจะจับคู่ให้ตรงตัวทันที</div>';
+  if(r.match==='none')return '<div style="color:var(--mu);">ไม่พบใบผลิตของลูกค้ารายนี้</div>'+refHint;
   if(r.match==='ambiguous'){
     // เจอหลายใบ → ไม่เดาให้ แต่ลิสต์ให้เลือกเอง (ผู้จัดการกดเปิดใบได้เลย)
     const canOpen=CURRENT_USER&&CURRENT_USER.role==='manager'&&typeof pkpOpen==='function';
-    let h='<div style="color:var(--amb);font-weight:700;margin-bottom:8px;">พบใบผลิตของลูกค้ารายนี้ '+(Number(r.count)||0)+' ใบ — เลือกใบที่ตรงกับงานนี้</div>';
+    let h='<div style="color:var(--amb);font-weight:700;margin-bottom:8px;">พบใบผลิตของลูกค้ารายนี้ '+(Number(r.count)||0)+' ใบ — เลือกใบที่ตรงกับงานนี้</div>'+refHint;
     (r.candidates||[]).forEach(function(c){
       h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid var(--bdr);font-size:12.5px;">'
         +'<b>'+escHtml(c.woId||'-')+'</b><span style="color:var(--mu);">'+escHtml(c.customerName||'-')+'</span>'
         +'<span style="color:var(--mu);">📅 '+escHtml(c.installDate||'ไม่ระบุวันติดตั้ง')+'</span>'
+        +(c.refNo?'<span style="color:var(--mu);">🔖 '+escHtml(c.refNo)+'</span>':'')
         +'<span class="badge bp">'+escHtml(c.prodStatus||'-')+'</span>'
         +(canOpen?'<button class="btn btn-g btn-sm" style="margin-left:auto;" onclick="pkpOpen(\''+escAttr(c.woId)+'\')">เปิดใบ</button>':'')
         +'</div>';
@@ -9909,8 +9930,12 @@ function dashJobProdRender_(r,j){
   let html='<div style="font-size:13px;font-weight:800;margin-bottom:9px;">สถานะใบผลิต</div><div style="display:flex;gap:5px;flex-wrap:wrap;">';
   ['ยืนยันคิว','ใบผลิต','จ่ายอุปกรณ์','ช่างรับงาน','จบงาน'].forEach((x,i)=>{html+=dashJobProdStep_(x,states[i]);});
   html+='</div><div style="font-size:12px;color:var(--mu);margin-top:10px;">ใบผลิต '+escHtml(r.woId)+' · '+escHtml(r.prodStatus||r.status||'-')+(r.rush?' · ด่วน':'')+'</div>';
+  // จับคู่จากเลขที่ใบจอง = แม่นสุด → บอกให้มั่นใจ (ห้ามตกไปโชว์คำเตือน "จับคู่จากชื่อ" ด้านล่าง)
+  if(r.via==='ref'){
+    html+='<div style="font-size:11.5px;color:var(--grn);margin-top:5px;">✓ จับคู่จากเลขที่ใบจองตรงกัน</div>';
+  }
   // จับคู่ไม่ได้เป๊ะ (ชื่อตรงแต่วันไม่ตรง / ชื่อใกล้เคียง) → บอกให้ผู้ใช้ตรวจเอง ไม่กลืนเงียบ
-  if(r.via&&r.via!=='exact'){
+  else if(r.via&&r.via!=='exact'){
     html+='<div style="font-size:11.5px;color:var(--amb);margin-top:5px;">⚠ จับคู่จากชื่อลูกค้า'+(r.via==='partial'?'ที่ใกล้เคียง':'')
       +' — ใบนี้ระบุวันติดตั้ง '+escHtml(r.installDate||'(ไม่ระบุ)')+(r.customerName?' · ชื่อในใบ: '+escHtml(r.customerName):'')+' · กรุณาตรวจว่าตรงกับงานนี้</div>';
   }
@@ -9919,7 +9944,7 @@ function dashJobProdRender_(r,j){
 }
 async function dashJobProdLoad_(j){
   const token=++_dashProdLoadToken,box=document.getElementById('dashJobProd');if(!box)return;
-  try{const r=await Promise.race([getJobProdFast(j.name,j.date),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),12000))]);if(token!==_dashProdLoadToken)return;box.innerHTML=dashJobProdRender_(r,j);}catch(e){if(token===_dashProdLoadToken)box.innerHTML='<div style="color:var(--mu);">ตรวจสถานะใบผลิตไม่สำเร็จ</div>';}
+  try{const r=await Promise.race([getJobProdFast(j.name,j.date,jobRef(j.note)),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),12000))]);if(token!==_dashProdLoadToken)return;box.innerHTML=dashJobProdRender_(r,j);}catch(e){if(token===_dashProdLoadToken)box.innerHTML='<div style="color:var(--mu);">ตรวจสถานะใบผลิตไม่สำเร็จ</div>';}
 }
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){const m=document.getElementById('dashJobModal');if(m&&m.classList.contains('on'))dashJobClose();}});
 // ── Feature 1.2: ปุ่ม toggle โชว์/ซ่อนยอดให้ tech (office เท่านั้น) บนการ์ดงานติดตั้ง ──
@@ -11790,6 +11815,8 @@ function recmPreviewHtml(e){
 function escAttr(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function jobTel(note){ var m = String(note||'').match(/\[tel:(\d{6,})\]/); return m ? m[1] : ''; }
+// เลขที่ใบจอง — tag [ref:...] ใน note (29 ก.ย. 2026 · คู่กับ pkRefTag_/pkRefFromNote_ ฝั่ง GAS) · ใช้จับคู่ใบผลิต (refNo) แบบตรงตัว
+function jobRef(note){ var m = String(note||'').match(/\[ref:([^\]]+)\]/); return m ? m[1].trim() : ''; }
 // เบอร์ที่เก็บเป็นตัวเลขในชีต (worker อ่าน UNFORMATTED_VALUE) จะทำ 0 หน้าหาย → เติมกลับ
 // มือถือไทย=10หลักขึ้นต้น 0 · บ้าน=9หลักขึ้นต้น 0 · ถ้ามา 9/8 หลักไม่ขึ้นต้น 0 = 0 หน้าหาย เติมคืน
 function telNorm(d){ d=String(d==null?'':d).replace(/\D/g,''); if(d.length===9 && d.charAt(0)!=='0') d='0'+d; else if(d.length===8 && d.charAt(0)!=='0') d='0'+d; return d; }
