@@ -8329,6 +8329,7 @@ function techSetPayMethod(m){
 // ════════════════════════════════════════
 let _outJobs = [];
 let _outSummary = { totalOutstanding: 0, count: 0 };
+let _outHidden = null;   // งานที่ไม่อยู่ในรายการ ย้อนหลัง 90 วัน (ไม่นับเข้ายอดค้างรวม) — จาก worker/GAS
 
 function outstandingInit(){ outstandingLoad(); }
 
@@ -8341,6 +8342,7 @@ async function outstandingLoad(){
     if (!r.ok){ if (w) w.innerHTML = '<div class="loading-row">' + (r.error || 'โหลดไม่ได้') + '</div>'; return; }
     _outJobs = r.jobs || [];
     _outSummary = { totalOutstanding: r.totalOutstanding || 0, count: r.count || 0 };
+    _outHidden = r.hidden || null;
     outstandingRenderCached();
   } catch(e){ if (w) w.innerHTML = '<div class="loading-row">❌ เชื่อมต่อไม่ได้</div>'; }
 }
@@ -8355,8 +8357,32 @@ function outstandingRenderCached(){
   const jobs = sf ? _outJobs.filter(j => j.payStatus === sf) : _outJobs;
   const w = document.getElementById('outList');
   if (!w) return;
-  if (!jobs.length){ w.innerHTML = '<div class="loading-row">🎉 ไม่มียอดค้าง</div>'; return; }
-  w.innerHTML = jobs.map(outCard).join('');
+  const hid = outHiddenHtml_(_outHidden);
+  if (!jobs.length){ w.innerHTML = '<div class="loading-row">🎉 ไม่มียอดค้าง</div>' + hid; return; }
+  w.innerHTML = jobs.map(outCard).join('') + hid;
+}
+
+// ── "ทำไมบางงานไม่อยู่ในรายการ" — แจกแจงงานที่ไม่ได้นับ (ดูอย่างเดียว ไม่เปลี่ยนยอดค้างรวม) ──
+function outHiddenHtml_(h){
+  if (!h || !h.notDone || !h.noPay) return '';
+  const dm = d => { const p = String(d || '').split('-'); return p.length === 3 ? (p[2] + '/' + p[1]) : escHtml(d || ''); };
+  const row = (j, tag) => '<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--bg);font-size:12.5px;">'
+      + '<div style="min-width:0;"><b>' + dm(j.date) + '</b> · ' + escHtml(j.name || '-') + ' <span style="color:var(--mu);">· ' + escHtml(j.team || '-') + ' · ' + escHtml(j.id) + '</span>'
+      + '<div style="font-size:11px;color:var(--amb);">' + tag + (j.sheetStatus && j.sheetStatus !== 'ยืนยันแล้ว' ? ' · สถานะในชีต: ' + escHtml(j.sheetStatus) : '') + '</div></div>'
+      + '<div style="font-family:var(--mono);white-space:nowrap;">฿' + fmt(j.amount) + '</div></div>';
+  const ndTag = j => j.status === 'none' ? 'ช่างยังไม่กดเริ่ม/จบงานในแอป' : 'ช่างยังไม่กดจบงานในแอป';
+  const npTag = j => j.cont ? 'กด "ต่องาน" — ยอดยังค้างอยู่ใบเดิม (ไม่ได้ย้ายไปใบใหม่)' : 'จบงานแล้ว แต่ไม่มีข้อมูลเก็บเงิน';
+  const block = (title, b, tagFn, color) => b.count
+    ? '<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:13px;"><b style="color:' + color + ';">' + title + ' ' + b.count + ' ใบ</b> · ยอดงาน ฿' + fmt(b.amount) + '</summary>'
+      + b.jobs.map(j => row(j, tagFn(j))).join('') + (b.count > b.jobs.length ? '<div style="font-size:11px;color:var(--mu);padding-top:4px;">แสดง ' + b.jobs.length + ' ใบล่าสุด</div>' : '') + '</details>'
+    : '<div style="margin-top:8px;font-size:13px;color:var(--mu);">' + title + ' — ไม่มี ✓</div>';
+  return '<div class="card" id="outHidden" style="margin-top:14px;padding:12px;border:1px dashed var(--bdr);border-radius:10px;">'
+    + '<div style="font-weight:700;">🔎 งานที่ไม่อยู่ในรายการด้านบน (ย้อนหลัง ' + (h.days || 90) + ' วัน ถึงเมื่อวาน)</div>'
+    + '<div style="font-size:11.5px;color:var(--mu);margin-top:2px;">จอนี้นับเฉพาะงานที่ช่างกดจบงานในแอปและเลือกสถานะเก็บเงินแล้ว — งานกลุ่มนี้<b>ไม่ได้รวม</b>ในยอดค้างรวม กดหัวข้อเพื่อดูรายชื่อ</div>'
+    + block('⚠️ ช่างยังไม่กดจบงาน', h.notDone, ndTag, 'var(--rd)')
+    + block('⚠️ จบงานแต่ไม่มีข้อมูลเก็บเงิน', h.noPay, npTag, 'var(--amb)')
+    + '<div style="margin-top:8px;font-size:12.5px;color:var(--mu);">✅ ยืนยันรับเงินแล้ว ' + ((h.settled && h.settled.count) || 0) + ' ใบ (฿' + fmt((h.settled && h.settled.amount) || 0) + ') · ไม่มียอดต้องเก็บ ' + ((h.noCharge && h.noCharge.count) || 0) + ' ใบ</div>'
+  + '</div>';
 }
 
 function outCard(j){
