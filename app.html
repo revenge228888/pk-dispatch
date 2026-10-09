@@ -579,6 +579,12 @@ body.pk-modal-open{position:fixed;left:0;right:0;width:100%;overflow:hidden;}
   letter-spacing:.5px;
 }
 .date-wrap .date-display.empty{color:var(--mu);font-family:var(--sans);}
+/* 📱 iOS Safari: ช่องวันที่ "ว่าง" หดเหลือเล็กมาก (ไม่ฟัง width) → แตะคำว่า "เลือกวันที่" แล้วไม่โดนช่อง = กดไม่ได้
+   บังคับขนาดเต็มเฉพาะ iOS (-webkit-touch-callout มีแค่ iOS) + dateWrapTap_ เปิดปฏิทินให้เมื่อแตะโดนกรอบ */
+@supports (-webkit-touch-callout: none){
+  .date-wrap input[type="date"]{-webkit-appearance:none;appearance:none;display:block;min-height:42px;line-height:20px;text-align:left;}
+  .date-wrap input[type="date"]::-webkit-date-and-time-value{text-align:left;min-height:20px;}
+}
 
 /* UI polish 2026-07 focus ring, table readability, misc */
 .btn:focus-visible,.sidebar-item:focus-visible,.lnk:focus-visible,.fi:focus-visible,.tab:focus-visible,input[type=checkbox]:focus-visible{outline:2px solid var(--acc);outline-offset:2px;}
@@ -13942,6 +13948,16 @@ function updateDateDisplay(input){
   span.textContent = `${p[2]}/${p[1]}/${p[0].slice(2)}`;
   span.classList.remove('empty');
 }
+// 📱 แตะตรงไหนในกรอบวันที่ก็เปิดปฏิทิน — กันกรณีช่องหด/คำว่า "เลือกวันที่" บังอยู่ (iPhone กดไม่ได้)
+function dateWrapTap_(e){
+  const w = e.target && e.target.closest ? e.target.closest('.date-wrap') : null;
+  if (!w) return;
+  const inp = w.querySelector('input[type="date"]');
+  if (!inp || e.target === inp || inp.disabled || inp.readOnly) return;
+  try { if (typeof inp.showPicker === 'function') { inp.showPicker(); return; } } catch(_) {}
+  inp.focus(); inp.click();
+}
+document.addEventListener('click', dateWrapTap_);
 function refreshAllDateDisplays(){
   document.querySelectorAll('input[type="date"]').forEach(updateDateDisplay);
 }
