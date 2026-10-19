@@ -205,6 +205,38 @@ a.sidebar-item{text-decoration:none;-webkit-user-drag:none;}   /* เมนู�
 .pkp-btn-row{justify-content:space-between;align-items:center;}
 .pkp-btn-row .btn-p{margin-left:0;}
 .pkp-btn-row .btn{white-space:nowrap;}
+/* ── ใบผลิต: การ์ดกรอกรายการ (pkpc*) + ตัวเลือกชนิด (pkpt*) — 19 ต.ค. 2026 ── */
+.pkpc{border:1px solid var(--bdr);border-radius:12px;padding:12px;margin-bottom:10px;background:var(--surf);}
+.pkpc.err{border-color:var(--rd);box-shadow:0 0 0 1px var(--rd) inset;}
+.pkpc-hd{display:flex;align-items:center;gap:6px;margin-bottom:10px;}
+.pkpc-no{font-weight:800;color:var(--acc);min-width:22px;font-size:15px;}
+.pkpc-type{flex:1;min-width:0;text-align:left;border:1px solid var(--bdr);border-radius:10px;background:var(--surf2);padding:7px 12px;cursor:pointer;font-family:inherit;color:var(--tx);display:flex;flex-direction:column;gap:1px;}
+.pkpc-type .g{font-size:11px;color:var(--mu);line-height:1.2;}
+.pkpc-type .t{font-size:14.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;}
+.pkpc-type.empty{border-style:dashed;border-color:var(--acc);}
+.pkpc-type.empty .t{color:var(--acc);}
+.pkpc-ic{width:40px;height:40px;border:1px solid var(--bdr);border-radius:10px;background:var(--surf2);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex:none;color:var(--tx);font-family:inherit;padding:0;}
+.pkpc-ic.del{color:var(--rd);}
+.pkpc-dims{display:flex;gap:8px;flex-wrap:wrap;}
+.pkpc-dim{flex:1 1 90px;max-width:160px;margin:0;}
+.pkpc-dim input{font-size:17px;font-weight:700;text-align:center;font-family:var(--mono);}
+.pkpc-dim input.bad{border-color:var(--rd);background:rgba(226,59,59,.07);}
+.pkpc-hint{font-size:11.5px;color:var(--rd);margin-top:3px;}
+.pkpc-hint:empty{display:none;}
+.pkpc-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;}
+.pkpc-row .fg{margin:0;}
+.pkpc-chip{border:1px dashed var(--bdr);border-radius:999px;padding:7px 12px;font-size:12.5px;background:transparent;cursor:pointer;color:var(--mu);font-family:inherit;text-align:left;}
+.pkpc-calc{font-size:12px;color:var(--mu);line-height:1.7;border-top:1px dashed var(--bdr);padding-top:7px;margin-top:10px;}
+.pkpt-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9000;display:flex;align-items:flex-end;justify-content:center;}
+.pkpt{background:var(--surf2);width:100%;max-width:640px;max-height:86vh;border-radius:16px 16px 0 0;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -8px 30px rgba(0,0,0,.25);}
+@media(min-width:760px){.pkpt-bg{align-items:center;}.pkpt{border-radius:16px;}}
+.pkpt-hd{padding:12px 14px;border-bottom:1px solid var(--bdr);display:flex;gap:8px;align-items:center;}
+.pkpt-body{overflow:auto;padding:4px 14px 20px;-webkit-overflow-scrolling:touch;}
+.pkpt-g{font-size:12px;font-weight:700;color:var(--mu);margin:14px 0 6px;}
+.pkpt-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;}
+.pkpt-it{border:1px solid var(--bdr);border-radius:10px;padding:10px;background:#fffdf9;cursor:pointer;text-align:left;font-family:inherit;font-size:14px;font-weight:700;color:var(--tx);line-height:1.3;}
+.pkpt-it.on{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc) inset;}
+.pkpt-it small{display:block;font-weight:400;color:var(--mu);font-size:11px;margin-top:2px;}
 .fg{display:flex;flex-direction:column;gap:4px;}
 .fl{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;}
 .btn{padding:8px 16px;border-radius:var(--r-md);border:none;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all .15s;white-space:nowrap;}
@@ -16596,8 +16628,25 @@ function pkpSandboxUiApply(){
 }
 
 // ── items CRUD ──
-function pkpAddItem(){ pkpItems.push(pkpBlankItem()); pkpRenderRows(); pkpAutosave(); }
-function pkpDelItem(i){ pkpItems.splice(i,1); if(!pkpItems.length)pkpItems.push(pkpBlankItem()); pkpRenderRows(); pkpAutosave(); }
+function pkpAddItem(){
+  pkpItems.push(pkpBlankItem()); pkpRenderRows(); pkpAutosave();
+  var i=pkpItems.length-1, c=document.getElementById('pkpCard'+i); if(c&&c.scrollIntoView) c.scrollIntoView({block:'center',behavior:'smooth'});
+  pkpTypePick(i);   // ชุดใหม่ → เปิดตัวเลือกชนิดให้เลย
+}
+function pkpDelItem(i){
+  var it=pkpItems[i]; if(!it) return;
+  var has=!!(it.type||it.w||it.h||it.wl||it.wr||it.note);
+  if(has && !confirm('ลบรายการที่ '+(i+1)+(it.type?' ('+pkpShortType_(it.type)+')':'')+' ?')) return;
+  pkpItems.splice(i,1); if(!pkpItems.length)pkpItems.push(pkpBlankItem()); pkpRenderRows(); pkpAutosave();
+}
+// คัดลอกชุด → แทรกต่อท้ายชุดเดิม (บานซ้ำ กดแล้วแก้เฉพาะที่ต่าง) · ไม่คัดลอกการดึงชุดค้าง stock (ของชิ้นเดียวกันห้ามนับสองชุด)
+function pkpDupItem(i){
+  var it=pkpItems[i]; if(!it) return;
+  var c=JSON.parse(JSON.stringify(it)); delete c.lsCovered; delete c.lsUsedDim; delete c._showColor;
+  pkpItems.splice(i+1,0,c); pkpRenderRows(); pkpAutosave();
+  var el=document.getElementById('pkpCard'+(i+1)); if(el&&el.scrollIntoView) el.scrollIntoView({block:'center',behavior:'smooth'});
+  toast('⧉ คัดลอกเป็นรายการที่ '+(i+2)+' แล้ว — แก้เฉพาะที่ต่างได้เลย');
+}
 function pkpAllTypes(){ var a=[]; pkpTYPES.forEach(function(g){ a=a.concat(g.items); }); return a; }
 function pkpValidType(v){ return pkpAllTypes().indexOf(v)>=0; }
 // ── ลูกศรอัตโนมัติตามรูปแบบ (เฉพาะมุ้งจีบ · ตั้งให้ตอนเลือกชนิด แต่ยังกดปุ่มวนแก้ได้อิสระ) ──
@@ -16630,41 +16679,139 @@ function pkpOnField(i,field,val,el){   // ตัวเลข → คำนวณ
 }
 function pkpOnNoReq(i,checked){ pkpItems[i].noReq=!checked; pkpRenderRows(); pkpAutosave(); }   // ติ๊กเบิก/ไม่เบิก → re-render ให้ป้าย+สีอัปเดตทันที (checkbox ไม่ต้องรักษา focus)
 
-// ── render การ์ดทุกรายการ ──
+// ── render การ์ดทุกรายการ (ปรับ UI กรอกข้อมูล 19 ต.ค. 2026 — เฉพาะหน้าตา/การกรอก · สูตร/ข้อมูลที่บันทึกเหมือนเดิม) ──
+//  หัวการ์ด: ปุ่มเลือกชนิด (เปิดตัวเลือกแบบกลุ่ม) · ลูกศร · ⧉ คัดลอก · ✕ ลบ  |  ขนาดช่องใหญ่ + เตือนขนาดผิดปกติ + Enter ไปช่องถัดไป
+//  สีเฉพาะชุด: ซ่อนไว้หลังปุ่ม (ส่วนใหญ่ใช้สีหลัก) · เปิดค้างอัตโนมัติถ้าชุดนั้นมีสีของตัวเอง
+var PKP_DIM_MIN=20, PKP_DIM_MAX=600;   // ซม. — นอกช่วงนี้ = น่าจะพิมพ์ผิด (เตือนเท่านั้น ไม่บล็อก)
+function pkpTypeGroup_(t){ for(var i=0;i<pkpTYPES.length;i++){ if(pkpTYPES[i].items.indexOf(t)>=0) return pkpTYPES[i].g; } return ''; }
+function pkpGroupShort_(g){ return String(g||'').replace(/\s*\(.*\)\s*$/,''); }
+function pkpShortType_(t){ var s=String(t||'').replace(/^มุ้งจีบมีรางธรรมดาสลิง|^มุ้งจีบมีรางธรรมดา|^มุ้งจีบรางเตี้ย/,'').trim(); return s||String(t||''); }
+function pkpDimBad_(v){
+  var s=String(v==null?'':v).trim(); if(!s) return '';
+  var n=Number(s); if(!isFinite(n)) return 'ไม่ใช่ตัวเลข';
+  if(n<PKP_DIM_MIN) return 'น้อยผิดปกติ'; if(n>PKP_DIM_MAX) return 'มากผิดปกติ'; return '';
+}
+// ปัญหาของชุด (ช่องขนาดที่ยังว่าง/ผิดปกติ) — ใช้ไฮไลต์การ์ด + เตือนก่อนบันทึก
+function pkpItemIssues_(it){
+  if(!it||!it.type) return [];
+  var f=pkpIsSplit(it.type)?[['wl','ซ้าย'],['wr','ขวา'],['h','สูง']]:[['w','กว้าง'],['h','สูง']];
+  var out=[];
+  f.forEach(function(x){ var v=String(it[x[0]]==null?'':it[x[0]]).trim(); if(!v) out.push(x[1]+'ยังว่าง'); else { var b=pkpDimBad_(v); if(b) out.push(x[1]+' '+v+' '+b); } });
+  return out;
+}
+function pkpDimMark_(el){
+  if(!el) return;
+  var b=pkpDimBad_(el.value); el.classList.toggle('bad',!!b);
+  var h=el.parentNode&&el.parentNode.querySelector('.pkpc-hint'); if(h) h.textContent=b?('⚠ '+b):'';
+  var card=el.closest&&el.closest('.pkpc'); if(card) card.classList.toggle('err',!!card.querySelector('input.bad'));
+}
+function pkpDimKey_(e,el){   // Enter = ไปช่องขนาดถัดไป (ช่องสุดท้าย → ปิดคีย์บอร์ด)
+  if(e.key!=='Enter') return;
+  e.preventDefault();
+  var card=el.closest('.pkpc'); if(!card) return;
+  var ins=[].slice.call(card.querySelectorAll('.pkpc-dims input')); var k=ins.indexOf(el);
+  if(k>=0 && k<ins.length-1){ ins[k+1].focus(); ins[k+1].select(); } else el.blur();
+}
+function pkpShowColor(i){ if(!pkpItems[i]) return; pkpItems[i]._showColor=true; pkpRenderRows(); var el=document.getElementById('pkpCAlu'+i); if(el) el.focus(); }
 function pkpRenderRows(){
   var wrap=document.getElementById('pkpItemsWrap'); if(!wrap) return;
-  var dl=document.getElementById('pkpTypeList');   // เติม datalist ชนิด (ครั้งเดียว)
+  var dl=document.getElementById('pkpTypeList');   // datalist ชนิด (เผื่อจุดอื่นยังใช้)
   if(dl && !dl.children.length){ dl.innerHTML=pkpAllTypes().map(function(t){return '<option value="'+t+'"></option>';}).join(''); }
+  var q=function(s){ return String(s==null?'':s).replace(/"/g,'&quot;'); };
+  var mainAlu=(document.getElementById('pkpMainAlu')||{}).value||'', mainMesh=(document.getElementById('pkpMainMesh')||{}).value||'';
   var html='';
   pkpItems.forEach(function(it,i){
     var sp=pkpIsSplit(it.type);
-    // ช่องขนาด
+    var cls=function(f){ return 'fi'+(pkpDimBad_(it[f])?' bad':''); };
+    var hint=function(f){ var b=pkpDimBad_(it[f]); return '<div class="pkpc-hint">'+(b?'⚠ '+b:'')+'</div>'; };
+    var ev=' type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off" onblur="pkpDimMark_(this)" onkeydown="pkpDimKey_(event,this)"';
     var dims = sp
-      ? '<div class="fg" style="width:78px"><label class="fl">ซ้าย(ซม.)</label><input class="fi" type="text" inputmode="decimal" value="'+(it.wl||'')+'" oninput="pkpOnField('+i+',\'wl\',this.value,this)"></div>'
-       +'<div class="fg" style="width:78px"><label class="fl">ขวา(ซม.)</label><input class="fi" type="text" inputmode="decimal" value="'+(it.wr||'')+'" oninput="pkpOnField('+i+',\'wr\',this.value,this)"></div>'
-       +'<div class="fg" style="width:78px"><label class="fl">สูง(ซม.)</label><input class="fi" type="text" inputmode="decimal" value="'+(it.h||'')+'" oninput="pkpOnField('+i+',\'h\',this.value,this)"></div>'
-      : '<div class="fg" style="width:90px"><label class="fl">กว้าง(ซม.)</label><input class="fi" type="text" inputmode="decimal" value="'+(it.w||'')+'" oninput="pkpOnField('+i+',\'w\',this.value,this)"></div>'
-       +'<div class="fg" style="width:90px"><label class="fl">สูง(ซม.)</label><input class="fi" type="text" inputmode="decimal" value="'+(it.h||'')+'" oninput="pkpOnField('+i+',\'h\',this.value,this)"></div>';
-    html+='<div class="pkp-card" style="border:1px solid var(--line,#2a3344);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--surf,#171d27);">'
-      +'<div class="row-form" style="align-items:flex-end;gap:8px;margin-bottom:8px;">'
-        +'<div style="font-weight:700;color:var(--acc,#B5653F);min-width:24px;">'+(i+1)+'.</div>'
-        +'<div class="fg" style="flex:1;min-width:200px;"><label class="fl">รายการ</label><input class="fi" list="pkpTypeList" value="'+(it.type||'').replace(/"/g,'&quot;')+'" placeholder="พิมพ์ค้น/เลือกชนิด" onchange="pkpOnType('+i+',this.value)"></div>'
-        +'<div class="fg" style="width:54px"><label class="fl">แบบ</label><button type="button" class="btn btn-g" id="pkpPatt'+i+'" onclick="pkpOnPatt('+i+')" style="width:100%;font-size:18px;padding:6px 0;">'+(it.patt||'→')+'</button></div>'
-        +'<button type="button" class="btn btn-g" onclick="pkpDelItem('+i+')" title="ลบ" style="color:var(--rd,#ff453a);">✕</button>'
+      ? '<div class="fg pkpc-dim"><label class="fl">ซ้าย (ซม.)</label><input class="'+cls('wl')+'" id="pkpD'+i+'_wl"'+ev+' value="'+q(it.wl)+'" oninput="pkpOnField('+i+',\'wl\',this.value,this);pkpDimMark_(this)">'+hint('wl')+'</div>'
+       +'<div class="fg pkpc-dim"><label class="fl">ขวา (ซม.)</label><input class="'+cls('wr')+'" id="pkpD'+i+'_wr"'+ev+' value="'+q(it.wr)+'" oninput="pkpOnField('+i+',\'wr\',this.value,this);pkpDimMark_(this)">'+hint('wr')+'</div>'
+       +'<div class="fg pkpc-dim"><label class="fl">สูง (ซม.)</label><input class="'+cls('h')+'" id="pkpD'+i+'_h"'+ev+' value="'+q(it.h)+'" oninput="pkpOnField('+i+',\'h\',this.value,this);pkpDimMark_(this)">'+hint('h')+'</div>'
+      : '<div class="fg pkpc-dim"><label class="fl">กว้าง (ซม.)</label><input class="'+cls('w')+'" id="pkpD'+i+'_w"'+ev+' value="'+q(it.w)+'" oninput="pkpOnField('+i+',\'w\',this.value,this);pkpDimMark_(this)">'+hint('w')+'</div>'
+       +'<div class="fg pkpc-dim"><label class="fl">สูง (ซม.)</label><input class="'+cls('h')+'" id="pkpD'+i+'_h"'+ev+' value="'+q(it.h)+'" oninput="pkpOnField('+i+',\'h\',this.value,this);pkpDimMark_(this)">'+hint('h')+'</div>';
+    var hasBad=['w','wl','wr','h'].some(function(f){ return !!pkpDimBad_(it[f]); });
+    var grp=pkpGroupShort_(pkpTypeGroup_(it.type));
+    var typeBtn='<button type="button" class="pkpc-type'+(it.type?'':' empty')+'" onclick="pkpTypePick('+i+')" title="'+q(it.type||'เลือกชนิด')+'">'
+      +(it.type?'<span class="g">'+(grp||'ชนิด')+'</span><span class="t">'+pkpShortType_(it.type)+'</span>':'<span class="g">รายการ</span><span class="t">แตะเพื่อเลือกชนิด ▾</span>')+'</button>';
+    var showColor=!!(it.cAlu||it.cMesh||it._showColor);
+    var colorRow = showColor
+      ? '<div class="pkpc-row">'
+        +'<div class="fg" style="flex:1 1 130px;max-width:200px;"><label class="fl">สีอลู (ว่าง=ตามหลัก)</label><input class="fi" id="pkpCAlu'+i+'" type="text" list="pkpColorList" value="'+q(it.cAlu)+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cAlu\',this.value)"></div>'
+        +'<div class="fg" style="flex:1 1 130px;max-width:200px;"><label class="fl">สีผ้ามุ้ง (ว่าง=ตามหลัก)</label><input class="fi" type="text" list="pkpColorList" value="'+q(it.cMesh)+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cMesh\',this.value)"></div>'
+        +'</div>'
+      : '<div class="pkpc-row"><button type="button" class="pkpc-chip" onclick="pkpShowColor('+i+')">🎨 สี: ตามสีหลัก'+((mainAlu||mainMesh)?' ('+q(mainAlu||'-')+' / '+q(mainMesh||'-')+')':'')+' · <b>เปลี่ยนเฉพาะชุดนี้</b></button></div>';
+    html+='<div class="pkp-card pkpc'+(hasBad?' err':'')+'" id="pkpCard'+i+'">'
+      +'<div class="pkpc-hd">'
+        +'<div class="pkpc-no">'+(i+1)+'.</div>'
+        +typeBtn
+        +'<button type="button" class="pkpc-ic" id="pkpPatt'+i+'" onclick="pkpOnPatt('+i+')" title="รูปแบบ (กดวน)" style="font-size:18px;">'+(it.patt||'→')+'</button>'
+        +'<button type="button" class="pkpc-ic" onclick="pkpDupItem('+i+')" title="คัดลอกชุดนี้">⧉</button>'
+        +'<button type="button" class="pkpc-ic del" onclick="pkpDelItem('+i+')" title="ลบ">✕</button>'
       +'</div>'
-      +'<div class="row-form" style="gap:8px;margin-bottom:8px;">'+dims
-        +'<div class="fg" style="width:120px"><label class="fl">สีอลู (ว่าง=ตามหลัก)</label><input class="fi" type="text" list="pkpColorList" value="'+String(it.cAlu||'').replace(/"/g,'&quot;')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cAlu\',this.value)"></div>'
-        +'<div class="fg" style="width:120px"><label class="fl">สีผ้ามุ้ง (ว่าง=ตามหลัก)</label><input class="fi" type="text" list="pkpColorList" value="'+String(it.cMesh||'').replace(/"/g,'&quot;')+'" placeholder="ตามสีหลัก" oninput="pkpOnField('+i+',\'cMesh\',this.value)"></div>'
-      +'</div>'
-      +'<div class="row-form" style="gap:8px;margin-bottom:8px;"><div class="fg" style="flex:1;min-width:220px"><label class="fl">หมายเหตุชุดนี้ (พิมพ์เฉพาะที่กรอก)</label><input class="fi" type="text" value="'+String(it.note||'').replace(/"/g,'&quot;')+'" placeholder="(ถ้ามี — จะโชว์ใต้รายการบนใบพิมพ์)" oninput="pkpOnField('+i+',\'note\',this.value)"></div>'
-        +'<div class="fg" style="width:auto;"><label class="fl">&nbsp;</label><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap;padding:7px 0;color:'+(it.noReq?'var(--rd,#ff453a)':'var(--tx,#e6edf6)')+';"><input type="checkbox" '+(it.noReq?'':'checked')+' onchange="pkpOnNoReq('+i+',this.checked)" style="width:16px;height:16px;cursor:pointer;">'+(it.noReq?'ไม่เบิกอุปกรณ์ (วัสดุมาเอง)':'เบิกอุปกรณ์')+'</label></div></div>'
-      +'<div id="pkpCalc'+i+'" style="font-size:12px;color:var(--mu,#6b7a94);line-height:1.7;border-top:1px dashed var(--line,#2a3344);padding-top:7px;"></div>'
+      +'<div class="pkpc-dims">'+dims+'</div>'
+      +colorRow
+      +'<div class="pkpc-row"><div class="fg" style="flex:1;min-width:200px"><label class="fl">หมายเหตุชุดนี้ (พิมพ์เฉพาะที่กรอก)</label><input class="fi" type="text" value="'+q(it.note)+'" placeholder="เช่น ห้องนอน / ประตูหลังบ้าน (โชว์ใต้รายการบนใบพิมพ์)" oninput="pkpOnField('+i+',\'note\',this.value)"></div>'
+        +'<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap;padding:7px 0;align-self:flex-end;color:'+(it.noReq?'var(--rd,#ff453a)':'var(--tx,#e6edf6)')+';"><input type="checkbox" '+(it.noReq?'':'checked')+' onchange="pkpOnNoReq('+i+',this.checked)" style="width:18px;height:18px;cursor:pointer;">'+(it.noReq?'ไม่เบิกอุปกรณ์ (วัสดุมาเอง)':'เบิกอุปกรณ์')+'</label></div>'
+      +'<div id="pkpCalc'+i+'" class="pkpc-calc"></div>'
     +'</div>';
   });
+  html+='<button type="button" class="btn btn-g" style="width:100%;margin:2px 0 6px;padding:12px;border-style:dashed;" onclick="pkpAddItem()">+ เพิ่มรายการ</button>';
   wrap.innerHTML=html;
   pkpItems.forEach(function(_,i){ pkpRecalc(i); });
   pkpRenderReqSummary();
 }
+
+// ── ตัวเลือกชนิด: แบ่งกลุ่ม · ชื่อสั้น · ค้นหาได้ · ใช้ล่าสุดอยู่บนสุด (จำในเครื่องนี้) ──
+var PKP_RECENT_KEY='pkp_recent_types';
+function pkpRecentTypes_(){ try{ var a=JSON.parse(localStorage.getItem(PKP_RECENT_KEY)||'[]'); return Array.isArray(a)?a.filter(pkpValidType).slice(0,6):[]; }catch(e){ return []; } }
+function pkpRecentPush_(t){ try{ var a=pkpRecentTypes_().filter(function(x){return x!==t;}); a.unshift(t); localStorage.setItem(PKP_RECENT_KEY,JSON.stringify(a.slice(0,6))); }catch(e){} }
+function pkpTypePick(i){
+  pkpTypePickClose();
+  var cur=(pkpItems[i]||{}).type||'';
+  var bg=document.createElement('div'); bg.className='pkpt-bg'; bg.id='pkpTypePicker'; bg.setAttribute('data-i',String(i));
+  bg.innerHTML='<div class="pkpt" role="dialog" aria-label="เลือกชนิดรายการ">'
+    +'<div class="pkpt-hd"><div style="font-weight:800;white-space:nowrap;">ชุดที่ '+(i+1)+'</div>'
+    +'<input class="fi" id="pkpTypeQ" type="text" placeholder="🔍 ค้นหาชนิด เช่น บานคู่ / เตี้ย / สลิง" autocomplete="off" style="flex:1;min-width:0;" oninput="pkpTypePickRender_()">'
+    +'<button type="button" class="pkpc-ic" onclick="pkpTypePickClose()" title="ปิด">✕</button></div>'
+    +'<div class="pkpt-body" id="pkpTypeBody"></div></div>';
+  bg.addEventListener('click',function(e){ if(e.target===bg) pkpTypePickClose(); });
+  document.body.appendChild(bg);
+  try{ pkModalScrollLock(true); }catch(e){}
+  pkpTypePickRender_(cur);
+}
+function pkpTypePickRender_(curType){
+  var bg=document.getElementById('pkpTypePicker'); if(!bg) return;
+  var i=Number(bg.getAttribute('data-i'));
+  var cur=curType!=null?curType:((pkpItems[i]||{}).type||'');
+  var qv=String((document.getElementById('pkpTypeQ')||{}).value||'').trim().replace(/\s+/g,'');
+  var match=function(t){ return !qv || t.replace(/\s+/g,'').indexOf(qv)>=0; };
+  var btn=function(t){ var g=pkpGroupShort_(pkpTypeGroup_(t)); return '<button type="button" class="pkpt-it'+(t===cur?' on':'')+'" data-t="'+t.replace(/"/g,'&quot;')+'">'+pkpShortType_(t)+'<small>'+g+'</small></button>'; };
+  var h='';
+  var rec=pkpRecentTypes_().filter(match);
+  if(rec.length && !qv) h+='<div class="pkpt-g">⭐ ใช้ล่าสุด</div><div class="pkpt-list">'+rec.map(btn).join('')+'</div>';
+  pkpTYPES.forEach(function(g){
+    var its=g.items.filter(match); if(!its.length) return;
+    h+='<div class="pkpt-g">'+g.g+'</div><div class="pkpt-list">'+its.map(btn).join('')+'</div>';
+  });
+  var body=document.getElementById('pkpTypeBody');
+  body.innerHTML=h||'<div class="loading-row">ไม่พบชนิดที่ค้นหา</div>';
+  body.querySelectorAll('.pkpt-it').forEach(function(b){ b.onclick=function(){ pkpTypePickSet_(i,b.getAttribute('data-t')); }; });
+}
+function pkpTypePickSet_(i,t){
+  pkpTypePickClose();
+  if(!pkpItems[i]) return;
+  pkpRecentPush_(t);
+  pkpOnType(i,t);   // ตัวตั้งค่าเดิม (ตรวจชนิด + ลูกศรอัตโนมัติ + re-render + autosave)
+  var first=document.getElementById('pkpD'+i+'_w')||document.getElementById('pkpD'+i+'_wl');
+  if(first && !first.value){ try{ first.focus(); }catch(e){} }
+}
+function pkpTypePickClose(){
+  var bg=document.getElementById('pkpTypePicker');
+  if(bg){ bg.remove(); try{ pkModalScrollLock(false); }catch(e){} }
+}
+document.addEventListener('keydown',function(e){ if(e.key==='Escape' && document.getElementById('pkpTypePicker')) pkpTypePickClose(); });
 
 // ── คำนวณ + แสดงสรุปต่อแถว ──
 function pkpRecalc(i){
@@ -16734,6 +16881,8 @@ async function pkpSave(){
   try{ b.equipNeed = JSON.stringify(pkpEquipNeed_(pkpRequisition(pkpItems, b.mainColorAlu||'').eq)); }
   catch(e){ /* คำนวณพัง → ไม่ส่งฟิลด์เลย (ห้ามส่ง '[]' — ใบที่หักแล้วจะโดนคืนของทั้งใบ + audit ตรวจไม่เจอ) */ }
   if(err){ toast('⚠️ '+err); return; }
+  var _iss=[]; pkpItems.forEach(function(it,k){ var x=pkpItemIssues_(it); if(x.length) _iss.push('ชุดที่ '+(k+1)+': '+x.join(', ')); });
+  if(_iss.length && !confirm('ตรวจขนาดก่อนบันทึก\n\n'+_iss.slice(0,10).join('\n')+(_iss.length>10?'\n…':'')+'\n\nบันทึกต่อเลยไหม?')) return;
   var sv=document.getElementById('pkpSaveBtn'); if(sv){sv.disabled=true;sv.textContent='กำลังบันทึก...';}
   try{
     var r;
