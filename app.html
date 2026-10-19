@@ -1975,6 +1975,7 @@ function renderOfficeShell(){
           ${CURRENT_USER.role === 'manager' ? `<a class="sidebar-item" data-tab="expenseapprove" href="#tab=expenseapprove" onclick="return pkNavTab(event,'expenseapprove',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></span><span class="sidebar-label">อนุมัติเบิก</span><span id="expApproveBadge" class="exp-badge"></span></a>
           <a class="sidebar-item" data-tab="summary" href="#tab=summary" onclick="return pkNavTab(event,'summary',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8"/><path d="M2 21h20"/></svg></span><span class="sidebar-label">สรุปรายเดือน</span></a>` : ''}
           <a class="sidebar-item" data-tab="outstanding" href="#tab=outstanding" onclick="return pkNavTab(event,'outstanding',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M15 14h3"/></svg></span><span class="sidebar-label">ตามยอดคงค้าง</span></a>
+          <a class="sidebar-item" data-tab="payees" href="#tab=payees" onclick="return pkNavTab(event,'payees',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg></span><span class="sidebar-label">บัญชีผู้รับเงิน</span></a>
           ${CURRENT_USER.role === 'manager' ? `<a class="sidebar-item" data-tab="slips" href="#tab=slips" onclick="return pkNavTab(event,'slips',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span><span class="sidebar-label">สลิปโอนเงิน</span></a>` : ''}
 
           <div class="sidebar-group">บุคคล & รายงาน</div>
@@ -2581,6 +2582,7 @@ function renderOfficeShell(){
 
       <div id="tabMap" style="display:none"></div>
       <div id="tabSlips" style="display:none"></div>
+      <div id="tabPayees" style="display:none"></div>
       <div id="tabSheetcap" style="display:none"></div>
       <div id="tabUsermgr" style="display:none"></div>
 
@@ -4969,7 +4971,7 @@ function mapTabInit(){
 }
 function mapTabReload_(){const f=document.getElementById('mapTabFrame');if(f)f.src='map.html?embed=1';}
 function setTab(t, btn){
-  ['Dash','Access','Gpssetup','Booking','Jobs','Customers','Followup','Assign','Cfqueue','Qtrack','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Mytasks','Taskmgr','Slips','Map','Sheetcap','Usermgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po'].forEach(x => {
+  ['Dash','Access','Gpssetup','Booking','Jobs','Customers','Followup','Assign','Cfqueue','Qtrack','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Payees','Mytasks','Taskmgr','Slips','Map','Sheetcap','Usermgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -4995,6 +4997,7 @@ function setTab(t, btn){
   if (t === 'cfqueue') cfLoad();
   if (t === 'qtrack') qtLoad();
   if (t === 'outstanding') outstandingInit();
+  if (t === 'payees') pyeInit();
   if (t === 'mytasks') myTasksLoad();
   if (t === 'taskmgr') taskMgrInit();
   if (t === 'slips') slpInit();
@@ -8389,6 +8392,136 @@ function outHiddenHtml_(h){
     + block('⚠️ จบงานแต่ไม่มีข้อมูลเก็บเงิน', h.noPay, npTag, 'var(--amb)')
     + '<div style="margin-top:8px;font-size:12.5px;color:var(--mu);">✅ ยืนยันรับเงินแล้ว ' + ((h.settled && h.settled.count) || 0) + ' ใบ (฿' + fmt((h.settled && h.settled.amount) || 0) + ') · ไม่มียอดต้องเก็บ ' + ((h.noCharge && h.noCharge.count) || 0) + ' ใบ</div>'
   + '</div>';
+}
+
+// ════════════════════════════════════════
+//  🏦 บัญชีผู้รับเงิน (pye*) — แก้ธนาคาร/เลขบัญชีที่บันทึกไว้ในระบบเบิก (office/manager)
+//  อ่าน: getExpenseBootstrapFast (worker /expense-bootstrap → GAS fallback) · เขียน: pk_expPayeeUpdate
+//  ⛔ เลขบัญชีเป็นข้อความเสมอ — input type=text (ห้าม type=number = 0 หน้าหาย) · ฝั่ง GAS เขียนด้วย '@' แล้วอ่านกลับเทียบ
+// ════════════════════════════════════════
+let _pyeList = [], _pyeEdit = '', _pyeQ = '';
+function pyeAcctValid_(acc){
+  if (acc === '') return true;
+  if (!/^[0-9-]+$/.test(acc)) return false;
+  const d = acc.replace(/-/g, '');
+  return d.length >= 6 && d.length <= 15;
+}
+// เลขบัญชีไทยส่วนใหญ่ 10 หลัก (บางธนาคาร 12) — ตัวเลขล้วน 9 หรือ 11 หลัก = น่าจะถูกชีตตัด 0 ด้านหน้าไปแล้ว
+function pyeAcctSuspect_(acc){
+  const a = String(acc || '');
+  return /^[0-9]+$/.test(a) && (a.length === 9 || a.length === 11);
+}
+function pyeShell_(){
+  return '<div class="section-pad">'
+    + '<div style="font-size:12.5px;color:var(--mu);margin-bottom:10px;line-height:1.6;">ธนาคาร/เลขบัญชีของผู้รับเงินที่บันทึกไว้ตอนตั้งเบิก — แก้ที่นี่แล้วครั้งหน้าตั้งเบิกจะดึงค่าใหม่ให้อัตโนมัติ · เลขบัญชีเก็บเป็นข้อความ <b>0 ด้านหน้าอยู่ครบ</b></div>'
+    + '<div class="row-form" style="gap:8px;align-items:flex-end;margin-bottom:10px;">'
+    +   '<div class="fg" style="flex:1;min-width:180px;"><label class="fl">ค้นหา</label><input class="fi" id="pyeQ" type="text" placeholder="ชื่อ / ธนาคาร / เลขบัญชี" oninput="_pyeQ=this.value;pyeRender()"></div>'
+    +   '<button class="btn btn-g" onclick="pyeLoad(true)">🔄 รีเฟรช</button>'
+    + '</div>'
+    + '<div id="pyeSummary" style="font-size:12.5px;color:var(--mu);margin-bottom:8px;"></div>'
+    + '<div id="pyeList"><div class="loading-row">กำลังโหลด...</div></div>'
+    + '</div>';
+}
+function pyeInit(){
+  const w = document.getElementById('tabPayees');
+  if (w && !document.getElementById('pyeList')) w.innerHTML = pyeShell_();
+  pyeLoad(false);
+}
+async function pyeLoad(force){
+  const box = document.getElementById('pyeList');
+  try {
+    if (force || !_expMaster) {
+      if (box) box.innerHTML = '<div class="loading-row">กำลังโหลด...</div>';
+      const r = await getExpenseBootstrapFast();
+      if (!r || !r.ok || !r.master) { if (box) box.innerHTML = '<div class="loading-row">❌ ' + escHtml((r && r.error) || 'โหลดไม่ได้') + '</div>'; return; }
+      _expMaster = r.master;
+    }
+    _pyeList = (_expMaster.payees || []).map(p => ({ name: String(p.name || ''), bank: String(p.bank || ''), account: String(p.account || '') }));
+    _pyeEdit = '';
+    pyeRender();
+  } catch(e){ if (box) box.innerHTML = '<div class="loading-row">❌ เชื่อมต่อไม่ได้</div>'; }
+}
+function pyeRender(){
+  const box = document.getElementById('pyeList'); if (!box) return;
+  const q = String(_pyeQ || '').trim().toLowerCase();
+  const list = _pyeList.filter(p => !q || (p.name + ' ' + p.bank + ' ' + p.account).toLowerCase().includes(q));
+  const sus = _pyeList.filter(p => pyeAcctSuspect_(p.account)).length;
+  const noAcc = _pyeList.filter(p => !p.account).length;
+  const sm = document.getElementById('pyeSummary');
+  if (sm) sm.innerHTML = 'ผู้รับเงิน ' + _pyeList.length + ' ราย'
+    + (sus ? ' · <b style="color:var(--amb)">⚠ ' + sus + ' รายเลขบัญชีน่าจะขาด 0 ด้านหน้า</b>' : '')
+    + (noAcc ? ' · ยังไม่มีเลขบัญชี ' + noAcc + ' ราย' : '');
+  if (!list.length) { box.innerHTML = '<div class="loading-row">' + (q ? 'ไม่พบที่ค้นหา' : 'ยังไม่มีผู้รับเงิน') + '</div>'; return; }
+  const banks = Array.from(new Set(_pyeList.map(p => p.bank).filter(Boolean))).sort();
+  box.innerHTML = '<datalist id="pyeBanks">' + banks.map(b => '<option value="' + escAttr(b) + '">').join('') + '</datalist>'
+    + list.map(p => pyeCard_(p)).join('');
+}
+function pyeCard_(p){
+  const idx = _pyeList.indexOf(p);
+  const editing = _pyeEdit === p.name;
+  const sus = pyeAcctSuspect_(p.account);
+  let h = '<div class="card" style="margin-bottom:8px;padding:12px;border:1px solid ' + (sus ? 'var(--amb)' : 'var(--bdr)') + ';border-radius:10px;">';
+  if (!editing) {
+    h += '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">'
+      +   '<div style="min-width:0;">'
+      +     '<div style="font-weight:700;">' + escHtml(p.name) + '</div>'
+      +     '<div style="font-size:12.5px;color:var(--mu);">🏦 ' + escHtml(p.bank || '— ยังไม่ระบุธนาคาร —') + '</div>'
+      +     '<div style="font-family:var(--mono);font-size:14px;letter-spacing:.5px;">' + (p.account ? escHtml(p.account) : '<span style="color:var(--mu);font-family:var(--sans);font-size:12.5px;">— ยังไม่มีเลขบัญชี —</span>') + '</div>'
+      +     (sus ? '<div style="font-size:11.5px;color:var(--amb);margin-top:2px;">⚠ มี ' + p.account.length + ' หลัก — น่าจะขาด 0 ด้านหน้า (ชีตเคยแปลงเป็นตัวเลข) ตรวจแล้วแก้ให้ครบ</div>' : '')
+      +   '</div>'
+      +   '<button class="btn btn-g btn-sm" onclick="pyeStartEdit(' + idx + ')">✏️ แก้ไข</button>'
+      + '</div>';
+  } else {
+    h += '<div style="font-weight:700;margin-bottom:8px;">' + escHtml(p.name) + '</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+      +   '<div class="fg" style="flex:1;min-width:150px;"><label class="fl">ธนาคาร</label><input class="fi" id="pyeBank" type="text" list="pyeBanks" maxlength="60" value="' + escAttr(p.bank) + '" placeholder="เช่น กสิกร"></div>'
+      +   '<div class="fg" style="flex:1;min-width:170px;"><label class="fl">เลขบัญชี</label><input class="fi" id="pyeAcc" type="text" inputmode="numeric" autocomplete="off" maxlength="20" value="' + escAttr(p.account) + '" placeholder="เช่น 0123456789" style="font-family:var(--mono);letter-spacing:.5px;" oninput="pyeAccHint()"></div>'
+      + '</div>'
+      + '<div id="pyeAccHint" style="font-size:11.5px;color:var(--mu);margin-top:4px;"></div>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">'
+      +   '<button class="btn btn-g btn-sm" onclick="pyeCancel()">ยกเลิก</button>'
+      +   '<button class="btn btn-p btn-sm" id="pyeSaveBtn" onclick="pyeSave(' + idx + ')">💾 บันทึก</button>'
+      + '</div>';
+  }
+  return h + '</div>';
+}
+function pyeStartEdit(idx){
+  const p = _pyeList[idx]; if (!p) return;
+  _pyeEdit = p.name; pyeRender(); pyeAccHint();
+  const el = document.getElementById('pyeAcc'); if (el) el.focus();
+}
+function pyeCancel(){ _pyeEdit = ''; pyeRender(); }
+function pyeAccHint(){
+  const el = document.getElementById('pyeAcc'), h = document.getElementById('pyeAccHint');
+  if (!el || !h) return;
+  const v = el.value.replace(/\s+/g, '');
+  const d = v.replace(/-/g, '');
+  if (!v) { h.textContent = 'เว้นว่าง = ลบเลขบัญชี'; h.style.color = 'var(--mu)'; return; }
+  if (!pyeAcctValid_(v)) { h.textContent = '❌ ใส่ได้เฉพาะตัวเลขและขีด (6–15 หลัก)'; h.style.color = 'var(--rd)'; return; }
+  const okLen = (d.length === 10 || d.length === 12);
+  h.textContent = d.length + ' หลัก' + (okLen ? ' ✓' : ' — ตรวจอีกครั้งว่าครบ (ส่วนใหญ่ 10 หลัก)');
+  h.style.color = okLen ? 'var(--grn)' : 'var(--amb)';
+}
+async function pyeSave(idx){
+  const p = _pyeList[idx]; if (!p) return;
+  const bank = String((document.getElementById('pyeBank') || {}).value || '').trim();
+  const account = String((document.getElementById('pyeAcc') || {}).value || '').replace(/\s+/g, '');
+  if (!pyeAcctValid_(account)) { toast('❌ เลขบัญชีต้องเป็นตัวเลข (มีขีดได้) 6–15 หลัก'); return; }
+  if (bank === p.bank && account === p.account) { toast('ไม่มีอะไรเปลี่ยน'); pyeCancel(); return; }
+  if (!confirm('ยืนยันแก้บัญชีของ ' + p.name + '\n\nธนาคาร: ' + (p.bank || '-') + ' → ' + (bank || '-') + '\nเลขบัญชี: ' + (p.account || '-') + ' → ' + (account || '-'))) return;
+  const btn = document.getElementById('pyeSaveBtn'); if (btn) { btn.disabled = true; btn.textContent = 'กำลังบันทึก...'; }
+  try {
+    const r = await call({ action:'pk_expPayeeUpdate', name:p.name, bank:bank, account:account });
+    if (!r || !r.ok) { toast('❌ ' + ((r && r.error) || 'บันทึกไม่สำเร็จ')); if (btn) { btn.disabled = false; btn.textContent = '💾 บันทึก'; } return; }
+    p.bank = r.bank; p.account = r.account;          // ใช้ค่าที่ server ยืนยันแล้ว (อ่านกลับจากชีต)
+    if (_expMaster && Array.isArray(_expMaster.payees)) {
+      const m = _expMaster.payees.find(x => x.name === p.name);
+      if (m) { m.bank = r.bank; m.account = r.account; }
+    }
+    if (_expPayeeMap && _expPayeeMap[p.name]) _expPayeeMap[p.name] = { bank:r.bank, account:r.account };
+    _pyeEdit = ''; pyeRender();
+    toast('✅ บันทึกบัญชีของ ' + p.name + ' แล้ว');
+  } catch(e){ toast('❌ เชื่อมต่อไม่ได้'); if (btn) { btn.disabled = false; btn.textContent = '💾 บันทึก'; } }
 }
 
 function outCard(j){
