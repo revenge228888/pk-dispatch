@@ -5145,9 +5145,9 @@ function measToInstall(j){
   const btn=document.querySelector('#officeSidebar .sidebar-item[data-tab="booking"]');
   setTab('booking',btn); setBookingType('install'); setBookingMode('form');
   const put=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
-  put('bkCustomer',j.name||''); put('bkAddress',j.address||j.rawAddr||''); put('bkPhone',jobTel(j.note)||''); put('bkJob',j.job||''); put('bkScore',''); put('bkAmount','');
+  put('bkCustomer',j.name||''); put('bkAddress',j.address||j.rawAddr||''); put('bkPhone',jobTel(j.note)||''); put('bkJob',j.job||''); put('bkScore',''); put('bkAmount', Number(j.amount)>0 ? String(Number(j.amount)) : '');   // ยอดจากงานวัด (เจ้าของสั่ง 21 ต.ค. 2026) · แก้ได้ก่อนบันทึก
   put('bkRef',jobRef(j.note)||'');   // งานวัดที่มีเลขใบจองแล้ว → ติดไปงานติดตั้งด้วย (ไม่ต้องพิมพ์ซ้ำ)
-  toast('🔧 ดึงข้อมูลงานวัด '+j.id+' แล้ว — กรอกคะแนนและยอดก่อนลงคิวติดตั้ง');
+  toast('🔧 ดึงข้อมูลงานวัด '+j.id+' แล้ว — '+(Number(j.amount)>0 ? 'ยอด ฿'+fmt(j.amount)+' ดึงมาจากงานวัด (แก้ได้) · กรอกคะแนนก่อนลงคิว' : 'กรอกคะแนนและยอดก่อนลงคิวติดตั้ง'));
 }
 
 function setBookingType(t){
@@ -7256,9 +7256,9 @@ function salesMeasureToInstall(j){
     set('sBkAddress', j.address || '');
     set('sBkJob', j.description || '');
     set('sBkScore', '1');   // คะแนนเริ่มใหม่
-    set('sBkAmount', '');   // ยอดเงินมาจาก quote
+    set('sBkAmount', Number(j.amount) > 0 ? String(Number(j.amount)) : '');   // ยอดจากงานวัด (เจ้าของสั่ง 21 ต.ค. 2026) · แก้ได้ก่อนขอคิว
     showMeasureLinkBanner(j.id);
-    toast('🔧 ดึงข้อมูลจากงานวัด ' + j.id + ' — กรอกคะแนนแล้วขอคิว');
+    toast('🔧 ดึงข้อมูลจากงานวัด ' + j.id + (Number(j.amount) > 0 ? ' · ยอด ฿' + fmt(j.amount) + ' (แก้ได้)' : '') + ' — กรอกคะแนนแล้วขอคิว');
   }, 200);
 }
 
