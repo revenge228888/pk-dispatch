@@ -6851,8 +6851,8 @@ function renderSalesStub(){
           <div class="fg" style="min-width:130px;">
             <label class="fl">สถานะ</label>
             <select class="fi" id="sFilterStatus" onchange="salesLoadMy()">
-              <option value="all">ทั้งหมด</option>
-              <option value="รอ CF" selected>รอ CF</option>
+              <option value="all" selected>ทั้งหมด</option>
+              <option value="รอ CF">รอ CF</option>
               <option value="ยืนยันแล้ว">ยืนยันแล้ว</option>
             </select>
           </div>
@@ -6918,6 +6918,7 @@ function renderSalesStub(){
           <button onclick="document.getElementById('sEditModal').classList.remove('on')" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button>
         </div>
         <div class="card-body">
+          <div id="sEditLockHint" style="display:none;font-size:12px;color:var(--amb);background:var(--amb-t);border-radius:8px;padding:8px 10px;margin-bottom:10px;line-height:1.5;">🔒 คิวนี้ออฟฟิศยืนยันแล้ว — แก้ได้เฉพาะ ลูกค้า / ที่อยู่ / รายการ / ยอด · วันที่และคะแนน แจ้งออฟฟิศเปลี่ยน · งานที่ช่างกดจบแล้วแก้ไม่ได้</div>
           <div class="row-form" style="margin-bottom:10px;">
             <div class="fg" style="flex:1;min-width:160px;">
               <label class="fl">วันที่</label>
@@ -7297,7 +7298,8 @@ function initSalesMy(){
   const to = document.getElementById('sFilterTo');
   const fr = document.getElementById('sFilterFrom');
   if (to && !to.value) {
-    const t = new Date();
+    // ช่วงเริ่มต้น: ย้อน 30 วัน → ล่วงหน้า 60 วัน (21 ต.ค. 2026 — เดิมถึงแค่วันนี้ คิวที่ลงล่วงหน้าไม่ขึ้นให้แก้)
+    const t = new Date(); t.setDate(t.getDate() + 60);
     const f = new Date(); f.setDate(f.getDate() - 30);
     to.value = t.toISOString().split('T')[0];
     fr.value = f.toISOString().split('T')[0];
@@ -7481,15 +7483,17 @@ async function salesLoadMy(){
             ${j.status==='รอ CF' ? `
               <button class="btn btn-g btn-sm" onclick='salesOpenEdit(${JSON.stringify(j).replace(/'/g,"\\'")})'>แก้</button>
               <button class="btn btn-d btn-sm" onclick="salesDelete('${j.id}')">ลบ</button>
-            ` : '<span style="font-size:11px;color:var(--mu);">—</span>'}
+            ` : `<button class="btn btn-g btn-sm" title="แก้รายละเอียด/ยอด (วันที่-คะแนนให้ออฟฟิศเปลี่ยน)" onclick='salesOpenEdit(${JSON.stringify(j).replace(/'/g,"\\'")})'>แก้</button>`}
           </td>
         </tr>`).join('')}
       </tbody></table></div>`;
   } catch(e) { w.innerHTML = '<div class="loading-row">โหลดไม่ได้</div>'; }
 }
 
+let _sEditConfirmed = false;
 function salesOpenEdit(j){
   _sEditingId = j.id;
+  _sEditConfirmed = String(j.status||'').trim() !== 'รอ CF';   // ยืนยันแล้ว → แก้ได้เฉพาะรายละเอียด/ยอด
   document.getElementById('sEditId').textContent = '#' + j.id;
   // แปลง dd/mm/yyyy → yyyy-mm-dd สำหรับ input
   let dateIso = '';
@@ -7505,6 +7509,9 @@ function salesOpenEdit(j){
   document.getElementById('sEditJob').value = j.job || '';
   document.getElementById('sEditScore').value = j.score || 1;
   document.getElementById('sEditAmount').value = j.amount || 0;
+  ['sEditDate','sEditScore'].forEach(id => { const el = document.getElementById(id); if (el) { el.disabled = _sEditConfirmed; el.style.opacity = _sEditConfirmed ? '.55' : ''; } });
+  const hint = document.getElementById('sEditLockHint');
+  if (hint) hint.style.display = _sEditConfirmed ? 'block' : 'none';
   document.getElementById('sEditModal').classList.add('on');
 }
 
@@ -7514,11 +7521,11 @@ async function salesSaveEdit(){
     action: 'pk_salesUpdate',
     username: CURRENT_USER.username,
     id: _sEditingId,
-    date: document.getElementById('sEditDate').value,
+    date: _sEditConfirmed ? undefined : document.getElementById('sEditDate').value,
     customer: document.getElementById('sEditCustomer').value.trim(),
     address: document.getElementById('sEditAddress').value.trim(),
     job: document.getElementById('sEditJob').value.trim(),
-    score: document.getElementById('sEditScore').value,
+    score: _sEditConfirmed ? undefined : document.getElementById('sEditScore').value,
     amount: document.getElementById('sEditAmount').value
   };
   showLoad('กำลังบันทึก...');
@@ -9422,6 +9429,7 @@ function dashJobCard_(j, mode){
   return '<div class="card" role="button" tabindex="0" onclick="dashJobOpen(\''+escAttr(j.id)+'\',\''+mode+'\')" onkeydown="dashJobKey_(event,\''+escAttr(j.id)+'\',\''+mode+'\')" style="padding:13px 14px;margin-bottom:10px;cursor:pointer;border-color:'+(none?'var(--rd)':'var(--bdr)')+';">'
     +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;"><div style="font-size:16px;font-weight:800;">'+escHtml(j.name||'-')+'</div><span class="badge '+(mode==='measure'?'bw':'bp')+'">'+type+'</span></div>'
     +(ref?'<div style="margin-top:4px;font-size:12px;color:var(--mu);">🔖 ใบจอง <b style="color:var(--tx);font-family:var(--mono);">'+escHtml(ref)+'</b></div>':'')
+    +jobBookedLine_(j.note)
     +(tel?'<div style="margin-top:5px;"><a href="tel:'+escAttr(tel)+'" onclick="event.stopPropagation()" style="color:var(--blu);font-weight:700;text-decoration:none;">📞 '+escHtml(telFmt(tel))+'</a></div>':'')
     +'<div style="font-size:13px;margin-top:5px;">📍 '+escHtml(addr||'-')+'</div>'
     +'<div style="font-size:13px;margin-top:5px;">🔧 '+escHtml(j.job||'-')+'</div>'
@@ -12014,6 +12022,17 @@ function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&l
 function jobTel(note){ var m = String(note||'').match(/\[tel:(\d{6,})\]/); return m ? m[1] : ''; }
 // เลขที่ใบจอง — tag [ref:...] ใน note (29 ก.ย. 2026 · คู่กับ pkRefTag_/pkRefFromNote_ ฝั่ง GAS) · ใช้จับคู่ใบผลิต (refNo) แบบตรงตัว
 function jobRef(note){ var m = String(note||'').match(/\[ref:([^\]]+)\]/); return m ? m[1].trim() : ''; }
+// เวลาลงคิว [bk:yyyy-MM-dd HH:mm|ผู้ลง] → { text:'21/10/69 14:32', by } · งานเก่าก่อน 21 ต.ค. 2026 ไม่มี tag = null
+function jobBooked(note){
+  var n = String(note||''), m = n.match(/\[bk:(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})(?:\|([^\]]*))?\]/);
+  if (!m) return null;
+  var by = (m[6]||'').trim(); if (!by) { var b = n.match(/\[by:([^\]]+)\]/); if (b) by = b[1].trim(); }
+  return { text: m[3]+'/'+m[2]+'/'+String(Number(m[1])+543).slice(2)+' '+m[4]+':'+m[5], by: by };
+}
+function jobBookedLine_(note){
+  var b = jobBooked(note); if (!b) return '';
+  return '<div style="margin-top:4px;font-size:11.5px;color:var(--mu);">🕒 ลงคิว <b style="color:var(--tx);font-family:var(--mono);font-weight:600;">'+escHtml(b.text)+'</b>'+(b.by?' · '+escHtml(b.by):'')+'</div>';
+}
 // เบอร์ที่เก็บเป็นตัวเลขในชีต (worker อ่าน UNFORMATTED_VALUE) จะทำ 0 หน้าหาย → เติมกลับ
 // มือถือไทย=10หลักขึ้นต้น 0 · บ้าน=9หลักขึ้นต้น 0 · ถ้ามา 9/8 หลักไม่ขึ้นต้น 0 = 0 หน้าหาย เติมคืน
 function telNorm(d){ d=String(d==null?'':d).replace(/\D/g,''); if(d.length===9 && d.charAt(0)!=='0') d='0'+d; else if(d.length===8 && d.charAt(0)!=='0') d='0'+d; return d; }
