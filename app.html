@@ -9425,7 +9425,7 @@ function dashJobCard_(j, mode){
   const none=!String(j.team||'').trim(), tel=telNorm(jobTel(j.note)||''), addr=pkDashCleanAddr_(mode==='measure'?(j.address||j.rawAddr):j.rawAddr);
   const type=mode==='measure'?'📏 งานวัด':'🔧 ติดตั้ง', flagged=String(j.note||'').indexOf('[qtmeasure]')!==-1, ref=jobRef(j.note);
   const queue=j.sheetStatus&&j.sheetStatus!=='ยืนยันแล้ว'?'<span class="badge bp">'+escHtml(j.sheetStatus)+'</span>':'';
-  const amount=mode==='measure'?'<span style="color:var(--mu);font-weight:700;">รอประเมินราคา</span>':'<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount)+'</span>';
+  const amount=mode==='measure'?(Number(j.amount)>0?'<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount)+'</span>':'<span style="color:var(--mu);font-weight:700;">รอประเมินราคา</span>'):'<span style="color:var(--grn);font-weight:800;">฿ '+fmt(j.amount)+'</span>';
   return '<div class="card" role="button" tabindex="0" onclick="dashJobOpen(\''+escAttr(j.id)+'\',\''+mode+'\')" onkeydown="dashJobKey_(event,\''+escAttr(j.id)+'\',\''+mode+'\')" style="padding:13px 14px;margin-bottom:10px;cursor:pointer;border-color:'+(none?'var(--rd)':'var(--bdr)')+';">'
     +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;"><div style="font-size:16px;font-weight:800;">'+escHtml(j.name||'-')+'</div><span class="badge '+(mode==='measure'?'bw':'bp')+'">'+type+'</span></div>'
     +(ref?'<div style="margin-top:4px;font-size:12px;color:var(--mu);">🔖 ใบจอง <b style="color:var(--tx);font-family:var(--mono);">'+escHtml(ref)+'</b></div>':'')
@@ -10077,6 +10077,7 @@ function dashJobOpen(id,mode){
   const ref=jobRef(j.note);
   let html='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;"><div><div style="font-size:18px;font-weight:800;">'+escHtml(j.name||'-')+'</div><div style="font-size:11px;color:var(--mu);margin-top:3px;">'+escHtml(j.id||'-')+(j.orderStr?' · งานที่ '+escHtml(String(j.orderStr)):'')+' · '+escHtml(j.date||'-')+'</div></div><span class="badge" style="color:'+pkDashTone_(j.status)+';background:var(--surf);border:1px solid '+pkDashTone_(j.status)+';">'+pkDashStatusLabel_(j.status)+'</span></div>'
     +'<div style="padding:7px 0;border-bottom:1px solid var(--bdr);">🔖 เลขที่ใบจอง: '+(ref?'<b style="font-family:var(--mono);">'+escHtml(ref)+'</b>':'<span style="color:var(--mu);">ยังไม่ได้ใส่ — กด ✏️ แก้ไขงาน เพื่อเพิ่ม (จะจับคู่ใบผลิตได้ตรงกว่า)</span>')+'</div>'
+    +(jobBookedLine_(j.note)?'<div style="padding:7px 0;border-bottom:1px solid var(--bdr);">'+jobBookedLine_(j.note).replace(/^<div[^>]*>/,'').replace(/<\/div>$/,'')+'</div>':'')
     +(tel?'<div style="padding:7px 0;border-bottom:1px solid var(--bdr);">📞 <a href="tel:'+escAttr(tel)+'" style="color:var(--blu);font-weight:700;text-decoration:none;">'+escHtml(telFmt(tel))+'</a></div>':'')
     +'<div style="padding:7px 0;border-bottom:1px solid var(--bdr);display:flex;align-items:flex-start;gap:8px;"><span style="flex:1;">📍 '+escHtml(addr||'-')+'</span>'+dashMapBtn_(j)+'</div>'
     +'<div style="padding:7px 0;border-bottom:1px solid var(--bdr);">🔧 '+escHtml(j.job||'-')+'</div>'
@@ -12030,8 +12031,12 @@ function jobBooked(note){
   return { text: m[3]+'/'+m[2]+'/'+String(Number(m[1])+543).slice(2)+' '+m[4]+':'+m[5], by: by };
 }
 function jobBookedLine_(note){
-  var b = jobBooked(note); if (!b) return '';
-  return '<div style="margin-top:4px;font-size:11.5px;color:var(--mu);">🕒 ลงคิว <b style="color:var(--tx);font-family:var(--mono);font-weight:600;">'+escHtml(b.text)+'</b>'+(b.by?' · '+escHtml(b.by):'')+'</div>';
+  var b = jobBooked(note);
+  if (!b) {   // งานก่อนมี tag เวลา: ถ้าเซลล์ลง ([by:]) ยังบอกได้ว่าใครลง
+    var m = String(note||'').match(/\[by:([^\]]+)\]/);
+    return m ? '<div style="margin-top:4px;font-size:11.5px;color:var(--mu);">👤 ลงคิวโดย <b style="color:var(--tx);">'+escHtml(m[1].trim())+'</b></div>' : '';
+  }
+  return '<div style="margin-top:4px;font-size:11.5px;color:var(--mu);">🕒 ลงคิว <b style="color:var(--tx);font-family:var(--mono);font-weight:600;">'+escHtml(b.text)+'</b>'+(b.by?' · โดย <b style="color:var(--tx);">'+escHtml(b.by)+'</b>':'')+'</div>';
 }
 // เบอร์ที่เก็บเป็นตัวเลขในชีต (worker อ่าน UNFORMATTED_VALUE) จะทำ 0 หน้าหาย → เติมกลับ
 // มือถือไทย=10หลักขึ้นต้น 0 · บ้าน=9หลักขึ้นต้น 0 · ถ้ามา 9/8 หลักไม่ขึ้นต้น 0 = 0 หน้าหาย เติมคืน
