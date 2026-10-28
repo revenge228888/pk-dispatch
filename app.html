@@ -769,6 +769,22 @@ tbody tr:nth-child(even){background:rgba(120,96,72,.04);}
   </div>
 </div>
 
+<!-- 🔒 [JOBLOCK 28 ต.ค. 2026] ออฟฟิศปิดงานที่ช่างกำลังทำ ก่อนลบคิววัน/ย้ายวัน/ย้ายทีม -->
+<div class="modal-bg" id="jlkModal" style="z-index:1250;">
+  <div class="modal" style="max-width:520px;width:94vw;">
+    <div class="card-head">
+      <span>🔒 มีงานที่ช่างยังทำไม่จบ</span>
+      <button onclick="jlkClose()" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button>
+    </div>
+    <div class="card-body">
+      <div id="jlkWhy" style="font-size:12.5px;color:var(--mu);margin-bottom:10px;line-height:1.5;"></div>
+      <div id="jlkList"></div>
+      <datalist id="jlkTeamList"></datalist>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px;"><button class="btn btn-g" onclick="jlkClose()">ปิด</button></div>
+    </div>
+  </div>
+</div>
+
 <!-- DASHBOARD JOB DETAIL MODAL -->
 <div class="modal-bg" id="dashJobModal" onclick="if(event.target===this)dashJobClose()">
   <div class="modal large" style="max-width:720px;width:96vw;">
@@ -5481,11 +5497,13 @@ async function asCommit(){
   catch(e){ hideLoad(); toast('❌ เชื่อมต่อไม่ได้'); return; }
   hideLoad();
   if (!r.ok){ toast('❌ '+(r.error||'ผิดพลาด')); return; }
-  if (!r.changeCount){ toast('ไม่มีการเปลี่ยนแปลง (ทุกงานทีมเดิมอยู่แล้ว)'); return; }
+  const busyMsg = (r.busy && r.busy.length) ? '\n\n🔒 ข้าม (ช่างกำลังทำ — ปิดงานก่อนจึงย้ายทีมได้) '+r.busy.length+' งาน:\n'+r.busy.slice(0,10).map(b=>'• '+b.customer+' ('+b.team+')').join('\n') : '';
+  if (!r.changeCount){ if (busyMsg) alert('ไม่มีงานที่ย้ายได้'+busyMsg); else toast('ไม่มีการเปลี่ยนแปลง (ทุกงานทีมเดิมอยู่แล้ว)'); return; }
   let msg = 'จะเขียนทีมจริง '+r.changeCount+' งาน:\n'
           + r.changes.slice(0,15).map(c=>'• '+c.customer+': '+c.from+' → '+c.to).join('\n');
   if (r.changes.length>15) msg += '\n... และอีก '+(r.changes.length-15)+' งาน';
   if (r.invalid && r.invalid.length) msg += '\n\n⚠️ ข้าม (ผิดกติกา) '+r.invalid.length+' งาน';
+  msg += busyMsg;
   if (!confirm(msg+'\n\nยืนยันเขียนลงระบบ?')) return;
   showLoad('กำลังเขียน...');
   try {
@@ -6034,6 +6052,102 @@ document.getElementById('teamDetailModal').addEventListener('click', e => {
   if (e.target === e.currentTarget) e.currentTarget.classList.remove('on');
 });
 
+// ════ 🔒 [JOBLOCK 28 ต.ค. 2026] ออฟฟิศปิดงานที่ช่างกำลังทำ — "ต่องาน" (สร้างงานต่อวันใหม่) / "ติดตั้งแล้ว" (เลือกสถานะเก็บเงินเอง) ════
+//  เปิดจาก: ลบคิววัน (removeAccess) · แก้ไขงานย้ายวัน/ทีม (jobEditSave) — server ตอบ code:'needResolve' + jobs
+//  ปิดครบทุกงานแล้ว → เรียก after() (เช่น ลบคิววันต่อให้เลย)
+let _jlkJobs = [], _jlkAfter = null;
+const JLK_PAY = [['collected','💵 เก็บครบ'],['partial','½ เก็บบางส่วน'],['unpaid','⏳ ยังไม่เก็บ'],['no_charge','🆓 ไม่มียอด']];
+const JLK_METHOD = [['cash','เงินสด'],['transfer','โอน'],['other','อื่นๆ']];
+function jlkOpen(jobs, why, after){
+  _jlkJobs = (jobs || []).map(j => Object.assign({}, j));
+  _jlkAfter = after || null;
+  document.getElementById('jlkWhy').innerHTML = escHtml(why || '') + ' — ช่างยังไม่ได้กดจบงาน กรุณาระบุทีละงานว่า <b>ต่องาน</b> หรือ <b>ติดตั้งแล้ว</b> ก่อน';
+  const teams = {}; (_accessDates || []).concat(_jlkJobs).forEach(x => { const t = String(x.team || '').trim(); if (t && t.indexOf('เซลล์') === -1) teams[t] = 1; });
+  document.getElementById('jlkTeamList').innerHTML = Object.keys(teams).sort().map(t => '<option value="' + escAttr(t) + '"></option>').join('');
+  jlkRender();
+  document.getElementById('jlkModal').classList.add('on');
+}
+function jlkClose(){ document.getElementById('jlkModal').classList.remove('on'); }
+function jlkNextDay_(ds){
+  const base = /^\d{4}-\d{2}-\d{2}$/.test(ds || '') ? new Date(ds + 'T00:00:00') : new Date();
+  base.setDate(base.getDate() + 1);
+  return base.getFullYear() + '-' + String(base.getMonth() + 1).padStart(2, '0') + '-' + String(base.getDate()).padStart(2, '0');
+}
+// เก็บค่าที่พิมพ์ไว้ก่อนวาดใหม่ (กดเปลี่ยนโหมด/สถานะเงินแล้วข้อความไม่หาย)
+function jlkGrab_(i){
+  const j = _jlkJobs[i], v = id => { const el = document.getElementById(id + i); return el ? el.value : undefined; };
+  ['note:jlkNote','date:jlkDate','team:jlkTeam','amt:jlkAmt','coll:jlkColl','pnote:jlkPNote'].forEach(p => {
+    const [k, id] = p.split(':'); const x = v(id); if (x !== undefined) j['_' + k] = x;
+  });
+  const mv = document.getElementById('jlkMove' + i); if (mv) j._move = mv.checked;
+}
+function jlkMode(i, m){ jlkGrab_(i); _jlkJobs[i]._mode = m; jlkRender(); }
+function jlkPay(i, p){ jlkGrab_(i); const j = _jlkJobs[i]; j._pay = p; if ((p === 'collected') && !j._coll) j._coll = String(j.amount || ''); jlkRender(); }
+function jlkMethod(i, m){ jlkGrab_(i); _jlkJobs[i]._method = m; jlkRender(); }
+function jlkRender(){
+  const pill = (on, txt, fn) => '<button type="button" class="btn ' + (on ? 'btn-p' : 'btn-g') + ' btn-sm" onclick="' + fn + '">' + txt + '</button>';
+  document.getElementById('jlkList').innerHTML = _jlkJobs.map((j, i) => {
+    const head = '<div style="font-weight:700;">' + escHtml(j.name || j.id) + ' <span style="color:var(--mu);font-weight:400;font-size:12px;">' + escHtml(j.id) + ' · ' + escHtml(j.team || '-') + ' · ' + fmtD(j.date) + '</span></div>'
+      + (j.job ? '<div style="font-size:12px;color:var(--mu);margin-top:2px;">' + escHtml(j.job) + '</div>' : '');
+    if (j._ok) return '<div style="border:1.5px solid var(--grn);border-radius:var(--r-md);padding:10px;margin-bottom:8px;">' + head + '<div style="color:var(--grn);font-weight:700;margin-top:6px;">✓ ' + escHtml(j._ok) + '</div></div>';
+    let form = '';
+    if (j._mode === 'continue') {
+      form = '<div class="fg"><label class="fl">งานเหลืออะไร</label><textarea class="fi" id="jlkNote' + i + '" rows="2" placeholder="เช่น เหลือติดมุ้ง 2 บาน">' + escHtml(j._note || '') + '</textarea></div>'
+        + '<div class="row-form"><div class="fg"><label class="fl">วันที่ทำต่อ</label><input class="fi" id="jlkDate' + i + '" type="date" value="' + escAttr(j._date || jlkNextDay_(j.date)) + '"></div>'
+        + '<div class="fg"><label class="fl">ทีมที่ทำต่อ</label><input class="fi" id="jlkTeam' + i + '" list="jlkTeamList" autocomplete="off" value="' + escAttr(j._team != null ? j._team : (j.team || '')) + '"></div></div>'
+        + '<div class="fg"><label class="fl">ยอดเงินงานวันใหม่ (บาท)</label><input class="fi" id="jlkAmt' + i + '" type="text" inputmode="numeric" value="' + escAttr(j._amt != null ? j._amt : String(j.amount || 0)) + '"></div>'
+        + '<label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;font-size:12.5px;cursor:pointer;line-height:1.5;"><input type="checkbox" id="jlkMove' + i + '"' + (j._move === false ? '' : ' checked') + ' style="width:16px;height:16px;margin-top:2px;"><span><b>ย้ายยอดมาใบนี้</b> — ล้างยอดใบเดิมเป็น 0<br><span style="color:var(--mu);font-size:11px;">เหมือนปุ่ม "ลงวันต่องาน" เดิม: ยอดนับครั้งเดียวที่วันจบงานจริง</span></span></label>'
+        + '<button class="btn btn-p btn-sm" onclick="jlkSave(' + i + ')">➡ บันทึกต่องาน + สร้างงานต่อ</button>';
+    } else if (j._mode === 'done') {
+      const needAmt = j._pay === 'collected' || j._pay === 'partial';
+      form = '<label class="fl">💰 การเก็บเงิน <span style="color:var(--rd)">*</span></label>'
+        + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 8px;">' + JLK_PAY.map(p => pill(j._pay === p[0], p[1], 'jlkPay(' + i + ',\'' + p[0] + '\')')).join('') + '</div>'
+        + (needAmt ? '<div class="fg"><label class="fl" style="font-size:12px;">จำนวนที่เก็บได้ (บาท)</label><input class="fi" id="jlkColl' + i + '" type="number" inputmode="numeric" value="' + escAttr(j._coll || '') + '">'
+          + '<div style="display:flex;gap:6px;margin-top:6px;">' + JLK_METHOD.map(m => pill((j._method || 'cash') === m[0], m[1], 'jlkMethod(' + i + ',\'' + m[0] + '\')')).join('') + '</div></div>' : '')
+        + '<input class="fi" id="jlkPNote' + i + '" type="text" placeholder="หมายเหตุการเก็บเงิน (ถ้ามี)" style="font-size:13px;margin-bottom:10px;" value="' + escAttr(j._pnote || '') + '">'
+        + '<button class="btn btn-p btn-sm" onclick="jlkSave(' + i + ')">✅ บันทึกติดตั้งแล้ว</button>';
+    }
+    return '<div style="border:1px solid var(--bdr);border-radius:var(--r-md);padding:10px;margin-bottom:8px;">' + head
+      + '<div style="display:flex;gap:6px;margin:8px 0;">' + pill(j._mode === 'continue', '➡ ต่องาน', 'jlkMode(' + i + ',\'continue\')') + pill(j._mode === 'done', '✅ ติดตั้งแล้ว', 'jlkMode(' + i + ',\'done\')') + '</div>'
+      + form + '</div>';
+  }).join('');
+}
+async function jlkSave(i){
+  jlkGrab_(i);
+  const j = _jlkJobs[i];
+  const body = { action:'pk_officeResolveJob', id:j.id, mode:j._mode };
+  if (j._mode === 'continue') {
+    const note = String(j._note || '').trim(), date = j._date || jlkNextDay_(j.date);
+    if (!note) { toast('ระบุว่างานเหลืออะไร'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { toast('เลือกวันที่ทำต่อ'); return; }
+    Object.assign(body, { note, date, team:String(j._team != null ? j._team : j.team || '').trim(), amount:String(j._amt != null ? j._amt : j.amount || 0).trim(), clearOldAmount:j._move !== false });
+  } else if (j._mode === 'done') {
+    if (!j._pay) { toast('เลือกสถานะการเก็บเงิน'); return; }
+    body.payStatus = j._pay;
+    if (j._pay === 'collected' || j._pay === 'partial') {
+      const amt = Number(j._coll) || 0;
+      if (amt <= 0) { toast('กรอกจำนวนเงินที่เก็บได้'); return; }
+      body.payCollected = amt; body.payMethod = j._method || 'cash';
+    } else body.payCollected = 0;
+    body.payNote = String(j._pnote || '').trim();
+  } else return;
+  showLoad('กำลังบันทึก...');
+  let r = null;
+  try { r = await call(body); } catch (e) {}
+  hideLoad();
+  if (!r || !r.ok) { toast('❌ ' + ((r && r.error) || 'ผิดพลาด')); return; }
+  j._ok = j._mode === 'continue'
+    ? 'ต่องานแล้ว → ' + r.newId + ' วันที่ ' + fmtD(r.date) + (r.team ? ' · ' + r.team : '') + (r.warn ? ' ⚠ ' + r.warn : '')
+    : 'ติดตั้งแล้ว · ' + (JLK_PAY.find(p => p[0] === j._pay) || ['', ''])[1];
+  clearCache('pk_dashboard'); clearCache('pk_installMonth');
+  if (document.getElementById('dashCalGrid') && typeof dashCalReload === 'function') dashCalReload();   // ปฏิทินเห็นสถานะใหม่ + งานต่อทันที
+  jlkRender();
+  if (_jlkJobs.every(x => x._ok)) {
+    const after = _jlkAfter; _jlkAfter = null;
+    setTimeout(() => { jlkClose(); if (after) after(); }, 900);
+  }
+}
+
 // ─── 📅 ลงวันต่องาน — กดจากการ์ดงานใน team detail modal หรือการ์ดในปฏิทิน/ช่วงวันที่ ───
 let _contJob = null, _contFrom = 'tdm';   // 'tdm' = team detail modal · 'cal' = ปฏิทิน/ช่วงวันที่
 function contJobOpenCore(j, baseDate, teamLabel, from){
@@ -6171,8 +6285,12 @@ function saveQueue(){
 }
 function removeAccess(team, date){
   if (!confirm(`ลบคิว ${team} วันที่ ${fmtD(date)}?\n(ช่างจะเข้าดูวันนี้ไม่ได้อีก)`)) return;
+  removeAccessGo_(team, date);
+}
+function removeAccessGo_(team, date){
   call({ action:'pk_removeAccessDate', team, date }).then(r => {
     if (r.ok) { toast('ลบแล้ว'); _accessDates = _accessDates.filter(a => !(a.team===team && a.date===date)); renderAccess(); }
+    else if (r.code === 'needResolve') jlkOpen(r.jobs, `ลบคิว ${team} วันที่ ${fmtD(date)}`, () => removeAccessGo_(team, date));   // [JOBLOCK] ปิดครบแล้วลบต่อให้
     else toast(r.error || 'ผิดพลาด');
   });
 }
@@ -7971,6 +8089,7 @@ async function techOpenRecord(j){
 
 function techJobButtons(j){
   if (j.status === 'pending') {
+    if (techBusyJob_(j.id)) return `<button class="btn btn-g btn-sm" onclick="techAcceptJob('${j.id}')" title="จบงานหรือต่องานที่กำลังทำก่อน">🔒 รับงาน (จบงานที่ทำอยู่ก่อน)</button>`;
     return `<button class="btn btn-p btn-sm" onclick="techAcceptJob('${j.id}')">▶ รับงาน</button>`;
   } else if (j.status === 'working') {
     return `
@@ -8074,8 +8193,12 @@ function locShowBanner(){
 }
 function locHideBanner(){ var b = document.getElementById('locBanner'); if (b) b.style.display = 'none'; }
 
+// [JOBLOCK] งานที่ทีมกำลังทำอยู่ในวันนี้ (ยกเว้นตัวเอง) — server เช็คซ้ำอีกชั้น
+function techBusyJob_(id){ return (_techJobs || []).find(x => x && x.id !== id && x.status === 'working') || null; }
 // ── รับงาน ──
 async function techAcceptJob(id){
+  const busy = techBusyJob_(id);
+  if (busy) { alert('🔒 ต้องกด "📍 จบงาน" ของ ' + (busy.name || busy.id) + ' ก่อน\n(ถ้ายังไม่เสร็จ ให้กดจบงานแล้วใส่โน้ตต่องาน)\nจึงจะรับงานใหม่ได้'); return; }
   if (!confirm('รับงานนี้?')) return;
   showLoad('กำลังดึงพิกัดเช็คอิน...');
   const gps = await getQuickGps(8000);                 // ★ Phase3: เช็คอินถึงหน้างาน
@@ -9882,6 +10005,13 @@ async function jobEditSave(){
       if (document.getElementById('dashCalGrid')) await dashCalReload();
       if (_dashInstallView === 'range') await dashRangeRun();
     }
+  } else if (r && r.code === 'needResolve') {   // [JOBLOCK]
+    jobEditClose();
+    jlkOpen(r.jobs, 'ย้ายวัน/ทีมของงานนี้', async () => {
+      _dashRangeJobs = [];
+      if (document.getElementById('dashCalGrid')) await dashCalReload();
+      if (_dashInstallView === 'range') await dashRangeRun();
+    });
   } else {
     toast((r&&r.error) ? ('บันทึกไม่สำเร็จ: '+r.error) : 'บันทึกไม่สำเร็จ');
   }
