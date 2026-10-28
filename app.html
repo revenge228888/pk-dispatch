@@ -9308,8 +9308,13 @@ async function dashDayNoteEdit(ds){
     const mv=document.getElementById('dashMeasureView'); if(mv&&mv.style.display!=='none') measCalRender(); else dashCalRender();
   } else toast((r && r.error) || 'ผิดพลาด');
 }
-// กรอบแดงของช่องวันที่มีหมายเหตุ — ใช้ร่วมปฏิทินติดตั้ง/วัดงาน (ซ้อนกับโหมดเทียบได้: ขอบนอกแดง + เงาในเดิม)
-function pkDayNoteOutline_(){ return 'border:3px solid var(--rd);outline:3px solid rgba(226,59,59,.22);outline-offset:0;background:rgba(226,59,59,.13);'; }   // outline ไม่ชนเงาในของโหมดเทียบ
+// เลขวันที่ในปฏิทิน: วันนี้ = วงกลมส้มทึบ (เดิม) · มีหมายเหตุ = วงกลมแดงรอบเลข · วันนี้+หมายเหตุ = ส้มทึบ + วงแดงรอบนอก
+function pkDayNumHtml_(d, isToday, hasNote){
+  var base='display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 5px;border-radius:var(--r-pill);font-weight:800;';
+  if (isToday) return '<span style="'+base+'background:var(--acc);color:var(--surf2);'+(hasNote?'box-shadow:0 0 0 2.5px var(--surf),0 0 0 5px var(--rd);':'')+'">'+d+'</span>';
+  if (hasNote) return '<span title="มีหมายเหตุ" style="'+base+'border:2.5px solid var(--rd);color:var(--rd);min-width:28px;height:28px;">'+d+'</span>';
+  return '<span style="font-weight:800;">'+d+'</span>';
+}
 function dashDayNoteHtml_(ds){
   const n = _dayNotes[ds];
   if (!n) return '';
@@ -9411,8 +9416,7 @@ function dashCalRender(){
       if (ds===_dashCmpA) st += 'border-color:var(--blu);box-shadow:inset 0 0 0 2px var(--blu);';
       else if (ds===_dashCmpB) st += 'border-color:var(--acc);box-shadow:inset 0 0 0 2px var(--acc);';
     }
-    if (_dayNotes[ds]) st += pkDayNoteOutline_();   // วันที่มีหมายเหตุ → กรอบแดง (26 ต.ค. 2026)
-    const dayNum=ds===today?'<span style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 5px;border-radius:var(--r-pill);background:var(--acc);color:var(--surf2);font-weight:800;">'+d+'</span>':'<span style="font-weight:800;">'+d+'</span>';
+    const dayNum=pkDayNumHtml_(d, ds===today, !!_dayNotes[ds]);   // มีหมายเหตุ → วงกลมแดงรอบเลขวันที่ (28 ต.ค. 2026)
     html+='<div class="pkcal-cell" role="button" tabindex="0" onclick="dashCalPick(\''+ds+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();dashCalPick(\''+ds+'\')}" style="'+st+'">'
       +'<div class="pkcal-top" style="display:flex;align-items:center;justify-content:space-between;font-size:12px;">'+(_dashCalSpan==='week'?'<span style="color:var(--mu);font-weight:700;">'+PK_DASH_DOW[dow]+'</span>':'')+dayNum+(js.length?'<span class="badge bp">'+js.length+'<span class="pkcal-unit"> งาน</span></span>':'')+'</div>'
       +pkDashStatusBar_(js,6)
@@ -10019,8 +10023,7 @@ function measCalRender(){
     if(!ds){html+='<div></div>';return;}
     const x=ds.split('-'),d=Number(x[2]),dow=new Date(Number(x[0]),Number(x[1])-1,d).getDay(),js=byDay[ds]||[],wk=dow===0||dow===6;
     let st='min-height:'+(_measCalSpan==='week'?'82':'70')+'px;background:'+(wk?'var(--acc-t)':'var(--surf)')+';border:1px solid '+(ds===_measCalSel?'var(--acc)':'var(--bdr)')+';border-radius:var(--r-md);padding:6px 7px;cursor:pointer;display:grid;grid-template-rows:auto 6px auto;gap:7px;';
-    if (_dayNotes[ds]) st += pkDayNoteOutline_();   // วันที่มีหมายเหตุ → กรอบแดง (26 ต.ค. 2026)
-    const dayNum=ds===today?'<span style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 5px;border-radius:var(--r-pill);background:var(--acc);color:var(--surf2);font-weight:800;">'+d+'</span>':'<span style="font-weight:800;">'+d+'</span>';
+    const dayNum=pkDayNumHtml_(d, ds===today, !!_dayNotes[ds]);   // มีหมายเหตุ → วงกลมแดงรอบเลขวันที่ (28 ต.ค. 2026)
     html+='<div class="pkcal-cell" role="button" tabindex="0" onclick="measCalPick(\''+ds+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();measCalPick(\''+ds+'\')}" style="'+st+'">'
       +'<div class="pkcal-top" style="display:flex;align-items:center;justify-content:space-between;font-size:12px;">'+(_measCalSpan==='week'?'<span style="color:var(--mu);font-weight:700;">'+PK_DASH_DOW[dow]+'</span>':'')+dayNum+(js.length?'<span class="badge bp">'+js.length+'<span class="pkcal-unit"> งาน</span></span>':'')+'</div>'
       +pkDashStatusBar_(js,6)+'<div class="pkcal-bot" style="display:flex;justify-content:space-between;font-size:11px;color:var(--mu);"><span>'+(js.length?'★ '+pkDashSumScore_(js):'')+'</span><span>'+(_dayNotes[ds]?'📝':'')+'</span></div></div>';
