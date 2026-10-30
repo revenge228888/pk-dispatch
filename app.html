@@ -18577,7 +18577,7 @@ async function umSave(editUsername){
   const discordId = (document.getElementById('umFieldDiscord').value || '').trim();
   if (!username) { toast('กรอกชื่อผู้ใช้'); return; }
   if (!editUsername && !password) { toast('ผู้ใช้ใหม่ต้องตั้งรหัสผ่าน'); return; }
-  const body = { action:'pk_userUpsert', username: username, role: role, name: name, team: team, discordId: discordId, active: true };
+  const body = { action:'pk_userUpsert', targetUsername: username, role: role, name: name, team: team, discordId: discordId, active: true };
   if (password) body.password = password;
   if (editUsername) { const cur = _umUsers.find(x => x.username === editUsername); if (cur) body.active = cur.active; }   // แก้ไข = คงสถานะเดิม (ระงับผ่านปุ่มแยก)
   try {
@@ -18590,7 +18590,7 @@ async function umSave(editUsername){
 async function umToggle(username, active){
   if (!confirm(active ? 'เปิดใช้งาน "' + username + '" ให้ login ได้อีกครั้ง?' : 'ระงับ "' + username + '"?\nlogin ไม่ได้ทันที แต่เก็บประวัติงาน/ยอดเงินเก่าไว้')) return;
   try {
-    const r = await call({ action:'pk_userSetActive', username: username, active: active });
+    const r = await call({ action:'pk_userSetActive', targetUsername: username, active: active });
     if (!r.ok) { toast('❌ ' + (r.error || 'ทำไม่สำเร็จ')); return; }
     toast(active ? '✓ เปิดใช้งานแล้ว' : '✓ ระงับแล้ว');
     await umLoad();
