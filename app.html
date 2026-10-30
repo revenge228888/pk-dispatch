@@ -10978,6 +10978,7 @@ function prdCss_(){
     +'.prd-selc{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;font-weight:800;cursor:pointer;flex:none;}.prd-selc input{width:30px;height:30px;}'
     +'.prd-card.sel{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-t,rgba(212,118,15,.25));}'
     +'.prd-selbar{position:sticky;bottom:10px;z-index:20;display:flex;align-items:center;gap:10px;background:var(--tx);color:var(--surf2);border-radius:14px;padding:10px 14px;box-shadow:0 8px 24px rgba(0,0,0,.25);}.prd-selbar .prd-wo{color:inherit;opacity:.8;}'
+    +'.prd-lotjobs{display:flex;flex-direction:column;gap:3px;margin-top:6px;}.prd-lotjob{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;}.prd-lotjob b{font-size:19px;}.prd-lotjob span{font-family:var(--mono);font-size:16px;font-weight:700;}'
     +'.prd-ctag{display:inline-flex;align-items:center;font-family:var(--sans);font-size:16px;font-weight:800;line-height:1.2;padding:3px 12px;border-radius:8px;border:2px solid #1f1a16;white-space:nowrap;}'
     +'.prd-ctag.big{font-size:22px;padding:5px 16px;border-width:3px;}'
     +'.prd-note{font-size:13px;border-left:3px solid var(--acc);padding:3px 8px;background:var(--acc-t);border-radius:4px;}'
@@ -11006,7 +11007,7 @@ function prdCss_(){
     +'.prd-jb.cur{outline:3px solid var(--tx);outline-offset:2px;}'
     +'.prd-pc{display:grid;grid-template-columns:52px minmax(0,1fr) auto 58px;align-items:center;gap:13px;background:#fff;border:2px solid var(--bdr);border-radius:12px;padding:9px 13px;cursor:pointer;text-align:left;font-family:var(--sans);color:#1f1a16;width:100%;}'
     +'.prd-pc .n{width:46px;height:46px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:800;font-size:21px;color:#1a1a1a;}'
-    +'.prd-pc .who b{display:block;font-size:16px;}.prd-pc .who span{font-size:13px;color:#6f5d49;}'
+    +'.prd-pc .who b{display:block;font-size:21px;line-height:1.25;}.prd-pc .who span{font-family:var(--mono);font-size:16px;font-weight:700;color:#4a3b2c;}'
     +'.prd-pc .len{font-family:var(--mono);font-weight:800;font-size:40px;line-height:1;}.prd-pc .len small{font-size:15px;color:#6f5d49;margin-left:3px;}'
     +'.prd-pc .tick{width:54px;height:54px;border-radius:12px;border:3px solid #cbbfae;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;color:transparent;}'
     +'.prd-pc.cut{opacity:.55;}.prd-pc.cut .tick{background:var(--grn);border-color:var(--grn);color:#fff;}.prd-pc.cut .len{text-decoration:line-through;}'
@@ -11296,7 +11297,7 @@ function prdRenderCut(){
   var h=prdCutSteps_(1);
   if(_prdCutFilter){ var fj=prdJob_(_prdCutFilter);
     h+='<div class="prd-banner" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">ใบจัดตัดที่มีงาน '+escHtml(_prdCutFilter)+(fj?' · '+escHtml(fj.customerName||''):'')+'<span class="prd-sp"></span><button class="prd-btn ghost sm" onclick="prdCutClearFilter()">ดูทั้งหมด</button></div>'; }
-  h+='<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><div style="font-size:14px;color:var(--mu);">ใบจัดตัดราง 45 วันล่าสุด — สร้างได้ 2 ทาง: ติ๊ก "ตัด" ที่การ์ดในคิวผลิต แล้วกด 🪚 ตัดงานที่เลือก · หรือผู้จัดการสร้างจากหน้าใบผลิต · เลขล็อตตรงกับหัวกระดาษ (🖨 พิมพ์ได้) เส้นตรงกันทุกเส้น</div>'
+  h+='<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><div style="font-size:14px;color:var(--mu);">ใบจัดตัดราง 45 วันล่าสุด — สร้างได้ 2 ทาง: ติ๊ก "ตัด" ที่การ์ดในคิวผลิต แล้วกด 🪚 ตัดงานที่เลือก · หรือผู้จัดการสร้างจากหน้าใบผลิต · เลขล็อตตรงกับหัวกระดาษ (📄 เปิดดูได้) เส้นตรงกันทุกเส้น</div>'
     +'<span class="prd-sp"></span><button class="prd-btn ghost sm" onclick="prdCutReloadLots()">↻ โหลดใหม่</button></div>';
   h+='<div class="prd-sec">🪚 ยังตัดไม่ครบ <span class="prd-chip">'+open.length+'</span></div><div class="prd-list">';
   if(!open.length) h+='<div class="loading-row">'+(lots.length?'ตัดครบทุกล็อตแล้ว 👍':(_prdCutFilter?'ยังไม่มีใบจัดตัดของงานนี้ — กลับไปคิวผลิต ติ๊ก "ตัด" ที่การ์ด แล้วกด 🪚 ตัดงานที่เลือก':'ยังไม่มีใบจัดตัดราง'))+'</div>';
@@ -11318,12 +11319,12 @@ function prdRenderCut(){
 function prdCutLotAllDone_(l){ var ids=(l&&l.woIds)||[]; return ids.length>0 && ids.every(function(id){ var j=prdJob_(id); return !j || prdIsDone_(j); }); }
 function prdCutWhen_(l){ return l.createdAt?ptThd(new Date(l.createdAt+7*3600000).toISOString().slice(0,10)):''; }
 function prdCutLotHtml_(l, cats){
-  var names=(l.woIds||[]).map(function(id){ var j=prdJob_(id); return j?(j.customerName||id):id; }).join(', ');
+  var jobs=(l.woIds||[]).map(function(id){ var j=prdJob_(id); return '<div class="prd-lotjob"><b>'+escHtml(j?(j.customerName||'-'):'-')+'</b><span>'+escHtml(id)+'</span></div>'; }).join('');
   var tp=0, td=0; cats.forEach(function(c){ tp+=c.pieces; td+=c.done; });
   var order=cats.map(function(c,i){ return i; }).sort(function(a,b){ var x=cats[a].state==='done'?1:0, y=cats[b].state==='done'?1:0; return x!==y?x-y:a-b; });
   var h='<div class="prd-lot"><div class="prd-loth"><div style="min-width:0;"><div class="prd-cust">'+escHtml(l.lotId)+(l.lotInfo?' <span class="prd-wo">'+escHtml(l.lotInfo)+'</span>':'')+'</div>'
-    +'<div class="prd-wo">'+prdCutWhen_(l)+' · โดย '+escHtml(l.createdBy||'-')+' · รางเต็มเส้น '+l.stock+' cm · '+escHtml(names)+'</div></div>'
-    +'<button class="prd-btn ghost sm" onclick="prdLotPrint(\''+escAttr(l.lotId)+'\')">🖨 พิมพ์</button>'
+    +'<div class="prd-wo">'+prdCutWhen_(l)+' · โดย '+escHtml(l.createdBy||'-')+' · รางเต็มเส้น '+l.stock+' cm</div><div class="prd-lotjobs">'+jobs+'</div></div>'
+    +'<button class="prd-btn ghost sm" onclick="prdLotPrint(\''+escAttr(l.lotId)+'\')">📄 เปิด</button>'
     +'<div style="text-align:right;flex:none;"><b style="font-family:var(--mono);font-size:22px;">'+td+'/'+tp+'</b><div class="prd-wo">ชิ้นที่ตัดแล้ว</div></div></div><div class="prd-cats">';
   order.forEach(function(ci){
     var c=cats[ci], pct=c.pieces?c.done/c.pieces*100:0;
@@ -16923,9 +16924,9 @@ function pkpCutPicker_(){
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;font-size:17px;">🪚 เลือกราง / สี ที่จะตัด</h3>'
     +'<button class="btn btn-sm" onclick="pkpCutClose_()">✕</button></div>'
     +(pkpCutExisting.length?'<div style="margin-bottom:12px;padding:9px 11px;border-radius:8px;border:1px solid var(--acc,#d4760f);background:rgba(212,118,15,.10);font-size:13px;">'
-      +'<div style="font-weight:800;margin-bottom:5px;">⚠ งานที่เลือกมีใบจัดตัดอยู่แล้ว — พิมพ์จากล็อตเดิมเพื่อให้กระดาษตรงกับแท็บเล็ตฝ่ายราง</div>'
+      +'<div style="font-weight:800;margin-bottom:5px;">⚠ งานที่เลือกมีใบจัดตัดอยู่แล้ว — เปิดล็อตเดิมเพื่อให้กระดาษตรงกับแท็บเล็ตฝ่ายราง</div>'
       +pkpCutExisting.map(function(l){ return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;"><b>'+escHtml(l.lotId)+'</b><span style="color:var(--mu,#6b7a94);">'+(l.createdAt?ptThd(new Date(l.createdAt+7*3600000).toISOString().slice(0,10)):'')+' · โดย '+escHtml(l.createdBy||'-')+' · '+escHtml((l.woIds||[]).join(', '))+'</span>'
-        +'<button class="btn btn-sm" onclick="prdLotPrint(\''+escAttr(l.lotId)+'\')">🖨 พิมพ์ล็อตนี้</button></div>'; }).join('')
+        +'<button class="btn btn-sm" onclick="prdLotPrint(\''+escAttr(l.lotId)+'\')">📄 เปิดล็อตนี้</button></div>'; }).join('')
       +'<div style="color:var(--mu,#6b7a94);margin-top:5px;">สร้างใบจัดตัดใหม่ด้านล่าง = ต้องยกเลิกใบเดิมก่อน (ระบบจะถามยืนยัน · ชิ้นที่ติ๊กตัดแล้วยังอยู่)</div></div>':'')
     +'<div style="margin-bottom:13px;font-size:13px;">รูปแบบแผ่น:'
     +'<label style="display:block;margin-top:6px;cursor:pointer;"><input type="radio" name="pkpcMode" value="rail" checked> รวมทุกสีในแผ่นเดียว (แยกหน้าตามชนิดราง)</label>'
@@ -17033,7 +17034,7 @@ function pkpCutDocHTML(pieces, ids, set, mode, scutPieces, lotInfo, ffd){
       var lo=Math.max(0,stock-b.used), lpct=lo/stock*100;
       var segs=b.pieces.map(function(pc,si){ var pct=Math.max(1.5,pc.len/stock*100); return '<div class="seg" style="width:'+pct+'%;background:'+(SEGC[pc.rail]||'#bbb')+';">'+(si+1)+'</div>'; }).join('');
       var waste=lo>0.05?'<div class="wseg" style="width:'+lpct+'%;">เศษ</div>':'';
-      var rows=b.pieces.map(function(pc,si){ return '<tr><td class="c">'+(si+1)+'</td><td>'+esc(pc.name||pc.wo||'-')+'</td><td class="c">'+pc.setNo+'</td><td class="c">'+(pc.ptot>1?pc.pidx+'/'+pc.ptot:'–')+'</td><td class="n">'+pc.len+'</td></tr>'; }).join('');
+      var rows=b.pieces.map(function(pc,si){ return '<tr><td class="c">'+(si+1)+'</td><td class="job"><b>'+esc(pc.name||pc.wo||'-')+'</b>'+(pc.name&&pc.wo?'<span>'+esc(pc.wo)+'</span>':'')+'</td><td class="c">'+pc.setNo+'</td><td class="c">'+(pc.ptot>1?pc.pidx+'/'+pc.ptot:'–')+'</td><td class="n">'+pc.len+'</td></tr>'; }).join('');
       return '<div class="bk"><div class="bh"><span><b>เส้นที่ '+(i+1)+'</b>'+(b.over?' ⚠ ยาวเกินราง':'')+'</span><span>ใช้ '+r2(b.used)+' / '+stock+' · เศษ '+r2(lo)+' cm</span></div>'
         +'<div class="vbar'+(b.over?' over':'')+'">'+segs+waste+'</div>'
         +'<table class="ct"><thead><tr><th class="c">#</th><th>ชื่องาน</th><th class="c">ชุด</th><th class="c">ชิ้นที่</th><th class="n">ยาว(cm)</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
@@ -17071,15 +17072,16 @@ function pkpCutDocHTML(pieces, ids, set, mode, scutPieces, lotInfo, ffd){
   PKP_SCUT_ORDER.forEach(function(prof){ renderGroup(prof, scutColors, function(c){ return scutByColor[c][prof]; }); });
   // อ้างอิงเฉพาะ WO ที่มีชิ้นในเอกสารนี้จริง (ไม่ใช่ทุกใบที่ติ๊กเลือก)
   var refWos={};
-  pieces.concat(scutPieces).forEach(function(p){ if(p.wo) refWos[p.wo]=1; });
+  pieces.concat(scutPieces).forEach(function(p){ if(p.wo) refWos[p.wo]=p.name||''; });
   var refList=Object.keys(refWos);
   var head='<div class="head"><div class="brand">PK มุ้งจีบ<small>CUTTING PLAN · ใบจัดตัดราง</small></div><div class="sumc"><div>รางเต็มเส้น <b>'+stock+'</b> cm · ใบตัด '+kerf+' cm</div><div>ใช้รางรวม <b>'+gBars+'</b> เส้น · เศษรวม <b>'+r2(gWaste)+'</b> cm</div>'+(lotInfo?'<div style="font-weight:800;color:#111a25;">'+esc(lotInfo)+'</div>':'')+'</div></div>'
-    +'<div class="info">รวมจาก: '+esc((refList.length?refList:ids).join(', '))+' &nbsp;·&nbsp; ชิ้นทั้งหมด '+gPieces+' ชิ้น &nbsp;·&nbsp; แยกตัดตามสีอลู (สีต่างกันไม่ตัดรวมเส้น)</div>';
+    +'<div class="jobs">'+(refList.length?refList:ids).map(function(id){ return '<div class="jb"><b>'+esc(refWos[id]||'-')+'</b><span>'+esc(id)+'</span></div>'; }).join('')+'</div><div class="info">ชิ้นทั้งหมด '+gPieces+' ชิ้น &nbsp;·&nbsp; แยกตัดตามสีอลู (สีต่างกันไม่ตัดรวมเส้น)</div>';
   var CSS='@import url(https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap);'
     +'*{box-sizing:border-box;margin:0;padding:0}body{font-family:Sarabun,sans-serif;background:#eef1f4;color:#111a25;padding:14px;line-height:1.3}'
     +'.bar2{max-width:297mm;margin:0 auto 10px;display:flex}.bar2 button{font-family:inherit;border:none;background:#1c2733;color:#fff;padding:7px 16px;border-radius:8px;font-weight:700;cursor:pointer}'
     +'.sheet{width:297mm;max-width:100%;margin:0 auto;background:#fff;border-radius:6px;box-shadow:0 10px 36px rgba(0,0,0,.18);padding:8mm 9mm}'
     +'.head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #1c2733;padding-bottom:5px}.brand{font-size:16px;font-weight:800}.brand small{font-size:9px;letter-spacing:1.5px;color:#4b5a6e;font-weight:600;margin-left:6px}.sumc{text-align:right;font-size:11px;color:#4b5a6e}.sumc b{color:#d4760f;font-size:13px}'
+    +'.jobs{display:flex;flex-wrap:wrap;gap:4px 18px;margin:7px 0 3px}.jb{display:flex;align-items:baseline;gap:7px}.jb b{font-size:16px;font-weight:800}.jb span{font-size:14px;font-weight:700;color:#1c2733}'
     +'.info{font-size:10px;color:#4b5a6e;margin:5px 0 2px}'
     +'.csec{margin-top:10px}.cht{font-size:13px;font-weight:800;display:flex;align-items:center;gap:6px;border-left:3px solid #d4760f;padding-left:7px;margin-bottom:6px;break-after:avoid;page-break-after:avoid}.dot{width:12px;height:12px;border-radius:50%;border:1px solid #999;display:inline-block;flex:none}.meta{font-size:10px;font-weight:600;color:#4b5a6e}'
     +'.railpage{padding-top:4px;break-inside:avoid;page-break-inside:avoid}.railpage+.railpage{margin-top:18px;border-top:1px dashed #b8c2cc;padding-top:10px}.rhd{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;border-bottom:2px solid #1c2733;padding-bottom:4px;margin:0 0 8px;break-after:avoid;page-break-after:avoid}.rt{font-size:15px;font-weight:800;color:#1c2733}.rc{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700}'
@@ -17089,7 +17091,7 @@ function pkpCutDocHTML(pieces, ids, set, mode, scutPieces, lotInfo, ffd){
     +'.vbar{display:flex;height:13px;border:1px solid #888;border-radius:2px;overflow:hidden;background:#fff;margin-bottom:4px}'
     +'.vbar .seg{display:flex;align-items:center;justify-content:center;border-right:1px solid #fff;min-width:0;color:#1a1a1a;font-size:8.5px;font-weight:800;overflow:hidden}.vbar.over{border-color:#ff453a}'
     +'.wseg{display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(45deg,#e6e6e6,#e6e6e6 4px,#f5f5f5 4px,#f5f5f5 8px);color:#666;font-size:8px;min-width:0}'
-    +'.ct{width:100%;border-collapse:collapse;font-size:10.5px}.ct th{background:#1c2733;color:#fff;font-weight:700;font-size:9.5px;padding:2px 6px;text-align:left}.ct th.c,.ct td.c{text-align:center}.ct th.n,.ct td.n{text-align:right}'
+    +'.ct{width:100%;border-collapse:collapse;font-size:10.5px}.ct td.job{font-size:13px;line-height:1.25}.ct td.job b{font-weight:800}.ct td.job span{display:block;font-size:11.5px;font-weight:700;color:#1c2733}.ct th{background:#1c2733;color:#fff;font-weight:700;font-size:9.5px;padding:2px 6px;text-align:left}.ct th.c,.ct td.c{text-align:center}.ct th.n,.ct td.n{text-align:right}'
     +'.ct td{padding:2px 6px;border-bottom:1px solid #e7ecf0;vertical-align:top}.ct td.n{font-weight:800;color:#1c2733;white-space:nowrap}.ct td.c{white-space:nowrap}.ct tbody tr:nth-child(even){background:#f4f7fa}'
     +'@media print{body{background:#fff;padding:0}.sheet{box-shadow:none;border-radius:0;width:auto;padding:8mm}.bar2{display:none}@page{size:A4 landscape;margin:0}}';
   return '<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>ใบจัดตัดราง'+(lotInfo?' · '+esc(lotInfo):'')+'</title><style>'+CSS+'</style></head><body>'
