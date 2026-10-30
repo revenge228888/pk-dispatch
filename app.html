@@ -11043,7 +11043,7 @@ function prdInit(){
   if(!_prdDept){ document.getElementById('prdBody').innerHTML='<div class="empty-section"><h2>บัญชีนี้ยังไม่ได้ระบุฝ่าย</h2><p>ให้ผู้จัดการตั้ง team ของบัญชีเป็น "ราง" หรือ "ผ้ามุ้ง" ในหน้าจัดการผู้ใช้</p></div>'; return; }
   prdLoad();
   if(_prdTimer) clearInterval(_prdTimer);
-  _prdTimer=setInterval(function(){ if(CURRENT_USER&&CURRENT_USER.role==='prod'&&!_prdCutOn&&document.getElementById('prdBody')) prdLoad(true); }, 180000);
+  _prdTimer=setInterval(function(){ if(CURRENT_USER&&CURRENT_USER.role==='prod'&&!_prdCutOn&&document.getElementById('prdBody')) prdLoad(true); }, 60000);   // ออฟฟิศเปลี่ยนสถานะ → แท็บเล็ตเห็นภายใน 1 นาที
 }
 async function prdLoad(quiet){
   if(!quiet){ var b=document.getElementById('prdBody'); if(b&&!_prdJobs.length) b.innerHTML='<div class="loading-row">กำลังโหลด...</div>'; }
@@ -11053,7 +11053,9 @@ async function prdLoad(quiet){
     if(r&&r.ok){ _prdJobs=r.jobs||[]; _prdPending=Number(r.pendingApproval)||0; }
     else if(!quiet) toast((r&&r.error)||'โหลดคิวผลิตไม่สำเร็จ');
   }catch(e){ if(!quiet) toast('โหลดคิวผลิตไม่สำเร็จ: '+(e&&e.message||e)); }
-  prdRender();
+  // รีเฟรชเงียบระหว่างเปิดหมวดที่พับไว้ → ไม่วาดใหม่รอบนี้ (ไม่งั้นหมวดปิดเองขณะอ่าน)
+  var _prdB=document.getElementById('prdBody');
+  if(!(quiet && _prdB && _prdB.querySelector('details[open]'))) prdRender();
   if(_prdDept==='rail' && _prdLots===null && _prdTab!=='cut') prdLoadLots();   // ฝ่ายราง: ใช้ล็อกปุ่ม "ส่วนรางเสร็จ" จนกว่าตัดครบ
 }
 function prdSetTab(t){ _prdTab=t; _prdQc=null; prdRender(); }
@@ -11324,7 +11326,7 @@ function prdCutLotHtml_(l, cats){
   var order=cats.map(function(c,i){ return i; }).sort(function(a,b){ var x=cats[a].state==='done'?1:0, y=cats[b].state==='done'?1:0; return x!==y?x-y:a-b; });
   var h='<div class="prd-lot"><div class="prd-loth"><div style="min-width:0;"><div class="prd-cust">'+escHtml(l.lotId)+(l.lotInfo?' <span class="prd-wo">'+escHtml(l.lotInfo)+'</span>':'')+'</div>'
     +'<div class="prd-wo">'+prdCutWhen_(l)+' · โดย '+escHtml(l.createdBy||'-')+' · รางเต็มเส้น '+l.stock+' cm</div><div class="prd-lotjobs">'+jobs+'</div></div>'
-    +'<button class="prd-btn ghost sm" onclick="prdLotPrint(\''+escAttr(l.lotId)+'\')">📄 เปิด</button>'
+    +'<button class="prd-btn ghost sm" onclick="prdLotPrint(\''+escAttr(l.lotId)+'\')">📄 เปิด</button><button class="prd-btn ghost sm" onclick="prdLotDelete(\''+escAttr(l.lotId)+'\')">🗑 ลบ</button>'
     +'<div style="text-align:right;flex:none;"><b style="font-family:var(--mono);font-size:22px;">'+td+'/'+tp+'</b><div class="prd-wo">ชิ้นที่ตัดแล้ว</div></div></div><div class="prd-cats">';
   order.forEach(function(ci){
     var c=cats[ci], pct=c.pieces?c.done/c.pieces*100:0;
@@ -11530,6 +11532,21 @@ function prdLotDocHTML_(lot){
     return { bars:bars, stockLen:stock, count:n, usedStock:bars.length, totalLen:r2(tl), waste:r2(ws) };
   };
   return pkpCutDocHTML(pieces, Object.keys(ids), { stock:lot.stock, kerf:lot.kerf }, 'rail', scut, 'ล็อต '+lot.lotId+(lot.lotInfo?' · '+lot.lotInfo:''), ffd);
+}
+// 🗑 ลบใบจัดตัด: server ตั้ง deletedAt · ติ๊กชิ้นตัดเก็บต่อใบผลิต ไม่หาย
+async function prdLotDelete(lotId){
+  var l=(_prdLots||[]).concat(pkpCutExisting||[]).find(function(x){ return x.lotId===lotId; });
+  if(!confirm('ลบใบจัดตัด '+lotId+(l&&(l.woIds||[]).length?'\nงาน: '+l.woIds.join(', '):'')+' ?\n\nกระดาษที่พิมพ์ไว้ของล็อตนี้ห้ามใช้ต่อ · ชิ้นที่ติ๊กตัดแล้วยังอยู่กับใบผลิต\nต้องการตัดงานเหล่านี้ต้องสร้างใบจัดตัดใหม่')) return;
+  showLoad('กำลังลบใบจัดตัด...');
+  try{
+    var r=await call({action:'pk_cutLotDelete', lotId:lotId});
+    if(!(r&&r.ok)){ toast((r&&r.error)||'ลบไม่สำเร็จ'); return; }
+    toast('ลบใบจัดตัด '+lotId+' แล้ว');
+    pkpCutExisting=(pkpCutExisting||[]).filter(function(x){ return x.lotId!==lotId; });
+    if(CURRENT_USER && CURRENT_USER.role==='prod'){ _prdLots=null; prdRender(); }
+    else if(document.getElementById('pkpCutModal') && document.getElementById('pkpCutModal').classList.contains('on')) pkpCutPicker_();
+  }catch(e){ toast('ลบไม่สำเร็จ: '+(e&&e.message||e)); }
+  finally{ hideLoad(); }
 }
 function prdLotPrint(lotId){
   var l=(_prdLots||[]).concat(pkpCutExisting||[]).find(function(x){ return x.lotId===lotId && !x.locked; });
@@ -16926,7 +16943,7 @@ function pkpCutPicker_(){
     +(pkpCutExisting.length?'<div style="margin-bottom:12px;padding:9px 11px;border-radius:8px;border:1px solid var(--acc,#d4760f);background:rgba(212,118,15,.10);font-size:13px;">'
       +'<div style="font-weight:800;margin-bottom:5px;">⚠ งานที่เลือกมีใบจัดตัดอยู่แล้ว — เปิดล็อตเดิมเพื่อให้กระดาษตรงกับแท็บเล็ตฝ่ายราง</div>'
       +pkpCutExisting.map(function(l){ return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;"><b>'+escHtml(l.lotId)+'</b><span style="color:var(--mu,#6b7a94);">'+(l.createdAt?ptThd(new Date(l.createdAt+7*3600000).toISOString().slice(0,10)):'')+' · โดย '+escHtml(l.createdBy||'-')+' · '+escHtml((l.woIds||[]).join(', '))+'</span>'
-        +'<button class="btn btn-sm" onclick="prdLotPrint(\''+escAttr(l.lotId)+'\')">📄 เปิดล็อตนี้</button></div>'; }).join('')
+        +'<button class="btn btn-sm" onclick="prdLotPrint(\''+escAttr(l.lotId)+'\')">📄 เปิดล็อตนี้</button><button class="btn btn-sm" onclick="prdLotDelete(\''+escAttr(l.lotId)+'\')">🗑 ลบ</button></div>'; }).join('')
       +'<div style="color:var(--mu,#6b7a94);margin-top:5px;">สร้างใบจัดตัดใหม่ด้านล่าง = ต้องยกเลิกใบเดิมก่อน (ระบบจะถามยืนยัน · ชิ้นที่ติ๊กตัดแล้วยังอยู่)</div></div>':'')
     +'<div style="margin-bottom:13px;font-size:13px;">รูปแบบแผ่น:'
     +'<label style="display:block;margin-top:6px;cursor:pointer;"><input type="radio" name="pkpcMode" value="rail" checked> รวมทุกสีในแผ่นเดียว (แยกหน้าตามชนิดราง)</label>'
