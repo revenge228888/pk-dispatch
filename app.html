@@ -11533,9 +11533,34 @@ function prdLotDocHTML_(lot){
   };
   return pkpCutDocHTML(pieces, Object.keys(ids), { stock:lot.stock, kerf:lot.kerf }, 'rail', scut, 'ล็อต '+lot.lotId+(lot.lotInfo?' · '+lot.lotInfo:''), ffd);
 }
+// 📋 ผู้จัดการ: รายการใบจัดตัดทั้งหมด (45 วัน) จากหน้าใบผลิต — เปิด/ลบ ได้โดยไม่ต้องเลือกงานก่อน
+var _pkpLotsAll=[];
+function pkpLotsModalEl_(){ var m=document.getElementById('pkpLotsModal'); if(!m){ m=document.createElement('div'); m.className='modal-bg'; m.id='pkpLotsModal'; m.onclick=function(e){ if(e.target===m) m.classList.remove('on'); }; document.body.appendChild(m); } return m; }
+function pkpLotsRender_(){
+  var rows=_pkpLotsAll.map(function(l){
+    return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--line,#2a3344);">'
+      +'<div style="flex:1;min-width:220px;"><div style="font-weight:800;font-size:15px;">'+escHtml(l.lotId)+(l.lotInfo?' <span style="font-size:12px;font-weight:600;color:var(--mu,#6b7a94);">'+escHtml(l.lotInfo)+'</span>':'')+'</div>'
+      +'<div style="font-size:13px;font-weight:700;">'+escHtml((l.woIds||[]).join(', '))+'</div>'
+      +'<div style="font-size:12px;color:var(--mu,#6b7a94);">'+prdCutWhen_(l)+' · โดย '+escHtml(l.createdBy||'-')+' · รางเต็มเส้น '+l.stock+' cm · '+(l.bars||[]).length+' เส้น</div></div>'
+      +'<button class="btn btn-sm" onclick="prdLotPrint(\''+escAttr(l.lotId)+'\')">📄 เปิด</button>'
+      +'<button class="btn btn-sm" onclick="prdLotDelete(\''+escAttr(l.lotId)+'\')">🗑 ลบ</button></div>';
+  }).join('');
+  pkpLotsModalEl_().innerHTML='<div class="modal" style="max-width:680px;width:96vw;max-height:86vh;overflow-y:auto;padding:18px;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><h3 style="margin:0;font-size:17px;">📋 ใบจัดตัดราง 45 วันล่าสุด</h3><button class="btn btn-sm" onclick="document.getElementById(\'pkpLotsModal\').classList.remove(\'on\')">✕</button></div>'
+    +(rows||'<div class="loading-row">ยังไม่มีใบจัดตัดราง</div>')+'</div>';
+}
+async function pkpLotsOpen(){
+  showLoad('กำลังโหลดใบจัดตัด...');
+  try{
+    var r=await getCutLotsFast();
+    if(!(r&&r.ok)){ toast((r&&r.error)||'โหลดใบจัดตัดไม่สำเร็จ'); return; }
+    _pkpLotsAll=r.lots||[]; pkpLotsRender_(); pkpLotsModalEl_().classList.add('on');
+  }catch(e){ toast('โหลดใบจัดตัดไม่สำเร็จ: '+(e&&e.message||e)); }
+  finally{ hideLoad(); }
+}
 // 🗑 ลบใบจัดตัด: server ตั้ง deletedAt · ติ๊กชิ้นตัดเก็บต่อใบผลิต ไม่หาย
 async function prdLotDelete(lotId){
-  var l=(_prdLots||[]).concat(pkpCutExisting||[]).find(function(x){ return x.lotId===lotId; });
+  var l=(_prdLots||[]).concat(pkpCutExisting||[], _pkpLotsAll).find(function(x){ return x.lotId===lotId; });
   if(!confirm('ลบใบจัดตัด '+lotId+(l&&(l.woIds||[]).length?'\nงาน: '+l.woIds.join(', '):'')+' ?\n\nกระดาษที่พิมพ์ไว้ของล็อตนี้ห้ามใช้ต่อ · ชิ้นที่ติ๊กตัดแล้วยังอยู่กับใบผลิต\nต้องการตัดงานเหล่านี้ต้องสร้างใบจัดตัดใหม่')) return;
   showLoad('กำลังลบใบจัดตัด...');
   try{
@@ -11544,12 +11569,13 @@ async function prdLotDelete(lotId){
     toast('ลบใบจัดตัด '+lotId+' แล้ว');
     pkpCutExisting=(pkpCutExisting||[]).filter(function(x){ return x.lotId!==lotId; });
     if(CURRENT_USER && CURRENT_USER.role==='prod'){ _prdLots=null; prdRender(); }
+    else if(document.getElementById('pkpLotsModal') && document.getElementById('pkpLotsModal').classList.contains('on')){ _pkpLotsAll=_pkpLotsAll.filter(function(x){ return x.lotId!==lotId; }); pkpLotsRender_(); }
     else if(document.getElementById('pkpCutModal') && document.getElementById('pkpCutModal').classList.contains('on')) pkpCutPicker_();
   }catch(e){ toast('ลบไม่สำเร็จ: '+(e&&e.message||e)); }
   finally{ hideLoad(); }
 }
 function prdLotPrint(lotId){
-  var l=(_prdLots||[]).concat(pkpCutExisting||[]).find(function(x){ return x.lotId===lotId && !x.locked; });
+  var l=(_prdLots||[]).concat(pkpCutExisting||[], _pkpLotsAll).find(function(x){ return x.lotId===lotId && !x.locked; });
   if(!l){ toast('ไม่พบล็อต '+lotId); return; }
   pkpReqOpenDoc_(prdLotDocHTML_(l));
 }
@@ -18010,6 +18036,7 @@ async function pkpLoadList(){
       +'<button class="btn btn-g btn-sm" id="pkpPrintSelBtn" onclick="pkpPrintMulti()" disabled style="opacity:.5;">🖨 พิมพ์ใบผลิต</button>'
       +'<button class="btn btn-g btn-sm" id="pkpExportSelBtn" onclick="pkpReqExportMulti()" disabled style="opacity:.5;">📋 export ใบเบิกรวม</button>'
       +'<button class="btn btn-g btn-sm" id="pkpCutBtn" onclick="pkpCutOptimize()" disabled style="opacity:.5;">🪚 จัดตัดราง</button>'
+      +'<button class="btn btn-g btn-sm" onclick="pkpLotsOpen()">📋 ใบจัดตัดทั้งหมด</button>'
       +'<button class="btn btn-g btn-sm" id="pkpCoverBtn" onclick="pkpCoverMulti()" disabled style="opacity:.5;">🏷 ใบปะหน้า</button>'
       +'<span style="font-size:11px;color:var(--mu,#6b7a94);">ติ๊กเลือกหลายใบ → '+(isMgr?'อนุมัติ / ':'')+'พิมพ์ใบผลิต / รวมใบเบิก / จัดตัดราง / ใบปะหน้า</span></div>'
       +'<div style="display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;padding:7px 9px;border:1px solid var(--line,#2a3344);border-radius:8px;">'
