@@ -11199,6 +11199,13 @@ function prdMeshOpen(woId){
   }).catch(function(e){ if(_prdMesh && _prdMesh.woId===woId){ _prdMesh.err='เปิดใบผลิตไม่ได้: '+(e&&e.message||e); prdRender(); } });
 }
 function prdMeshExit(){ _prdMesh=null; prdRender(); }
+// เรียงสูงสุดก่อน (เจ้าของสั่ง 31 ต.ค.) · สูงเท่ากันตามเลขชุด · ไม่มีค่าตัดมุ้งไว้ท้าย · ไม่แก้ลำดับ/เลขชุดเดิม
+function prdMeshSort_(sets){
+  return (sets||[]).slice().sort(function(a,b){
+    var x=a.meshH==null?-1:a.meshH, y=b.meshH==null?-1:b.meshH;
+    return x!==y?y-x:a.setNo-b.setNo;
+  });
+}
 function prdRenderMesh(){
   var q=_prdMesh, j=prdJob_(q.woId), body=document.getElementById('prdBody');
   if(!j){ _prdMesh=null; prdRenderQueue(); return; }
@@ -11207,7 +11214,7 @@ function prdRenderMesh(){
   if(!q.sets){ body.innerHTML=h+'<div class="loading-row">'+(q.err?escHtml(q.err):'กำลังโหลดใบผลิต...')+'</div></div>'; return; }
   h+='<div class="prd-qcl">';
   if(!q.sets.length) h+='<div class="loading-row">ใบนี้ไม่มีรายการ</div>';
-  q.sets.forEach(function(s){
+  prdMeshSort_(q.sets).forEach(function(s){
     h+='<div class="prd-qc"><div class="hd"><span class="no">'+s.setNo+'</span><div style="min-width:0;flex:1;"><div class="ty">'+escHtml(s.type)+'</div><div class="cl">ชุดที่ '+s.setNo+'</div></div></div>'
       +'<div class="prd-msh"><div><span>รูปแบบ</span><b>'+escHtml(s.patt||'-')+'</b></div>'
       +'<div><span>สีผ้ามุ้ง</span><b>'+escHtml(s.mesh||'-')+'</b></div>'
