@@ -11790,7 +11790,7 @@ async function prdOpenDoc(woId){
 var PK_RAIL_TYPES = ['รางมือจับ','รางข้าง','รางบน-ล่าง','รางเตี้ย'];
 let _railStock=[], _railMap={}, _railCatalog=[];
 function railMapBuild(){ _railMap={}; _railStock.forEach(function(s){ _railMap[s.color]=(_railMap[s.color]||0)+s.qty; }); }   // สี → รวมทุกชนิด (ใช้เตือนในจอติดตาม)
-function railQty(t,c){ var f=_railStock.find(function(s){return s.railType===t&&s.color===c;}); return f?f.qty:0; }
+function railQty(t,c,z){ var f=_railStock.find(function(s){return s.railType===t&&s.color===c&&String(s.size||'')===String(z||'');}); return f?f.qty:0; }
 async function railStockFetch(){
   var got=false;
   if(CURRENT_USER){
@@ -11813,7 +11813,7 @@ async function railCatalogFetch(){   // ดึงรายการรางจ�
   }
   if(!prices.length){ try{ var g=await call({action:'pk_costListPrices'}); if(g&&g.ok) prices=g.prices||[]; }catch(e){} }
   var seen={}, cat=[];
-  prices.forEach(function(p){ if(PK_RAIL_TYPES.indexOf(p.name)<0) return; var c=String(p.color||'').trim(); if(!c) return; var k=p.name+'|'+c; if(seen[k])return; seen[k]=1; cat.push({railType:p.name, color:c}); });
+  prices.forEach(function(p){ if(PK_RAIL_TYPES.indexOf(p.name)<0) return; var c=String(p.color||'').trim(); if(!c) return; var z=Number(p.divisor)>1?String(Number(p.divisor)):''; var k=p.name+'|'+c+'|'+z; if(seen[k])return; seen[k]=1; cat.push({railType:p.name, color:c, size:z}); });
   _railCatalog=cat;
 }
 // ════════════════════════════════════════
@@ -11821,8 +11821,7 @@ async function railCatalogFetch(){   // ดึงรายการรางจ�
 //  ช่องว่าง = ยังไม่นับ คงยอดเดิม · บันทึก = ตั้งยอดคงเหลือเป็นจำนวนที่นับ + จดประวัติ PK_RailMove
 //  อ่าน: worker /rail-count → fallback GAS pk_railCountList · ไม่มีราคาในข้อมูล
 // ════════════════════════════════════════
-let _rcData=null, _rcHost='', _rcDraft={}, _rcCombos=[];
-var RC_TYPES_DEFAULT=['รางมือจับ','รางข้าง','รางบน-ล่าง','รางเตี้ย'];
+let _rcData=null, _rcHost='', _rcDraft={}, _rcCombos=[], _rcGroup='jeeb', _rcSize=null;
 async function getRailCountFast(){
   try{
     var d=await _pkFastPost_('/rail-count');
@@ -11831,22 +11830,32 @@ async function getRailCountFast(){
   }catch(e){ console.warn('[getRailCountFast] /rail-count error → fallback GAS:', e&&e.message); }
   var g=await call({action:'pk_railCountList'}); _markJobSource('gas'); return g;
 }
-function rcKey_(t,c){ return t+'|'+c; }
-// แถวตาราง: สีเรียงตามชื่อ · ช่องมีเฉพาะชนิด×สีที่มีจริง (ในชีตราคาต้นทุนหรือเคยมียอด)
+function rcKey_(t,c,z){ return t+'|'+c+'|'+(z||''); }
+// หมวด: รางมุ้งจีบ / รางบานเลื่อน-บานเปิด → แยกตามความยาว · ช่องมีเฉพาะที่อยู่ในชีตราคาต้นทุน หรือมียอดจริง
+//  แถว "ไม่ระบุความยาว" (ยอดเดิม/รับเข้าจาก PO) โผล่เฉพาะเมื่อมียอด หรือรายการนั้นไม่มีความยาวในชีต — นับเป็น 0 แล้วหายไป
 function rcModel_(data){
-  var types=(data&&data.types)||RC_TYPES_DEFAULT, cells={}, colors={};
-  ((data&&data.catalog)||[]).forEach(function(x){ cells[rcKey_(x.railType,x.color)]={railType:x.railType,color:x.color,qty:0,updatedAt:0,updatedBy:''}; colors[x.color]=1; });
-  ((data&&data.items)||[]).forEach(function(x){ if(types.indexOf(x.railType)<0) return; cells[rcKey_(x.railType,x.color)]=x; colors[x.color]=1; });
-  return { types:types, colors:Object.keys(colors).sort(function(a,b){ return a.localeCompare(b,'th'); }), cells:cells };
+  var jeeb=(data&&data.jeeb)||[], scut=(data&&data.scut)||[], cells={};
+  ((data&&data.catalog)||[]).forEach(function(x){ cells[rcKey_(x.railType,x.color,x.size)]={railType:x.railType,color:x.color,size:x.size||'',qty:0,updatedAt:0,updatedBy:''}; });
+  ((data&&data.items)||[]).forEach(function(x){
+    if(jeeb.indexOf(x.railType)<0 && scut.indexOf(x.railType)<0) return;
+    var k=rcKey_(x.railType,x.color,x.size);
+    if(!x.size && !cells[k] && !(Number(x.qty)>0)) return;
+    cells[k]=Object.assign({},x,{size:x.size||''});
+  });
+  var groups=[{id:'jeeb',name:'รางมุ้งจีบ',types:jeeb,sizes:{}},{id:'scut',name:'รางบานเลื่อน / บานเปิด',types:scut,sizes:{}}];
+  Object.keys(cells).forEach(function(k){ var x=cells[k]; groups.forEach(function(g){ if(g.types.indexOf(x.railType)>=0) g.sizes[x.size]=1; }); });
+  groups.forEach(function(g){ g.sizes=Object.keys(g.sizes).sort(function(a,b){ return a===''?1:(b===''?-1:Number(a)-Number(b)); }); });
+  return { groups:groups, cells:cells };
 }
+function rcSizeLabel_(z){ return z?z+' ม.':'ไม่ระบุความยาว'; }
 // ช่องที่กรอกค่าแล้ว → รายการส่ง server · ว่าง = ไม่ส่ง · ไม่ใช่จำนวนเต็ม ≥0 = เก็บใน bad ห้ามบันทึก
 function rcChanges_(draft, cells){
   var items=[], bad=[];
   Object.keys(draft||{}).forEach(function(k){
     var v=String(draft[k]==null?'':draft[k]).trim(); if(v==='') return;
-    var i=k.indexOf('|'), t=k.slice(0,i), c=k.slice(i+1), cur=(cells[k]&&Number(cells[k].qty))||0;
+    var p=k.split('|'), z=p.pop(), t=p.shift(), c=p.join('|'), cur=(cells[k]&&Number(cells[k].qty))||0;
     if(!/^\d+$/.test(v)){ bad.push(t+' '+c); return; }
-    items.push({railType:t, color:c, qty:Number(v), before:cur});
+    items.push({railType:t, color:c, size:z, qty:Number(v), before:cur});
   });
   return {items:items, bad:bad};
 }
@@ -11856,6 +11865,8 @@ function rcCss_(){
     +'.rc-t td{padding:8px;border-bottom:1px solid var(--bdr);text-align:center;vertical-align:top;}.rc-t td:first-child{text-align:left;vertical-align:middle;white-space:nowrap;}'
     +'.rc-i{width:100%;max-width:120px;height:52px;font-family:var(--mono);font-size:24px;font-weight:800;text-align:center;border:2px solid var(--bdr);border-radius:10px;background:#fff;color:#1f1a16;}.rc-i:focus{outline:3px solid var(--acc);}.rc-i.on{border-color:var(--acc);}'
     +'.rc-m{font-size:13px;color:var(--mu);margin-top:3px;min-height:18px;}.rc-m b{font-family:var(--mono);}.rc-m .up{color:var(--grn);font-weight:800;}.rc-m .dn{color:var(--rd);font-weight:800;}'
+    +'.rc-tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;}.rc-tab{font-family:var(--sans);font-size:15px;font-weight:700;min-height:44px;padding:8px 16px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf2);color:var(--tx);cursor:pointer;}.rc-tab.on{background:var(--tx);color:var(--surf2);border-color:var(--tx);}.rc-g .rc-tab{font-size:17px;font-weight:800;min-height:52px;}.rc-n{display:inline-block;min-width:22px;padding:0 6px;border-radius:999px;background:var(--acc);color:#fff;font-size:13px;text-align:center;}.rc-head{font-size:19px;font-weight:800;margin:4px 0 8px;}'
+    +'.rc-t td:first-child,.rc-t th:first-child{position:sticky;left:0;background:var(--surf2);z-index:1;}'
     +'.rc-bar{position:sticky;bottom:10px;z-index:20;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--tx);color:var(--surf2);border-radius:14px;padding:10px 14px;margin-top:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);}'
     +'.rc-btn{font-family:var(--sans);font-size:16px;font-weight:700;border:0;border-radius:12px;padding:10px 16px;min-height:48px;cursor:pointer;background:var(--acc);color:#fff;}.rc-btn.ghost{background:var(--surf2);color:var(--tx);border:1px solid var(--bdr);}.rc-btn:disabled{opacity:.45;cursor:default;}'
     +'.prd-ctag{display:inline-flex;align-items:center;font-family:var(--sans);font-size:16px;font-weight:800;line-height:1.2;padding:3px 12px;border-radius:8px;border:2px solid #1f1a16;white-space:nowrap;}</style>';
@@ -11870,27 +11881,42 @@ async function rcLoad(){
   rcRender_();
 }
 function rcWhen_(ts){ if(!ts) return ''; return ptThd(new Date(Number(ts)+7*3600000).toISOString().slice(0,10)); }
+function rcTabBtn_(on, label, n, onclick){
+  return '<button class="rc-tab'+(on?' on':'')+'" onclick="'+onclick+'">'+label+(n?' <span class="rc-n">'+n+'</span>':'')+'</button>';
+}
+function rcSetGroup(id){ _rcGroup=id; _rcSize=null; rcRender_(); }
+function rcSetSize(i){ var g=rcModel_(_rcData).groups.find(function(x){ return x.id===_rcGroup; }); _rcSize=g?g.sizes[i]:null; rcRender_(); }
 function rcRender_(){
   var b=document.getElementById(_rcHost); if(!b) return;
-  var m=rcModel_(_rcData); _rcCombos=[];
+  var m=rcModel_(_rcData), live=m.groups.filter(function(g){ return g.sizes.length; }); _rcCombos=[];
+  var cntOf=function(gId,z){ var n=0; Object.keys(_rcDraft).forEach(function(k){ var c=m.cells[k]; if(!c) return; var g=m.groups.find(function(x){ return x.id===gId; }); if(g.types.indexOf(c.railType)>=0 && (z===undefined||c.size===z)) n++; }); return n; };
   var h=rcCss_()+'<div style="font-size:14px;color:var(--mu);margin-bottom:10px;">กรอกจำนวนเส้นที่นับได้จริง · ช่องที่เว้นว่าง = ยังไม่นับ ยอดเดิมไม่เปลี่ยน · ใต้ช่องคือยอดในระบบ</div>';
-  if(!m.colors.length) h+='<div class="loading-row">ยังไม่มีรายการราง — เพิ่มชนิด+สีในชีตราคาต้นทุน</div>';
-  else {
-    h+='<div class="rc-wrap"><table class="rc-t"><thead><tr><th>สีอลู</th>'+m.types.map(function(t){ return '<th>'+escHtml(t)+'</th>'; }).join('')+'</tr></thead><tbody>';
-    m.colors.forEach(function(c){
-      h+='<tr><td>'+prdColorTag_(c)+'</td>';
-      m.types.forEach(function(t){
-        var k=rcKey_(t,c), x=m.cells[k];
-        if(!x){ h+='<td style="color:var(--mu);padding-top:20px;">—</td>'; return; }
-        var i=_rcCombos.length, v=_rcDraft[k]==null?'':String(_rcDraft[k]); _rcCombos.push(k);
-        var when=rcWhen_(x.updatedAt);
-        h+='<td><input class="rc-i'+(v!==''?' on':'')+'" id="rcI'+i+'" type="text" inputmode="numeric" autocomplete="off" aria-label="'+escAttr(t+' '+c)+'" value="'+escAttr(v)+'" oninput="rcInput('+i+',this.value)" onkeydown="rcKeyNext(event,'+i+')">'
-          +'<div class="rc-m" id="rcM'+i+'">'+rcMeta_(x,v)+'</div>'+(when?'<div class="rc-m" title="อัปเดตล่าสุดโดย '+escAttr(x.updatedBy||'-')+'">'+when+'</div>':'')+'</td>';
-      });
-      h+='</tr>';
+  if(!live.length){ b.innerHTML=h+'<div class="loading-row">ยังไม่มีรายการราง — เพิ่มชนิด+สีในชีตราคาต้นทุน</div>'; return; }
+  if(!live.some(function(g){ return g.id===_rcGroup; })) _rcGroup=live[0].id;
+  var g=live.find(function(x){ return x.id===_rcGroup; });
+  if(_rcSize===null || g.sizes.indexOf(_rcSize)<0) _rcSize=g.sizes[0];
+  h+='<div class="rc-tabs rc-g">'+live.map(function(x){ return rcTabBtn_(x.id===_rcGroup, escHtml(x.name), cntOf(x.id), "rcSetGroup('"+x.id+"')"); }).join('')+'</div>'
+    +'<div class="rc-tabs">'+g.sizes.map(function(z,i){ return rcTabBtn_(z===_rcSize, escHtml(rcSizeLabel_(z)), cntOf(g.id,z), 'rcSetSize('+i+')'); }).join('')+'</div>'
+    +'<div class="rc-head">'+escHtml(g.name)+' · '+escHtml(rcSizeLabel_(_rcSize))+'</div>';
+  // เฉพาะชนิด/สีที่มีในหมวด+ความยาวนี้ · มุ้งจีบ: แถวสี คอลัมน์ชนิด · บานเลื่อน: แถวชนิด คอลัมน์สี (ชนิดเยอะ)
+  var types={}, colors={};
+  Object.keys(m.cells).forEach(function(k){ var x=m.cells[k]; if(g.types.indexOf(x.railType)>=0 && x.size===_rcSize){ types[x.railType]=1; colors[x.color]=1; } });
+  var typeList=g.types.filter(function(t){ return types[t]; }), colorList=Object.keys(colors).sort(function(a,x){ return a.localeCompare(x,'th'); });
+  var byColorRow=g.id==='jeeb', rows=byColorRow?colorList:typeList, cols=byColorRow?typeList:colorList;
+  h+='<div class="rc-wrap"><table class="rc-t"><thead><tr><th>'+(byColorRow?'สีอลู':'ชนิด')+'</th>'+cols.map(function(c){ return '<th>'+(byColorRow?escHtml(c):prdColorTag_(c))+'</th>'; }).join('')+'</tr></thead><tbody>';
+  rows.forEach(function(r){
+    h+='<tr><td>'+(byColorRow?prdColorTag_(r):'<b>'+escHtml(r)+'</b>')+'</td>';
+    cols.forEach(function(c){
+      var t=byColorRow?c:r, col=byColorRow?r:c, k=rcKey_(t,col,_rcSize), x=m.cells[k];
+      if(!x){ h+='<td style="color:var(--mu);padding-top:20px;">—</td>'; return; }
+      var i=_rcCombos.length, v=_rcDraft[k]==null?'':String(_rcDraft[k]); _rcCombos.push(k);
+      var when=rcWhen_(x.updatedAt);
+      h+='<td><input class="rc-i'+(v!==''?' on':'')+'" id="rcI'+i+'" type="text" inputmode="numeric" autocomplete="off" aria-label="'+escAttr(t+' '+col+' '+rcSizeLabel_(_rcSize))+'" value="'+escAttr(v)+'" oninput="rcInput('+i+',this.value)" onkeydown="rcKeyNext(event,'+i+')">'
+        +'<div class="rc-m" id="rcM'+i+'">'+rcMeta_(x,v)+'</div>'+(when?'<div class="rc-m" title="อัปเดตล่าสุดโดย '+escAttr(x.updatedBy||'-')+'">'+when+'</div>':'')+'</td>';
     });
-    h+='</tbody></table></div><div class="rc-bar" id="rcBar"></div>';
-  }
+    h+='</tr>';
+  });
+  h+='</tbody></table></div><div class="rc-bar" id="rcBar"></div>';
   b.innerHTML=h;
   rcBar_();
 }
@@ -11907,6 +11933,17 @@ function rcInput(i,v){
   if(el) el.classList.toggle('on', String(v).trim()!=='');
   if(me) me.innerHTML=rcMeta_(cells[k]||{qty:0},v);
   rcBar_();
+  rcBadges_();
+}
+// อัปเดตเลขบนแท็บโดยไม่วาดตารางใหม่ (ไม่ให้ช่องที่กำลังพิมพ์หลุดโฟกัส)
+function rcBadges_(){
+  var m=rcModel_(_rcData), live=m.groups.filter(function(g){ return g.sizes.length; }), g=live.find(function(x){ return x.id===_rcGroup; }); if(!g) return;
+  var cnt=function(gr,z){ return Object.keys(_rcDraft).filter(function(k){ var c=m.cells[k]; return c && gr.types.indexOf(c.railType)>=0 && (z===undefined||c.size===z); }).length; };
+  var host=document.getElementById(_rcHost); if(!host) return;
+  var tabs=host.querySelectorAll('.rc-tabs'); if(tabs.length<2) return;
+  var put=function(btn,n){ var s=btn.querySelector('.rc-n'); if(!n){ if(s) s.remove(); return; } if(!s){ s=document.createElement('span'); s.className='rc-n'; btn.appendChild(document.createTextNode(' ')); btn.appendChild(s); } s.textContent=n; };
+  tabs[0].querySelectorAll('.rc-tab').forEach(function(b,i){ put(b,cnt(live[i])); });
+  tabs[1].querySelectorAll('.rc-tab').forEach(function(b,i){ put(b,cnt(g,g.sizes[i])); });
 }
 function rcKeyNext(ev,i){ if(ev.key==='Enter'){ ev.preventDefault(); var n=document.getElementById('rcI'+(i+1)); if(n){ n.focus(); n.select(); } else ev.target.blur(); } }
 function rcBar_(){
@@ -11921,17 +11958,17 @@ async function rcSave(){
   var ch=rcChanges_(_rcDraft, rcModel_(_rcData).cells); if(!ch.items.length || ch.bad.length) return;
   var moved=ch.items.filter(function(x){ return x.qty!==x.before; });
   var msg='บันทึกยอดที่นับ '+ch.items.length+' ช่อง?\n\nยอดในระบบจะเปลี่ยน '+moved.length+' ช่อง:\n'
-    +moved.slice(0,15).map(function(x){ return '• '+x.railType+' '+x.color+': '+x.before+' → '+x.qty; }).join('\n')+(moved.length>15?'\n... และอีก '+(moved.length-15)+' ช่อง':'');
+    +moved.slice(0,15).map(function(x){ return '• '+x.railType+' '+x.color+' '+rcSizeLabel_(x.size)+': '+x.before+' → '+x.qty; }).join('\n')+(moved.length>15?'\n... และอีก '+(moved.length-15)+' ช่อง':'');
   if(!confirm(msg)) return;
-  var sent=ch.items.map(function(x){ return {railType:x.railType, color:x.color, qty:x.qty}; });
+  var sent=ch.items.map(function(x){ return {railType:x.railType, color:x.color, size:x.size, qty:x.qty}; });
   showLoad('กำลังบันทึกยอดที่นับ...');
   try{
     var r=await prdSave_({action:'pk_railCountSave', items:sent});
     if(!(r&&r.ok)){ toast((r&&r.error)||'บันทึกไม่สำเร็จ — ตัวเลขที่กรอกยังอยู่'); return; }
     (r.items||[]).forEach(function(x){
-      var list=_rcData.items, f=list.find(function(y){ return y.railType===x.railType&&y.color===x.color; });
+      var list=_rcData.items, f=list.find(function(y){ return y.railType===x.railType&&y.color===x.color&&String(y.size||'')===String(x.size||''); });
       if(f) Object.assign(f,x); else list.push(x);
-      delete _rcDraft[rcKey_(x.railType,x.color)];
+      delete _rcDraft[rcKey_(x.railType,x.color,x.size)];
     });
     toast('✅ บันทึกยอดที่นับ '+sent.length+' ช่องแล้ว');
     rcRender_();
@@ -11952,46 +11989,46 @@ function rsRender(){
   if(!document.getElementById('rsBody'))return;
   var q=((document.getElementById('rsSearchInput')||{}).value||'').trim().toLowerCase();
   var combos=_railCatalog.slice();
-  _railStock.forEach(function(s){ if(!combos.find(function(x){return x.railType===s.railType&&x.color===s.color;})) combos.push({railType:s.railType,color:s.color}); });
+  _railStock.forEach(function(s){ if(!combos.find(function(x){return x.railType===s.railType&&x.color===s.color&&String(x.size||'')===String(s.size||'');})) combos.push({railType:s.railType,color:s.color,size:s.size||''}); });
   var byColor={}, colorOrder=[];
   combos.forEach(function(x){ if(q && (x.color+' '+x.railType).toLowerCase().indexOf(q)<0) return; if(!byColor[x.color]){byColor[x.color]=[];colorOrder.push(x.color);} byColor[x.color].push(x); });
   colorOrder.sort();
   var h='';
   if(!colorOrder.length){ h='<div style="padding:18px;text-align:center;color:var(--mu);">ไม่พบรายการราง — เพิ่มในชีตราคาต้นทุน (ชื่อ = รางมือจับ/รางข้าง/รางบน-ล่าง/รางเตี้ย + ใส่สี)</div>'; }
   colorOrder.forEach(function(color){
-    var tot=byColor[color].reduce(function(s,x){return s+railQty(x.railType,x.color);},0);
+    var tot=byColor[color].reduce(function(s,x){return s+railQty(x.railType,x.color,x.size);},0);
     h+='<div style="margin:14px 0 6px;font-weight:800;font-size:14px;">🎨 '+escHtml(color)+' <span style="color:var(--mu);font-size:12px;font-weight:600;">· รวม '+tot+' เส้น</span></div>';
-    byColor[color].sort(function(a,b){return PK_RAIL_TYPES.indexOf(a.railType)-PK_RAIL_TYPES.indexOf(b.railType);});
+    byColor[color].sort(function(a,b){return (PK_RAIL_TYPES.indexOf(a.railType)-PK_RAIL_TYPES.indexOf(b.railType))||(Number(a.size||0)-Number(b.size||0));});
     h+='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><tbody>';
-    byColor[color].forEach(function(x){ var qn=railQty(x.railType,x.color), low=qn<=0;
-      h+='<tr style="border-bottom:1px solid var(--bdr);"><td style="padding:9px 8px;">'+escHtml(x.railType)+'</td>'
+    byColor[color].forEach(function(x){ var qn=railQty(x.railType,x.color,x.size), low=qn<=0;
+      h+='<tr style="border-bottom:1px solid var(--bdr);"><td style="padding:9px 8px;">'+escHtml(x.railType)+(x.size?' <b>· '+escHtml(x.size)+' ม.</b>':'')+'</td>'
         +'<td style="padding:9px 8px;text-align:right;font-weight:800;color:'+(low?'var(--rd)':'var(--tx)')+';">'+qn+' เส้น</td>'
         +'<td style="padding:9px 8px;text-align:right;white-space:nowrap;">'
-        +'<button class="btn btn-g btn-sm" onclick="rsReceive(\''+escHtml(x.railType)+'\',\''+escHtml(x.color)+'\')">+ รับเข้า</button> '
-        +'<button class="btn btn-g btn-sm" onclick="rsUse(\''+escHtml(x.railType)+'\',\''+escHtml(x.color)+'\')">− หัก</button> '
-        +'<button class="btn btn-g btn-sm" onclick="rsSet(\''+escHtml(x.railType)+'\',\''+escHtml(x.color)+'\')">แก้ยอด</button></td></tr>';
+        +'<button class="btn btn-g btn-sm" onclick="rsReceive(\''+escHtml(x.railType)+'\',\''+escHtml(x.color)+'\',\''+escHtml(x.size||'')+'\')">+ รับเข้า</button> '
+        +'<button class="btn btn-g btn-sm" onclick="rsUse(\''+escHtml(x.railType)+'\',\''+escHtml(x.color)+'\',\''+escHtml(x.size||'')+'\')">− หัก</button> '
+        +'<button class="btn btn-g btn-sm" onclick="rsSet(\''+escHtml(x.railType)+'\',\''+escHtml(x.color)+'\',\''+escHtml(x.size||'')+'\')">แก้ยอด</button></td></tr>';
     });
     h+='</tbody></table></div>';
   });
   document.getElementById('rsBody').innerHTML=h;
 }
-function rsApply(railType,color,mode){
-  var s=_railStock.find(function(x){return x.railType===railType&&x.color===color;}), cur=s?s.qty:0, q, action, nn;
+function rsApply(railType,color,mode,size){
+  size=String(size||''); var s=_railStock.find(function(x){return x.railType===railType&&x.color===color&&String(x.size||'')===size;}), cur=s?s.qty:0, q, action, nn;
   if(mode==='receive'){ q=prompt('รับเข้า '+railType+' ['+color+'] กี่เส้น?','1'); if(q===null)return; q=Number(q); if(!(q>0)){toast('จำนวนไม่ถูกต้อง');return;} nn=cur+q; action='pk_railStockReceive'; }
   else if(mode==='use'){ q=prompt('หัก '+railType+' ['+color+'] กี่เส้น? (มี '+cur+')','1'); if(q===null)return; q=Number(q); if(!(q>0)){toast('จำนวนไม่ถูกต้อง');return;} nn=cur-q; action='pk_railStockUse'; }
   else { q=prompt('แก้ยอด '+railType+' ['+color+'] เป็นกี่เส้น?',String(cur)); if(q===null)return; q=Number(q); if(!isFinite(q)){toast('จำนวนไม่ถูกต้อง');return;} nn=q; action='pk_railStockSet'; }
-  if(s)s.qty=nn; else { s={railType:railType,color:color,qty:nn}; _railStock.push(s); } railMapBuild(); rsRender();
-  call({action:action,railType:railType,color:color,qty:(mode==='set'?nn:q)}).then(function(r){ if(r&&r.ok){ if(typeof r.qty==='number'){s.qty=r.qty; railMapBuild(); rsRender();} } else { s.qty=cur; railMapBuild(); rsRender(); toast((r&&r.error)||'บันทึกไม่สำเร็จ'); } }).catch(function(e){ s.qty=cur; railMapBuild(); rsRender(); toast('บันทึกไม่สำเร็จ: '+(e&&e.message||e)); });
+  if(s)s.qty=nn; else { s={railType:railType,color:color,qty:nn,size:size}; _railStock.push(s); } railMapBuild(); rsRender();
+  call({action:action,railType:railType,color:color,size:size,qty:(mode==='set'?nn:q)}).then(function(r){ if(r&&r.ok){ if(typeof r.qty==='number'){s.qty=r.qty; railMapBuild(); rsRender();} } else { s.qty=cur; railMapBuild(); rsRender(); toast((r&&r.error)||'บันทึกไม่สำเร็จ'); } }).catch(function(e){ s.qty=cur; railMapBuild(); rsRender(); toast('บันทึกไม่สำเร็จ: '+(e&&e.message||e)); });
 }
-function rsReceive(t,c){ rsApply(t,c,'receive'); }
-function rsUse(t,c){ rsApply(t,c,'use'); }
-function rsSet(t,c){ rsApply(t,c,'set'); }
+function rsReceive(t,c,z){ rsApply(t,c,'receive',z); }
+function rsUse(t,c,z){ rsApply(t,c,'use',z); }
+function rsSet(t,c,z){ rsApply(t,c,'set',z); }
 // ── tie-in จอติดตามงานผลิต: เตือนระดับสี (รวมทุกชนิด) · ปุ่มแค่ mark ว่าได้รางแล้ว (หักจริงในจอคลังราง) ──
 function ptJobSpecialColors(j){ return (j.sets||[]).map(function(s){return s.c;}).filter(function(c){return c&&c!=='อบขาว'&&c!=='ดำ';}); }
 function ptRailStockAlert(j){
   if(j.hasRail || j.rush || !ptIsSpecial(j) || j.prodStatus==='ผลิตเสร็จแล้ว') return '';
   var out=''; ptJobSpecialColors(j).forEach(function(c){
-    var types=_railStock.filter(function(s){return s.color===c && s.qty>0;}).map(function(s){return escHtml(s.railType)+' '+s.qty;});
+    var types=_railStock.filter(function(s){return s.color===c && s.qty>0;}).map(function(s){return escHtml(s.railType)+(s.size?' '+escHtml(s.size)+'ม.':'')+' '+s.qty;});
     if(types.length){
       out+='<div style="font-size:12px;background:#11331d;border:1px solid #1d5233;border-radius:7px;padding:6px 9px;margin:5px 0;color:#9be8b4;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">📦 มีรางสี'+escHtml(c)+'ในคลัง: '+types.join(' · ')+' เส้น — เช็คว่าตรงชนิดที่ใช้ <button class="btn btn-p btn-sm" onclick="ptMarkRail(\''+j.woId+'\')">✓ ได้รางแล้ว</button></div>';
     }
