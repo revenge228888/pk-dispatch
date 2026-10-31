@@ -2323,7 +2323,9 @@ function renderOfficeShell(){
             <button class="btn btn-g btn-sm" onclick="rsLoad()">↻ รีเฟรช</button>
           </div>
           <div style="font-size:12px;color:var(--mu);margin-bottom:10px;">รายการดึงจากชีตราคาต้นทุน (รางมือจับ/รางข้าง/รางบน-ล่าง/รางเตี้ย) · นับเป็นเส้น ต่อชนิด×สี · หักเอง</div>
+          <div style="display:flex;gap:8px;margin-bottom:12px;"><button id="rsVList" class="btn btn-sm btn-p" onclick="rsView('list')">📦 รายการ</button><button id="rsVCount" class="btn btn-sm btn-g" onclick="rsView('count')">🔢 นับราง</button></div>
           <input id="rsSearchInput" class="fi" style="margin-bottom:12px;" oninput="rsRender()" placeholder="🔍 ค้นหาสี">
+          <div id="rcHost" style="display:none;"></div>
           <div id="rsBody"><div class="loading-row">กำลังโหลด...</div></div>
         </div>
       </div>
@@ -11051,6 +11053,7 @@ function prdInit(){
 }
 async function prdLoad(quiet){
   if(!quiet){ var b=document.getElementById('prdBody'); if(b&&!_prdJobs.length) b.innerHTML='<div class="loading-row">กำลังโหลด...</div>'; }
+  if(!quiet) _rcData=null;   // กดรีเฟรช = โหลดยอดรางใหม่ (ยอดที่กรอกค้างไว้ไม่หาย)
   if(!quiet && !_prdCutOn) _prdLots=null;   // กดรีเฟรช = โหลดใบจัดตัดใหม่ด้วย
   try{
     var seq0=_prdSaveSeq;
@@ -11062,7 +11065,7 @@ async function prdLoad(quiet){
   }catch(e){ if(!quiet) toast('โหลดคิวผลิตไม่สำเร็จ: '+(e&&e.message||e)); }
   // รีเฟรชเงียบระหว่างเปิดหมวดที่พับไว้ → ไม่วาดใหม่รอบนี้ (ไม่งั้นหมวดปิดเองขณะอ่าน)
   var _prdB=document.getElementById('prdBody');
-  if(!(quiet && _prdB && _prdB.querySelector('details[open]'))) prdRender();
+  if(!(quiet && _prdB && (_prdB.querySelector('details[open]') || _prdTab==='count'))) prdRender();   // หน้านับราง: ไม่วาดใหม่ระหว่างกรอก
   if(_prdDept==='rail' && _prdLots===null && _prdTab!=='cut') prdLoadLots();   // ฝ่ายราง: ใช้ล็อกปุ่ม "ส่วนรางเสร็จ" จนกว่าตัดครบ
 }
 function prdSetTab(t){ _prdTab=t; _prdQc=null; _prdMesh=null; prdRender(); }
@@ -11070,11 +11073,12 @@ function prdRender(){
   var tabs=[['queue','📋 คิวผลิต']];
   if(_prdDept==='rail') tabs.push(['cut','🪚 ตัดราง']);
   tabs.push(['docs','📄 ใบผลิต']);
+  tabs.push(['count','🔢 นับราง']);
   if(!tabs.some(function(t){ return t[0]===_prdTab; })) _prdTab='queue';
   var te=document.getElementById('prdTabs');
   if(te) te.innerHTML=tabs.map(function(t){ return '<button class="prd-btn '+(_prdTab===t[0]?'on':'ghost')+'" onclick="prdSetTab(\''+t[0]+'\')">'+t[1]+'</button>'; }).join('');
   if(!document.getElementById('prdBody') || !_prdDept) return;
-  if(_prdTab==='cut') prdRenderCut(); else if(_prdTab==='docs') prdRenderDocs(); else if(_prdQc) prdRenderQc(); else if(_prdMesh) prdRenderMesh(); else prdRenderQueue();
+  if(_prdTab==='cut') prdRenderCut(); else if(_prdTab==='docs') prdRenderDocs(); else if(_prdTab==='count') rcOpen('prdBody'); else if(_prdQc) prdRenderQc(); else if(_prdMesh) prdRenderMesh(); else prdRenderQueue();
 }
 function prdJob_(woId){ return _prdJobs.find(function(x){ return x.woId===woId; }); }
 function prdRenderQueue(){
@@ -11811,6 +11815,137 @@ async function railCatalogFetch(){   // ดึงรายการรางจ�
   var seen={}, cat=[];
   prices.forEach(function(p){ if(PK_RAIL_TYPES.indexOf(p.name)<0) return; var c=String(p.color||'').trim(); if(!c) return; var k=p.name+'|'+c; if(seen[k])return; seen[k]=1; cat.push({railType:p.name, color:c}); });
   _railCatalog=cat;
+}
+// ════════════════════════════════════════
+//  🔢 นับราง — ตารางชนิดราง × สี · ใช้ร่วมกัน: ฝ่ายผลิต (แท็บ) + ออฟฟิศ/ผู้จัดการ (ในหน้าคลังราง)
+//  ช่องว่าง = ยังไม่นับ คงยอดเดิม · บันทึก = ตั้งยอดคงเหลือเป็นจำนวนที่นับ + จดประวัติ PK_RailMove
+//  อ่าน: worker /rail-count → fallback GAS pk_railCountList · ไม่มีราคาในข้อมูล
+// ════════════════════════════════════════
+let _rcData=null, _rcHost='', _rcDraft={}, _rcCombos=[];
+var RC_TYPES_DEFAULT=['รางมือจับ','รางข้าง','รางบน-ล่าง','รางเตี้ย'];
+async function getRailCountFast(){
+  try{
+    var d=await _pkFastPost_('/rail-count');
+    if(d&&d.ok&&Array.isArray(d.items)){ _markJobSource('sheets', d.ms); return d; }
+    console.warn('[getRailCountFast] /rail-count ไม่ ok → fallback GAS:', d&&d.error);
+  }catch(e){ console.warn('[getRailCountFast] /rail-count error → fallback GAS:', e&&e.message); }
+  var g=await call({action:'pk_railCountList'}); _markJobSource('gas'); return g;
+}
+function rcKey_(t,c){ return t+'|'+c; }
+// แถวตาราง: สีเรียงตามชื่อ · ช่องมีเฉพาะชนิด×สีที่มีจริง (ในชีตราคาต้นทุนหรือเคยมียอด)
+function rcModel_(data){
+  var types=(data&&data.types)||RC_TYPES_DEFAULT, cells={}, colors={};
+  ((data&&data.catalog)||[]).forEach(function(x){ cells[rcKey_(x.railType,x.color)]={railType:x.railType,color:x.color,qty:0,updatedAt:0,updatedBy:''}; colors[x.color]=1; });
+  ((data&&data.items)||[]).forEach(function(x){ if(types.indexOf(x.railType)<0) return; cells[rcKey_(x.railType,x.color)]=x; colors[x.color]=1; });
+  return { types:types, colors:Object.keys(colors).sort(function(a,b){ return a.localeCompare(b,'th'); }), cells:cells };
+}
+// ช่องที่กรอกค่าแล้ว → รายการส่ง server · ว่าง = ไม่ส่ง · ไม่ใช่จำนวนเต็ม ≥0 = เก็บใน bad ห้ามบันทึก
+function rcChanges_(draft, cells){
+  var items=[], bad=[];
+  Object.keys(draft||{}).forEach(function(k){
+    var v=String(draft[k]==null?'':draft[k]).trim(); if(v==='') return;
+    var i=k.indexOf('|'), t=k.slice(0,i), c=k.slice(i+1), cur=(cells[k]&&Number(cells[k].qty))||0;
+    if(!/^\d+$/.test(v)){ bad.push(t+' '+c); return; }
+    items.push({railType:t, color:c, qty:Number(v), before:cur});
+  });
+  return {items:items, bad:bad};
+}
+function rcCss_(){
+  return '<style>.rc-wrap{overflow-x:auto;background:var(--surf2);border:1px solid var(--bdr);border-radius:12px;}'
+    +'.rc-t{width:100%;border-collapse:collapse;min-width:680px;}.rc-t th{font-size:15px;font-weight:800;padding:10px 8px;text-align:center;border-bottom:2px solid var(--tx);}.rc-t th:first-child{text-align:left;}'
+    +'.rc-t td{padding:8px;border-bottom:1px solid var(--bdr);text-align:center;vertical-align:top;}.rc-t td:first-child{text-align:left;vertical-align:middle;white-space:nowrap;}'
+    +'.rc-i{width:100%;max-width:120px;height:52px;font-family:var(--mono);font-size:24px;font-weight:800;text-align:center;border:2px solid var(--bdr);border-radius:10px;background:#fff;color:#1f1a16;}.rc-i:focus{outline:3px solid var(--acc);}.rc-i.on{border-color:var(--acc);}'
+    +'.rc-m{font-size:13px;color:var(--mu);margin-top:3px;min-height:18px;}.rc-m b{font-family:var(--mono);}.rc-m .up{color:var(--grn);font-weight:800;}.rc-m .dn{color:var(--rd);font-weight:800;}'
+    +'.rc-bar{position:sticky;bottom:10px;z-index:20;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--tx);color:var(--surf2);border-radius:14px;padding:10px 14px;margin-top:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);}'
+    +'.rc-btn{font-family:var(--sans);font-size:16px;font-weight:700;border:0;border-radius:12px;padding:10px 16px;min-height:48px;cursor:pointer;background:var(--acc);color:#fff;}.rc-btn.ghost{background:var(--surf2);color:var(--tx);border:1px solid var(--bdr);}.rc-btn:disabled{opacity:.45;cursor:default;}'
+    +'.prd-ctag{display:inline-flex;align-items:center;font-family:var(--sans);font-size:16px;font-weight:800;line-height:1.2;padding:3px 12px;border-radius:8px;border:2px solid #1f1a16;white-space:nowrap;}</style>';
+}
+function rcOpen(hostId){ _rcHost=hostId; if(_rcData===null) rcLoad(); else rcRender_(); }
+async function rcLoad(){
+  var b=document.getElementById(_rcHost); if(b) b.innerHTML='<div class="loading-row">กำลังโหลดยอดราง...</div>';
+  try{ var r=await getRailCountFast();
+    if(r&&r.ok) _rcData=r;
+    else { if(b) b.innerHTML='<div class="loading-row">'+escHtml((r&&r.error)||'โหลดยอดรางไม่สำเร็จ')+'</div>'; return; }
+  }catch(e){ if(b) b.innerHTML='<div class="loading-row">โหลดยอดรางไม่สำเร็จ: '+escHtml(e&&e.message||e)+'</div>'; return; }
+  rcRender_();
+}
+function rcWhen_(ts){ if(!ts) return ''; return ptThd(new Date(Number(ts)+7*3600000).toISOString().slice(0,10)); }
+function rcRender_(){
+  var b=document.getElementById(_rcHost); if(!b) return;
+  var m=rcModel_(_rcData); _rcCombos=[];
+  var h=rcCss_()+'<div style="font-size:14px;color:var(--mu);margin-bottom:10px;">กรอกจำนวนเส้นที่นับได้จริง · ช่องที่เว้นว่าง = ยังไม่นับ ยอดเดิมไม่เปลี่ยน · ใต้ช่องคือยอดในระบบ</div>';
+  if(!m.colors.length) h+='<div class="loading-row">ยังไม่มีรายการราง — เพิ่มชนิด+สีในชีตราคาต้นทุน</div>';
+  else {
+    h+='<div class="rc-wrap"><table class="rc-t"><thead><tr><th>สีอลู</th>'+m.types.map(function(t){ return '<th>'+escHtml(t)+'</th>'; }).join('')+'</tr></thead><tbody>';
+    m.colors.forEach(function(c){
+      h+='<tr><td>'+prdColorTag_(c)+'</td>';
+      m.types.forEach(function(t){
+        var k=rcKey_(t,c), x=m.cells[k];
+        if(!x){ h+='<td style="color:var(--mu);padding-top:20px;">—</td>'; return; }
+        var i=_rcCombos.length, v=_rcDraft[k]==null?'':String(_rcDraft[k]); _rcCombos.push(k);
+        var when=rcWhen_(x.updatedAt);
+        h+='<td><input class="rc-i'+(v!==''?' on':'')+'" id="rcI'+i+'" type="text" inputmode="numeric" autocomplete="off" aria-label="'+escAttr(t+' '+c)+'" value="'+escAttr(v)+'" oninput="rcInput('+i+',this.value)" onkeydown="rcKeyNext(event,'+i+')">'
+          +'<div class="rc-m" id="rcM'+i+'">'+rcMeta_(x,v)+'</div>'+(when?'<div class="rc-m" title="อัปเดตล่าสุดโดย '+escAttr(x.updatedBy||'-')+'">'+when+'</div>':'')+'</td>';
+      });
+      h+='</tr>';
+    });
+    h+='</tbody></table></div><div class="rc-bar" id="rcBar"></div>';
+  }
+  b.innerHTML=h;
+  rcBar_();
+}
+function rcMeta_(x,v){
+  var cur=Number(x.qty)||0, s='ระบบ <b>'+cur+'</b>';
+  if(/^\d+$/.test(String(v).trim())){ var d=Number(v)-cur; s+=d?' <span class="'+(d>0?'up':'dn')+'">'+(d>0?'+':'')+d+'</span>':' <span class="up">ตรง</span>'; }
+  else if(String(v).trim()!=='') s+=' <span class="dn">ตัวเลขไม่ถูกต้อง</span>';
+  return s;
+}
+function rcInput(i,v){
+  var k=_rcCombos[i]; if(!k) return;
+  if(String(v).trim()==='') delete _rcDraft[k]; else _rcDraft[k]=v;
+  var cells=rcModel_(_rcData).cells, el=document.getElementById('rcI'+i), me=document.getElementById('rcM'+i);
+  if(el) el.classList.toggle('on', String(v).trim()!=='');
+  if(me) me.innerHTML=rcMeta_(cells[k]||{qty:0},v);
+  rcBar_();
+}
+function rcKeyNext(ev,i){ if(ev.key==='Enter'){ ev.preventDefault(); var n=document.getElementById('rcI'+(i+1)); if(n){ n.focus(); n.select(); } else ev.target.blur(); } }
+function rcBar_(){
+  var bar=document.getElementById('rcBar'); if(!bar) return;
+  var ch=rcChanges_(_rcDraft, rcModel_(_rcData).cells), n=ch.items.length;
+  bar.innerHTML='<b>นับแล้ว '+n+' ช่อง</b>'+(ch.bad.length?'<span>⚠ แก้ '+ch.bad.length+' ช่องที่ไม่ใช่ตัวเลข</span>':'')+'<span style="flex:1;"></span>'
+    +'<button class="rc-btn ghost" '+(Object.keys(_rcDraft).length?'':'disabled')+' onclick="rcClear()">ล้าง</button>'
+    +'<button class="rc-btn" '+(n&&!ch.bad.length?'':'disabled')+' onclick="rcSave()">💾 บันทึกยอดที่นับ</button>';
+}
+function rcClear(){ if(!confirm('ล้างตัวเลขที่กรอกไว้ทั้งหมด? (ยังไม่ได้บันทึก)')) return; _rcDraft={}; rcRender_(); }
+async function rcSave(){
+  var ch=rcChanges_(_rcDraft, rcModel_(_rcData).cells); if(!ch.items.length || ch.bad.length) return;
+  var moved=ch.items.filter(function(x){ return x.qty!==x.before; });
+  var msg='บันทึกยอดที่นับ '+ch.items.length+' ช่อง?\n\nยอดในระบบจะเปลี่ยน '+moved.length+' ช่อง:\n'
+    +moved.slice(0,15).map(function(x){ return '• '+x.railType+' '+x.color+': '+x.before+' → '+x.qty; }).join('\n')+(moved.length>15?'\n... และอีก '+(moved.length-15)+' ช่อง':'');
+  if(!confirm(msg)) return;
+  var sent=ch.items.map(function(x){ return {railType:x.railType, color:x.color, qty:x.qty}; });
+  showLoad('กำลังบันทึกยอดที่นับ...');
+  try{
+    var r=await prdSave_({action:'pk_railCountSave', items:sent});
+    if(!(r&&r.ok)){ toast((r&&r.error)||'บันทึกไม่สำเร็จ — ตัวเลขที่กรอกยังอยู่'); return; }
+    (r.items||[]).forEach(function(x){
+      var list=_rcData.items, f=list.find(function(y){ return y.railType===x.railType&&y.color===x.color; });
+      if(f) Object.assign(f,x); else list.push(x);
+      delete _rcDraft[rcKey_(x.railType,x.color)];
+    });
+    toast('✅ บันทึกยอดที่นับ '+sent.length+' ช่องแล้ว');
+    rcRender_();
+    if(CURRENT_USER.role!=='prod') railStockFetch().then(rsRender);
+  }catch(e){ toast('บันทึกไม่สำเร็จ — ตัวเลขที่กรอกยังอยู่: '+(e&&e.message||e)); }
+  finally{ hideLoad(); }
+}
+// หน้าคลังราง (ออฟฟิศ/ผู้จัดการ): สลับ รายการ ↔ นับราง
+function rsView(v){
+  var cnt=v==='count', s=document.getElementById('rsSearchInput'), b=document.getElementById('rsBody'), c=document.getElementById('rcHost');
+  if(s) s.style.display=cnt?'none':''; if(b) b.style.display=cnt?'none':''; if(c) c.style.display=cnt?'':'none';
+  var a=document.getElementById('rsVList'), d=document.getElementById('rsVCount');
+  if(a) a.className='btn btn-sm '+(cnt?'btn-g':'btn-p'); if(d) d.className='btn btn-sm '+(cnt?'btn-p':'btn-g');
+  if(cnt){ _rcData=null; rcOpen('rcHost'); }
 }
 async function rsLoad(){ if(!document.getElementById('rsBody'))return; document.getElementById('rsBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; await Promise.all([railStockFetch(), railCatalogFetch()]); rsRender(); }
 function rsRender(){
