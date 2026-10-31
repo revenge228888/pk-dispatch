@@ -11900,15 +11900,16 @@ async function getRailCountFast(){
 }
 function rcKey_(t,c,z){ return t+'|'+c+'|'+(z||''); }
 // หมวด: รางมุ้งจีบ / รางบานเลื่อน-บานเปิด → แยกตามความยาว · ช่องมีเฉพาะที่อยู่ในชีตราคาต้นทุน หรือมียอดจริง
-//  แถว "ไม่ระบุความยาว" (ยอดเดิม/รับเข้าจาก PO) โผล่เฉพาะเมื่อมียอด หรือรายการนั้นไม่มีความยาวในชีต — นับเป็น 0 แล้วหายไป
+//  ⛔ ยอดนับ = แถวที่ระบุความยาว (มาจากการนับ/รับของ PO) · ยอด stock เก่าไม่ระบุความยาวไม่ใช้ เพราะไม่เคยถูกตัดออก (เจ้าของสั่ง 31 ต.ค.)
+//  counted=false = ช่องนี้ยังไม่เคยนับ ห้ามแสดงเหมือนยอด 0
 function rcModel_(data){
   var jeeb=(data&&data.jeeb)||[], scut=(data&&data.scut)||[], cells={};
-  ((data&&data.catalog)||[]).forEach(function(x){ cells[rcKey_(x.railType,x.color,x.size)]={railType:x.railType,color:x.color,size:x.size||'',qty:0,updatedAt:0,updatedBy:''}; });
+  ((data&&data.catalog)||[]).forEach(function(x){ cells[rcKey_(x.railType,x.color,x.size)]={railType:x.railType,color:x.color,size:x.size||'',qty:0,updatedAt:0,updatedBy:'',counted:false}; });
   ((data&&data.items)||[]).forEach(function(x){
     if(jeeb.indexOf(x.railType)<0 && scut.indexOf(x.railType)<0) return;
     var k=rcKey_(x.railType,x.color,x.size);
-    if(!x.size && !cells[k] && !(Number(x.qty)>0)) return;
-    cells[k]=Object.assign({},x,{size:x.size||''});
+    if(!x.size && !cells[k]) return;
+    cells[k]=Object.assign({},x,{size:x.size||'',counted:true});
   });
   var groups=[{id:'jeeb',name:'รางมุ้งจีบ',types:jeeb,sizes:{}},{id:'scut',name:'รางบานเลื่อน / บานเปิด',types:scut,sizes:{}}];
   Object.keys(cells).forEach(function(k){ var x=cells[k]; groups.forEach(function(g){ if(g.types.indexOf(x.railType)>=0) g.sizes[x.size]=1; }); });
@@ -11921,7 +11922,7 @@ function rcChanges_(draft, cells){
   var items=[], bad=[];
   Object.keys(draft||{}).forEach(function(k){
     var v=String(draft[k]==null?'':draft[k]).trim(); if(v==='') return;
-    var p=k.split('|'), z=p.pop(), t=p.shift(), c=p.join('|'), cur=(cells[k]&&Number(cells[k].qty))||0;
+    var p=k.split('|'), z=p.pop(), t=p.shift(), c=p.join('|'), cur=(cells[k]&&cells[k].counted)?Number(cells[k].qty)||0:null;
     if(!/^\d+$/.test(v)){ bad.push(t+' '+c); return; }
     items.push({railType:t, color:c, size:z, qty:Number(v), before:cur});
   });
@@ -11933,6 +11934,10 @@ function rcCss_(){
     +'.rc-t td{padding:8px;border-bottom:1px solid var(--bdr);text-align:center;vertical-align:top;}.rc-t td:first-child{text-align:left;vertical-align:middle;white-space:nowrap;}'
     +'.rc-i{width:100%;max-width:120px;height:52px;font-family:var(--mono);font-size:24px;font-weight:800;text-align:center;border:2px solid var(--bdr);border-radius:10px;background:#fff;color:#1f1a16;}.rc-i:focus{outline:3px solid var(--acc);}.rc-i.on{border-color:var(--acc);}'
     +'.rc-m{font-size:13px;color:var(--mu);margin-top:3px;min-height:18px;}.rc-m b{font-family:var(--mono);}.rc-m .up{color:var(--grn);font-weight:800;}.rc-m .dn{color:var(--rd);font-weight:800;}'
+    +'.rc-c{min-width:118px;}.rc-b{font-family:var(--mono);font-size:34px;font-weight:800;line-height:1.1;}.rc-b.zero{color:var(--rd);}.rc-b.none{font-family:var(--sans);font-size:15px;font-weight:800;line-height:37px;color:var(--amb,#B45309);}.rc-w{font-size:12px;color:var(--mu);margin-bottom:5px;min-height:16px;}'
+    +'.rc-i::placeholder{font-family:var(--sans);font-size:14px;font-weight:600;color:var(--mu);}'
+    +'.rc-sum{font-size:16px;margin-bottom:8px;}.rc-sum b{font-family:var(--mono);font-size:20px;}.rc-warn{color:var(--amb,#B45309);font-weight:800;}'
+    +'.rc-t tfoot td{font-size:17px;font-weight:800;font-family:var(--mono);border-top:2px solid var(--tx);border-bottom:0;}.rc-t tfoot small{font-family:var(--sans);font-size:12px;font-weight:600;}'
     +'.rc-tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;}.rc-tab{font-family:var(--sans);font-size:15px;font-weight:700;min-height:44px;padding:8px 16px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf2);color:var(--tx);cursor:pointer;}.rc-tab.on{background:var(--tx);color:var(--surf2);border-color:var(--tx);}.rc-g .rc-tab{font-size:17px;font-weight:800;min-height:52px;}.rc-n{display:inline-block;min-width:22px;padding:0 6px;border-radius:999px;background:var(--acc);color:#fff;font-size:13px;text-align:center;}.rc-head{font-size:19px;font-weight:800;margin:4px 0 8px;}'
     +'.rc-t td:first-child,.rc-t th:first-child{position:sticky;left:0;background:var(--surf2);z-index:1;}'
     +'.rc-bar{position:sticky;bottom:10px;z-index:20;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--tx);color:var(--surf2);border-radius:14px;padding:10px 14px;margin-top:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);}'
@@ -11964,7 +11969,7 @@ function rcRender_(){
   var b=document.getElementById(_rcHost); if(!b) return;
   var m=rcModel_(_rcData), live=m.groups.filter(function(g){ return g.sizes.length; }); _rcCombos=[];
   var cntOf=function(gId,z){ var n=0; Object.keys(_rcDraft).forEach(function(k){ var c=m.cells[k]; if(!c) return; var g=m.groups.find(function(x){ return x.id===gId; }); if(g.types.indexOf(c.railType)>=0 && (z===undefined||c.size===z)) n++; }); return n; };
-  var h=rcCss_()+'<div style="font-size:14px;color:var(--mu);margin-bottom:10px;">กรอกจำนวนเส้นที่นับได้จริง · ช่องที่เว้นว่าง = ยังไม่นับ ยอดเดิมไม่เปลี่ยน · ใต้ช่องคือยอดในระบบ</div>';
+  var h=rcCss_()+'<div style="font-size:14px;color:var(--mu);margin-bottom:10px;">ตัวเลขใหญ่ = ยอดที่นับล่าสุด (เพิ่มเองเมื่อรับของจาก PO) · นับใหม่ให้กรอกในช่อง · เว้นว่าง = ยอดเดิมไม่เปลี่ยน</div>';
   if(!live.length){ b.innerHTML=h+'<div class="loading-row">ยังไม่มีรายการราง — เพิ่มชนิด+สีในชีตราคาต้นทุน</div>'; return; }
   if(!live.some(function(g){ return g.id===_rcGroup; })) _rcGroup=live[0].id;
   var g=live.find(function(x){ return x.id===_rcGroup; });
@@ -11977,28 +11982,33 @@ function rcRender_(){
   Object.keys(m.cells).forEach(function(k){ var x=m.cells[k]; if(g.types.indexOf(x.railType)>=0 && x.size===_rcSize){ types[x.railType]=1; colors[x.color]=1; } });
   var typeList=g.types.filter(function(t){ return types[t]; }), colorList=Object.keys(colors).sort(function(a,x){ return a.localeCompare(x,'th'); });
   var byColorRow=g.id==='jeeb', rows=byColorRow?colorList:typeList, cols=byColorRow?typeList:colorList;
+  var nAll=0, nDone=0; Object.keys(m.cells).forEach(function(k){ var x=m.cells[k]; if(g.types.indexOf(x.railType)>=0 && x.size===_rcSize){ nAll++; if(x.counted) nDone++; } });
+  h+='<div class="rc-sum">นับแล้ว <b>'+nDone+'</b>/'+nAll+' ช่อง'+(nAll>nDone?' · <span class="rc-warn">ยังไม่นับ '+(nAll-nDone)+' ช่อง</span>':' · ครบแล้ว')+'</div>';
   h+='<div class="rc-wrap"><table class="rc-t"><thead><tr><th>'+(byColorRow?'สีอลู':'ชนิด')+'</th>'+cols.map(function(c){ return '<th>'+(byColorRow?escHtml(c):prdColorTag_(c))+'</th>'; }).join('')+'</tr></thead><tbody>';
+  var tot={}, col2idx={}; cols.forEach(function(c,i){ col2idx[c]=i; });
   rows.forEach(function(r){
     h+='<tr><td>'+(byColorRow?prdColorTag_(r):'<b>'+escHtml(r)+'</b>')+'</td>';
     cols.forEach(function(c){
       var t=byColorRow?c:r, col=byColorRow?r:c, k=rcKey_(t,col,_rcSize), x=m.cells[k];
       if(!x){ h+='<td style="color:var(--mu);padding-top:20px;">—</td>'; return; }
       var i=_rcCombos.length, v=_rcDraft[k]==null?'':String(_rcDraft[k]); _rcCombos.push(k);
-      var when=rcWhen_(x.updatedAt);
-      h+='<td><input class="rc-i'+(v!==''?' on':'')+'" id="rcI'+i+'" type="text" inputmode="numeric" autocomplete="off" aria-label="'+escAttr(t+' '+col+' '+rcSizeLabel_(_rcSize))+'" value="'+escAttr(v)+'" oninput="rcInput('+i+',this.value)" onkeydown="rcKeyNext(event,'+i+')">'
-        +'<div class="rc-m" id="rcM'+i+'">'+rcMeta_(x,v)+'</div>'+(when?'<div class="rc-m" title="อัปเดตล่าสุดโดย '+escAttr(x.updatedBy||'-')+'">'+when+'</div>':'')+'</td>';
+      var when=rcWhen_(x.updatedAt), low=x.counted&&!(Number(x.qty)>0);
+      if(x.counted) tot[col2idx[c]]=(tot[col2idx[c]]||0)+(byColorRow?(Number(x.qty)||0):0);
+      h+='<td class="rc-c"><div class="rc-b'+(x.counted?(low?' zero':''):' none')+'" id="rcB'+i+'">'+(x.counted?(Number(x.qty)||0):'ยังไม่นับ')+'</div>'+(x.counted&&when?'<div class="rc-w" title="โดย '+escAttr(x.updatedBy||'-')+'">'+when+'</div>':'<div class="rc-w">&nbsp;</div>')+'<input class="rc-i'+(v!==''?' on':'')+'" id="rcI'+i+'" type="text" inputmode="numeric" autocomplete="off" aria-label="'+escAttr(t+' '+col+' '+rcSizeLabel_(_rcSize))+'" placeholder="นับใหม่" value="'+escAttr(v)+'" oninput="rcInput('+i+',this.value)" onkeydown="rcKeyNext(event,'+i+')">'
+        +'<div class="rc-m" id="rcM'+i+'">'+rcMeta_(x,v)+'</div></td>';
     });
     h+='</tr>';
   });
-  h+='</tbody></table></div><div class="rc-bar" id="rcBar"></div>';
+  h+='</tbody>'+(byColorRow?'<tfoot><tr><td>รวมที่นับ</td>'+cols.map(function(c,i){ return '<td>'+(tot[i]||0)+' <small>เส้น</small></td>'; }).join('')+'</tr></tfoot>':'')+'</table></div><div class="rc-bar" id="rcBar"></div>';
   b.innerHTML=h;
   rcBar_();
 }
 function rcMeta_(x,v){
-  var cur=Number(x.qty)||0, s='ระบบ <b>'+cur+'</b>';
-  if(/^\d+$/.test(String(v).trim())){ var d=Number(v)-cur; s+=d?' <span class="'+(d>0?'up':'dn')+'">'+(d>0?'+':'')+d+'</span>':' <span class="up">ตรง</span>'; }
-  else if(String(v).trim()!=='') s+=' <span class="dn">ตัวเลขไม่ถูกต้อง</span>';
-  return s;
+  var t=String(v==null?'':v).trim(); if(t==='') return '';
+  if(!/^\d+$/.test(t)) return '<span class="dn">ตัวเลขไม่ถูกต้อง</span>';
+  if(!x.counted) return '<span class="up">นับครั้งแรก</span>';
+  var d=Number(t)-(Number(x.qty)||0);
+  return d?'<span class="'+(d>0?'up':'dn')+'">'+(d>0?'+':'')+d+'</span>':'<span class="up">ตรงเดิม</span>';
 }
 function rcInput(i,v){
   var k=_rcCombos[i]; if(!k) return;
@@ -12031,8 +12041,8 @@ function rcClear(){ if(!confirm('ล้างตัวเลขที่กร�
 async function rcSave(){
   var ch=rcChanges_(_rcDraft, rcModel_(_rcData).cells); if(!ch.items.length || ch.bad.length) return;
   var moved=ch.items.filter(function(x){ return x.qty!==x.before; });
-  var msg='บันทึกยอดที่นับ '+ch.items.length+' ช่อง?\n\nยอดในระบบจะเปลี่ยน '+moved.length+' ช่อง:\n'
-    +moved.slice(0,15).map(function(x){ return '• '+x.railType+' '+x.color+' '+rcSizeLabel_(x.size)+': '+x.before+' → '+x.qty; }).join('\n')+(moved.length>15?'\n... และอีก '+(moved.length-15)+' ช่อง':'');
+  var msg='บันทึกยอดที่นับ '+ch.items.length+' ช่อง?\n\nยอดจะเปลี่ยน '+moved.length+' ช่อง:\n'
+    +moved.slice(0,15).map(function(x){ return '• '+x.railType+' '+x.color+' '+rcSizeLabel_(x.size)+': '+(x.before==null?'ยังไม่นับ':x.before)+' → '+x.qty; }).join('\n')+(moved.length>15?'\n... และอีก '+(moved.length-15)+' ช่อง':'');
   if(!confirm(msg)) return;
   var sent=ch.items.map(function(x){ return {railType:x.railType, color:x.color, size:x.size, qty:x.qty}; });
   showLoad('กำลังบันทึกยอดที่นับ...');
