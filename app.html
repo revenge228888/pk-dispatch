@@ -1878,6 +1878,7 @@ async function doLogin(){
   btn.disabled = true; btn.textContent = 'กำลังเข้าสู่ระบบ...';
   try {
     const r = await pkLoginTry(username, password);
+    if (r.ok && r.user.role === 'bot') { err.textContent = 'บัญชีนี้สำหรับระบบอัตโนมัติ ใช้หน้าเว็บไม่ได้'; return; }
     if (r.ok) {
       // team ต้องเก็บด้วย — fast wrapper งานวัดเซลล์/หน้าช่างใช้ (เคยหลุด: login สดไม่มี team → ตกเส้น GAS ช้าเงียบๆ 19 ก.ค.)
       CURRENT_USER = { username:r.user.username, role:r.user.role, name:r.user.name, team:r.user.team||'', token:r.token };
@@ -18909,7 +18910,7 @@ async function slpDelete(id){const rec=_slpRecords.find(x=>x.id===id);const warn
 // (เพดานโค้ดเต็มจริง ขยายจาก UI ไม่ได้ — ต้องแก้ constant + sync worker → hint บอกวิธีต่อชีต)
 // ══ จัดการผู้ใช้ (manager only · prefix um*) ══════════════════════════════════
 let _umUsers = [];
-const UM_ROLES = [['office','ออฟฟิศ'],['sales','เซลล์'],['tech','ช่าง'],['manager','ผู้จัดการ'],['quote','ทำใบเสนอราคา'],['prod','ฝ่ายผลิต (ทีม: ราง / ผ้ามุ้ง)']];
+const UM_ROLES = [['bot','ระบบอัตโนมัติ (Claude)'],['office','ออฟฟิศ'],['sales','เซลล์'],['tech','ช่าง'],['manager','ผู้จัดการ'],['quote','ทำใบเสนอราคา'],['prod','ฝ่ายผลิต (ทีม: ราง / ผ้ามุ้ง)']];
 function umRoleLabel(r){ const f = UM_ROLES.find(x => x[0] === r); return f ? f[1] : (r || '-'); }
 function umInit(){ umLoad(); }
 async function umLoad(){
