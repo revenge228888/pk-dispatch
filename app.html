@@ -717,6 +717,22 @@ tbody tr:nth-child(even){background:rgba(120,96,72,.04);}
   </div>
 </div>
 
+<!-- [FSL] หางานแทนเมื่อมีงานเลื่อน -->
+<div class="modal-bg" id="fslModal" onclick="if(event.target===this)fslClose()">
+  <div class="modal large" style="max-width:720px;">
+    <div class="card-head"><span>🔄 หางานแทน (งานเลื่อน)</span><button onclick="fslClose()" style="background:none;border:none;color:var(--mu);font-size:20px;cursor:pointer;">×</button></div>
+    <div style="padding:12px 16px 16px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;">
+        <div class="fg" style="min-width:150px;flex:1;margin:0;"><label class="fl">วันที่คิวว่าง</label>
+          <div class="date-wrap"><input class="fi" id="fslDate" type="date" oninput="updateDateDisplay(this)"><span class="date-display empty" data-for="fslDate">เลือกวันที่</span></div></div>
+        <div class="fg" style="max-width:140px;margin:0;"><label class="fl">หางานล่วงหน้า</label><select class="fi" id="fslDays"><option value="5">5 วันทำงาน</option><option value="7" selected>7 วันทำงาน</option><option value="10">10 วันทำงาน</option><option value="14">14 วันทำงาน</option></select></div>
+        <button class="btn btn-p" onclick="fslLoad()">🔍 ค้นหา</button>
+      </div>
+      <div id="fslBody"></div>
+    </div>
+  </div>
+</div>
+
 <!-- OFFICE PHOTO MODAL -->
 <div class="modal-bg" id="officePhotoModal" style="z-index:500;" onclick="if(event.target===this)this.classList.remove('on')">
   <button onclick="document.getElementById('officePhotoModal').classList.remove('on')" style="position:fixed;top:14px;right:14px;background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.3);width:42px;height:42px;border-radius:50%;cursor:pointer;font-size:22px;line-height:1;z-index:10;">×</button>
@@ -2572,6 +2588,7 @@ function renderOfficeShell(){
           <div class="fg" style="max-width:120px;"><label class="fl">ทีมช่างวันนี้</label><input class="fi" id="asTech" type="number" min="0" max="26" placeholder="default"></div>
           <div class="fg" style="max-width:120px;"><label class="fl">ทีมเซลล์วันนี้</label><input class="fi" id="asSales" type="number" min="0" max="26" placeholder="default"></div>
           <button class="btn btn-p" onclick="assignPreview()">🚚 ดูแผนจัดทีม</button>
+          <button class="btn btn-g" onclick="fslOpen()">🔄 หางานแทน (งานเลื่อน)</button>
           <span style="font-size:11px;color:var(--mu);align-self:center;">เว้นช่องทีม = ใช้ค่า default · จัดกลุ่มโซน + เรียงจุดแวะจาก depot</span>
         </div>
         <div id="asResult" class="section-pad"></div>
@@ -5413,6 +5430,305 @@ function clearBookingForm(){
   // ── จังหวะ2A: หน้าจัดทีม (preview · ยังไม่เขียน) ──
   return clearBookingForm_impl();
 }
+// ════════ [FSL] 🔄 หางานแทนเมื่อมีงานเลื่อน + 🔗 ผูกใบผลิตกับงานคิว (2 พ.ย. 2026) ════════
+//  ⛔ ส่วนคำนวณ (FSL_* + fsl*_ ก่อนบรรทัด "── หน้าจอ") = ชุดเดียวที่ tools/pk-mcp/fillslot.mjs โหลดไปรันใน vm
+//     ห้ามใช้ DOM / ตัวแปรของหน้าเว็บในส่วนนี้ · คิดแบบเดียวกับ productionSummary (lib.mjs) — เทส fsl_test.mjs เทียบ
+//  ผูก = tag [wo:...] ในหมายเหตุงานคิว (pkWoTag_ ฝั่ง GAS) · ยังไม่ผูก → เดาจากชื่อลูกค้า (เป็นแค่คำแนะนำ)
+var FSL_EQUIP_READY=['จัดอุปกรณ์แล้ว','รอราง/จ่ายงานผลิต','กำลังผลิต','ผลิตเสร็จแล้ว'];
+function fslAddDays_(ymd,n){ var d=new Date(ymd+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
+function fslIsSun_(ymd){ return new Date(ymd+'T00:00:00Z').getUTCDay()===0; }
+function fslDays_(a,b){ return Math.round((Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000); }
+// วันทำงานถัดจาก date จำนวน n วัน (อาทิตย์หยุด)
+function fslWindow_(date,n){ var out=[],d=date; while(out.length<n){ d=fslAddDays_(d,1); if(!fslIsSun_(d)) out.push(d); } return out; }
+// วันทำงานที่ n นับจาก ymd (รวม ymd ถ้าไม่ใช่อาทิตย์) = workDayN ใน lib.mjs
+function fslWorkDayN_(ymd,n){ var d=ymd,left=n; for(;;){ if(!fslIsSun_(d) && --left<=0) return d; d=fslAddDays_(d,1); } }
+// ชื่อย่อไว้เทียบ = nameKey (tools/pk-mcp/followup.mjs)
+function fslNameKey_(s){ return String(s||'').replace(/line@\S*/ig,'').replace(/\(.*?\)|\*.*$/g,'').replace(/^\s*(คุณ|ร้าน|บจก\.?|บริษัท|หจก\.?)\s*/,'').replace(/[\s.]/g,'').toLowerCase(); }
+function fslSetsOf_(j){ var n=(j.sets||[]).reduce(function(s,x){return s+(Number(x.n)||0);},0); return n||Number(j.itemCount)||0; }
+function fslIsDone_(j){ return j.prodStatus==='ผลิตเสร็จแล้ว'; }
+function fslIsSpecial_(j){ return (j.sets||[]).some(function(x){return x.c && x.c!=='อบขาว' && x.c!=='ดำ';}) || (!(j.sets||[]).length && !!j.specialColors); }
+function fslApproved_(j){ return !j.docStatus || j.docStatus==='อนุมัติแล้ว'; }
+function fslState_(j){
+  if(fslIsDone_(j)) return 'ผลิตเสร็จแล้ว';
+  if(j.railStatus==='done' && j.meshStatus==='done') return 'ผลิตครบสองฝ่าย รอตรวจ/ออฟฟิศกดเสร็จ';
+  return 'ราง: '+(j.railStatus||'ยังไม่เริ่ม')+' · มุ้ง: '+(j.meshStatus||'ยังไม่เริ่ม');
+}
+// คาดการณ์วันผลิตเสร็จแยกฝ่าย (= productionSummary: ลำดับ เลยกำหนด/พรุ่งนี้ → ด่วน → วันติดตั้ง → ลำดับออฟฟิศ → เริ่มแล้วก่อน)
+function fslForecast_(jobs,cap,today){
+  var rows=(jobs||[]).filter(function(j){ return !fslIsDone_(j) && fslApproved_(j); }).map(function(j){
+    var d=j.installDate?fslDays_(today,j.installDate):null;
+    return { woId:j.woId, customer:j.customerName, installDate:j.installDate||'', sets:fslSetsOf_(j), rail:j.railStatus||'', mesh:j.meshStatus||'',
+      prio:Number(j.prio)||0, tier:(d!=null && d<=1)?0:(j.rush?1:2), started:(j.railStatus||j.meshStatus)?0:1 };
+  }).sort(function(a,b){ return a.tier-b.tier || (a.installDate||'9999').localeCompare(b.installDate||'9999') || (a.prio||1e9)-(b.prio||1e9) || a.started-b.started || String(a.woId).localeCompare(String(b.woId)); });
+  var late={};
+  ['rail','mesh'].forEach(function(dept){
+    var c=Number(cap && cap[dept])||0, cum=0; late[dept]=[];
+    rows.forEach(function(r){
+      if(r[dept]==='done'){ r[dept+'Finish']='เสร็จแล้ว'; return; }
+      cum+=r.sets;
+      if(!c){ r[dept+'Finish']=null; return; }
+      var fin=fslWorkDayN_(today,Math.ceil(cum/c)); r[dept+'Finish']=fin;
+      if(r.installDate && fin>=r.installDate) late[dept].push(r.woId);
+    });
+  });
+  return { order:rows, late:late };
+}
+// ลองเร่ง: ตั้งวันติดตั้งของใบในชุดนี้ = date แล้วเรียงใหม่ → ทันก่อนติดตั้ง 1 วันไหม + งานไหนหลุดไม่ทันเพิ่ม
+function fslSimulate_(jobs,woIds,date,cap,today){
+  var base=fslForecast_(jobs,cap,today);
+  var sim=fslForecast_((jobs||[]).map(function(j){ return woIds.indexOf(j.woId)>=0?Object.assign({},j,{installDate:date}):j; }),cap,today);
+  var capOk=Number(cap && cap.rail)>0 && Number(cap && cap.mesh)>0;
+  var mine=sim.order.filter(function(r){ return woIds.indexOf(r.woId)>=0; });
+  var isLate=mine.some(function(r){ return sim.late.rail.indexOf(r.woId)>=0 || sim.late.mesh.indexOf(r.woId)>=0; });
+  var fin=function(k){ var v=mine.map(function(r){return r[k];}); if(v.some(function(x){return x==null;})) return null; v=v.filter(function(x){return x!=='เสร็จแล้ว';}).sort(); return v.length?v[v.length-1]:'เสร็จแล้ว'; };
+  var bumped=[];
+  ['rail','mesh'].forEach(function(d){ sim.late[d].forEach(function(w){ if(woIds.indexOf(w)<0 && base.late[d].indexOf(w)<0 && bumped.indexOf(w)<0) bumped.push(w); }); });
+  return { possible:capOk && !isLate, railFinish:fin('railFinish'), meshFinish:fin('meshFinish'),
+    why:!capOk?'ยังไม่ได้ตั้งกำลังผลิตต่อวัน':(isLate?'ผลิตไม่ทันก่อนวันติดตั้ง 1 วัน แม้ลัดคิว':''),
+    bumped:bumped.map(function(w){ var r=base.order.find(function(x){return x.woId===w;})||{}; return { woId:w, customer:r.customer||'', installDate:r.installDate||'' }; }) };
+}
+// ใบที่ผลิตเสร็จนานแล้ว = ส่วนใหญ่ติดตั้งไปแล้ว (ร้านประจำมีหลายใบชื่อเดียวกัน) → ไม่เอามาเดา
+function fslRecent_(j,today){ return !fslIsDone_(j) || (j.installDate ? j.installDate>=fslAddDays_(today,-14) : (!!j.doneDate && j.doneDate>=fslAddDays_(today,-30))); }
+// เดาจากชื่อ: ตรงกัน > ชื่อหนึ่งอยู่ในอีกชื่อ (≥4 ตัว) · หลายใบ → เลือกใบที่วันติดตั้งตรงคิว ไม่งั้นกำกวม
+function fslMatchName_(customer,qDate,pool){
+  var k=fslNameKey_(customer); if(k.length<3) return { match:'none', jobs:[] };
+  var hit=pool.filter(function(j){ return fslNameKey_(j.customerName)===k; }), how='name';
+  if(!hit.length && k.length>=4){ hit=pool.filter(function(j){ var n=fslNameKey_(j.customerName); return n.length>=4 && (n.indexOf(k)>=0 || k.indexOf(n)>=0); }); how='partial'; }
+  if(hit.length>1){ var same=hit.filter(function(j){ return j.installDate===qDate; }); if(same.length===1) return { match:'exact', jobs:same }; return { match:'ambiguous', jobs:hit }; }
+  if(hit.length===1) return { match:hit[0].installDate===qDate?'exact':how, jobs:hit };
+  return { match:'none', jobs:[] };
+}
+// แนะนำใบผลิตให้ผูก: คะแนน = ชื่อ (ตรง 60 / คล้าย 35) + วันติดตั้ง (ตรง 30 / ±7 วัน 15 / ±30 วัน 5) − ผูกกับงานอื่นแล้ว 40
+//  high = ชื่อตรง + วันตรง (หลายใบได้ = งานเดียวมีหลายใบผลิต) · medium = ชื่อตรง/คล้ายเหลือใบเดียว · นอกนั้นไม่เลือกให้
+function fslSuggest_(row,jobs,linkedTo,today){
+  var k=fslNameKey_(row.customer), cands=[];
+  (jobs||[]).forEach(function(j){
+    if(!fslRecent_(j,today)) return;
+    var n=fslNameKey_(j.customerName), s=0, why=[];
+    if(k.length>=3 && n===k){ s+=60; why.push('ชื่อตรง'); }
+    else if(k.length>=4 && n.length>=4 && (n.indexOf(k)>=0 || k.indexOf(n)>=0)){ s+=35; why.push('ชื่อคล้าย'); }
+    else return;
+    if(j.installDate){ var dd=Math.abs(fslDays_(row.date,j.installDate)); if(dd===0){ s+=30; why.push('วันตรง'); } else if(dd<=7){ s+=15; why.push('วันห่าง '+dd+' วัน'); } else if(dd<=30) s+=5; }
+    var other=linkedTo[j.woId] && linkedTo[j.woId]!==row.id;
+    if(other){ s-=40; why.push('ผูกกับงานอื่นแล้ว'); }
+    cands.push({ woId:j.woId, customerName:j.customerName, installDate:j.installDate||'', state:fslState_(j), score:s, why:why.join(' · '), other:!!other, exactName:n===k, sameDay:j.installDate===row.date });
+  });
+  cands.sort(function(a,b){ return b.score-a.score || String(a.woId).localeCompare(String(b.woId)); });
+  var free=cands.filter(function(c){ return !c.other; });
+  var hi=free.filter(function(c){ return c.exactName && c.sameDay; });
+  if(hi.length) return { level:'high', pick:hi.map(function(c){return c.woId;}), cands:cands.slice(0,8) };
+  if(free.length===1) return { level:'medium', pick:[free[0].woId], cands:cands.slice(0,8) };
+  return { level:'', pick:[], cands:cands.slice(0,8) };
+}
+// รวมผล · input { date, today, days, queue, teamCfg, jobs, cap, team, postponedId }
+function fslBuild_(o){
+  var date=o.date, today=o.today, tc=o.teamCfg||{}, cap=o.cap, jobs=o.jobs||[];
+  var capPerTeam=Number(tc.capPerTeam)||0, glassTeams=tc.glassTeams||[];
+  var byId={}; jobs.forEach(function(j){ byId[j.woId]=j; });
+  var linkedTo={}; (o.queue||[]).forEach(function(r){ (r.wos||[]).forEach(function(w){ linkedTo[w]=r.id; }); });
+  var dayRows=(o.queue||[]).filter(function(r){ return r.date===date; });
+  var removed=dayRows.filter(function(r){ return o.postponedId && r.id===o.postponedId; });
+  var teams=(tc.techTeams||[]).map(function(t){
+    var mine=dayRows.filter(function(r){ return r.team===t && r.id!==o.postponedId; });
+    var load=mine.reduce(function(s,r){ return s+(Number(r.score)||0); },0);
+    return { team:t, jobs:mine.length, load:load, free:Math.max(0,capPerTeam-load), glass:glassTeams.indexOf(t)>=0 };
+  });
+  var noTeam=dayRows.filter(function(r){ return !r.team && r.id!==o.postponedId; });
+  var focus=o.team?teams.filter(function(t){ return t.team===o.team; }):teams;
+  var fitTeams=function(r){ return focus.filter(function(t){ return (!r.glass || t.glass) && t.free>=(Number(r.score)||0); }).map(function(t){ return t.team; }); };
+  var win=fslWindow_(date,Math.min(14,Math.max(1,Number(o.days)||7)));
+  var pool=jobs.filter(function(j){ return fslRecent_(j,today); });
+  var ready=[], expedite=[], unlinked=[], used={};
+  (o.queue||[]).filter(function(r){ return win.indexOf(r.date)>=0; }).sort(function(a,b){ return a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)); }).forEach(function(r){
+    var base={ id:r.id, queueDate:r.date, customer:r.customer, job:r.job, address:r.address, score:Number(r.score)||0, glass:!!r.glass, nowTeam:r.team||'', fitTeams:fitTeams(r) };
+    var js, link;
+    if((r.wos||[]).length){
+      js=r.wos.map(function(w){ return byId[w]; }).filter(Boolean); link='link';
+      if(!js.length){ unlinked.push(Object.assign(base,{ why:'ใบผลิตที่ผูกไว้ถูกลบ/ไม่พบ ('+r.wos.join(', ')+')', suggest:fslSuggest_(r,jobs,linkedTo,today) })); return; }
+    } else {
+      var m=fslMatchName_(r.customer,r.date,pool);
+      if(m.match==='none' || m.match==='ambiguous'){ unlinked.push(Object.assign(base,{ why:m.match==='none'?'ไม่พบใบผลิตชื่อนี้':'ชื่อตรงหลายใบ', suggest:fslSuggest_(r,jobs,linkedTo,today) })); return; }
+      js=m.jobs; link=m.match;
+    }
+    js.forEach(function(j){ used[j.woId]=1; });
+    var c=Object.assign(base,{ wos:js.map(function(j){return j.woId;}), link:link, prodInstallDate:js.map(function(j){return j.installDate||'';}).join(', '), sets:js.reduce(function(s,j){return s+fslSetsOf_(j);},0) });
+    if(link!=='link'){ c.checkNote=link==='exact'?'จับคู่จากชื่อ+วันติดตั้ง (ยังไม่ได้ผูก)':'จับคู่จากชื่อ วันในใบผลิต ('+(js[0].installDate||'ไม่มี')+') ไม่ตรงคิว — เช็กก่อน'; c.suggest=fslSuggest_(r,jobs,linkedTo,today); }
+    if(js.every(fslIsDone_)){ ready.push(Object.assign(c,{ state:'ผลิตเสร็จแล้ว' })); return; }
+    var open=js.filter(function(j){ return !fslIsDone_(j); }), blockers=[];
+    if(open.some(function(j){ return !fslApproved_(j); })) blockers.push('ใบผลิตยังไม่อนุมัติ');
+    if(open.some(function(j){ return FSL_EQUIP_READY.indexOf(j.prodStatus||'รอจัดอุปกรณ์')<0; })) blockers.push('ออฟฟิศยังไม่จัดอุปกรณ์');
+    if(open.some(function(j){ return fslIsSpecial_(j) && !j.hasRail; })) blockers.push('สีพิเศษ ยังไม่ติ๊กว่ารางมาแล้ว');
+    var sim=blockers.indexOf('ใบผลิตยังไม่อนุมัติ')>=0 ? { possible:false, why:'', bumped:[] } : fslSimulate_(jobs,open.map(function(j){return j.woId;}),date,cap,today);
+    if(sim.why) blockers.push(sim.why);
+    expedite.push(Object.assign(c,{ state:open.map(fslState_).join(' / '), possible:sim.possible && !blockers.length, railFinish:sim.railFinish||null, meshFinish:sim.meshFinish||null, blockers:blockers, wouldDelay:sim.bumped }));
+  });
+  var lastQ=win[win.length-1];
+  var readyNoQueue=pool.filter(function(j){ return fslIsDone_(j) && !used[j.woId] && !linkedTo[j.woId] && (!j.installDate || j.installDate>lastQ); })
+    .map(function(j){ return { woId:j.woId, customer:j.customerName, prodInstallDate:j.installDate||'', doneDate:j.doneDate||'', sets:fslSetsOf_(j) }; })
+    .sort(function(a,b){ return (b.doneDate||'').localeCompare(a.doneDate||''); });
+  var fitFirst=function(a,b){ return (b.fitTeams.length?1:0)-(a.fitTeams.length?1:0) || (a.checkNote?1:0)-(b.checkNote?1:0) || a.queueDate.localeCompare(b.queueDate); };
+  ready.sort(fitFirst);
+  expedite.sort(function(a,b){ return (b.possible?1:0)-(a.possible?1:0) || a.wouldDelay.length-b.wouldDelay.length || fitFirst(a,b); });
+  return { date:date, today:today, capPerTeam:capPerTeam, teams:teams, noTeam:noTeam.map(function(r){ return { id:r.id, customer:r.customer, score:r.score }; }),
+    postponed:removed.map(function(r){ return { id:r.id, customer:r.customer, score:r.score, team:r.team }; }),
+    searched:win, ready:ready, expedite:expedite, readyNoQueue:readyNoQueue, unlinked:unlinked };
+}
+// ผูกทั้งชุด (Claude ช่วยรอบแรก): งานในช่วงที่ยังไม่ผูก → แนะนำ high/medium · นอกนั้นให้คนเลือก
+function fslLinkPlan_(queue,jobs,today){
+  var linkedTo={}; (queue||[]).forEach(function(r){ (r.wos||[]).forEach(function(w){ linkedTo[w]=r.id; }); });
+  var high=[], medium=[], none=[];
+  (queue||[]).filter(function(r){ return !(r.wos||[]).length; }).sort(function(a,b){ return a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)); }).forEach(function(r){
+    var s=fslSuggest_(r,jobs,linkedTo,today), v={ id:r.id, date:r.date, customer:r.customer, job:r.job, pick:s.pick, cands:s.cands };
+    (s.level==='high'?high:s.level==='medium'?medium:none).push(v);
+  });
+  return { linked:(queue||[]).filter(function(r){ return (r.wos||[]).length; }).length, high:high, medium:medium, none:none };
+}
+
+// ── หน้าจอ (office/manager · หน้าจัดทีม) ──
+async function getFillSlotDataFast(from,to){
+  if (CURRENT_USER) {
+    try {
+      const d = await _pkFastPost_('/fill-slot-data', { from:from, to:to });
+      if (d && d.ok && Array.isArray(d.queue)) { _markJobSource('sheets', d.ms); return d; }
+      console.warn('[getFillSlotDataFast] ไม่ ok → fallback GAS:', d && d.error);
+    } catch(e){ console.warn('[getFillSlotDataFast] error → fallback GAS:', e.message); }
+  }
+  const _g = await call({ action:'pk_fillSlotData', from:from, to:to }); _markJobSource('gas'); return _g;
+}
+let _fsl = null;   // { data, date, team, postponedId, days, pick:{id, sel:[]}, showLate }
+function fslToday_(){ const t=new Date(); return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0'); }
+function fslThai_(ymd){ if(!ymd) return '-'; const p=ymd.split('-'); return Number(p[2])+'/'+Number(p[1])+'/'+String(Number(p[0])+543).slice(2); }
+function fslOpen(){
+  const as=document.getElementById('asDate');
+  const d=document.getElementById('fslDate');
+  d.value=(as && as.value) || fslToday_(); updateDateDisplay(d);
+  document.getElementById('fslBody').innerHTML='<div style="color:var(--mu);font-size:13px;">เลือกวันที่ว่าง แล้วกด 🔍 ค้นหา</div>';
+  document.getElementById('fslModal').classList.add('on');
+  fslLoad();
+}
+function fslClose(){ document.getElementById('fslModal').classList.remove('on'); }
+async function fslLoad(){
+  const date=document.getElementById('fslDate').value, box=document.getElementById('fslBody');
+  if(!date){ toast('เลือกวันที่ก่อน'); return; }
+  if(date<fslToday_()){ toast('วันที่ผ่านมาแล้ว'); return; }
+  const days=Number(document.getElementById('fslDays').value)||7;
+  box.innerHTML='<div class="loading-row">⏳ กำลังโหลดคิวและใบผลิต...</div>';
+  try{
+    const win=fslWindow_(date,days);
+    const r=await getFillSlotDataFast(date, win[win.length-1]);
+    if(!r || !r.ok) throw new Error((r && r.error) || 'โหลดไม่สำเร็จ');
+    const keepTeam=_fsl && _fsl.date===date ? _fsl.team : '', keepPp=_fsl && _fsl.date===date ? _fsl.postponedId : '';
+    _fsl={ data:r, date:date, days:days, team:keepTeam, postponedId:keepPp, pick:null, showLate:false };
+    fslRender_();
+  }catch(e){ box.innerHTML='<div style="color:var(--rd);">⚠ '+escHtml(e.message||String(e))+'</div>'; }
+}
+function fslSet(k,v){ if(!_fsl) return; _fsl[k]=v; if(k!=='pick') _fsl.pick=null; fslRender_(); }
+function fslCard_(x,kind){
+  const wos=(x.wos||[]).join(', ');
+  const fit=x.fitTeams.length?'<span style="color:var(--grn);font-weight:700;">✓ ลงได้: '+escHtml(x.fitTeams.join(', '))+'</span>':'<span style="color:var(--mu);">คะแนนว่างไม่พอทุกทีม</span>';
+  let h='<div style="border:1px solid var(--bdr);border-radius:10px;padding:9px 11px;margin-bottom:7px;background:var(--surf);">'
+    +'<div style="display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;"><b style="font-size:14px;">'+escHtml(x.customer)+'</b>'
+    +'<span style="font-size:11.5px;color:var(--mu);">คิวเดิม '+fslThai_(x.queueDate)+(x.nowTeam?' · '+escHtml(x.nowTeam):'')+' · ★'+x.score+(x.glass?' · 🪟 กระจก':'')+'</span></div>'
+    +'<div style="font-size:12px;margin-top:2px;">'+(wos?'<span style="font-family:var(--mono);">'+escHtml(wos)+'</span> · ':'')+escHtml(x.state||'')+(x.sets?' · '+x.sets+' ชุด':'')+'</div>';
+  if(kind==='exp'){
+    const fin=function(v){ return v==='เสร็จแล้ว'?'เสร็จแล้ว':'เสร็จ '+fslThai_(v); };
+    if(x.possible) h+='<div style="font-size:12px;margin-top:2px;">ถ้าเร่ง: ราง '+fin(x.railFinish)+' · มุ้ง '+fin(x.meshFinish)+'</div>';
+    if(x.blockers.length) h+='<div style="font-size:12px;color:var(--rd);margin-top:2px;">⛔ '+escHtml(x.blockers.join(' · '))+'</div>';
+    if(x.wouldDelay.length) h+='<div style="font-size:12px;color:var(--amb,#B45309);margin-top:2px;">⚠ เร่งแล้วงานนี้จะผลิตไม่ทัน: '+x.wouldDelay.map(function(w){ return escHtml(w.customer||w.woId)+' ('+fslThai_(w.installDate)+')'; }).join(', ')+'</div>';
+  }
+  h+='<div style="font-size:12px;margin-top:3px;">'+fit+'</div>';
+  if(x.checkNote) h+='<div style="font-size:11.5px;color:var(--amb,#B45309);margin-top:3px;">🔎 '+escHtml(x.checkNote)+' <button class="btn btn-g btn-sm" style="padding:2px 8px;font-size:11px;" onclick="fslPickOpen(\''+_esc(x.id)+'\')">🔗 ยืนยัน/เลือกใบผลิต</button></div>';
+  else if(x.link==='link') h+='<div style="font-size:11.5px;color:var(--mu);margin-top:3px;">🔗 ผูกใบผลิตแล้ว <a href="javascript:void 0" onclick="fslPickOpen(\''+_esc(x.id)+'\')">แก้</a></div>';
+  return h+fslPickBox_(x.id)+'</div>';
+}
+function fslRow_(id){ return (_fsl.data.queue||[]).find(function(r){ return r.id===id; }); }
+function fslPickOpen(id){
+  const r=fslRow_(id); if(!r) return;
+  let sel=(r.wos||[]).slice();
+  if(!sel.length){ const lt={}; _fsl.data.queue.forEach(function(q){ (q.wos||[]).forEach(function(w){ lt[w]=q.id; }); }); sel=fslSuggest_(r,_fsl.data.jobs,lt,fslToday_()).pick.slice(); }
+  _fsl.pick={ id:id, sel:sel, q:'' }; fslRender_();
+}
+function fslPickBox_(id){
+  const p=_fsl.pick; if(!p || p.id!==id) return '';
+  const r=fslRow_(id), lt={}; _fsl.data.queue.forEach(function(q){ (q.wos||[]).forEach(function(w){ lt[w]=q.id; }); });
+  const sg=fslSuggest_(r,_fsl.data.jobs,lt,fslToday_());
+  const q=fslNameKey_(p.q), qq=String(p.q||'').trim().toUpperCase();
+  let list=sg.cands.map(function(c){ return { woId:c.woId, name:c.customerName, installDate:c.installDate, state:c.state, why:c.why }; });
+  if(qq){
+    list=_fsl.data.jobs.filter(function(j){ return (q.length>=2 && fslNameKey_(j.customerName).indexOf(q)>=0) || String(j.woId).toUpperCase().indexOf(qq)>=0; })
+      .sort(function(a,b){ return String(b.woId).localeCompare(String(a.woId)); }).slice(0,20)
+      .map(function(j){ return { woId:j.woId, name:j.customerName, installDate:j.installDate||'', state:fslState_(j), why:'' }; });
+  }
+  p.sel.forEach(function(w){ if(!list.some(function(x){ return x.woId===w; })){ const j=_fsl.data.jobs.find(function(x){ return x.woId===w; }); if(j) list.unshift({ woId:w, name:j.customerName, installDate:j.installDate||'', state:fslState_(j), why:'' }); } });
+  let h='<div style="margin-top:8px;border-top:1px dashed var(--bdr);padding-top:8px;">'
+    +'<div style="font-size:12px;font-weight:700;margin-bottom:4px;">🔗 เลือกใบผลิตของงานนี้ (เลือกได้หลายใบ)</div>'
+    +'<input class="fi" id="fslPickQ" placeholder="ค้นชื่อลูกค้า หรือเลข WO" value="'+escHtml(p.q)+'" oninput="_fsl.pick.q=this.value;fslPickList_()" style="margin-bottom:6px;">'
+    +'<div id="fslPickList">';
+  h+=list.length?list.map(function(c){
+    const on=p.sel.indexOf(c.woId)>=0, other=lt[c.woId] && lt[c.woId]!==id;
+    return '<label style="display:flex;gap:8px;align-items:flex-start;padding:5px 2px;font-size:12.5px;cursor:pointer;"><input type="checkbox" '+(on?'checked':'')+' onchange="fslPickTog(\''+_esc(c.woId)+'\',this.checked)">'
+      +'<span><b style="font-family:var(--mono);">'+escHtml(c.woId)+'</b> '+escHtml(c.name)+'<br><span style="color:var(--mu);font-size:11.5px;">ติดตั้ง '+fslThai_(c.installDate)+' · '+escHtml(c.state)+(c.why?' · '+escHtml(c.why):'')+(other?' · <span style="color:var(--rd);">ผูกกับงานอื่นอยู่</span>':'')+'</span></span></label>';
+  }).join(''):'<div style="font-size:12px;color:var(--mu);padding:4px 0;">ไม่พบใบที่น่าจะใช่ — พิมพ์ค้นชื่อหรือเลข WO</div>';
+  h+='</div><div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">'
+    +'<button class="btn btn-p btn-sm" onclick="fslPickSave()">💾 บันทึกการผูก ('+p.sel.length+' ใบ)</button>'
+    +((r.wos||[]).length?'<button class="btn btn-g btn-sm" style="color:var(--rd);" onclick="fslPickSave(true)">ยกเลิกการผูก</button>':'')
+    +'<button class="btn btn-g btn-sm" onclick="fslSet(\'pick\',null)">ปิด</button></div></div>';
+  return h;
+}
+function fslPickList_(){
+  // พิมพ์ค้นหา → วาดเฉพาะรายการ (ไม่วาดทั้งหน้า ไม่งั้นช่องพิมพ์หลุดโฟกัส)
+  const box=document.getElementById('fslPickList'); if(!box || !_fsl.pick) return;
+  const tmp=document.createElement('div'); tmp.innerHTML=fslPickBox_(_fsl.pick.id);
+  const nb=tmp.querySelector('#fslPickList'); if(nb) box.innerHTML=nb.innerHTML;
+}
+function fslPickTog(w,on){ const p=_fsl.pick; if(!p) return; const i=p.sel.indexOf(w); if(on && i<0) p.sel.push(w); if(!on && i>=0) p.sel.splice(i,1); const b=document.querySelector('#fslModal [onclick="fslPickSave()"]'); if(b) b.textContent='💾 บันทึกการผูก ('+p.sel.length+' ใบ)'; }
+async function fslPickSave(unlink){
+  const p=_fsl.pick; if(!p) return;
+  const r=fslRow_(p.id), wos=unlink?[]:p.sel.slice();
+  if(!unlink && !wos.length){ toast('ยังไม่ได้เลือกใบผลิต'); return; }
+  if(!confirm((unlink?'ยกเลิกการผูกใบผลิตของ ':'ผูก '+wos.join(', ')+' กับงาน ')+r.customer+' (คิว '+fslThai_(r.date)+') ?')) return;
+  try{
+    const res=await call({ action:'pk_queueWoLink', items:[{ id:p.id, wos:wos }], dryRun:false });
+    if(!res || !res.ok) throw new Error((res && res.error) || 'บันทึกไม่สำเร็จ');
+    if(res.missing && res.missing.length) throw new Error('ไม่พบงานนี้ในคิวแล้ว (อาจถูกลบ) — กดค้นหาใหม่');
+    r.wos=wos; _fsl.pick=null; toast(unlink?'ยกเลิกการผูกแล้ว':'🔗 ผูกใบผลิตแล้ว'); fslRender_();
+  }catch(e){ toast('⚠ '+(e.message||e)); }
+}
+function fslRender_(){
+  const box=document.getElementById('fslBody'); if(!_fsl || !box) return;
+  const d=_fsl.data, dayRows=d.queue.filter(function(r){ return r.date===_fsl.date; });
+  const res=fslBuild_({ date:_fsl.date, today:fslToday_(), days:_fsl.days, queue:d.queue, teamCfg:d.teamCfg, jobs:d.jobs, cap:d.cap, team:_fsl.team, postponedId:_fsl.postponedId });
+  let h='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'
+    +'<div class="fg" style="min-width:150px;flex:1;"><label class="fl">ทีมที่ว่าง</label><select class="fi" onchange="fslSet(\'team\',this.value)"><option value="">ทุกทีมช่าง</option>'
+    +(d.teamCfg.techTeams||[]).map(function(t){ return '<option'+(t===_fsl.team?' selected':'')+'>'+escHtml(t)+'</option>'; }).join('')+'</select></div>'
+    +'<div class="fg" style="min-width:180px;flex:2;"><label class="fl">งานที่เลื่อน (ถ้ายังอยู่ในคิววันนี้)</label><select class="fi" onchange="fslSet(\'postponedId\',this.value)"><option value="">— ย้ายออกไปแล้ว / ไม่ระบุ —</option>'
+    +dayRows.map(function(r){ return '<option value="'+escHtml(r.id)+'"'+(r.id===_fsl.postponedId?' selected':'')+'>'+escHtml(r.customer)+' (★'+r.score+(r.team?' · '+escHtml(r.team):'')+')</option>'; }).join('')+'</select></div></div>';
+  const glassMark=res.teams.some(function(t){ return !t.glass; });   // ทุกทีมทำกระจกได้ = ไม่ต้องติดป้าย
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">'+res.teams.map(function(t){
+    const on=!_fsl.team || _fsl.team===t.team;
+    return '<span style="border:1px solid var(--bdr);border-radius:20px;padding:4px 10px;font-size:12px;'+(on?'':'opacity:.45;')+(t.free>0?'background:rgba(34,160,90,.12);':'')+'">'+escHtml(t.team)+(glassMark&&t.glass?' (ทีมกระจก)':'')+' · ว่าง <b>★'+t.free+'</b>/'+res.capPerTeam+'</span>';
+  }).join('')+(res.noTeam.length?'<span style="font-size:12px;color:var(--amb,#B45309);align-self:center;">⚠ ยังไม่มีทีม '+res.noTeam.length+' งาน (★'+res.noTeam.reduce(function(s,r){return s+(Number(r.score)||0);},0)+')</span>':'')+'</div>';
+  const sec=function(t,n,sub){ return '<div style="font-weight:800;font-size:14px;margin:12px 0 6px;">'+t+' <span style="color:var(--mu);font-weight:600;">('+n+')</span>'+(sub?'<div style="font-size:11.5px;color:var(--mu);font-weight:400;">'+sub+'</div>':'')+'</div>'; };
+  h+=sec('✅ ผลิตเสร็จแล้ว ดึงมาก่อนได้เลย',res.ready.length,'งานในคิว '+fslThai_(res.searched[0])+' – '+fslThai_(res.searched[res.searched.length-1])+' · โทรถามลูกค้าก่อน แล้วย้ายวันในหน้าแก้ไขงาน');
+  h+=res.ready.length?res.ready.map(function(x){ return fslCard_(x,'ready'); }).join(''):'<div style="font-size:12px;color:var(--mu);">ไม่มี</div>';
+  const ok=res.expedite.filter(function(x){ return x.possible; }), no=res.expedite.filter(function(x){ return !x.possible; });
+  const capOk=!!(d.cap && Number(d.cap.rail)>0 && Number(d.cap.mesh)>0);
+  h+=sec('⚡ เร่งผลิตแล้วทัน',ok.length,capOk?'คาดการณ์จากกำลังผลิต ราง '+d.cap.rail+' / มุ้ง '+d.cap.mesh+' ชุด/วัน · อาทิตย์หยุด · ต้องเสร็จก่อนติดตั้ง 1 วัน · ต้องแจ้งฝ่ายผลิตลัดคิว':'<span style="color:var(--rd);">⚠ ยังไม่ได้ตั้งกำลังผลิตต่อวัน (หน้าผลิต → ตั้งค่า) — คำนวณการเร่งผลิตไม่ได้</span>');
+  h+=ok.length?ok.map(function(x){ return fslCard_(x,'exp'); }).join(''):'<div style="font-size:12px;color:var(--mu);">ไม่มี</div>';
+  if(no.length) h+='<div style="margin:8px 0;"><a href="javascript:void 0" onclick="fslSet(\'showLate\',!_fsl.showLate)" style="font-size:12.5px;">'+(_fsl.showLate?'▾':'▸')+' เร่งไม่ทัน / ติดเงื่อนไข ('+no.length+')</a></div>'+(_fsl.showLate?no.map(function(x){ return fslCard_(x,'exp'); }).join(''):'');
+  h+=sec('📦 ผลิตเสร็จ ยังไม่มีคิวในช่วงนี้',res.readyNoQueue.length,'เพิ่งผลิตเสร็จ (ไม่เกิน 30 วัน) ยังไม่ได้นัด — โทรนัดเข้ามาได้');
+  h+=res.readyNoQueue.length?res.readyNoQueue.map(function(x){ return '<div style="font-size:12.5px;padding:3px 0;"><b style="font-family:var(--mono);">'+escHtml(x.woId)+'</b> '+escHtml(x.customer)+' · '+x.sets+' ชุด · เสร็จ '+fslThai_(x.doneDate)+(x.prodInstallDate?' · วันในใบผลิต '+fslThai_(x.prodInstallDate):'')+'</div>'; }).join(''):'<div style="font-size:12px;color:var(--mu);">ไม่มี</div>';
+  h+=sec('🔗 ยังหาใบผลิตไม่เจอ',res.unlinked.length,'ผูกใบผลิตครั้งเดียว ครั้งหน้าระบบรู้เลยว่าพร้อมหรือยัง');
+  h+=res.unlinked.map(function(x){
+    const sg=x.suggest||{ pick:[] };
+    return '<div style="border:1px solid var(--bdr);border-radius:10px;padding:8px 11px;margin-bottom:6px;"><div style="font-size:13px;"><b>'+escHtml(x.customer)+'</b> <span style="font-size:11.5px;color:var(--mu);">คิว '+fslThai_(x.queueDate)+' · ★'+x.score+' · '+escHtml(x.why)+'</span></div>'
+      +(_fsl.pick && _fsl.pick.id===x.id ? '' : '<button class="btn btn-g btn-sm" style="margin-top:5px;" onclick="fslPickOpen(\''+_esc(x.id)+'\')">🔗 '+(sg.pick.length?'ผูก '+escHtml(sg.pick.join(', '))+' (แนะนำ)':'เลือกใบผลิต')+'</button>')
+      +fslPickBox_(x.id)+'</div>';
+  }).join('');
+  box.innerHTML=h;
+  const qi=document.getElementById('fslPickQ'); if(qi && _fsl.pick && _fsl.pick.q){ qi.focus(); qi.setSelectionRange(qi.value.length,qi.value.length); }
+}
+
 let _asPins = {};       // team → jobId (ปักหมุดงานแรก)
 let _asAssign = {};      // jobId → team (override map · มีครบทุกงานหลัง fetch แรก)
 let _asJobs = [];        // งานทั้งหมด (สถานะกระดานปัจจุบัน)
