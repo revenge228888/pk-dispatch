@@ -5598,15 +5598,17 @@ async function getFillSlotDataFast(from,to){
 let _fsl = null;   // { data, date, team, postponedId, days, pick:{id, sel:[]}, showLate }
 function fslToday_(){ const t=new Date(); return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0'); }
 function fslThai_(ymd){ if(!ymd) return '-'; const p=ymd.split('-'); return Number(p[2])+'/'+Number(p[1])+'/'+String(Number(p[0])+543).slice(2); }
+let _fslPreset = null;   // เปิดจากการ์ดงานใน Dashboard: { date, postponedId, team }
+function fslOpenFor(id, date, team){ _fslPreset={ date:date, postponedId:id, team:team||'' }; fslOpen(); }
 function fslOpen(){
   const as=document.getElementById('asDate');
   const d=document.getElementById('fslDate');
-  d.value=(as && as.value) || fslToday_(); updateDateDisplay(d);
+  d.value=(_fslPreset && _fslPreset.date) || (as && as.value) || fslToday_(); updateDateDisplay(d);
   document.getElementById('fslBody').innerHTML='<div style="color:var(--mu);font-size:13px;">เลือกวันที่ว่าง แล้วกด 🔍 ค้นหา</div>';
   document.getElementById('fslModal').classList.add('on');
   fslLoad();
 }
-function fslClose(){ document.getElementById('fslModal').classList.remove('on'); }
+function fslClose(){ _fslPreset=null; document.getElementById('fslModal').classList.remove('on'); }
 async function fslLoad(){
   const date=document.getElementById('fslDate').value, box=document.getElementById('fslBody');
   if(!date){ toast('เลือกวันที่ก่อน'); return; }
@@ -5617,7 +5619,12 @@ async function fslLoad(){
     const win=fslWindow_(date,days);
     const r=await getFillSlotDataFast(date, win[win.length-1]);
     if(!r || !r.ok) throw new Error((r && r.error) || 'โหลดไม่สำเร็จ');
-    const keepTeam=_fsl && _fsl.date===date ? _fsl.team : '', keepPp=_fsl && _fsl.date===date ? _fsl.postponedId : '';
+    const pre=_fslPreset && _fslPreset.date===date ? _fslPreset : null; _fslPreset=null;
+    let keepTeam=_fsl && _fsl.date===date ? _fsl.team : '', keepPp=_fsl && _fsl.date===date ? _fsl.postponedId : '';
+    if (pre){
+      keepPp=r.queue.some(function(x){ return x.id===pre.postponedId && x.date===date; }) ? pre.postponedId : '';
+      keepTeam=(r.teamCfg.techTeams||[]).indexOf(pre.team)>=0 ? pre.team : '';   // งานยังไม่มีทีม/ทีมเกินจำนวนวันนั้น = ดูทุกทีม
+    }
     _fsl={ data:r, date:date, days:days, team:keepTeam, postponedId:keepPp, pick:null, showLate:false };
     fslRender_();
   }catch(e){ box.innerHTML='<div style="color:var(--rd);">⚠ '+escHtml(e.message||String(e))+'</div>'; }
@@ -9891,8 +9898,12 @@ function dashJobCard_(j, mode){
     +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px;padding-top:8px;border-top:1px solid var(--bdr);">'
       +(none?'<span class="badge" style="color:var(--rd);background:var(--surf);border:1px solid var(--rd);">ยังไม่จัดทีม</span>':'<span>👷 '+escHtml(j.team)+'</span>')
       +'<span style="color:var(--acc);font-weight:800;">★ '+(Number(j.score)||0)+'</span><span style="margin-left:auto;">'+amount+'</span>'
-      +'<span class="badge" style="color:'+pkDashTone_(j.status)+';background:var(--surf);border:1px solid '+pkDashTone_(j.status)+';">'+pkDashStatusLabel_(j.status)+'</span>'+queue+'</div></div>';
+      +'<span class="badge" style="color:'+pkDashTone_(j.status)+';background:var(--surf);border:1px solid '+pkDashTone_(j.status)+';">'+pkDashStatusLabel_(j.status)+'</span>'+queue+'</div>'
+    +(dashFslCan_(j,mode)?'<div style="margin-top:8px;"><button class="btn btn-g btn-sm" onclick="event.stopPropagation();fslOpenFor(\''+escAttr(j.id)+'\',\''+escAttr(j.date)+'\',\''+escAttr(j.team||'')+'\')" onkeydown="event.stopPropagation()">🔄 หางานแทน (งานนี้เลื่อน)</button></div>':'')
+    +'</div>';
 }
+// [FSL] ปุ่มหางานแทนบนการ์ด: งานติดตั้ง · ออฟฟิศ/ผู้จัดการ · วันนี้หรืออนาคต · ช่างยังไม่เริ่ม/ยังไม่จบ (กำลังทำ = ย้ายไม่ได้ตาม JOBLOCK)
+function dashFslCan_(j,mode){ return mode==='install' && isOfficeLevel() && /^\d{4}-\d{2}-\d{2}$/.test(j.date||'') && j.date>=pkTodayStr_() && j.status!=='done' && j.status!=='working'; }
 function dashJobCardFull_(j){ return dashJobCard_(j,'install'); }
 
 // render งานของวันหนึ่งแบบเต็ม (header + กลุ่มทีม + การ์ดเต็ม) — ใช้ทั้งมุมมองเต็มและโหมดเทียบ
