@@ -1545,18 +1545,18 @@ async function getProdGetFast(woId){
 
 // Dashboard: สถานะใบผลิตต้องจับคู่ชื่อ+วันติดตั้งแบบ 1:1 เท่านั้น
 // ref = เลขที่ใบจองของงาน (tag [ref:]) — มีแล้ว server จับคู่กับ refNo ของใบผลิตก่อน (แม่นสุด) ไม่เจอค่อยใช้ชื่อ+วันที่
-async function getJobProdFast(name, date, ref){
-  ref = String(ref||'').trim();
+async function getJobProdFast(name, date, ref, wos){
+  ref = String(ref||'').trim(); wos = Array.isArray(wos) ? wos : [];
   if (USE_SHEETS_PROD_GET && CURRENT_USER && name && date) {
     try {
-      const d = await _pkFastPost_('/job-prod', { name:name, date:date, ref:ref });
+      const d = await _pkFastPost_('/job-prod', { name:name, date:date, ref:ref, wos:wos });
       if (d && d.ok && (d.match === 'one' || d.match === 'none' || d.match === 'ambiguous')) {
         _markJobSource('sheets', d.ms); return d;
       }
       console.warn('[getJobProdFast] worker not ok, falling back to GAS:', d && d.error);
     } catch(e){ console.warn('[getJobProdFast] worker error, falling back to GAS:', e.message); }
   }
-  const _g = await call({ action:'pk_jobProdStatus', name:name, date:date, ref:ref }); _markJobSource('gas'); return _g;
+  const _g = await call({ action:'pk_jobProdStatus', name:name, date:date, ref:ref, wos:wos }); _markJobSource('gas'); return _g;
 }
 
 let USE_SHEETS_EXP = true;   // ON: เบิกจ่าย /expense-list-*
@@ -2232,6 +2232,7 @@ function renderOfficeShell(){
             <div class="fg"><label class="fl">วันที่ติดตั้ง</label><div class="date-wrap"><input class="fi" id="pkpInstall" type="date" oninput="updateDateDisplay(this);pkpAutosave()"><span class="date-display empty" data-for="pkpInstall">เลือกวันที่</span></div></div>
             <div class="fg" style="width:120px;"><label class="fl">เลขอ้างอิง</label><input class="fi" id="pkpRef" type="text" placeholder="(ถ้ามี)" oninput="pkpAutosave()"></div>
           </div>
+          <div id="pkpQLinkWrap" style="margin-bottom:10px;"></div>
           <div class="row-form" style="margin-bottom:10px;">
             <div class="fg" style="flex:1;min-width:160px;"><label class="fl">หมายเหตุ</label><input class="fi" id="pkpNote" type="text" placeholder="(ถ้ามี)" oninput="pkpAutosave()"></div>
             <div class="fg" style="width:150px;"><label class="fl">สีหลัก-อลู (ทั้งใบ)</label><input class="fi" id="pkpMainAlu" type="text" list="pkpColorList" placeholder="เลือก/พิมพ์เอง" oninput="pkpAutosave()"></div>
@@ -9945,9 +9946,15 @@ function dashJobCard_(j, mode){
       +(none?'<span class="badge" style="color:var(--rd);background:var(--surf);border:1px solid var(--rd);">ยังไม่จัดทีม</span>':'<span>👷 '+escHtml(j.team)+'</span>')
       +'<span style="color:var(--acc);font-weight:800;">★ '+(Number(j.score)||0)+'</span><span style="margin-left:auto;">'+amount+'</span>'
       +'<span class="badge" style="color:'+pkDashTone_(j.status)+';background:var(--surf);border:1px solid '+pkDashTone_(j.status)+';">'+pkDashStatusLabel_(j.status)+'</span>'+queue+'</div>'
-    +(dashFslCan_(j,mode)?'<div style="margin-top:8px;"><button class="btn btn-g btn-sm" onclick="event.stopPropagation();fslOpenFor(\''+escAttr(j.id)+'\',\''+escAttr(j.date)+'\',\''+escAttr(j.team||'')+'\')" onkeydown="event.stopPropagation()">🔄 หางานแทน (งานนี้เลื่อน)</button></div>':'')
+    +(mode==='install'&&jobWos(j.note).length?'<div style="margin-top:6px;font-size:12px;color:var(--grn);">🔗 ใบผลิต <b style="font-family:var(--mono);">'+escHtml(jobWos(j.note).join(', '))+'</b></div>':'')
+    +((dashFslCan_(j,mode)||pkpFromQueueCan_(j,mode))?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">'
+      +(dashFslCan_(j,mode)?'<button class="btn btn-g btn-sm" onclick="event.stopPropagation();fslOpenFor(\''+escAttr(j.id)+'\',\''+escAttr(j.date)+'\',\''+escAttr(j.team||'')+'\')" onkeydown="event.stopPropagation()">🔄 หางานแทน (งานนี้เลื่อน)</button>':'')
+      +(pkpFromQueueCan_(j,mode)?'<button class="btn btn-g btn-sm" onclick="event.stopPropagation();pkpFromQueue(\''+escAttr(j.id)+'\')" onkeydown="event.stopPropagation()">📝 เปิดใบผลิต'+(jobWos(j.note).length?'เพิ่ม':'')+'</button>':'')
+      +'</div>':'')
     +'</div>';
 }
+// [QLINK] เปิดใบผลิตจากงานคิว: ผู้จัดการเท่านั้น (หน้าใบผลิตเปิดได้เฉพาะผู้จัดการ) · งานติดตั้งที่มีวันที่ · ยังไม่จบ
+function pkpFromQueueCan_(j,mode){ return (mode||'install')==='install' && !!CURRENT_USER && CURRENT_USER.role==='manager' && !!j && /^\d{4}-\d{2}-\d{2}$/.test(j.date||'') && j.status!=='done'; }
 // [FSL] ปุ่มหางานแทนบนการ์ด: งานติดตั้ง · ออฟฟิศ/ผู้จัดการ · วันนี้หรืออนาคต · ช่างยังไม่เริ่ม/ยังไม่จบ (กำลังทำ = ย้ายไม่ได้ตาม JOBLOCK)
 function dashFslCan_(j,mode){ return mode==='install' && isOfficeLevel() && /^\d{4}-\d{2}-\d{2}$/.test(j.date||'') && j.date>=pkTodayStr_() && j.status!=='done' && j.status!=='working'; }
 function dashJobCardFull_(j){ return dashJobCard_(j,'install'); }
@@ -10632,7 +10639,7 @@ function dashJobProdRender_(r,j){
   if(!r||!r.ok)return '<div style="color:var(--mu);">ตรวจสถานะใบผลิตไม่สำเร็จ</div>';
   // งานยังไม่มีเลขที่ใบจอง → แนะนำวิธีให้จับคู่ได้ตรง (ใส่เลขเดียวกันทั้งในงานนี้และช่อง "เลขที่ใบจอง" ของใบผลิต)
   const refHint=jobRef(j&&j.note)?'':'<div style="font-size:11.5px;color:var(--mu);margin-top:6px;">💡 ใส่เลขที่ใบจองในงานนี้ (✏️ แก้ไขงาน) ให้ตรงกับช่อง "เลขที่ใบจอง" ในใบผลิต — ระบบจะจับคู่ให้ตรงตัวทันที</div>';
-  if(r.match==='none')return '<div style="color:var(--mu);">ไม่พบใบผลิตของลูกค้ารายนี้</div>'+refHint;
+  if(r.match==='none')return '<div style="color:var(--mu);">ไม่พบใบผลิตของลูกค้ารายนี้</div>'+refHint+(pkpFromQueueCan_(j)?'<button class="btn btn-g btn-sm" style="margin-top:9px;" onclick="pkpFromQueue(\''+escAttr(j.id)+'\')">📝 เปิดใบผลิตจากงานนี้</button>':'');
   if(r.match==='ambiguous'){
     // เจอหลายใบ → ไม่เดาให้ แต่ลิสต์ให้เลือกเอง (ผู้จัดการกดเปิดใบได้เลย)
     const canOpen=CURRENT_USER&&CURRENT_USER.role==='manager'&&typeof pkpOpen==='function';
@@ -10655,7 +10662,11 @@ function dashJobProdRender_(r,j){
   ['ยืนยันคิว','ใบผลิต','จ่ายอุปกรณ์','ช่างรับงาน','จบงาน'].forEach((x,i)=>{html+=dashJobProdStep_(x,states[i]);});
   html+='</div><div style="font-size:12px;color:var(--mu);margin-top:10px;">ใบผลิต '+escHtml(r.woId)+' · '+escHtml(r.prodStatus||r.status||'-')+(r.rush?' · ด่วน':'')+'</div>';
   // จับคู่จากเลขที่ใบจอง = แม่นสุด → บอกให้มั่นใจ (ห้ามตกไปโชว์คำเตือน "จับคู่จากชื่อ" ด้านล่าง)
-  if(r.via==='ref'){
+  if(r.via==='link'){
+    const others=(r.linked||[]).filter(function(w){ return w!==r.woId; });
+    html+='<div style="font-size:11.5px;color:var(--grn);margin-top:5px;">✓ ผูกใบผลิตกับงานนี้แล้ว'+(others.length?' · มีอีก '+others.length+' ใบ: '+escHtml(others.join(', ')):'')+'</div>';
+  }
+  else if(r.via==='ref'){
     html+='<div style="font-size:11.5px;color:var(--grn);margin-top:5px;">✓ จับคู่จากเลขที่ใบจองตรงกัน</div>';
   }
   // จับคู่ไม่ได้เป๊ะ (ชื่อตรงแต่วันไม่ตรง / ชื่อใกล้เคียง) → บอกให้ผู้ใช้ตรวจเอง ไม่กลืนเงียบ
@@ -10668,7 +10679,7 @@ function dashJobProdRender_(r,j){
 }
 async function dashJobProdLoad_(j){
   const token=++_dashProdLoadToken,box=document.getElementById('dashJobProd');if(!box)return;
-  try{const r=await Promise.race([getJobProdFast(j.name,j.date,jobRef(j.note)),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),12000))]);if(token!==_dashProdLoadToken)return;box.innerHTML=dashJobProdRender_(r,j);}catch(e){if(token===_dashProdLoadToken)box.innerHTML='<div style="color:var(--mu);">ตรวจสถานะใบผลิตไม่สำเร็จ</div>';}
+  try{const r=await Promise.race([getJobProdFast(j.name,j.date,jobRef(j.note),jobWos(j.note)),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),12000))]);if(token!==_dashProdLoadToken)return;box.innerHTML=dashJobProdRender_(r,j);}catch(e){if(token===_dashProdLoadToken)box.innerHTML='<div style="color:var(--mu);">ตรวจสถานะใบผลิตไม่สำเร็จ</div>';}
 }
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){const m=document.getElementById('dashJobModal');if(m&&m.classList.contains('on'))dashJobClose();}});
 // ── Feature 1.2: ปุ่ม toggle โชว์/ซ่อนยอดให้ tech (office เท่านั้น) บนการ์ดงานติดตั้ง ──
@@ -13782,6 +13793,8 @@ function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&l
 function jobTel(note){ var m = String(note||'').match(/\[tel:(\d{6,})\]/); return m ? m[1] : ''; }
 // เลขที่ใบจอง — tag [ref:...] ใน note (29 ก.ย. 2026 · คู่กับ pkRefTag_/pkRefFromNote_ ฝั่ง GAS) · ใช้จับคู่ใบผลิต (refNo) แบบตรงตัว
 function jobRef(note){ var m = String(note||'').match(/\[ref:([^\]]+)\]/); return m ? m[1].trim() : ''; }
+// ใบผลิตที่ผูกกับงานคิว — tag [wo:WO-6910-0001,...] (= pkWoFromNote_ ฝั่ง GAS / fslWoFromNote ใน worker)
+function jobWos(note){ var m = String(note||'').match(/\[wo:([^\]]*)\]/); return m ? m[1].split(',').map(function(s){ return s.trim(); }).filter(function(s){ return /^WO-\d{4}-\d{4}$/.test(s); }) : []; }
 // เวลาลงคิว [bk:yyyy-MM-dd HH:mm|ผู้ลง] → { text:'21/10/69 14:32', by } · งานเก่าก่อน 21 ต.ค. 2026 ไม่มี tag = null
 function jobBooked(note){
   var n = String(note||''), m = n.match(/\[bk:(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})(?:\|([^\]]*))?\]/);
@@ -18346,6 +18359,156 @@ function pkpInit(){
   });
 }
 
+// ── [QLINK] งานในคิวของใบผลิตนี้ (4 พ.ย. 2026 · เจ้าของเปิดใบผลิตหลังลงคิวเสมอ) ──
+//  ผูก = tag [wo:] ในหมายเหตุงานคิว (ที่เดียวกับ 🔄 หางานแทน) · ส่งไปพร้อม pk_prodCreate/Update เป็น queueAdd/queueRemove "เฉพาะส่วนต่าง"
+//  โหลดคิวช่วง -30..+60 วัน (getFillSlotDataFast · worker ก่อน) — งานนอกช่วงที่ผูกไว้ไม่แสดง และไม่ถูกแตะ เพราะส่งแค่ส่วนต่าง
+//  โหลดงานที่ผูกไว้ไม่สำเร็จ (ready=false) → ไม่ส่งฟิลด์ผูกเลย (กันถอดการผูกโดยไม่ตั้งใจ)
+let _pkpQ = { sel:[], orig:[], ready:true, err:'', warn:'', open:false, q:'' };
+let _pkpQData = null, _pkpQAt = 0;
+function pkpQFresh_(sel){ return { sel:sel||[], orig:[], ready:true, err:'', warn:'', open:false, q:'' }; }
+function pkpQReset_(){ _pkpQ=pkpQFresh_(); pkpQRender_(); }
+async function pkpQData_(force){
+  if(!force && _pkpQData && Date.now()-_pkpQAt<120000) return _pkpQData;
+  const t=fslToday_(), r=await getFillSlotDataFast(fslAddDays_(t,-30), fslAddDays_(t,60));
+  if(!r || !r.ok || !Array.isArray(r.queue)) throw new Error((r && r.error) || 'โหลดคิวไม่สำเร็จ');
+  _pkpQData=r; _pkpQAt=Date.now(); return r;
+}
+function pkpQRow_(q){ return { id:q.id, date:q.date, customer:q.customer||'', job:q.job||'', team:q.team||'', wos:(q.wos||[]).slice() }; }
+async function pkpQLoadFor_(woId){
+  _pkpQ=pkpQFresh_(); _pkpQ.ready=false; pkpQRender_();
+  try{
+    const d=await pkpQData_(true);
+    if(pkpEditingWO!==woId) return;   // เปิดใบอื่นไประหว่างโหลด
+    const sel=d.queue.filter(function(q){ return (q.wos||[]).indexOf(woId)>=0; }).map(pkpQRow_);
+    _pkpQ=pkpQFresh_(sel); _pkpQ.orig=sel.map(function(x){ return x.id; });
+  }catch(e){ if(pkpEditingWO!==woId) return; _pkpQ.err=e.message||String(e); }
+  pkpQRender_();
+}
+// ชื่อในคิวมักมี *ติดตั้ง*/Line@/เบอร์/เวลา ต่อท้าย → ตัดออกก่อนกรอกเป็นชื่อลูกค้าในใบผลิต (แก้เองได้)
+function pkpCleanCust_(s){
+  return String(s||'').replace(/\*.*$/,'').replace(/(?:line|fb)\s*[@.]\S*/ig,' ').replace(/\((?:ช่วง)?(?:เช้า|บ่าย|เย็น)\)/g,' ')
+    .replace(/(^|\s)\d{1,2}[.:]\d{2}(?:\s*-\s*\d{1,2}[.:]\d{2})?(?=\s|$)/g,' ').replace(/(?:โทร\.?\s*)?0\d{1,2}[-\s]?\d{3}[-\s]?\d{3,4}/g,' ')
+    .replace(/\s+/g,' ').trim();
+}
+// งานคิวที่น่าจะใช่: ชื่อตรง 60 / คล้าย 35 + วันติดตั้งตรง 30 / ±7 วัน 15 + ยังไม่ถึงวัน 5 (= คะแนนชื่อ/วันของ fslSuggest_)
+function pkpQCands_(){
+  const d=_pkpQData; if(!d) return [];
+  const g=function(id){ const e=document.getElementById(id); return e?e.value:''; };
+  const selIds=_pkpQ.sel.map(function(x){ return x.id; }), q=String(_pkpQ.q||'').trim(), qk=fslNameKey_(q), qu=q.toUpperCase();
+  const ck=fslNameKey_(g('pkpCust')), inst=g('pkpInstall'), today=fslToday_();
+  let rows=d.queue.filter(function(r){ return selIds.indexOf(r.id)<0; });
+  if(q) rows=rows.filter(function(r){ return (qk.length>=2 && fslNameKey_(r.customer).indexOf(qk)>=0) || String(r.id).toUpperCase().indexOf(qu)>=0 || String(r.customer).indexOf(q)>=0; });
+  const sc=function(r){
+    const n=fslNameKey_(r.customer); let s=0;
+    if(ck.length>=3 && n===ck) s+=60; else if(ck.length>=4 && n.length>=4 && (n.indexOf(ck)>=0 || ck.indexOf(n)>=0)) s+=35;
+    if(inst){ const dd=Math.abs(fslDays_(inst,r.date)); if(dd===0) s+=30; else if(dd<=7) s+=15; }
+    if(r.date>=today) s+=5;
+    return s;
+  };
+  return rows.map(function(r){ return { r:r, s:sc(r) }; })
+    .sort(function(a,b){ return b.s-a.s || a.r.date.localeCompare(b.r.date) || String(a.r.id).localeCompare(String(b.r.id)); })
+    .slice(0,15).map(function(x){ return x.r; });
+}
+function pkpQListHTML_(){
+  if(!_pkpQData) return '<div class="loading-row">⏳ กำลังโหลดงานในคิว...</div>';
+  const list=pkpQCands_();
+  if(!list.length) return '<div style="font-size:12px;color:var(--mu,#6b7a94);padding:4px 0;">ไม่พบงานในคิว (ช่วง 30 วันก่อน ถึง 60 วันข้างหน้า) — พิมพ์ค้นชื่อหรือรหัสงาน</div>';
+  return list.map(function(r){
+    return '<div style="display:flex;gap:8px;align-items:center;padding:6px 2px;border-bottom:1px solid var(--line,#2a3344);font-size:12.5px;">'
+      +'<div style="flex:1;min-width:0;"><b>'+escHtml(r.customer||'-')+'</b><div style="color:var(--mu,#6b7a94);font-size:11.5px;">📅 '+fslThai_(r.date)+' · '+escHtml(r.id)+(r.team?' · '+escHtml(r.team):'')+' · '+escHtml(String(r.job||'-').slice(0,60))
+      +((r.wos||[]).length?' · <span style="color:var(--amb,#B45309);">มีใบผลิตผูกอยู่แล้ว: '+escHtml(r.wos.join(', '))+'</span>':'')+'</div></div>'
+      +'<button class="btn btn-g btn-sm" style="flex:none;" onclick="pkpQAdd(\''+escAttr(r.id)+'\')">เลือก</button></div>';
+  }).join('');
+}
+function pkpQRender_(){
+  const w=document.getElementById('pkpQLinkWrap'); if(!w) return;
+  if(_pkpSandbox){ w.innerHTML=''; return; }   // กระดาษทดไม่ผูกคิว
+  const Q=_pkpQ;
+  let h='<div style="border:1px solid var(--line,#2a3344);border-radius:8px;padding:8px 10px;">'
+    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><b style="font-size:13px;">🔗 งานในคิว</b>';
+  if(!Q.ready){
+    h+=Q.err?'<span style="font-size:12px;color:var(--rd,#ff453a);">โหลดงานที่ผูกไว้ไม่สำเร็จ ('+escHtml(Q.err)+') — บันทึกใบได้ แต่การผูกจะไม่เปลี่ยน</span><button class="btn btn-g btn-sm" onclick="pkpQLoadFor_(pkpEditingWO)">ลองใหม่</button>'
+      :'<span style="font-size:12px;color:var(--mu,#6b7a94);">⏳ กำลังโหลดงานที่ผูกไว้...</span>';
+    w.innerHTML=h+'</div></div>'; return;
+  }
+  h+='<button class="btn btn-g btn-sm" onclick="pkpQToggle()">'+(Q.open?'ปิดรายการ':'+ เลือกงานในคิว')+'</button>';
+  if(!Q.sel.length) h+='<span style="font-size:12px;color:var(--amb,#B45309);">ยังไม่ได้ผูก — เลือกงานในคิวของใบนี้ (กรอกชื่อ/วันติดตั้งตามคิวให้)</span>';
+  h+='</div>';
+  if(Q.sel.length) h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">'+Q.sel.map(function(x){
+    return '<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--grn,#22a05a);border-radius:16px;padding:3px 4px 3px 10px;font-size:12px;">'
+      +'📅 '+fslThai_(x.date)+' · <b>'+escHtml(String(x.customer||'-').slice(0,40))+'</b> · '+escHtml(String(x.job||'').slice(0,30))
+      +'<button class="btn btn-g btn-sm" style="padding:0 7px;" title="เอาออก" onclick="pkpQDel(\''+escAttr(x.id)+'\')">✕</button></span>';
+  }).join('')+'</div>';
+  if(Q.warn) h+='<div style="font-size:12px;color:var(--rd,#ff453a);margin-top:6px;">⚠ '+escHtml(Q.warn)+'</div>';
+  if(Q.open) h+='<div style="margin-top:8px;"><input class="fi" id="pkpQSearch" placeholder="ค้นชื่อลูกค้า หรือรหัสงาน (เว้นว่าง = เรียงจากชื่อ/วันติดตั้งในใบ)" value="'+escHtml(Q.q)+'" oninput="_pkpQ.q=this.value;pkpQList_()" style="margin-bottom:4px;">'
+    +'<div id="pkpQList" style="max-height:300px;overflow:auto;">'+pkpQListHTML_()+'</div></div>';
+  w.innerHTML=h+'</div>';
+}
+function pkpQList_(){ const b=document.getElementById('pkpQList'); if(b) b.innerHTML=pkpQListHTML_(); }   // พิมพ์ค้น = วาดเฉพาะรายการ (ไม่หลุดโฟกัส)
+async function pkpQToggle(){
+  _pkpQ.open=!_pkpQ.open; pkpQRender_();
+  if(!_pkpQ.open) return;
+  try{ await pkpQData_(false); }catch(e){ _pkpQ.open=false; toast('⚠ '+(e.message||e)); }
+  pkpQRender_();
+  const s=document.getElementById('pkpQSearch'); if(s) s.focus();
+}
+function pkpQAdd(id){
+  const r=_pkpQData && _pkpQData.queue.find(function(x){ return x.id===id; }); if(!r || _pkpQ.sel.some(function(x){ return x.id===id; })) return;
+  const first=!_pkpQ.sel.length; _pkpQ.sel.push(pkpQRow_(r));
+  const cust=document.getElementById('pkpCust'), ins=document.getElementById('pkpInstall'), filled=[];
+  if(cust && !cust.value.trim()){ cust.value=pkpCleanCust_(r.customer); filled.push('ชื่อลูกค้า'); }
+  // ใบใหม่: งานแรกที่เลือก = วันติดตั้งตามคิว · ใบเดิม: กรอกให้เฉพาะช่องที่ว่าง
+  if(ins && first && ins.value!==r.date && (!pkpEditingWO || !ins.value)){ ins.value=r.date; updateDateDisplay(ins); filled.push('วันติดตั้ง'); }
+  else if(ins && ins.value && ins.value!==r.date) toast('⚠ วันติดตั้งในใบ ('+fslThai_(ins.value)+') ไม่ตรงกับคิวนี้ ('+fslThai_(r.date)+')');
+  if(filled.length) toast('กรอก'+filled.join(' + ')+'ตามคิวให้แล้ว');
+  _pkpQ.open=false; _pkpQ.q=''; pkpQRender_(); pkpAutosave();
+}
+function pkpQDel(id){ _pkpQ.sel=_pkpQ.sel.filter(function(x){ return x.id!==id; }); pkpQRender_(); pkpAutosave(); }
+// ส่วนต่างที่ส่งไปพร้อมใบผลิต · null = ไม่ส่ง (ยังโหลดงานที่ผูกไว้ไม่ได้)
+function pkpQDelta_(){
+  if(!_pkpQ.ready) return null;
+  const ids=_pkpQ.sel.map(function(x){ return x.id; });
+  return { add:ids.filter(function(id){ return _pkpQ.orig.indexOf(id)<0; }), remove:_pkpQ.orig.filter(function(id){ return ids.indexOf(id)<0; }) };
+}
+// ผลผูกจาก server → ข้อความต่อท้าย toast + อัปเดตสถานะช่อง
+function pkpQApplyResult_(woId, L){
+  if(!L) return '';
+  _pkpQAt=0;   // คิวที่จำไว้เก่าแล้ว
+  if(L.error){ pkpQLoadFor_(woId); return ' · ⚠ ผูกงานคิวไม่สำเร็จ ('+L.error+')'; }
+  const miss=L.missing||[], msg=[], warn=[];
+  _pkpQ.sel=_pkpQ.sel.filter(function(x){ return miss.indexOf(x.id)<0; });
+  _pkpQ.orig=_pkpQ.sel.map(function(x){ return x.id; });
+  if((L.linked||[]).length) msg.push('🔗 ผูกงานคิว '+L.linked.length+' งาน');
+  if((L.unlinked||[]).length) msg.push('ถอดการผูก '+L.unlinked.length+' งาน');
+  if((L.refFilled||[]).length) msg.push('เติมเลขใบจองให้คิว '+L.refFilled.length+' งาน');
+  if(miss.length) warn.push('ไม่พบงานคิว '+miss.join(', ')+' (อาจถูกลบ) — ไม่ได้ผูก');
+  (L.refConflict||[]).forEach(function(c){ warn.push('งานคิว '+c.id+' มีเลขใบจอง "'+c.ref+'" ไม่ตรงกับเลขอ้างอิงในใบผลิต — ตรวจว่าเป็นงานเดียวกันไหม (ไม่ได้เขียนทับ)'); });
+  _pkpQ.warn=warn.join(' · ');
+  pkpQRender_();
+  return (msg.length?' · '+msg.join(' · '):'')+(warn.length?' · ⚠ ดูคำเตือนที่ช่องงานในคิว':'');
+}
+// ปุ่ม 📝 เปิดใบผลิตจากงานนี้ (การ์ด/หน้าต่างงานใน Dashboard)
+function pkpFromQueue(id){
+  const j=(_dashCalJobs||[]).concat(_dashRangeJobs||[]).find(function(x){ return String(x.id)===String(id); });
+  if(!j){ toast('ไม่พบงาน ลองรีเฟรชปฏิทิน'); return; }
+  if(!pkpFromQueueCan_(j)) return;
+  if(_pkpSandbox) pkpSandboxExit();
+  let dirty=false;
+  if(pkpItems.length) dirty=!pkpEditingWO && pkpDraftHasData(JSON.stringify(pkpCollectDraft()));
+  else { try{ const raw=localStorage.getItem(PKP_DRAFT_KEY); dirty=!!raw && pkpDraftHasData(raw); }catch(e){} }
+  if(dirty && !confirm('มีใบผลิตใบใหม่ที่กรอกค้างอยู่ — ทิ้งแล้วเปิดใบใหม่จากงาน "'+(j.name||'')+'" ไหม?')) return;
+  try{ localStorage.removeItem(PKP_DRAFT_KEY); }catch(e){}
+  dashJobClose();
+  pkpNew(true);   // ก่อนสลับแท็บ → pkpInit ไม่ถามกู้ร่าง
+  setTab('production', document.querySelector('#officeSidebar .sidebar-item[data-tab="production"]'));
+  const set=function(k,v){ const e=document.getElementById(k); if(e){ e.value=v||''; if(e.type==='date') updateDateDisplay(e); } };
+  set('pkpCust', pkpCleanCust_(j.name)); set('pkpInstall', j.date); set('pkpRef', jobRef(j.note));
+  _pkpQ=pkpQFresh_([{ id:j.id, date:j.date, customer:j.name||'', job:j.job||'', team:j.team||'', wos:jobWos(j.note) }]);
+  pkpQRender_(); pkpAutosave();
+  if(window.scrollTo) window.scrollTo(0,0);
+  toast('เปิดใบผลิตใหม่จากงาน '+(j.name||'')+' — ผูกกับคิวให้แล้ว กรอกรายการแล้วกดบันทึก');
+}
+
 // ── ใบใหม่ (reset) ──
 function pkpNew(skipRender){
   pkpEditingWO=null; pkpLoadedStatus='';
@@ -18362,6 +18525,7 @@ function pkpNew(skipRender){
   if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
   if(!skipRender) pkpRenderRows();
   pkpRenderSig();
+  pkpQReset_();
   if(_pkpSandbox) pkpSandboxUiApply();   // "+ ใบใหม่"/ล้าง ระหว่างทดคำนวณ → คงป้าย/ปุ่มโหมดทดไว้
 }
 
@@ -18369,10 +18533,11 @@ function pkpNew(skipRender){
 var PKP_DRAFT_KEY='pk_prod_draft';
 function pkpCollectDraft(){
   var g=function(id){var e=document.getElementById(id);return e?e.value:'';};
-  return { cust:g('pkpCust'), issue:g('pkpIssue'), install:g('pkpInstall'), ref:g('pkpRef'), note:g('pkpNote'), mainAlu:g('pkpMainAlu'), mainMesh:g('pkpMainMesh'), items:pkpItems };
+  return { cust:g('pkpCust'), issue:g('pkpIssue'), install:g('pkpInstall'), ref:g('pkpRef'), note:g('pkpNote'), mainAlu:g('pkpMainAlu'), mainMesh:g('pkpMainMesh'), items:pkpItems,
+    qsel:(!_pkpSandbox && !pkpEditingWO)?_pkpQ.sel:[] };   // [QLINK] งานในคิวที่เลือกไว้ของใบใหม่
 }
 function pkpDraftHasData(raw){
-  try{ var d=JSON.parse(raw); return !!(d.cust||d.ref||d.note||d.mainAlu||d.mainMesh||(d.items&&d.items.some(function(it){return it.type||it.w||it.h||it.wl||it.wr||it.cAlu||it.cMesh||it.note;}))); }catch(e){ return false; }
+  try{ var d=JSON.parse(raw); return !!(d.cust||d.ref||d.note||d.mainAlu||d.mainMesh||(d.qsel&&d.qsel.length)||(d.items&&d.items.some(function(it){return it.type||it.w||it.h||it.wl||it.wr||it.cAlu||it.cMesh||it.note;}))); }catch(e){ return false; }
 }
 function pkpAutosave(){
   if(_pkpSandbox){   // โหมดทดคำนวณ → จำลง key กระดาษทด ไม่แตะร่างใบจริง
@@ -18395,6 +18560,7 @@ function pkpRestoreDraft(raw, silent){
     var d=JSON.parse(raw); var s=function(id,v){var e=document.getElementById(id);if(e)e.value=v||'';};
     s('pkpCust',d.cust); s('pkpIssue',d.issue); s('pkpInstall',d.install); s('pkpRef',d.ref); s('pkpNote',d.note); s('pkpMainAlu',d.mainAlu); s('pkpMainMesh',d.mainMesh);
     pkpItems=(d.items&&d.items.length)?d.items:[pkpBlankItem()];
+    _pkpQ=pkpQFresh_(Array.isArray(d.qsel)?d.qsel:[]); pkpQRender_();
     if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
     pkpRenderRows();
     if(!silent) toast('กู้คืนใบที่ค้างไว้แล้ว');
@@ -18426,7 +18592,8 @@ function pkpSandboxEnter(){
     sigCheck: pkpSigCheck, sigApprove: pkpSigApprove, costResult: _pkpCostResult,
     woLabel: (document.getElementById('pkpWoLabel')||{}).textContent||'',
     saveLabel: (document.getElementById('pkpSaveBtn')||{}).textContent||'💾 บันทึกใบผลิต',
-    costHtml: (document.getElementById('pkpCostWrap')||{}).innerHTML||''
+    costHtml: (document.getElementById('pkpCostWrap')||{}).innerHTML||'',
+    q: _pkpQ   // [QLINK] งานในคิว (รวม orig ของใบเดิม) — draft เก็บแค่ของใบใหม่
   };
   _pkpSandbox=true;
   pkpEditingWO=null; pkpLoadedStatus=''; pkpSigCheck=null; pkpSigApprove=null; _pkpCostResult=null;
@@ -18449,6 +18616,7 @@ function pkpSandboxExit(){
     pkpEditingWO=st.editingWO; pkpLoadedStatus=st.loadedStatus;
     pkpSigCheck=st.sigCheck; pkpSigApprove=st.sigApprove; _pkpCostResult=st.costResult;
     pkpRestoreDraft(JSON.stringify(st.draft), true);
+    if(st.q){ _pkpQ=st.q; pkpQRender_(); }
     var wo=document.getElementById('pkpWoLabel'); if(wo)wo.textContent=st.woLabel;
     var sv=document.getElementById('pkpSaveBtn'); if(sv)sv.textContent=st.saveLabel;
     var cw2=document.getElementById('pkpCostWrap'); if(cw2)cw2.innerHTML=st.costHtml;
@@ -18723,6 +18891,12 @@ async function pkpSave(){
   if(err){ toast('⚠️ '+err); return; }
   var _iss=[]; pkpItems.forEach(function(it,k){ var x=pkpItemIssues_(it); if(x.length) _iss.push('ชุดที่ '+(k+1)+': '+x.join(', ')); });
   if(_iss.length && !confirm('ตรวจขนาดก่อนบันทึก\n\n'+_iss.slice(0,10).join('\n')+(_iss.length>10?'\n…':'')+'\n\nบันทึกต่อเลยไหม?')) return;
+  // [QLINK] ผูกงานคิว — ใบใหม่ที่ยังไม่ได้เลือกงาน เตือนก่อน (ไม่บังคับ เผื่องานพิเศษ)
+  var _qd=pkpQDelta_();
+  if(_qd){
+    if(!pkpEditingWO && !_pkpQ.sel.length && !confirm('ยังไม่ได้เลือก "งานในคิว" ของใบนี้\nถ้าผูกไว้ ระบบจะรู้ทันทีว่าใบนี้เป็นของงานไหน (Dashboard / หางานแทน แม่นขึ้น)\n\nบันทึกโดยไม่ผูกเลยไหม?')) return;
+    b.queueAdd=_qd.add; b.queueRemove=_qd.remove;
+  }
   var sv=document.getElementById('pkpSaveBtn'); if(sv){sv.disabled=true;sv.textContent='กำลังบันทึก...';}
   try{
     var r;
@@ -18747,6 +18921,7 @@ async function pkpSave(){
     if(r.healed) _svMsg+=' · ซ่อมการเชื่อมไฟล์ให้แล้ว';
     if(r.equip&&r.equip.adjusted) _svMsg+=' · 📦 ปรับสต็อกตามส่วนต่าง '+r.equip.adjusted+' รายการ'+(r.equip.warnings&&r.equip.warnings.length?' ⚠ ติดลบ: '+r.equip.warnings.join(', '):'');
     if(r.equip&&r.equip.error) _svMsg+=' · ❌ ปรับสต็อกไม่สำเร็จ ('+r.equip.error+') — กด 🧾 ตรวจตัดย้อนหลัง ในคลังอุปกรณ์';
+    _svMsg+=pkpQApplyResult_(r.woId, r.qlink);
     toast(_svMsg);
     try{localStorage.removeItem(PKP_DRAFT_KEY);}catch(e){}   // บันทึกสำเร็จ → ล้าง draft ค้าง
     pkpLoadList();
@@ -18821,6 +18996,7 @@ async function pkpOpen(woId, fresh){
     }
     var o=r.order;
     pkpEditingWO=o.woId; pkpLoadedStatus=o.status||'';
+    pkpQLoadFor_(o.woId);   // [QLINK] งานคิวที่ผูกใบนี้ไว้ (โหลดเบื้องหลัง)
     var set=function(id,v){var e=document.getElementById(id); if(e)e.value=v||'';};
     set('pkpCust',(o.customer&&o.customer.name)||''); set('pkpIssue',o.issueDate); set('pkpInstall',o.installDate);
     set('pkpRef',o.refNo); set('pkpNote',o.note); set('pkpMainAlu',o.mainColorAlu); set('pkpMainMesh',o.mainColorMesh);
