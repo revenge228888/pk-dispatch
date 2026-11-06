@@ -2020,6 +2020,7 @@ function renderOfficeShell(){
           ${CURRENT_USER.role === 'manager' ? `
           <div class="sidebar-group">ผลิต & สต็อก</div>
           <a class="sidebar-item" data-tab="production" href="#tab=production" onclick="return pkNavTab(event,'production',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 21V10l6 4V10l6 4V7h6v14z"/></svg></span><span class="sidebar-label">ใบผลิต</span></a>
+          <a class="sidebar-item" data-tab="glasscalc" href="#tab=glasscalc" onclick="return pkNavTab(event,'glasscalc',this,setTab)"><span class="sidebar-ico">🧮</span><span class="sidebar-label">คำนวณกระจก</span></a>
           <a class="sidebar-item" data-tab="prodtrack" href="#tab=prodtrack" onclick="return pkNavTab(event,'prodtrack',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 7-8"/><path d="M17 7h4v4"/></svg></span><span class="sidebar-label">ติดตามงานผลิต</span></a>
           <a class="sidebar-item" data-tab="railstock" href="#tab=railstock" onclick="return pkNavTab(event,'railstock',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg></span><span class="sidebar-label">คลังราง</span></a>
           <a class="sidebar-item" data-tab="equipstock" href="#tab=equipstock" onclick="return pkNavTab(event,'equipstock',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></span><span class="sidebar-label">คลังอุปกรณ์</span><span id="esMissBadge" class="exp-badge"></span></a>
@@ -2658,6 +2659,7 @@ function renderOfficeShell(){
       <div id="tabMytasks" style="display:none;">${myTasksScreenHTML()}</div>
 
       <div id="tabMap" style="display:none"></div>
+      <div id="tabGlasscalc" style="display:none"></div>
       <div id="tabSlips" style="display:none"></div>
       <div id="tabPayees" style="display:none"></div>
       <div id="tabSheetcap" style="display:none"></div>
@@ -5046,9 +5048,27 @@ function mapTabInit(){
   }
   mapTabResize_();
 }
+// ── [GCALC] 🧮 คำนวณราง+กระจก (ผู้จัดการ) — หน้าแยก glass-calc.html ฝังใน iframe (ตัวแปรของเครื่องมือชน app.html ถ้าโหลดตรง) ──
+//  ข้อมูลเก็บบนระบบผ่าน worker/GAS ของหน้านั้นเอง (session เดียวกันจาก localStorage pk_user) · ฝังครั้งเดียว สลับแท็บไม่โหลดใหม่
+function gcalcTabResize_(){
+  const f=document.getElementById('gcalcFrame'),box=document.getElementById('tabGlasscalc');
+  if(!f||!box||box.style.display==='none')return;
+  const top=Math.max(0,f.getBoundingClientRect().top);
+  f.style.height='calc('+(window.CSS&&CSS.supports('height','100dvh')?'100dvh':window.innerHeight+'px')+' - '+top+'px)';
+}
+function gcalcTabInit(){
+  if(!CURRENT_USER||CURRENT_USER.role!=='manager')return;
+  const box=document.getElementById('tabGlasscalc');if(!box)return;
+  if(!document.getElementById('gcalcFrame')){
+    box.innerHTML='<div style="display:flex;gap:12px;align-items:center;padding:6px 10px;font-size:13px"><a href="glass-calc.html" target="_blank" rel="noopener">↗ เปิดเต็มจอ</a><button type="button" class="btn btn-g btn-sm" onclick="gcalcTabReload_()" aria-label="โหลดหน้าคำนวณใหม่">↻ โหลดใหม่</button></div><iframe id="gcalcFrame" title="คำนวณราง + กระจก" src="glass-calc.html?embed=1" style="display:block;border:0;width:100%;background:#eef1f0"></iframe>';
+    window.addEventListener('resize',gcalcTabResize_);
+  }
+  setTimeout(gcalcTabResize_,0);
+}
+function gcalcTabReload_(){const f=document.getElementById('gcalcFrame');if(f)f.src='glass-calc.html?embed=1';}
 function mapTabReload_(){const f=document.getElementById('mapTabFrame');if(f)f.src='map.html?embed=1';}
 function setTab(t, btn){
-  ['Dash','Access','Gpssetup','Booking','Jobs','Customers','Followup','Assign','Cfqueue','Qtrack','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Payees','Mytasks','Taskmgr','Slips','Map','Sheetcap','Usermgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po'].forEach(x => {
+  ['Dash','Access','Gpssetup','Booking','Jobs','Customers','Followup','Assign','Cfqueue','Qtrack','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Payees','Mytasks','Taskmgr','Slips','Map','Sheetcap','Usermgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po','Glasscalc'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -5079,6 +5099,7 @@ function setTab(t, btn){
   if (t === 'taskmgr') taskMgrInit();
   if (t === 'slips') slpInit();
   if (t === 'map') mapTabInit();
+  if (t === 'glasscalc') gcalcTabInit();
   mapTabMessage_(t === 'map' ? 'resume' : 'pause');
   if (t === 'sheetcap') shcInit();
   if (t === 'usermgr') umInit();
