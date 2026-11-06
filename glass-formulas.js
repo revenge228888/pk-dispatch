@@ -2,12 +2,11 @@
 //  ที่มา: C:\Coding\คำนวณรางงานกระจก\คำนวณรางงานกระจก.html (ย้ายมาเข้าระบบ 6 พ.ย. 2026 · เนื้อสูตรคัดลอกตรงตัว ไม่แก้เลข)
 //  ใช้ร่วม: หน้า glass-calc.html (แท็บ 🧮 คำนวณกระจก) · ต่อไปใบผลิตกระจกจะโหลดไฟล์นี้คำนวณด้วย · เทส tests/glasscalc_test.mjs
 //
-//  ── วิธีเพิ่มสูตรใหม่ (ทำครบ 5 จุด แล้วรันเทส) ──
-//   1. เขียนฟังก์ชันรางของรูปแบบใหม่ (คืน [{rail,len}] ขยายจำนวนแล้ว) + กระจก (คืน [{label,w,h,qty}])
-//   2. ต่อเส้นทางใน piecesFor(job) และ glassFor(job) — เงื่อนไขเฉพาะเจาะจงต้องอยู่ก่อนเงื่อนไขกว้าง
-//   3. เพิ่ม probe job ใน allKnownRails() (ไม่งั้นรางใหม่ไม่ขึ้นในหน้าราคา)
-//   4. หน้าจอ glass-calc.html: ตัวเลือกใน renderJobs + ค่าที่ยอมรับใน load()/normImportJob() (ข้อมูลเก่าต้องไม่พัง)
-//   5. เพิ่มเลขตรวจมือใน tests/glasscalc_test.mjs แล้ว bump GC_FORMULAS_VER ใน glass-calc.html (กันมือถือใช้สูตรเก่าจาก cache)
+//  ── วิธีเพิ่มสูตรใหม่ (ตาราง GC_FORMULAS — ทำครบ 4 จุด แล้วรันเทส) ──
+//   1. เขียนฟังก์ชันราง (คืน [{rail,len}] ขยายจำนวนแล้ว) + กระจก (คืน [{label,w,h,qty}])
+//   2. เพิ่ม 1 แถวใน GC_FORMULAS (key/label/match/pieces/glass/probes) ก่อนแถว 'slide' — แถวเฉพาะเจาะจงต้องมาก่อน
+//   3. หน้าจอ glass-calc.html: ตัวเลือกใน renderJobs + ค่าที่ยอมรับใน load()/normImportJob() (ข้อมูลเก่าต้องไม่พัง) + ข้อความเตือนใน gcJobWarn_ ถ้ามี
+//   4. เพิ่มเลขตรวจมือใน tests/glasscalc_test.mjs แล้ว bump GC_FORMULAS_VER ใน glass-calc.html (กันมือถือใช้สูตรเก่าจาก cache)
 //  ⚠ ไฟล์นี้เป็น global script ธรรมดา (ใช้ state ร่วมกับหน้าจอ) — ห้ามโหลดตรงใน app.html (ชื่อ state/render ชนกัน)
 
 const QTY = {"บานตาย": {"ไม่เสริม": {"เฟรมบน (ไม่ติดกล่อง)": 1, "เฟรมล่าง (ไม่ติดกล่อง)": 1, "เฟรมข้าง (ไม่ติดกล่อง)": 2, "เสากุญแจ": 1, "เสาเกี่ยว": 2, "เสาตาย": 1, "ขวางบน": 2, "ขวางล่าง": 2, "ธรณี": 1}, "เสริม3": {"เฟรมล่าง (ไม่ติดกล่อง)": 1, "เฟรมบน (ติดกล่อง)": 1, "เฟรมข้าง (ติดกล่อง)": 2, "เสากุญแจ": 1, "เสาเกี่ยว": 2, "เสาตาย": 1, "ขวางบน": 2, "ขวางล่าง": 2, "ธรณี": 1}, "เสริม4": {"เฟรมบน (ติดกล่อง)": 1, "เฟรมล่าง (ติดกล่อง)": 1, "เฟรมข้าง (ติดกล่อง)": 2, "เสากุญแจ": 1, "เสาเกี่ยว": 2, "เสาตาย": 1, "ขวางบน": 2, "ขวางล่าง": 2, "ธรณี": 1}}, "สลับ": {"ไม่เสริม": {"เฟรมบน (ไม่ติดกล่อง)": 1, "เฟรมล่าง (ไม่ติดกล่อง)": 1, "เฟรมข้าง (ไม่ติดกล่อง)": 2, "เสากุญแจ": 2, "เสาเกี่ยว": 2, "ขวางบน": 2, "ขวางล่าง": 2}, "เสริม3": {"เฟรมล่าง (ไม่ติดกล่อง)": 1, "เฟรมบน (ติดกล่อง)": 1, "เฟรมข้าง (ติดกล่อง)": 2, "เสากุญแจ": 2, "เสาเกี่ยว": 2, "ขวางบน": 2, "ขวางล่าง": 2}, "เสริม4": {"เฟรมบน (ติดกล่อง)": 1, "เฟรมล่าง (ติดกล่อง)": 1, "เฟรมข้าง (ติดกล่อง)": 2, "เสากุญแจ": 2, "เสาเกี่ยว": 2, "ขวางบน": 2, "ขวางล่าง": 2}}, "แบ่ง4": {"ไม่เสริม": {"เฟรมบน (ไม่ติดกล่อง)": 1, "เฟรมล่าง (ไม่ติดกล่อง)": 1, "เฟรมข้าง (ไม่ติดกล่อง)": 2, "เสากุญแจ": 2, "เสาเกี่ยว": 4, "เสาตาย": 2, "ขวางบน": 4, "ขวางล่าง": 4, "ประกบกลาง": 1, "ธรณี": 1}, "เสริม3": {"เฟรมล่าง (ไม่ติดกล่อง)": 1, "เฟรมบน (ติดกล่อง)": 1, "เฟรมข้าง (ติดกล่อง)": 2, "เสากุญแจ": 2, "เสาเกี่ยว": 4, "เสาตาย": 2, "ขวางบน": 4, "ขวางล่าง": 4, "ประกบกลาง": 1, "ธรณี": 1}, "เสริม4": {"เฟรมบน (ติดกล่อง)": 1, "เฟรมล่าง (ติดกล่อง)": 1, "เฟรมข้าง (ติดกล่อง)": 2, "เสากุญแจ": 2, "เสาเกี่ยว": 4, "เสาตาย": 2, "ขวางบน": 4, "ขวางล่าง": 4, "ประกบกลาง": 1, "ธรณี": 1}}, "บานกระทุ้ง": {"ติดกล่อง": {"กล่องเรียบ": 4, "กรอบนอกบานกระทุ้ง": 4, "กรอบในบานกระทุ้ง": 4, "คิ้วบานกระทุ้ง": 4}, "ไม่ติดกล่อง": {"กรอบนอกบานกระทุ้ง": 4, "กรอบในบานกระทุ้ง": 4, "คิ้วบานกระทุ้ง": 4}}};
@@ -341,21 +340,89 @@ function fixGlass(job){
   }
   return [{label:'บานฟิกซ์',w:r2(W-9+1.5),h:r2(H-9+1.2),qty:1}];
 }
-function piecesFor(job){
-  const W=+job.W,H=+job.H;
-  if(job.type==='บานฟิกซ์')return fixPieces(job);
-  if(job.type==='บานกระทุ้ง'){
-    if(job.box==='ช่องแสงบน/ล่าง')return kraToongClearPieces(job);
-    return awningPieces(W,H,job.box);
-  }
-  if(job.base==='รางแขวน'||job.base==='รางแขวนแยกกลาง')return hangPieces(job.base,W,H,job.box);
-  if(is3Track(job.base))return threeTrack(job);
-  if(isSideTop(job))return sideTopPieces(job);
-  if(clearSupported(job)){
-    const {outer,Wp,Hp}=isClearTop(job)?clearTop(job):clearParts(job);
-    return outer.concat(slidingPieces(job.base,'ไม่เสริม',Wp,Hp)).concat([{rail:'ฉากกันตก',len:antiFallLen(job)}]);
-  }
-  return slidingPieces(job.base,job.box,W,H).concat([{rail:'ฉากกันตก',len:antiFallLen(job)}]);
+// ════════ [GLWO] ตารางลงทะเบียนสูตร (registry · 6 พ.ย. 2026) ════════
+//  1 แถว = 1 รูปแบบงาน: match(job) ใช้สูตรนี้ไหม · pieces(job) → ราง [{rail,len}] · glass(job) → กระจก [{label,w,h,qty}] · probes = งานตัวอย่าง (รายชื่อรางในหน้าราคา)
+//  ⚠ ลำดับแถว = ลำดับเลือกสูตร (แถวเฉพาะเจาะจงต้องมาก่อน) · เพิ่มรูปแบบใหม่ = เพิ่มแถวก่อนแถว 'slide' (ตัวตั้งต้นท้ายสุด)
+//  ⚠ คงพฤติกรรมเดิม: เครื่องมือเดิมเช็ค "ช่องแสงข้าง+บน" ของกระจกก่อนรางแขวน/3 ราง (ฝั่งรางเช็คทีหลัง) → glass ของ 2 แถวนั้นใช้ gcSideTopFirst_
+function hangGlass(job){const W=+job.W,H=+job.H;return [{label:'กระจก',w:r2(W-5-0.7),h:r2(H-0.8-5.1-8-0.7),qty:1}];}
+function hangSplitGlass(job){const W=+job.W,H=+job.H;return [{label:'กระจก',w:r2((W-5-5-0.2)/2-0.7),h:r2(H-5.1-8-0.8-0.7),qty:2}];}
+function threeTrackGlass(job){
+  const d=threeTrackDims(job);
+  const cross=threeTrackCross(job.base,d.Wp), post=d.Hp-2.3;
+  return [{label:'บานเลื่อน',w:r2(cross+1.5),h:r2(post-8),qty:3}];
+}
+function awningClearGlass(job){
+  const W=+job.W,Dc=+job.clearSize,{Wp,Hp}=kraToongClear(job);
+  return [{label:'ช่องแสง',w:r2(W-9-1),h:r2(Dc-1),qty:1},
+          Object.assign({},awningGlass(Wp,Hp,'ไม่ติดกล่อง'),{label:'กระจกบานกระทุ้ง'})];
+}
+function clearTopGlass(job){
+  const base=job.base,W=+job.W,g=[];
+  const {Wp,Hp}=clearTop(job);
+  const n=Math.max(2,parseInt(job.nSlit)||4);
+  const panes=((QTY[base]||{})['ไม่เสริม']||{})['ขวางบน']||0;
+  if(panes)g.push({label:'บานเลื่อน',w:r2(crossLen(base,'ไม่เสริม',Wp)+1.5),h:r2(postLen('ไม่เสริม',Hp)-8),qty:panes});
+  g.push({label:'ช่องแสง',w:r2(((W-9-(n-1)*4.5)/n)+1.6),h:r2(clearTopDc(job)+1.2),qty:n});
+  return g;
+}
+function clearSideGlass(job){
+  const base=job.base,H=+job.H,Dc=+job.clearSize,g=[];
+  const {Wp,Hp}=clearParts(job);
+  const panes=((QTY[base]||{})['ไม่เสริม']||{})['ขวางบน']||0;
+  if(panes)g.push({label:'บานเลื่อน',w:r2(crossLen(base,'ไม่เสริม',Wp)+1.5),h:r2(postLen('ไม่เสริม',Hp)-8),qty:panes});
+  g.push({label:'ช่องแสง',w:r2(Dc+1.5),h:r2(H-9+1.2),qty:1});
+  return g;
+}
+function clearPiecesFor(job){
+  const {outer,Wp,Hp}=isClearTop(job)?clearTop(job):clearParts(job);
+  return outer.concat(slidingPieces(job.base,'ไม่เสริม',Wp,Hp)).concat([{rail:'ฉากกันตก',len:antiFallLen(job)}]);
+}
+function slideGlass(job){
+  const base=job.base,box=job.box,W=+job.W,H=+job.H,panes=((QTY[base]||{})[box]||{})['ขวางบน']||0;
+  if(!panes)return [];
+  return [{label:'บานเลื่อน',w:r2(crossLen(base,box,W)+1.5),h:r2(postLen(box,H)-8),qty:panes}];
+}
+function gcSideTopFirst_(fn){return job=>isSideTop(job)?sideTopGlass(job):fn(job);}
+const _PW=300,_PH=220;
+const GC_FORMULAS=[
+  { key:'fix', label:'บานฟิกซ์', match:j=>j.type==='บานฟิกซ์', pieces:fixPieces, glass:fixGlass,
+    probes:['ธรรมดา','ช่องแสงบน','แบ่งหลายช่อง','ช่องแสงบน+ซอย'].map(box=>({type:'บานฟิกซ์',box,clearSize:40,nSlit:3,W:100,H:200})) },
+  { key:'awningClear', label:'บานกระทุ้ง ช่องแสงบน/ล่าง', match:j=>j.type==='บานกระทุ้ง'&&j.box==='ช่องแสงบน/ล่าง', pieces:kraToongClearPieces, glass:awningClearGlass,
+    probes:[{type:'บานกระทุ้ง',box:'ช่องแสงบน/ล่าง',clearSize:40,W:100,H:200}] },
+  { key:'awning', label:'บานกระทุ้ง', match:j=>j.type==='บานกระทุ้ง', pieces:j=>awningPieces(+j.W,+j.H,j.box), glass:j=>[awningGlass(+j.W,+j.H,j.box)],
+    probes:['ติดกล่อง','ไม่ติดกล่อง'].map(box=>({type:'บานกระทุ้ง',box,clearSize:40,W:100,H:200})) },
+  { key:'hang', label:'รางแขวน', match:j=>j.base==='รางแขวน', pieces:j=>hangPieces(j.base,+j.W,+j.H,j.box), glass:gcSideTopFirst_(hangGlass),
+    probes:[{type:'บานเลื่อน',base:'รางแขวน',box:'ไม่เสริม',clear:'ไม่มี',W:_PW,H:_PH}] },
+  { key:'hangSplit', label:'รางแขวนแยกกลาง', match:j=>j.base==='รางแขวนแยกกลาง', pieces:j=>hangPieces(j.base,+j.W,+j.H,j.box), glass:gcSideTopFirst_(hangSplitGlass),
+    probes:[{type:'บานเลื่อน',base:'รางแขวนแยกกลาง',box:'ไม่เสริม',clear:'ไม่มี',W:_PW,H:_PH}] },
+  { key:'track3', label:'3 ราง', match:j=>is3Track(j.base), pieces:threeTrack, glass:gcSideTopFirst_(threeTrackGlass),
+    probes:['3 รางอิสระ','3 ราง ฟิกข้าง'].reduce((a,base)=>a.concat(['เสริมเรียบ 3 ด้าน','เสริมเรียบ 4 ด้าน','เสริมกล่อง 1"*4" 3 ด้าน','เสริมกล่อง 1"*4" 4 ด้าน'].map(box=>({type:'บานเลื่อน',base,box,clear:'ไม่มี',W:_PW,H:_PH}))),[]) },
+  { key:'sideTop', label:'บานเลื่อน ช่องแสงข้าง+บน', match:isSideTop, pieces:sideTopPieces, glass:sideTopGlass,
+    probes:['บานตาย','สลับ','แบ่ง4'].map(base=>({type:'บานเลื่อน',base,clear:'ข้าง+บน',w1:30,w2:30,h1:40,nSlit:3,W:300,H:220})) },
+  { key:'clearTop', label:'บานเลื่อน ช่องแสงบน', match:isClearTop, pieces:clearPiecesFor, glass:clearTopGlass,
+    probes:['บานตาย','สลับ','แบ่ง4'].reduce((a,base)=>a.concat(['ภายใน','ภายนอก'].map(v=>({type:'บานเลื่อน',base,box:'ไม่เสริม',clear:'บน',clVariant:v,nSlit:3,clearSize:40,W:_PW,H:_PH}))),[]) },
+  { key:'clearSide', label:'บานเลื่อน ช่องแสงข้าง', match:clearSupported, pieces:clearPiecesFor, glass:clearSideGlass,
+    probes:['บานตาย','สลับ'].map(base=>({type:'บานเลื่อน',base,box:'ไม่เสริม',clear:'ข้าง',clearSize:40,W:_PW,H:_PH})) },
+  { key:'slide', label:'บานเลื่อน', match:()=>true, pieces:j=>slidingPieces(j.base,j.box,+j.W,+j.H).concat([{rail:'ฉากกันตก',len:antiFallLen(j)}]), glass:slideGlass,
+    probes:['บานตาย','สลับ','แบ่ง4'].reduce((a,base)=>a.concat(['ไม่เสริม','เสริม3','เสริม4'].map(box=>({type:'บานเลื่อน',base,box,clear:'ไม่มี',W:_PW,H:_PH}))),[]) }
+];
+function gcFormulaOf(job){return GC_FORMULAS.find(r=>r.match(job));}
+function piecesFor(job){return gcFormulaOf(job).pieces(job);}
+// กระจกต่อชุด (บานเลื่อน: จำนวน = จำนวนบาน (ขวางบน) · ช่องแสงตามสูตรของแถว)
+function glassFor(job){
+  // ⚠ คงพฤติกรรมเดิม: กระจกของงานกระทุ้ง/ฟิกซ์ตัดสินด้วยชนิดงานก่อน ไม่สนฐาน (ฝั่งรางก็เหมือนกัน)
+  return gcFormulaOf(job).glass(job);
+}
+let _ALL_RAILS=null;
+function allKnownRails(){
+  if(_ALL_RAILS)return _ALL_RAILS;
+  const s=new Set();
+  // ลำดับรางในหน้าราคา = ลำดับ probe ของเครื่องมือเดิม (แถวใหม่ที่ไม่อยู่ในรายการ ต่อท้าย)
+  const ORDER=['slide','clearTop','clearSide','sideTop','track3','hang','hangSplit','awning','awningClear','fix'];
+  GC_FORMULAS.slice().sort((a,b)=>{const ia=ORDER.indexOf(a.key),ib=ORDER.indexOf(b.key);return (ia<0?99:ia)-(ib<0?99:ib);}).forEach(r=>(r.probes||[]).forEach(j=>{try{piecesFor(j).forEach(p=>s.add(p.rail));}catch(e){}}));
+  s.add('ลูกฟูก'); // จากวัสดุบาน
+  _ALL_RAILS=[...s];
+  return _ALL_RAILS;
 }
 
 // glass per job (sliding only; clear-light glass is v2). count = #panes (ขวางบน qty)
@@ -363,46 +430,6 @@ function piecesFor(job){
 function awningGlass(W,H,box){
   const base = box==='ติดกล่อง'?[W-9-0.3,H-9-0.3]:[W,H];
   return {label:'กระจก',w:r2(base[0]-3-6.5),h:r2(base[1]-3-6.5),qty:1};
-}
-function glassFor(job){
-  if(job.type==='บานฟิกซ์')return fixGlass(job);
-  if(job.type==='บานกระทุ้ง'){
-    const W=+job.W,H=+job.H;
-    if(job.box==='ช่องแสงบน/ล่าง'){
-      const Dc=+job.clearSize,{Wp,Hp}=kraToongClear(job);
-      return [{label:'ช่องแสง',w:r2(W-9-1),h:r2(Dc-1),qty:1},
-              Object.assign({},awningGlass(Wp,Hp,'ไม่ติดกล่อง'),{label:'กระจกบานกระทุ้ง'})];
-    }
-    return [awningGlass(W,H,job.box)];
-  }
-  if(isSideTop(job))return sideTopGlass(job);
-  const base=job.base,W=+job.W,H=+job.H;
-  if(base==='รางแขวน')return [{label:'กระจก',w:r2(W-5-0.7),h:r2(H-0.8-5.1-8-0.7),qty:1}];
-  if(base==='รางแขวนแยกกลาง')return [{label:'กระจก',w:r2((W-5-5-0.2)/2-0.7),h:r2(H-5.1-8-0.8-0.7),qty:2}];
-  if(is3Track(base)){
-    const d=threeTrackDims(job);
-    const cross=threeTrackCross(base,d.Wp), post=d.Hp-2.3;
-    return [{label:'บานเลื่อน',w:r2(cross+1.5),h:r2(post-8),qty:3}];
-  }
-  if(clearSupported(job)){
-    const Dc=+job.clearSize,g=[];
-    if(isClearTop(job)){
-      const {Wp,Hp}=clearTop(job);
-      const n=Math.max(2,parseInt(job.nSlit)||4);
-      const panes=((QTY[base]||{})['ไม่เสริม']||{})['ขวางบน']||0;
-      if(panes)g.push({label:'บานเลื่อน',w:r2(crossLen(base,'ไม่เสริม',Wp)+1.5),h:r2(postLen('ไม่เสริม',Hp)-8),qty:panes});
-      g.push({label:'ช่องแสง',w:r2(((W-9-(n-1)*4.5)/n)+1.6),h:r2(clearTopDc(job)+1.2),qty:n});
-      return g;
-    }
-    const {Wp,Hp}=clearParts(job);
-    const panes=((QTY[base]||{})['ไม่เสริม']||{})['ขวางบน']||0;
-    if(panes)g.push({label:'บานเลื่อน',w:r2(crossLen(base,'ไม่เสริม',Wp)+1.5),h:r2(postLen('ไม่เสริม',Hp)-8),qty:panes});
-    g.push({label:'ช่องแสง',w:r2(Dc+1.5),h:r2(H-9+1.2),qty:1});
-    return g;
-  }
-  const box=job.box,panes=((QTY[base]||{})[box]||{})['ขวางบน']||0;
-  if(!panes)return [];
-  return [{label:'บานเลื่อน',w:r2(crossLen(base,box,W)+1.5),h:r2(postLen(box,H)-8),qty:panes}];
 }
 
 // Best-Fit-Decreasing per rail. pieces:[{len,label}], stock,kerf
@@ -482,29 +509,3 @@ function optimizeGlass(sizes,sheets,gkerf){
   return {used,oversized,leftover:remaining};
 }
 
-let _ALL_RAILS=null;
-function allKnownRails(){
-  if(_ALL_RAILS)return _ALL_RAILS;
-  const probes=[];
-  const W=300,H=220;
-  // บานเลื่อนมาตรฐาน ทุกฐาน × ทุกกล่อง
-  ['บานตาย','สลับ','แบ่ง4'].forEach(base=>['ไม่เสริม','เสริม3','เสริม4'].forEach(box=>
-    probes.push({type:'บานเลื่อน',base,box,clear:'ไม่มี',W,H})));
-  // ช่องแสงบน (ภายใน/ภายนอก) + ช่องแสงข้าง
-  ['บานตาย','สลับ','แบ่ง4'].forEach(base=>['ภายใน','ภายนอก'].forEach(v=>
-    probes.push({type:'บานเลื่อน',base,box:'ไม่เสริม',clear:'บน',clVariant:v,nSlit:3,clearSize:40,W,H})));
-  ['บานตาย','สลับ'].forEach(base=>probes.push({type:'บานเลื่อน',base,box:'ไม่เสริม',clear:'ข้าง',clearSize:40,W,H}));
-  ['บานตาย','สลับ','แบ่ง4'].forEach(base=>probes.push({type:'บานเลื่อน',base,clear:'ข้าง+บน',w1:30,w2:30,h1:40,nSlit:3,W:300,H:220}));
-  // 3 ราง
-  ['3 รางอิสระ','3 ราง ฟิกข้าง'].forEach(base=>['เสริมเรียบ 3 ด้าน','เสริมเรียบ 4 ด้าน','เสริมกล่อง 1"*4" 3 ด้าน','เสริมกล่อง 1"*4" 4 ด้าน'].forEach(box=>probes.push({type:'บานเลื่อน',base,box,clear:'ไม่มี',W,H})));
-  // รางแขวน
-  ['รางแขวน','รางแขวนแยกกลาง'].forEach(base=>probes.push({type:'บานเลื่อน',base,box:'ไม่เสริม',clear:'ไม่มี',W,H}));
-  // บานกระทุ้ง
-  ['ติดกล่อง','ไม่ติดกล่อง','ช่องแสงบน/ล่าง'].forEach(box=>probes.push({type:'บานกระทุ้ง',box,clearSize:40,W:100,H:200}));
-  ['ธรรมดา','ช่องแสงบน','แบ่งหลายช่อง','ช่องแสงบน+ซอย'].forEach(box=>probes.push({type:'บานฟิกซ์',box,clearSize:40,nSlit:3,W:100,H:200}));
-  const s=new Set();
-  probes.forEach(j=>{try{piecesFor(j).forEach(p=>s.add(p.rail));}catch(e){}});
-  s.add('ลูกฟูก'); // จากวัสดุบาน
-  _ALL_RAILS=[...s];
-  return _ALL_RAILS;
-}
