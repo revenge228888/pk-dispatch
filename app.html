@@ -18285,6 +18285,7 @@ function pkpBlankItem(){ return { type:'', patt:'→', w:'', h:'', wl:'', wr:'',
 
 // ── ลายเซ็นดิจิทัล (แนบรูป) ──
 function pkpRenderSig(){
+  if(pkpKind==='glass' && typeof glwRender_==='function') setTimeout(glwRender_,0);   // [GLWO] ลายเซ็นอนุมัติเปลี่ยน → ล็อก/ปลดปุ่มดึงงานคำนวณ
   var wrap=document.getElementById('pkpSigWrap'); if(!wrap) return;
   var isMgr = CURRENT_USER && CURRENT_USER.role==='manager';
   wrap.innerHTML =
@@ -18553,7 +18554,7 @@ function pkpFromQueue(id){
 //  ไฟล์: ประทับหัว/ท้ายกระดาษในเบราว์เซอร์ (PDF = pdf-lib ขยายขอบหน้า แล้ววางแถบข้อความเป็นรูป → ไม่ต้องฝังฟอนต์ไทย · รูป = canvas)
 //        แล้วส่ง 2 จังหวะต่อไฟล์ (ต้นฉบับ → ฉบับประทับ) · ใบใหม่ต้องบันทึกก่อนได้เลข WO ไฟล์ที่เลือกไว้จึงอัปโหลดหลังบันทึก
 let pkpKind='';
-let _pkpGl={ files:[], pending:[], busy:false, prog:'' };
+let _pkpGl={ files:[], pending:[], busy:false, prog:'', calc:null, cost:null, cut:[] };   // calc/cost = [GLWO] สำเนางานคำนวณ + ต้นทุน
 var GLS_MAX=10*1024*1024, GLS_MAX_STAMPED=14*1024*1024;
 var GLS_ST={ '':'รอผลิต', working:'กำลังผลิต', done:'ผลิตเสร็จ' };
 function pkpGlMeta_(s){ try{ var m=typeof s==='string'?JSON.parse(s||'{}'):(s||{}); return { shop:String(m.shop||''), pieces:String(m.pieces||''), files:Array.isArray(m.files)?m.files:[] }; }catch(e){ return { shop:'', pieces:'', files:[] }; } }
@@ -18567,11 +18568,12 @@ function pkpKindApply_(){
   pkpGlRender_();
 }
 function pkpKindSet(k){ if(pkpEditingWO || _pkpSandbox) return; pkpKind=k==='glass'?'glass':''; pkpKindApply_(); pkpAutosave(); }
-function pkpGlReset_(){ _pkpGl={ files:[], pending:[], busy:false, prog:'' }; ['pkpGlShop','pkpGlPieces'].forEach(function(id){ const e=document.getElementById(id); if(e) e.value=''; }); }
+function pkpGlReset_(){ _pkpGl={ files:[], pending:[], busy:false, prog:'', calc:null, cost:null, cut:[] }; ['pkpGlShop','pkpGlPieces'].forEach(function(id){ const e=document.getElementById(id); if(e) e.value=''; }); }
 function pkpGlRender_(){
   const w=document.getElementById('pkpGlassWrap'); if(!w) return;
   if(!document.getElementById('pkpGlFiles')){
     w.innerHTML='<div style="border:1px solid var(--line,#2a3344);border-radius:8px;padding:10px;">'
+      +'<div id="pkpGlCalc" style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--line,#2a3344);"></div>'
       +'<div class="row-form" style="margin-bottom:8px;">'
       +'<div class="fg" style="flex:1;min-width:160px;"><label class="fl">ร้าน/โรงกระจก</label><input class="fi" id="pkpGlShop" placeholder="(ถ้ามี)" oninput="pkpAutosave()"></div>'
       +'<div class="fg" style="width:150px;"><label class="fl">จำนวนแผ่น</label><input class="fi" id="pkpGlPieces" placeholder="เช่น 6 แผ่น" oninput="pkpAutosave()"></div></div>'
@@ -18579,6 +18581,7 @@ function pkpGlRender_(){
       +'<div id="pkpGlFiles"></div></div>';
   }
   pkpGlRenderFiles_();
+  glwRender_(); glwLoadList_().then(glwRender_);   // [GLWO]
 }
 function pkpGlSize_(n){ n=Number(n)||0; return n>=1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB'; }
 function pkpGlRenderFiles_(){
@@ -18852,7 +18855,9 @@ function glsBoardHTML_(jobs){
       +'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;">'+(j.rush?'<span class="gls-chip rush">ด่วน</span>':'')+(g.pieces?'<span class="gls-chip">'+escHtml(g.pieces)+'</span>':'')+(g.shop?'<span class="gls-chip">🏭 '+escHtml(g.shop)+'</span>':'')
       +(ok?'':'<span class="gls-chip">🔒 รอผู้จัดการอนุมัติ</span>')+'</div>'
       +(j.noteGeneral?'<div style="font-size:12.5px;margin-top:4px;">📌 '+escHtml(j.noteGeneral)+'</div>':'')
-      +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;"><button class="btn btn-g btn-sm" onclick="glsFilesOpen(\''+id+'\')">📎 ไฟล์ '+(g.files||[]).length+'</button>';
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;"><button class="btn btn-g btn-sm" onclick="glsFilesOpen(\''+id+'\')">📎 ไฟล์ '+(g.files||[]).length+'</button>'
+      +((glsCanOpen_()&&ok)||(CURRENT_USER&&CURRENT_USER.role==='manager')?'<button class="btn btn-g btn-sm" onclick="glsOpenSheet(\''+id+'\')">📄 เปิดใบ</button>':'')   // [GLWO]
+      +(glsCanOpen_()&&ok&&g.sets?'<button class="btn btn-g btn-sm" onclick="glsCutOpen(\''+id+'\')">✂ ตัดแล้ว '+(g.cut||[]).length+'/'+g.sets+'</button>':'');
     if(ok){
       if(st==='') h+='<button class="btn btn-p btn-sm" onclick="glsSet(\''+id+'\',\'working\')">▶ เริ่มผลิต</button>';
       else if(st==='working') h+='<button class="btn btn-g btn-sm" title="ย้อนเป็นรอผลิต" onclick="glsSet(\''+id+'\',\'\')">◀</button><button class="btn btn-p btn-sm" onclick="glsSet(\''+id+'\',\'done\')">✓ ผลิตเสร็จ</button>';
@@ -18941,10 +18946,10 @@ function pkpCollectDraft(){
   var g=function(id){var e=document.getElementById(id);return e?e.value:'';};
   return { cust:g('pkpCust'), issue:g('pkpIssue'), install:g('pkpInstall'), ref:g('pkpRef'), note:g('pkpNote'), mainAlu:g('pkpMainAlu'), mainMesh:g('pkpMainMesh'), items:pkpItems,
     qsel:(!_pkpSandbox && !pkpEditingWO)?_pkpQ.sel:[],   // [QLINK] งานในคิวที่เลือกไว้ของใบใหม่
-    kind:pkpKind, glShop:g('pkpGlShop'), glPieces:g('pkpGlPieces') };   // [GLASS]
+    kind:pkpKind, glShop:g('pkpGlShop'), glPieces:g('pkpGlPieces'), glCalc:_pkpGl.calc||null, glCost:_pkpGl.cost||null };   // [GLASS] [GLWO]
 }
 function pkpDraftHasData(raw){
-  try{ var d=JSON.parse(raw); return !!(d.cust||d.ref||d.note||d.mainAlu||d.mainMesh||(d.qsel&&d.qsel.length)||d.glShop||d.glPieces||(d.items&&d.items.some(function(it){return it.type||it.w||it.h||it.wl||it.wr||it.cAlu||it.cMesh||it.note;}))); }catch(e){ return false; }
+  try{ var d=JSON.parse(raw); return !!(d.cust||d.ref||d.note||d.mainAlu||d.mainMesh||(d.qsel&&d.qsel.length)||d.glShop||d.glPieces||d.glCalc||(d.items&&d.items.some(function(it){return it.type||it.w||it.h||it.wl||it.wr||it.cAlu||it.cMesh||it.note;}))); }catch(e){ return false; }
 }
 function pkpAutosave(){
   if(_pkpSandbox){   // โหมดทดคำนวณ → จำลง key กระดาษทด ไม่แตะร่างใบจริง
@@ -18968,7 +18973,7 @@ function pkpRestoreDraft(raw, silent){
     s('pkpCust',d.cust); s('pkpIssue',d.issue); s('pkpInstall',d.install); s('pkpRef',d.ref); s('pkpNote',d.note); s('pkpMainAlu',d.mainAlu); s('pkpMainMesh',d.mainMesh);
     pkpItems=(d.items&&d.items.length)?d.items:[pkpBlankItem()];
     _pkpQ=pkpQFresh_(Array.isArray(d.qsel)?d.qsel:[]); pkpQRender_();
-    pkpKind=d.kind==='glass'?'glass':''; pkpKindApply_(); s('pkpGlShop',d.glShop); s('pkpGlPieces',d.glPieces);   // [GLASS]
+    pkpKind=d.kind==='glass'?'glass':''; _pkpGl.calc=d.glCalc||null; _pkpGl.cost=d.glCost||null; pkpKindApply_(); s('pkpGlShop',d.glShop); s('pkpGlPieces',d.glPieces);   // [GLASS] [GLWO]
     if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
     pkpRenderRows();
     if(!silent) toast('กู้คืนใบที่ค้างไว้แล้ว');
@@ -19269,6 +19274,7 @@ function pkpBody(){
     sigCheck: pkpSigCheck,
     sigApprove: pkpSigApprove,
     kind: pkpKind, glassShop:(document.getElementById('pkpGlShop')||{}).value||'', glassPieces:(document.getElementById('pkpGlPieces')||{}).value||'',   // [GLASS]
+    glassCalc: pkpKind==='glass'?(_pkpGl.calc||null):undefined, glassCost: pkpKind==='glass'?(_pkpGl.cost||null):undefined,   // [GLWO] สำเนางานคำนวณ (ไม่มีราคา) + ต้นทุน
     specialColors: pkpSpecialColors(pkpItems.filter(function(it){return it.type;}), (document.getElementById('pkpMainAlu')||{}).value||'')
   };
 }
@@ -19410,7 +19416,9 @@ async function pkpOpen(woId, fresh){
     pkpQLoadFor_(o.woId);   // [QLINK] งานคิวที่ผูกใบนี้ไว้ (โหลดเบื้องหลัง)
     // [GLASS] ชนิดใบ + ไฟล์แนบ (glassMeta อยู่ในแถวชีต r.index)
     pkpKind=((o.kind||(r.index&&r.index.kind))==='glass')?'glass':''; pkpGlReset_(); _pkpGl.st=(r.index&&r.index.glassStatus)||'';
-    var _gm=pkpGlMeta_(r.index&&r.index.glassMeta); _pkpGl.files=_gm.files; pkpKindApply_();
+    var _gm=pkpGlMeta_(r.index&&r.index.glassMeta); _pkpGl.files=_gm.files;
+    if(pkpKind==='glass'){ _pkpGl.calc=o.glassCalc||null; _pkpGl.cost=(o.costSnapshot&&o.costSnapshot.kind==='glass')?o.costSnapshot:null; _pkpGl.cut=glwCutOf_(r.index&&r.index.glassMeta); }   // [GLWO]
+    pkpKindApply_();
     (function(){ var a=document.getElementById('pkpGlShop'), b2=document.getElementById('pkpGlPieces'); if(a) a.value=_gm.shop; if(b2) b2.value=_gm.pieces; })();
     var set=function(id,v){var e=document.getElementById(id); if(e)e.value=v||'';};
     set('pkpCust',(o.customer&&o.customer.name)||''); set('pkpIssue',o.issueDate); set('pkpInstall',o.installDate);
@@ -19428,7 +19436,7 @@ async function pkpOpen(woId, fresh){
     pkpLeftoverFetch().then(function(){ pkpRenderRows(); }).catch(function(){});
     pkpRenderSig();
     var cw=document.getElementById('pkpCostWrap'); if(cw)cw.innerHTML='';   // ล้างต้นทุนของใบก่อน
-    if(o.costSnapshot) pkpShowSnapshot(o.costSnapshot);                     // แสดงราคา ณ ตอนบันทึก (ถ้ามี)
+    if(o.costSnapshot && o.costSnapshot.kind!=='glass') pkpShowSnapshot(o.costSnapshot);   // [GLWO] ใบกระจกโชว์ต้นทุนในกล่องงานคำนวณแทน                     // แสดงราคา ณ ตอนบันทึก (ถ้ามี)
     if(typeof refreshAllDateDisplays==='function') refreshAllDateDisplays();
     if(window.scrollTo)window.scrollTo(0,0);
     toast('เปิด '+o.woId+' แล้ว'+(r.healed?' · ซ่อมการเชื่อมไฟล์ให้แล้ว':'')+(r.cause==='trashed'?' · ไฟล์อยู่ในถังขยะ — กด 🔧 ตรวจไฟล์ เพื่อกู้คืน':''));
@@ -19633,47 +19641,250 @@ function pkpProdSheetsHTML_(o){
   }
   return sheets;
 }
-// ── [GLPRINT] ใบผลิตงานกระจก (หน้าใบ) — หัวใบ/ลายเซ็นแบบเดียวกับ pkpProdSheetsHTML_ + ร้าน/จำนวนแผ่น/สถานะผลิต + รายการไฟล์แนบ ──
-//  o.glass={shop,pieces,files:[meta],pending:[ชื่อไฟล์ที่ยังไม่อัปโหลด]} · .sheet มี data-wo/data-fn → ปุ่ม PDF/แยกไฟล์/LINE ใน pkpProdDocWrap_ ใช้ได้เลย
+// ── [GLPRINT+GLWO] ใบผลิตงานกระจก — หัวใบ/ลายเซ็นแบบ pkpProdSheetsHTML_ · .sheet มี data-wo/data-fn → ปุ่ม PDF/แยกไฟล์/LINE ใน pkpProdDocWrap_ ใช้ได้เลย ──
+//  o.glass={shop,pieces,files:[meta],pending:[ชื่อไฟล์ที่ยังไม่อัปโหลด],cut:[key ชุดที่ตัดแล้ว]} · o.glassCalc = สำเนางานคำนวณ (ไม่มีราคา) หรือ null
+//  มีงานคำนวณ (เจ้าของยืนยัน 6 พ.ย. 2026 ครบทุกหน้า): ① ตารางรายการ + ลายเซ็น ② ใบตัดต่อชุด (การ์ด 2 คอลัมน์) ③ Optimize ราง ④ ตัดกระจก ⑤ รายการไฟล์แนบ
+//  ไม่มีงานคำนวณ = หน้าเดียวแบบเดิม (ข้อมูลใบ + รายการไฟล์แนบ)
+function glwKey_(x){ return String((x&&x.seq)||'')+'|'+String((x&&x.pos)||'')+'|'+(Number(x&&x.W)||0)+'x'+(Number(x&&x.H)||0); }   // = pkGlwoKey_ (GAS)
 function pkpGlassSheetsHTML_(o){
   var thDate=function(s){ if(!s)return'-'; var p=String(s).slice(0,10).split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):s; };
   var esc=function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
-  var g=o.glass||{};
+  var num=function(n){ var x=Number(n); return isNaN(x)?'':(Math.round(x*100)/100).toLocaleString('th-TH',{maximumFractionDigits:2}); };
+  var g=o.glass||{}, gc=o.glassCalc&&o.glassCalc.snap?o.glassCalc:null, snap=gc?gc.snap:null, notes=(gc&&gc.notes)||{}, cut=g.cut||[];
   var atDate=function(a){ var n=Number(a); if(a!==''&&a!=null&&!isNaN(n)&&n>1e11) return thDate(new Date(n+7*3600000).toISOString()); return thDate(a); };   // f.at = มิลลิวินาที → วันที่ไทย (+7)
-  var rows=(g.files||[]).map(function(f){ return '<td class="nme" style="font-size:11.5px;">'+esc(f.name)+'</td><td>'+(f.mime==='application/pdf'?'PDF':'รูป')+'</td><td>'+pkpGlSize_(f.size)+'</td><td>'+atDate(f.at)+'</td><td>'+esc(f.by||'')+'</td>'; })
-    .concat((g.pending||[]).map(function(n){ return '<td class="nme" style="font-size:11.5px;">'+esc(n)+'</td><td></td><td></td><td colspan="2" style="color:#a05a00;">ยังไม่อัปโหลด</td>'; }));
-  var PER=14, pages=[];
-  for(var i=0;i<rows.length;i+=PER) pages.push(rows.slice(i,i+PER));
-  if(!pages.length) pages=[[]];
   var sigCell=function(label,sig){
     if(sig&&sig.img) return '<div class="sg"><img class="sgimg" src="'+sig.img+'"><div class="rl">'+label+'</div><div class="dt">'+(esc(sig.name||'')||'&nbsp;')+(sig.ts?' · '+thDate(sig.ts):'')+'</div></div>';
     return '<div class="sg"><div class="ln"></div><div class="rl">'+label+'</div><div class="dt">วันที่ ......./......./...........</div></div>';
   };
-  var head='<div class="head"><div class="mark">PK</div><div><div class="co">PK มุ้งจีบ</div><div class="doc">Glass Order · ใบผลิตงานกระจก</div></div>'
-    +'<div class="sp"></div><div class="wo"><span class="lab">เลขที่ใบผลิต</span><span class="no">'+esc(o.woId)+'</span><span class="stat">'+esc(o.status)+'</span></div></div>'
-    +'<div class="info"><div class="f w"><div class="k">ชื่อลูกค้า</div><div class="v">'+esc(o.customer)+'</div></div>'
+  var signHTML='<div class="sign">'+sigCell('ผู้ตรวจสอบ',o.sigCheck)+sigCell('ผู้อนุมัติ',o.sigApprove)+'</div>';
+  var head=function(label){ return '<div class="head"><div class="mark">PK</div><div><div class="co">PK มุ้งจีบ</div><div class="doc">Glass Order · '+label+'</div></div>'
+    +'<div class="sp"></div><div class="wo"><span class="lab">เลขที่ใบผลิต</span><span class="no">'+esc(o.woId)+'</span><span class="stat">'+esc(o.status)+'</span></div></div>'; };
+  var info='<div class="info"><div class="f w"><div class="k">ชื่อลูกค้า</div><div class="v">'+esc(o.customer)+'</div></div>'
     +'<div class="f"><div class="k">วันที่ออกใบผลิต</div><div class="v">'+thDate(o.issueDate)+'</div></div>'
     +'<div class="f"><div class="k">วันที่ติดตั้ง</div><div class="v">'+thDate(o.installDate)+'</div></div>'
     +'<div class="f"><div class="k">เลขที่ใบจอง</div><div class="v">'+(esc(o.refNo)||'-')+'</div></div>'
-    +'<div class="f w"><div class="k">หมายเหตุ</div><div class="v">'+(esc(o.note)||'-')+'</div></div></div>'
-    +'<div class="info"><div class="f w"><div class="k">ร้าน/โรงกระจก</div><div class="v">'+(esc(g.shop)||'-')+'</div></div>'
-    +'<div class="f"><div class="k">จำนวนแผ่น</div><div class="v">'+(esc(g.pieces)||'-')+'</div></div>'
+    +'<div class="f w"><div class="k">หมายเหตุ</div><div class="v">'+(esc(o.note)||'-')+'</div></div></div>';
+  var sets=snap?(snap.sets||[]):[], okSets=sets.filter(function(x){ return !x.warn; });
+  var panes=okSets.reduce(function(a,x){ return a+(Number(x.panes)||0); },0);
+  var info2='<div class="info"><div class="f w"><div class="k">ร้าน/โรงกระจก</div><div class="v">'+(esc(g.shop)||'-')+'</div></div>'
+    +'<div class="f"><div class="k">จำนวนแผ่น</div><div class="v">'+(esc(g.pieces)||(snap?panes+' แผ่น':'-'))+'</div></div>'
     +'<div class="f"><div class="k">สถานะผลิต</div><div class="v">'+esc(GLS_ST[o.glassStatus||'']||'รอผลิต')+'</div></div>'
+    +(snap?'<div class="f"><div class="k">งานคำนวณ</div><div class="v">'+esc(gc.gcName||'-')+' · '+okSets.length+' ชุด'+(cut.length?' · ตัดแล้ว '+okSets.filter(function(x){ return cut.indexOf(glwKey_(x))!==-1; }).length:'')+'</div></div>':'')
     +'<div class="f"><div class="k">ไฟล์แนบ</div><div class="v">'+(g.files||[]).length+' ไฟล์'+((g.pending||[]).length?' (+'+g.pending.length+' รออัปโหลด)':'')+'</div></div></div>';
-  var THEAD='<colgroup><col class="colNo"><col><col style="width:50px"><col style="width:70px"><col style="width:80px"><col style="width:110px"><col style="width:60px"></colgroup>'
+  var pages=[];   // [{label, body, sign}]
+  var fileRows=(g.files||[]).map(function(f){ return '<td class="nme" style="font-size:11.5px;">'+esc(f.name)+'</td><td>'+(f.mime==='application/pdf'?'PDF':'รูป')+'</td><td>'+pkpGlSize_(f.size)+'</td><td>'+atDate(f.at)+'</td><td>'+esc(f.by||'')+'</td>'; })
+    .concat((g.pending||[]).map(function(n){ return '<td class="nme" style="font-size:11.5px;">'+esc(n)+'</td><td></td><td></td><td colspan="2" style="color:#a05a00;">ยังไม่อัปโหลด</td>'; }));
+  var FHEAD='<colgroup><col class="colNo"><col><col style="width:50px"><col style="width:70px"><col style="width:80px"><col style="width:110px"><col style="width:60px"></colgroup>'
     +'<thead><tr><th>No.</th><th>ไฟล์แบบ/รายละเอียดกระจก</th><th>ชนิด</th><th>ขนาด</th><th>แนบเมื่อ</th><th>แนบโดย</th><th>✓ ตรวจ</th></tr></thead>';
-  var sheets='', start=0;
-  pages.forEach(function(pg,pi){
-    var body=pg.map(function(r,k){ return '<tr class="grpstart"><td class="b">'+(start+k+1)+'</td>'+r+'<td></td></tr>'; }).join('');
-    if(!pg.length) body='<tr class="empty"><td colspan="7" style="color:#9aa7b6;font-style:italic;">— ยังไม่มีไฟล์แนบ —</td></tr>';
-    start+=pg.length;
-    sheets+='<div class="sheet" data-wo="'+esc(o.woId)+'" data-fn="'+esc(pkpWoFileName_(o.woId,o.customer))+'">'+head
-      +'<table>'+THEAD+'<tbody>'+body+'</tbody></table>'
-      +'<div class="scp-note">แบบกระจกอยู่ในไฟล์แนบ — ทุกหน้าประทับเลข WO · ลูกค้า · วันติดตั้ง แล้ว · เปิด/พิมพ์ไฟล์ได้จากหน้า ใบผลิต หรือ 🪟 งานกระจก</div>'
-      +'<div class="sign">'+sigCell('ผู้ตรวจสอบ',o.sigCheck)+sigCell('ผู้อนุมัติ',o.sigApprove)+'</div>'
-      +'<div class="foot"><span>PK Queue System · ใบผลิตงานกระจก</span><span>หน้า '+(pi+1)+'/'+pages.length+' · พิมพ์ '+thDate(new Date().toISOString().slice(0,10))+'</span></div></div>';
+  var filePages=function(label, first){
+    var out=[], PER=first?14:18;
+    for(var i=0;i<Math.max(1,fileRows.length);i+=PER){
+      var pg=fileRows.slice(i,i+PER);
+      var body=pg.map(function(r,k){ return '<tr class="grpstart"><td class="b">'+(i+k+1)+'</td>'+r+'<td></td></tr>'; }).join('')
+        ||'<tr class="empty"><td colspan="7" style="color:#9aa7b6;font-style:italic;">— ยังไม่มีไฟล์แนบ —</td></tr>';
+      out.push({ label:label, body:'<table>'+FHEAD+'<tbody>'+body+'</tbody></table>'
+        +'<div class="scp-note">แบบกระจกอยู่ในไฟล์แนบ — ทุกหน้าประทับเลข WO · ลูกค้า · วันติดตั้ง แล้ว · เปิด/พิมพ์ไฟล์ได้จากหน้า ใบผลิต หรือ 🪟 งานกระจก</div>' });
+    }
+    return out;
+  };
+  if(!snap){
+    filePages('ใบผลิตงานกระจก', true).forEach(function(p,i){ pages.push({ label:p.label, body:info+info2+p.body, sign:true }); });
+  } else {
+    // ① ตารางรายการ
+    var RH='<colgroup><col class="colNo"><col style="width:120px"><col><col style="width:78px"><col style="width:70px"><col style="width:110px"><col style="width:44px"><col style="width:150px"></colgroup>'
+      +'<thead><tr><th>No.</th><th>ตำแหน่ง</th><th>ชนิด</th><th>กว้าง×สูง</th><th>สีอลู</th><th>กระจก</th><th>แผ่น</th><th>หมายเหตุ</th></tr></thead>';
+    var rows=sets.map(function(x){
+      if(x.warn) return '<tr class="grpstart"><td class="b">'+esc(x.seq)+'</td><td class="nme">'+esc(x.pos)+'</td><td colspan="6" style="color:#b4560f;text-align:left;white-space:normal;">⚠ '+esc(x.warn)+' (ชุดนี้ไม่ได้คำนวณ)</td></tr>';
+      var nt=notes[glwKey_(x)]||'';
+      return '<tr class="grpstart"><td class="b">'+esc(x.seq)+'</td><td class="nme">'+esc(x.pos)+'</td><td class="nme" style="white-space:normal;">'+esc(x.desc)+'</td><td>'+num(x.W)+'×'+num(x.H)+'</td><td>'+(esc(x.color)||'-')+'</td><td class="nme">'+esc(x.thickLabel)+(x.glassColor?' '+esc(x.glassColor):'')+'</td><td class="b">'+(Number(x.panes)||0)+'</td><td class="nme" style="white-space:normal;">'+esc(nt)+'</td></tr>';
+    });
+    for(var i=0;i<Math.max(1,rows.length);i+=12){
+      pages.push({ label:'ใบผลิตงานกระจก', sign:i===0, body:(i===0?info+info2:'')+'<table>'+RH+'<tbody>'+(rows.slice(i,i+12).join('')||'<tr class="empty"><td colspan="8">—</td></tr>')+'</tbody></table>' });
+    }
+    // ② ใบตัดต่อชุด (การ์ด 2 คอลัมน์ · ☑ = ฝ่ายผลิตติ๊กตัดแล้ว)
+    var cards=okSets.map(function(x){
+      var done=cut.indexOf(glwKey_(x))!==-1, nt=notes[glwKey_(x)]||'';
+      var rr=(x.rails||[]).map(function(r){ return '<tr><td class="l">'+esc(r.rail)+'</td><td class="n">'+(r.lens||[]).map(function(l){ return num(l.len)+(l.qty>1?' ×'+l.qty:''); }).join(', ')+'</td><td class="c">'+r.n+'</td><td class="c">☐</td></tr>'; }).join('');
+      var gr=(x.glass||[]).map(function(q){ return '<tr><td class="l">กระจก '+esc(q.label)+'</td><td class="n">'+num(q.w)+' × '+num(q.h)+'</td><td class="c">'+q.qty+'</td><td class="c">☐</td></tr>'; }).join('');
+      var lr=(x.luk||[]).map(function(q){ return '<tr><td class="l">ลูกฟูก ('+esc(q.dir)+') '+q.paneQty+' บาน × '+q.perPane+' แผ่น</td><td class="n">'+num(q.len)+'</td><td class="c">'+q.count+'</td><td class="c">☐</td></tr>'; }).join('');
+      var html='<div class="scp-card"><div class="scp-hd"><span class="scp-no">'+esc(x.seq)+'</span><span class="scp-type">'+esc(x.pos||'-')+'</span><span class="scp-size">'+num(x.W)+'×'+num(x.H)+' <small>ซม.</small></span></div>'
+        +'<div class="scp-meta"><span class="scp-chip">'+esc(x.desc)+'</span>'+(x.color?'<span class="scp-chip">อลู <b>'+esc(x.color)+'</b></span>':'')+'<span class="scp-chip">กระจก <b>'+esc(x.thickLabel)+(x.glassColor?' '+esc(x.glassColor):'')+'</b></span><span class="scp-chip"><b>'+(done?'☑ ตัดแล้ว':'☐ ตัดแล้ว')+'</b></span></div>'
+        +'<table class="scp-t"><thead><tr><th class="l">ราง / ชิ้น</th><th class="n">ยาว (ซม.)</th><th class="c">ชิ้น</th><th class="c">✓</th></tr></thead><tbody>'+rr+gr+lr+'</tbody></table>'
+        +(nt?'<div class="scp-note">📝 '+esc(nt)+'</div>':'')+'</div>';
+      return { w:3+(x.rails||[]).length+(x.glass||[]).length+(x.luk||[]).length+(nt?1:0), html:html };
+    });
+    var packCards=function(list, MAX, label){ var cur=[], w=0; list.forEach(function(c){ if(w+c.w>MAX && cur.length){ pages.push({ label:label, body:'<div class="scp-grid">'+cur.join('')+'</div>' }); cur=[]; w=0; } cur.push(c.html); w+=c.w; });
+      if(cur.length) pages.push({ label:label, body:'<div class="scp-grid">'+cur.join('')+'</div>' }); };
+    packCards(cards, 44, 'ใบตัดต่อชุด');
+    // ③ Optimize ราง (ไม่มีราคา) — สรุปรางสำหรับเบิก/สั่ง + แผนตัดทีละเส้น
+    var opt=snap.optimize||[], sumRows=[];
+    opt.forEach(function(c){ (c.rails||[]).forEach(function(r){ sumRows.push('<tr><td class="l">'+esc(r.rail)+'</td><td class="l">'+esc(c.color)+'</td><td class="n">'+r.pieces+'</td><td class="n">'+num(r.totalLen)+'</td><td class="n"><b>'+(r.bars||[]).length+'</b></td></tr>'); }); });
+    if(sumRows.length){
+      var optCards=[{ w:4+sumRows.length, html:'<div class="scp-card" style="grid-column:1/-1;"><div class="scp-hd"><span class="scp-type">📦 สรุปรางที่ใช้ (เส้น '+num(snap.stock)+' ซม. · ใบตัด '+num(snap.kerf)+')</span></div><table class="scp-t"><thead><tr><th class="l">ราง</th><th class="l">สี</th><th class="n">ชิ้น</th><th class="n">ยาวรวม</th><th class="n">เส้น</th></tr></thead><tbody>'+sumRows.join('')+'</tbody></table></div>' }];
+      opt.forEach(function(c){ (c.rails||[]).forEach(function(r){
+        var br=(r.bars||[]).map(function(b,i){ return '<tr><td class="c">'+(i+1)+'</td><td class="l sm">'+(b.cuts||[]).map(function(x){ return '<b>'+num(x.len)+(x.n>1?' ×'+x.n:'')+'</b> '+esc(String(x.label||'').replace(/^#\S+\s*/,''))+''; }).join(' · ')+'</td><td class="n">'+num(b.off)+'</td></tr>'; }).join('');
+        var ov=(r.over||[]).length?'<div class="scp-warn">⚠ ยาวเกินเส้น: '+r.over.map(function(p){ return num(p.len); }).join(', ')+'</div>':'';
+        optCards.push({ w:3+(r.bars||[]).length*1.4+(ov?1:0), html:'<div class="scp-card"><div class="scp-hd"><span class="scp-type">'+esc(r.rail)+'</span><span class="scp-size">'+(r.bars||[]).length+' <small>เส้น · '+esc(c.color)+'</small></span></div><table class="scp-t"><thead><tr><th class="c">เส้น</th><th class="l">ชิ้นที่ตัด (ซม.)</th><th class="n">เศษ</th></tr></thead><tbody>'+br+'</tbody></table>'+ov+'</div>' });
+      }); });
+      packCards(optCards, 40, 'Optimize ราง');
+    }
+    // ④ ตัดกระจก (แผนตัดจากแผ่นมาตรฐาน)
+    var gcut=snap.glassCut||[], glCards=[];
+    gcut.forEach(function(grp){
+      var cls={}; (grp.sheets||[]).forEach(function(s){ var k=s.wi+'×'+s.hi; cls[k]=(cls[k]||0)+1; });
+      glCards.push({ w:3+Object.keys(cls).length, html:'<div class="scp-card" style="grid-column:1/-1;"><div class="scp-hd"><span class="scp-type">กระจก '+esc(grp.color)+' · หนา '+esc(grp.thickLabel)+'</span><span class="scp-size">'+(grp.sheets||[]).length+' <small>แผ่น</small></span></div><div class="scp-meta">'+Object.keys(cls).map(function(k){ return '<span class="scp-chip">'+k+' นิ้ว <b>×'+cls[k]+'</b></span>'; }).join('')+'</div>'+((grp.oversized||[]).length?'<div class="scp-warn">⚠ ชิ้นเกินทุกแผ่น: '+grp.oversized.map(esc).join(', ')+'</div>':'')+'</div>' });
+      (grp.sheets||[]).forEach(function(s,i){
+        var sc=Math.min(300/s.w, 150/s.h), SW=s.w*sc, SH=s.h*sc;
+        var rects=(s.placed||[]).map(function(p){ var x=p.x*sc,y=p.y*sc,w=p.w*sc,h=p.h*sc; return '<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+h.toFixed(1)+'" fill="#eef5ff" stroke="#3a6ea5" stroke-width="1"/>'+((w>30&&h>12)?'<text x="'+(x+w/2).toFixed(1)+'" y="'+(y+h/2).toFixed(1)+'" font-size="8.5" text-anchor="middle" dominant-baseline="middle" fill="#1f4e79">'+num(p.pw)+'×'+num(p.ph)+(p.rot?' ↻':'')+'</text>':''); }).join('');
+        var m={}; (s.placed||[]).forEach(function(p){ m[p.label]=(m[p.label]||0)+1; });
+        glCards.push({ w:9, html:'<div class="scp-card"><div class="scp-hd"><span class="scp-no">'+(i+1)+'</span><span class="scp-type">'+esc(grp.color)+' · '+esc(grp.thickLabel)+'</span><span class="scp-size">'+s.wi+'×'+s.hi+' <small>นิ้ว</small></span></div>'
+          +'<div class="scp-meta" style="font-size:10px;">'+Object.keys(m).sort().map(function(k){ return esc(k)+(m[k]>1?' ×'+m[k]:'')+' ซม.'; }).join(' · ')+'</div>'
+          +'<svg width="'+SW.toFixed(1)+'" height="'+SH.toFixed(1)+'" viewBox="0 0 '+SW.toFixed(1)+' '+SH.toFixed(1)+'" style="background:#fafafa;border:1px solid #bbb;display:block;margin:2px auto 0;">'+rects+'</svg></div>' });
+      });
+    });
+    if(glCards.length) packCards(glCards, 40, 'ตัดกระจก');
+    // ⑤ รายการไฟล์แนบ
+    filePages('รายการไฟล์แนบ', false).forEach(function(p){ pages.push({ label:p.label, body:info2+p.body }); });
+  }
+  var fn=pkpWoFileName_(o.woId,o.customer), today=thDate(new Date().toISOString().slice(0,10));
+  return pages.map(function(p,pi){
+    return '<div class="sheet" data-wo="'+esc(o.woId)+'" data-fn="'+esc(fn)+'">'+head(p.label)+p.body+(p.sign?signHTML:'')
+      +'<div class="foot"><span>PK Queue System · ใบผลิตงานกระจก'+(p.label!=='ใบผลิตงานกระจก'?' · '+esc(p.label):'')+'</span><span>หน้า '+(pi+1)+'/'+pages.length+' · พิมพ์ '+today+'</span></div></div>';
+  }).join('');
+}
+// ════════ [GLWO] ใบผลิตกระจกแบบมีรายการ — ดึงสำเนาจากแท็บ 🧮 คำนวณกระจก (6 พ.ย. 2026 · เจ้าของยืนยันแบบ) ════════
+//  กรอกที่หน้าคำนวณที่เดียว → ใบผลิตเก็บสำเนา (_pkpGl.calc) · หมายเหตุต่อชุดกรอกในใบได้ · อนุมัติแล้วดึงใหม่ไม่ได้ (server ล็อกซ้ำ)
+//  ต้นทุนวัสดุ (_pkpGl.cost) เก็บเป็น costSnapshot แบบใบมุ้ง → ฝ่ายผลิตถูกตัดออกฝั่ง server
+// อ่านเร็ว (กฎ fast-read): worker /gc-list /gc-get ก่อน → GAS pk_gcList / pk_gcGet
+async function getGcListFast(){
+  if(CURRENT_USER){ try{ const d=await _pkFastPost_('/gc-list'); if(d&&d.ok){ _markJobSource('sheets', d.ms); return d; } console.warn('[getGcListFast] ไม่ ok → fallback GAS:', d&&d.error); }catch(e){ console.warn('[getGcListFast] error → fallback GAS:', e.message); } }
+  const g=await call({ action:'pk_gcList' }); _markJobSource('gas'); return g;
+}
+async function getGcGetFast(id){
+  if(CURRENT_USER){ try{ const d=await _pkFastPost_('/gc-get',{ id:id }); if(d&&(d.ok||/ไม่พบ/.test(d.error||''))){ _markJobSource('sheets', d.ms); return d; } console.warn('[getGcGetFast] ไม่ ok → fallback GAS:', d&&d.error); }catch(e){ console.warn('[getGcGetFast] error → fallback GAS:', e.message); } }
+  const g=await call({ action:'pk_gcGet', id:id }); _markJobSource('gas'); return g;
+}
+var _glwList=null, _glwListAt=0;
+async function glwLoadList_(force){
+  if(!force && _glwList && Date.now()-_glwListAt<120000) return _glwList;
+  try{ const r=await getGcListFast(); if(r&&r.ok){ _glwList=r.items||[]; _glwListAt=Date.now(); } }catch(e){}
+  return _glwList||[];
+}
+function glwLocked_(){ return !!pkpSigApprove; }   // อนุมัติแล้ว (ลายเซ็นผู้อนุมัติอยู่บนจอ) → ดึงใหม่ไม่ได้
+function glwRender_(){
+  const b=document.getElementById('pkpGlCalc'); if(!b) return;
+  const G=_pkpGl, c=G.calc, list=_glwList||[], it=c?list.find(function(x){ return x.id===c.gcId; }):null;
+  const fmtT=function(t){ return t?new Date(t).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}):''; };
+  let opts='<option value="">— เลือกงานคำนวณ —</option>'+list.map(function(x){ return '<option value="'+escAttr(x.id)+'"'+(c&&c.gcId===x.id?' selected':'')+'>'+escHtml((x.name||'(ไม่มีชื่อ)')+' · '+(x.jobCount||0)+' ชุด')+'</option>'; }).join('');
+  if(c && !it) opts+='<option value="'+escAttr(c.gcId)+'" selected>'+escHtml((c.gcName||c.gcId)+' (ไม่อยู่ในรายการ/ถูกลบ)')+'</option>';
+  const lock=glwLocked_();
+  let h='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px;"><b style="font-size:13px;">🧮 งานคำนวณ</b>'
+    +'<select class="fi" id="pkpGlCalcSel" style="flex:1;min-width:180px;max-width:100%;" '+(lock?'disabled':'')+'>'+opts+'</select>'
+    +'<button class="btn btn-p btn-sm" '+(lock||G.busy?'disabled':'')+' onclick="glwPull()">'+(c?'🔄 ดึงใหม่':'⬇ ดึงมาใบนี้')+'</button>'
+    +'<button class="btn btn-g btn-sm" onclick="glwOpenCalc()">↗ เปิดหน้าคำนวณ</button></div>';
+  if(lock) h+='<div style="font-size:12px;color:var(--mu,#6b7a94);margin-bottom:6px;">🔒 ใบอนุมัติแล้ว — ดึงใหม่ไม่ได้ (ล้างลายเซ็นผู้อนุมัติก่อนถ้าต้องแก้)</div>';
+  if(c){
+    const stale=it && Number(it.rev)>Number(c.gcRev||0);
+    h+='<div style="font-size:12px;color:var(--mu,#6b7a94);margin-bottom:6px;">ดึงล่าสุด '+fmtT(c.pulledAt)+' · '+escHtml(c.gcName||'')+(stale?' <b style="color:var(--amb,#B45309);">⚠ หน้าคำนวณแก้หลังดึง — กด 🔄 ดึงใหม่ก่อนอนุมัติ</b>':'')+'</div>';
+    const sets=(c.snap&&c.snap.sets)||[];
+    h+='<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:620px;"><thead><tr style="text-align:left;color:var(--mu,#6b7a94);">'
+      +'<th style="padding:4px;">No</th><th style="padding:4px;">ตำแหน่ง</th><th style="padding:4px;">ชนิด</th><th style="padding:4px;">กว้าง×สูง</th><th style="padding:4px;">สีอลู</th><th style="padding:4px;">กระจก</th><th style="padding:4px;">แผ่น</th><th style="padding:4px;min-width:140px;">หมายเหตุ (ถึงฝ่ายผลิต)</th></tr></thead><tbody>';
+    sets.forEach(function(x){
+      const k=glwKey_(x), td='<td style="padding:4px;border-top:1px solid var(--line,#2a3344);vertical-align:top;">';
+      if(x.warn){ h+='<tr>'+td+escHtml(x.seq)+'</td>'+td+escHtml(x.pos)+'</td><td colspan="6" style="padding:4px;border-top:1px solid var(--line,#2a3344);color:var(--amb,#B45309);">⚠ '+escHtml(x.warn)+' — ไม่ได้คำนวณ (แก้ที่หน้าคำนวณ)</td></tr>'; return; }
+      h+='<tr>'+td+escHtml(x.seq)+'</td>'+td+escHtml(x.pos)+'</td>'+td+escHtml(x.desc)+'</td>'+td+x.W+'×'+x.H+'</td>'+td+(escHtml(x.color)||'-')+'</td>'+td+escHtml(x.thickLabel)+(x.glassColor?' '+escHtml(x.glassColor):'')+'</td>'+td+(Number(x.panes)||0)+'</td>'
+        +td+'<input class="fi" style="padding:4px 6px;font-size:12.5px;" data-glwk="'+escAttr(k)+'" value="'+escAttr((c.notes||{})[k]||'')+'" oninput="glwNote(this)"></td></tr>';
+    });
+    h+='</tbody></table></div>';
+    if(G.cost) h+='<div style="margin-top:6px;font-size:12.5px;background:rgba(52,199,89,.08);border:1px solid rgba(52,199,89,.3);border-radius:6px;padding:6px 10px;">💰 ต้นทุนวัสดุ ณ ตอนดึง: อลู ฿'+fmt(G.cost.alu||0)+' · กระจก ฿'+fmt(G.cost.glass||0)+' · <b>รวม ฿'+fmt(G.cost.total||0)+'</b> <span style="color:var(--mu,#6b7a94);">(ฝ่ายผลิตไม่เห็น)</span></div>';
+  } else {
+    h+='<div style="font-size:12px;color:var(--mu,#6b7a94);">ยังไม่ได้ดึงงานคำนวณ — ใบนี้ใช้ไฟล์แนบอย่างเดียวได้เหมือนเดิม</div>';
+  }
+  b.innerHTML=h;
+}
+function glwNote(inp){
+  const c=_pkpGl.calc; if(!c) return;
+  c.notes=c.notes||{}; const k=inp.getAttribute('data-glwk'), v=String(inp.value||'').slice(0,300);
+  if(v.trim()) c.notes[k]=v; else delete c.notes[k];
+  pkpAutosave();
+}
+async function glwPull(){
+  if(glwLocked_()){ toast('🔒 ใบอนุมัติแล้ว — ล้างลายเซ็นผู้อนุมัติก่อน'); return; }
+  const sel=document.getElementById('pkpGlCalcSel'), id=sel?sel.value:'';
+  if(!id){ toast('เลือกงานคำนวณก่อน'); return; }
+  showLoad('กำลังดึงงานคำนวณ...');
+  try{
+    const r=await getGcGetFast(id);
+    if(!r||!r.ok){ toast('❌ '+((r&&r.error)||'ดึงไม่ได้')); return; }
+    const sn=r.data&&r.data.snapshot;
+    if(!sn||sn.v!==1||!Array.isArray(sn.sets)){ toast('งานนี้ยังไม่มีผลคำนวณ — เปิดงานนี้ในหน้าคำนวณ 1 ครั้ง ระบบจะบันทึกผลให้เอง แล้วกดดึงอีกครั้ง'); return; }
+    const old=_pkpGl.calc, notes={}, keys=sn.sets.map(glwKey_);
+    if(old&&old.notes) Object.keys(old.notes).forEach(function(k){ if(keys.indexOf(k)!==-1) notes[k]=old.notes[k]; });   // คงหมายเหตุของชุดเดิม
+    const snap=JSON.parse(JSON.stringify(sn)); const cost=snap.cost||null; delete snap.cost;
+    _pkpGl.calc={ gcId:r.item.id, gcRev:r.item.rev, gcName:r.item.name||'', pulledAt:Date.now(), snap:snap, notes:notes };
+    _pkpGl.cost=cost?{ alu:cost.alu||0, glass:cost.glass||0, total:cost.total||0, at:Date.now() }:null;
+    const cu=document.getElementById('pkpCust'); if(cu && !String(cu.value||'').trim() && r.item.name) cu.value=r.item.name;
+    const ok=sn.sets.filter(function(x){ return !x.warn; }).length, bad=sn.sets.length-ok;
+    await glwLoadList_(true); glwRender_(); pkpAutosave();
+    toast('✅ ดึงแล้ว '+ok+' ชุด'+(bad?' · ⚠ '+bad+' ชุดข้อมูลไม่ครบ (ไม่ได้คำนวณ)':'')+' — กดบันทึกใบผลิตเพื่อเก็บ');
+  }catch(e){ toast('❌ เชื่อมต่อไม่ได้'); }
+  finally{ hideLoad(); }
+}
+function glwOpenCalc(){
+  const sel=document.getElementById('pkpGlCalcSel'), id=(sel&&sel.value)||(_pkpGl.calc&&_pkpGl.calc.gcId)||'';
+  try{ if(id) localStorage.setItem('pk_gc_last', id); }catch(e){}
+  setTab('glasscalc', document.querySelector('#officeSidebar .sidebar-item[data-tab="glasscalc"]'));
+  if(document.getElementById('gcalcFrame')) gcalcTabReload_();
+}
+// ── ฝ่ายผลิต/ผู้จัดการ: เปิดใบเต็ม (ใบพิมพ์ทุกหน้า) จากบอร์ดงานกระจก · ข้อมูลจาก /prod-get (prod: ใบอนุมัติแล้ว · ราคาถูกตัดที่ server) ──
+function glwCutOf_(gm){ try{ const m=typeof gm==='string'?JSON.parse(gm||'{}'):(gm||{}); return Array.isArray(m.cut)?m.cut.map(String):[]; }catch(e){ return []; } }
+function glsCanOpen_(){ return !!CURRENT_USER && (CURRENT_USER.role==='manager' || CURRENT_USER.role==='prod'); }
+async function glsOrder_(woId){
+  const r=await getProdGetFast(woId);
+  if(!r||!r.ok||!r.order) throw new Error((r&&r.error)||'เปิดใบไม่ได้');
+  const wo=r.order, ix=r.index||{}, gm=pkpGlMeta_(ix.glassMeta);
+  const cut=glwCutOf_(ix.glassMeta);
+  return { woId:wo.woId, status:wo.status||'', customer:(wo.customer&&wo.customer.name)||'-', issueDate:wo.issueDate||'', installDate:wo.installDate||'', refNo:wo.refNo||'', note:wo.note||'',
+    sigCheck:wo.sigCheck||null, sigApprove:wo.sigApprove||null, items:[], glassStatus:ix.glassStatus||'', glassCalc:wo.glassCalc||null,
+    glass:{ shop:gm.shop||wo.glassShop||'', pieces:gm.pieces||wo.glassPieces||'', files:gm.files, pending:[], cut:cut } };
+}
+async function glsOpenSheet(woId){
+  const win=window.open('','_blank');
+  if(!win){ toast('เปิดหน้าต่างไม่ได้ (ตรวจป๊อปอัปบล็อก)'); return; }
+  win.document.write('<!doctype html><meta charset="utf-8"><p style="font-family:sans-serif">กำลังเปิดใบผลิต…</p>');
+  try{ const o=await glsOrder_(woId); pkpReqOpenDoc_(pkpProdDocWrap_(pkpGlassSheetsHTML_(o), pkpWoFileName_(o.woId,o.customer)), win); }
+  catch(e){ try{ win.close(); }catch(_){} toast('⚠ '+(e&&e.message||e)); }
+}
+// ── ✂ ติ๊กชุดที่ตัดแล้ว (ฝ่ายผลิต/ผู้จัดการ) — เก็บใน glassMeta.cut ผ่าน pk_glassCutMark ──
+async function glsCutOpen(woId){
+  const old=document.getElementById('glsCut'); if(old) old.remove();
+  showLoad('กำลังโหลดชุด...');
+  let o; try{ o=await glsOrder_(woId); }catch(e){ hideLoad(); toast('⚠ '+(e&&e.message||e)); return; }
+  hideLoad();
+  const sets=((o.glassCalc&&o.glassCalc.snap&&o.glassCalc.snap.sets)||[]).filter(function(x){ return !x.warn; }), notes=(o.glassCalc&&o.glassCalc.notes)||{};
+  const d=document.createElement('div'); d.id='glsCut';
+  d.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+  d.onclick=function(e){ if(e.target===d) d.remove(); };
+  let h='<div class="modal" style="max-width:560px;width:100%;max-height:86vh;overflow:auto;padding:14px;"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><b style="flex:1;">✂ ตัดแล้ว · '+escHtml(o.woId)+' · '+escHtml(o.customer)+'</b><button class="btn btn-g btn-sm" onclick="document.getElementById(\'glsCut\').remove()">ปิด</button></div>';
+  if(!sets.length) h+='<div style="color:var(--mu);font-size:13px;">ใบนี้ยังไม่มีรายการจากงานคำนวณ</div>';
+  sets.forEach(function(x){
+    const k=glwKey_(x), on=o.glass.cut.indexOf(k)!==-1;
+    h+='<label style="display:flex;gap:10px;align-items:flex-start;padding:9px 4px;border-top:1px solid var(--bdr,#2a3344);cursor:pointer;font-size:14px;"><input type="checkbox" style="width:20px;height:20px;flex:none;margin-top:2px;" data-woid="'+escAttr(o.woId)+'" data-key="'+escAttr(k)+'" '+(on?'checked':'')+' onchange="glsCutToggle(this)">'
+      +'<span style="min-width:0;"><b>'+escHtml(x.seq)+' · '+escHtml(x.pos||'-')+'</b> — '+x.W+'×'+x.H+'<br><span style="font-size:12.5px;color:var(--mu);">'+escHtml(x.desc)+' · '+escHtml(x.thickLabel)+(x.glassColor?' '+escHtml(x.glassColor):'')+' · '+(Number(x.panes)||0)+' แผ่น</span>'+(notes[k]?'<br><span style="font-size:12.5px;">📝 '+escHtml(notes[k])+'</span>':'')+'</span></label>';
   });
-  return sheets;
+  h+='<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-g btn-sm" onclick="glsOpenSheet(\''+escAttr(o.woId)+'\')">📄 เปิดใบเต็ม</button></div></div>';
+  d.innerHTML=h; document.body.appendChild(d);
+}
+async function glsCutToggle(cb){
+  const woId=cb.getAttribute('data-woid'), key=cb.getAttribute('data-key'), done=cb.checked;
+  cb.disabled=true;
+  try{
+    const r=await call({ action:'pk_glassCutMark', woId:woId, key:key, done:done });
+    if(!r||!r.ok){ cb.checked=!done; toast('❌ '+((r&&r.error)||'บันทึกไม่ได้')); return; }
+    glsEach_(woId, function(j){ j.glass=j.glass||{ files:[] }; j.glass.cut=r.cut; });
+    glsRerender_();
+  }catch(e){ cb.checked=!done; toast('❌ เชื่อมต่อไม่ได้'); }
+  finally{ cb.disabled=false; }
 }
 // ── ใบผลิต: ห่อ .sheet ทั้งหมดเป็นเอกสาร HTML พร้อมพิมพ์/บันทึก PDF (ใช้ร่วม) ──
 function pkpProdDocWrap_(sheets, fn){
@@ -19765,8 +19976,8 @@ async function pkpPrint(){
   };
   if(isGl){
     o.glass={ shop:(document.getElementById('pkpGlShop')||{}).value||'', pieces:(document.getElementById('pkpGlPieces')||{}).value||'',
-      files:_pkpGl.files||[], pending:(_pkpGl.pending||[]).map(function(p){return p.name;}) };
-    o.glassStatus=_pkpGl.st||'';
+      files:_pkpGl.files||[], pending:(_pkpGl.pending||[]).map(function(p){return p.name;}), cut:_pkpGl.cut||[] };
+    o.glassStatus=_pkpGl.st||''; o.glassCalc=_pkpGl.calc||null;   // [GLWO]
   }
   if(!isGl&&!o.items.length){ preWin.close(); toast('⚠️ ยังไม่มีรายการให้พิมพ์'); return; }
   var fn=('ใบผลิต '+((o.customer&&o.customer!=='-')?o.customer:'')).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim();
@@ -19792,8 +20003,8 @@ async function pkpPrintMulti(){
       var ix=pkpWoIdxCache[ids[i]]||{};
       if((wo.kind||ix.kind)==='glass'){   // [GLPRINT] ใบกระจก: ไฟล์แนบ/สถานะผลิตอยู่ในแถวชีต
         var gm=pkpGlMeta_(ix.glassMeta);
-        o.items=[]; o.glass={ shop:gm.shop||wo.glassShop||'', pieces:gm.pieces||wo.glassPieces||'', files:gm.files, pending:[] };
-        o.glassStatus=ix.glassStatus||'';
+        o.items=[]; o.glass={ shop:gm.shop||wo.glassShop||'', pieces:gm.pieces||wo.glassPieces||'', files:gm.files, pending:[], cut:glwCutOf_(ix.glassMeta) };
+        o.glassStatus=ix.glassStatus||''; o.glassCalc=wo.glassCalc||null;   // [GLWO]
         sheets+=pkpGlassSheetsHTML_(o); continue;
       }
       if(!o.items.length) continue;
