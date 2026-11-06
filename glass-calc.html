@@ -122,6 +122,24 @@ body.gc-embed header,body.gc-embed .ruler{display:none}
 .gc-st{font-size:12.5px;color:var(--muted);white-space:nowrap}
 .gc-st.ok{color:#2f7d4f}.gc-st.err{color:var(--danger);white-space:normal}.gc-st.busy{color:var(--accent-dk)}
 .gc-del{color:var(--danger)!important}
+.gc-filt{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.gc-filt input[type=search]{flex:1 1 220px;min-width:0}
+.gc-chk{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--muted)}
+.gc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.gc-card{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:#fff;display:flex;flex-direction:column;gap:6px;min-width:0}
+.gc-card.cur{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.gc-card.del{opacity:.6;background:#fafafa}
+.gc-card .gc-h{display:flex;gap:8px;align-items:baseline;justify-content:space-between}
+.gc-card .gc-nm{font-weight:700;font-size:15px;color:var(--head);word-break:break-word;min-width:0}
+.gc-card .gc-when{font-size:11.5px;color:var(--muted);white-space:nowrap}
+.gc-card .gc-meta{display:flex;flex-wrap:wrap;gap:5px;font-size:12.5px;color:var(--muted)}
+.gc-chip{border:1px solid var(--line);border-radius:12px;padding:1px 8px;font-size:12px;color:var(--ink);background:#f7f9f9}
+.gc-cost{background:var(--accent-soft);border-radius:7px;padding:5px 10px;text-align:center}
+.gc-cost small{display:block;font-size:10.5px;color:var(--muted)}
+.gc-cost b{font-size:17px;color:var(--accent-dk);font-variant-numeric:tabular-nums}
+.gc-btns{display:flex;flex-wrap:wrap;gap:6px}
+.gc-btns button{flex:1 1 auto;padding:7px 10px;font-size:13px}
+.gc-empty{grid-column:1/-1;text-align:center;color:var(--muted);padding:24px 8px}
 #gcGate{max-width:520px;margin:40px auto;padding:20px;background:#fff;border:1px solid var(--line);border-radius:10px;text-align:center;font-size:15px}
 .panel,.card{max-width:100%;min-width:0}
 .panel>div{max-width:100%}
@@ -158,6 +176,7 @@ body.gc-embed header,body.gc-embed .ruler{display:none}
   <span id="gcStatus" class="gc-st" role="status"></span>
 </div></div>
 <nav class="tabs no-print" id="tabNav">
+  <button data-tab="tab-list">📂 รายการ<span class="cnt" id="cntList">0</span></button>
   <button data-tab="tab-jobs" class="active">📋 งาน<span class="cnt" id="cntJobs">0</span></button>
   <button data-tab="tab-opt">🪚 ตัดราง</button>
   <button data-tab="tab-glass">🪟 กระจก</button>
@@ -165,6 +184,19 @@ body.gc-embed header,body.gc-embed .ruler{display:none}
   <button data-tab="tab-cost">💰 ต้นทุน</button>
 </nav>
 <div class="wrap">
+
+<section class="tabsec" id="tab-list">
+  <div class="panel no-print">
+    <h3>งานคำนวณที่บันทึกไว้</h3>
+    <div class="gc-filt">
+      <input id="gcSearch" type="search" placeholder="🔍 ค้นหาชื่อหลัก" aria-label="ค้นหาชื่อหลัก">
+      <select id="gcMonth" aria-label="เดือน"><option value="all">ทุกเดือน</option></select>
+      <label class="gc-chk"><input type="checkbox" id="gcShowDel"> แสดงที่ลบแล้ว</label>
+      <button class="primary" id="gcNewBtn2" type="button">＋ คำนวณใหม่</button>
+    </div>
+    <div id="gcList" class="gc-grid"></div>
+  </div>
+</section>
 
 <section class="tabsec active" id="tab-jobs">
   <div class="panel no-print" id="jobs">
@@ -843,12 +875,14 @@ function jobCost(job){
   return {alu:+alu||0,aluBars,glass:+glass||0,glassSheets,unpriced,priceMissing:!(price>0)&&glassEntries.length>0};
 }
 function renderCost(alumCost,glassInfo,alumDetail){
+  gcLastCost_=0;   // [GCALC] จำยอดรวมไว้ใส่การ์ดรายการ
   const el=document.getElementById('costOut'); if(!el)return;
   const gdet=(glassInfo&&glassInfo.detail)||[];
   const glassCost=gdet.reduce((s,d)=>s+(+d.cost||0),0);
   const det=alumDetail||[];
   if(!alumCost&&!glassCost&&!det.length&&!gdet.length){el.innerHTML='<p class=muted>— (ยังไม่ตั้งราคา หรือไม่มีงาน)</p>';return;}
   const total=(+alumCost||0)+glassCost;
+  gcLastCost_=total;
   // แถวย่อยต่อสี + วินิจฉัย
   const colorRows=det.map(d=>{
     let note='';
@@ -1071,12 +1105,13 @@ async function gcFlush(leaving){
   try{
     if(needS){const r=await gcCall_({action:'pk_gcSettingsSave',rev:GC.sRev,data:JSON.parse(sj)},leaving);if(!r.ok)throw r;GC.sRev=r.rev;GC.lastSet=sj;}
     if(needP){
-      const r=await gcCall_({action:'pk_gcSave',id:GC.id||'',rev:GC.rev,data:JSON.parse(pj)},leaving);if(!r.ok)throw r;
+      const r=await gcCall_({action:'pk_gcSave',id:GC.id||'',rev:GC.rev,data:JSON.parse(pj),summary:gcSummary_()},leaving);if(!r.ok)throw r;
       GC.id=r.id;GC.rev=r.rev;GC.lastProj=pj;
       try{localStorage.setItem(GC_LAST_KEY,GC.id);}catch(e){}
       const it=GC.items.find(x=>x.id===r.id),nm=r.name!=null?r.name:String(state.site.name||'');
-      if(it){it.name=nm;it.rev=r.rev;it.updatedAt=r.updatedAt;it.jobCount=state.jobs.length;}
-      else GC.items.unshift({id:r.id,name:nm,rev:r.rev,updatedAt:r.updatedAt,jobCount:state.jobs.length});
+      const sm=gcSummary_(),who=(GC.user&&(GC.user.name||GC.user.username))||'';
+      if(it){Object.assign(it,{name:nm,rev:r.rev,updatedAt:r.updatedAt,jobCount:state.jobs.length,summary:sm,updatedBy:who});}
+      else GC.items.unshift({id:r.id,name:nm,rev:r.rev,updatedAt:r.updatedAt,createdAt:r.updatedAt,jobCount:state.jobs.length,summary:sm,updatedBy:who,deletedAt:0});
       gcDraftSave_();gcRenderSel_();
     }
     gcStatus_('saved');
@@ -1092,9 +1127,11 @@ function gcItemLabel_(it){
 function gcRenderSel_(){
   const sel=document.getElementById('gcSel');if(!sel)return;
   let h=GC.id?'':'<option value="" selected>(งานใหม่ — ยังไม่บันทึก)</option>';
-  h+=GC.items.map(it=>'<option value="'+gcEsc_(it.id)+'"'+(it.id===GC.id?' selected':'')+'>'+gcEsc_(gcItemLabel_(it))+'</option>').join('');
+  h+=GC.items.filter(it=>!it.deletedAt).map(it=>'<option value="'+gcEsc_(it.id)+'"'+(it.id===GC.id?' selected':'')+'>'+gcEsc_(gcItemLabel_(it))+'</option>').join('');
   sel.innerHTML=h||'<option value="">(ยังไม่มีงาน)</option>';
   const del=document.getElementById('gcDelBtn');if(del)del.style.display=GC.id?'':'none';
+  const c=document.getElementById('cntList');if(c)c.textContent=GC.items.filter(it=>!it.deletedAt).length;
+  gcListRender_();
 }
 // ใช้ข้อมูลงาน (site+jobs) + ราคา/ตั้งค่าปัจจุบัน ผ่าน load() ตัวเดิม → ค่าเก่าถูกย้ายให้ครบ
 function gcApply_(proj){
@@ -1159,12 +1196,14 @@ async function gcBoot(){
   document.getElementById('gcNewBtn').addEventListener('click',gcNew);
   document.getElementById('gcExp4Btn').addEventListener('click',e=>gcExport4(e.currentTarget));
   gcDelBind_();
+  gcListBind_();
   let last='';try{last=localStorage.getItem(GC_LAST_KEY)||'';}catch(e){}
   if(last&&GC.items.some(x=>x.id===last)&&await gcOpen(last))return;
   // งานใหม่ที่ยังไม่เคยขึ้นระบบ แต่มีร่างในเครื่อง → กู้ร่าง
   let d=null;try{d=JSON.parse(localStorage.getItem(GC_DRAFT_KEY)||'null');}catch(e){}
   gcApply_(d&&!d.id?{site:d.site,jobs:d.jobs}:null);
   GC.ready=true;gcRenderSel_();
+  if(GC.items.length&&!(d&&!d.id&&gcHasData_()))showTab('tab-list');
   if(gcHasData_())gcSchedule_();else gcStatus_('empty');
 }
 function gcDelBind_(){
@@ -1176,9 +1215,79 @@ function gcDelBind_(){
     clearTimeout(GC.timer);GC.timer=null;
     const id=GC.id,r=await gcCall_({action:'pk_gcDelete',id:id});
     if(!r.ok){gcStatus_('error',r.error);return;}
-    GC.items=GC.items.filter(x=>x.id!==id);GC.id='';
+    GC.items.forEach(x=>{if(x.id===id)x.deletedAt=Date.now();});GC.id='';
     await gcNew();
   });
+}
+// ---- 📂 รายการงานคำนวณ (แบบหน้าใบเสนอราคา · ไม่มีเลขที่รัน) ----
+var gcLastCost_=0;
+function gcTypeKey_(j){return j.type==='บานเลื่อน'?('บานเลื่อน '+(j.base||'')).trim():(j.type||'-');}
+function gcSummary_(){const t={};state.jobs.forEach(j=>{if(!(+j.W>0&&+j.H>0))return;const k=gcTypeKey_(j);t[k]=(t[k]||0)+1;});return {cost:Math.round((+gcLastCost_||0)*100)/100,types:t};}
+function gcMonthKey_(ts){if(!ts)return '';const d=new Date(+ts);return isNaN(d)?'':d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function gcListRender_(){
+  const w=document.getElementById('gcList');if(!w)return;
+  const q=((document.getElementById('gcSearch')||{}).value||'').trim().toLowerCase();
+  const showDel=!!(document.getElementById('gcShowDel')||{}).checked;
+  const ms=document.getElementById('gcMonth');
+  let list=GC.items.filter(it=>showDel||!it.deletedAt);
+  const keys=[...new Set(list.map(it=>gcMonthKey_(it.updatedAt)).filter(Boolean))].sort().reverse();
+  if(ms){const cur=ms.value||'all';ms.innerHTML='<option value="all">ทุกเดือน</option>'+keys.map(k=>{const p=k.split('-');return '<option value="'+k+'">'+new Date(+p[0],+p[1]-1,1).toLocaleDateString('th-TH',{month:'short',year:'numeric'})+'</option>';}).join('');ms.value=(cur==='all'||keys.indexOf(cur)!==-1)?cur:'all';}
+  // กำลังค้นหา = ค้นทุกเดือน (กันตัวกรองเดือนตัดผลค้นทิ้ง แบบหน้าใบเสนอราคา)
+  if(q)list=list.filter(it=>String(it.name||'').toLowerCase().indexOf(q)!==-1);
+  else if(ms&&ms.value!=='all')list=list.filter(it=>gcMonthKey_(it.updatedAt)===ms.value);
+  list=list.slice().sort((a,b)=>(!!a.deletedAt-!!b.deletedAt)||(b.updatedAt-a.updatedAt));
+  if(!list.length){w.innerHTML='<div class="gc-empty">'+(GC.items.length?'ไม่พบงานที่ตรงกับตัวกรอง':'ยังไม่มีงานคำนวณ<br><small>กด "＋ คำนวณใหม่" แล้วใส่ชื่อหลัก ระบบบันทึกให้เอง</small>')+'</div>';return;}
+  w.innerHTML=list.map(it=>{
+    const sm=it.summary||{cost:0,types:{}},del=!!it.deletedAt,cur=it.id===GC.id,id=gcEsc_(it.id);
+    const when=it.updatedAt?new Date(it.updatedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}):'';
+    const types=Object.keys(sm.types||{}).map(k=>'<span class="gc-chip">'+gcEsc_(k)+' '+sm.types[k]+'</span>').join('');
+    return '<div class="gc-card'+(cur?' cur':'')+(del?' del':'')+'" data-id="'+id+'">'
+      +'<div class="gc-h"><div class="gc-nm">'+gcEsc_(it.name||'(ไม่มีชื่อ)')+(cur?' <span class="gc-chip" style="color:var(--accent-dk)">กำลังเปิด</span>':'')+(del?' <span class="gc-chip">ลบแล้ว</span>':'')+'</div><div class="gc-when">'+gcEsc_(when)+'</div></div>'
+      +'<div class="gc-meta"><span>📋 <b>'+(it.jobCount||0)+'</b> ชุด</span>'+(it.updatedBy?'<span>· โดย '+gcEsc_(it.updatedBy)+'</span>':'')+(it.woId?'<span class="gc-chip">🔗 '+gcEsc_(it.woId)+'</span>':'')+'</div>'
+      +(types?'<div class="gc-meta">'+types+'</div>':'')
+      +'<div class="gc-cost"><small>ต้นทุนวัสดุ (ตอนบันทึกล่าสุด)</small><b>฿'+fmt(sm.cost||0)+'</b></div>'
+      +'<div class="gc-btns">'+(del
+        ?'<button class="ghost" data-act="restore">↩ กู้คืน</button>'
+        :'<button class="primary" data-act="open">📂 เปิด</button><button class="ghost" data-act="dup">📋 ทำซ้ำ</button><button class="ghost gc-del" data-act="del">🗑 ลบ</button>')+'</div></div>';
+  }).join('');
+}
+async function gcListReload_(){
+  const r=await gcFast_('/gc-list','pk_gcList',{includeDeleted:!!(document.getElementById('gcShowDel')||{}).checked});
+  if(r&&r.ok){GC.items=r.items||[];gcRenderSel_();}else gcStatus_('error',(r&&r.error)||'โหลดรายการไม่ได้');
+}
+function gcListBind_(){
+  const w=document.getElementById('gcList');
+  document.getElementById('gcSearch').addEventListener('input',gcListRender_);
+  document.getElementById('gcMonth').addEventListener('change',gcListRender_);
+  document.getElementById('gcShowDel').addEventListener('change',gcListReload_);
+  document.getElementById('gcNewBtn2').addEventListener('click',gcNew);
+  w.addEventListener('click',async e=>{
+    const b=e.target.closest('button[data-act]');if(!b)return;
+    const id=b.closest('.gc-card').getAttribute('data-id'),act=b.getAttribute('data-act');
+    if(act==='open'){if(await gcOpen(id))showTab('tab-jobs');return;}
+    if(act==='dup'){b.disabled=true;await gcDup(id);b.disabled=false;return;}
+    if(act==='restore'){b.disabled=true;const r=await gcCall_({action:'pk_gcRestore',id:id});if(!r.ok){gcStatus_('error',r.error);b.disabled=false;return;}GC.items.forEach(x=>{if(x.id===id)x.deletedAt=0;});gcRenderSel_();return;}
+    if(act==='del'){   // กด 2 จังหวะ (เครื่องมือเดิมเลี่ยง confirm() — เบราว์เซอร์บล็อกได้)
+      if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='⚠ กดอีกครั้ง';setTimeout(()=>{if(b.isConnected){b.classList.remove('armed');b.textContent='🗑 ลบ';}},3000);return;}
+      b.disabled=true;
+      if(id===GC.id){clearTimeout(GC.timer);GC.timer=null;}
+      const r=await gcCall_({action:'pk_gcDelete',id:id});
+      if(!r.ok){gcStatus_('error',r.error);b.disabled=false;return;}
+      GC.items.forEach(x=>{if(x.id===id)x.deletedAt=Date.now();});
+      if(id===GC.id){GC.id='';await gcNew();showTab('tab-list');}else gcRenderSel_();
+    }
+  });
+}
+// ทำซ้ำ = สร้างงานใหม่จากเนื้องานเดิม (ชื่อหลัก + " (สำเนา)") แล้วเปิดงานใหม่
+async function gcDup(id){
+  if(GC.busy||GC.timer)await gcFlush(false);
+  const g=await gcFast_('/gc-get','pk_gcGet',{id:id});
+  if(!g||!g.ok){gcStatus_('error',(g&&g.error)||'โหลดไม่ได้');return;}
+  const d=g.data||{};d.site=Object.assign({name:'',mainColor:'',glassColor:''},d.site||{});d.site.name=(String(d.site.name||'').trim()+' (สำเนา)').trim();
+  const r=await gcCall_({action:'pk_gcSave',id:'',rev:0,data:{site:d.site,jobs:d.jobs||[]},summary:(g.item&&g.item.summary)||null});
+  if(!r.ok){gcStatus_('error',r.error);return;}
+  GC.items.unshift(Object.assign({},g.item,{id:r.id,name:r.name,rev:r.rev,createdAt:r.updatedAt,updatedAt:r.updatedAt,deletedAt:0,woId:''}));
+  if(await gcOpen(r.id))showTab('tab-jobs');
 }
 // ---- หัวกระดาษ/ชื่อไฟล์: ชื่อหลัก นำหน้าชื่อเอกสาร ----
 function gcBaseName_(){return (String(state.site.name||'').replace(/[\\/:*?"<>|\[\]]+/g,' ').replace(/\s+/g,' ').trim())||'ไม่มีชื่อ';}
