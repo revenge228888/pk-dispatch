@@ -297,8 +297,21 @@ body.gc-embed header,body.gc-embed .ruler{display:none}
 </section>
 
 </div>
-<script src="glass-formulas.js?v=20261106a"></script>
+<script src="glass-formulas.js?v=20261106b"></script>
 <script>
+// ── [GLWO] แผนตัดกระจก: แยกกลุ่มสี×ความหนา (คนละหนาตัดจากแผ่นเดียวกันไม่ได้) → optimize ต่อกลุ่ม (ย้ายจาก renderGlassCut ตรงตัว) ──
+function gcGlassPlan_(allGlass,sheets,gkerf){
+  const groups={};
+  allGlass.forEach(g=>{const c=g.color||'(ไม่ระบุสี)',t=normThick(g.thick),k=c+'|'+t;(groups[k]=groups[k]||{color:c,thick:t,items:[]}).items.push(g);});
+  const keys=Object.keys(groups).sort((a,b)=>{const ga=groups[a],gb=groups[b];return ga.color.localeCompare(gb.color,'th')||(thickMm(ga.thick)-thickMm(gb.thick));});
+  return keys.map(key=>{
+    const grp=groups[key],agg={};
+    grp.items.forEach(g=>{const a=Math.min(g.w,g.h),b=Math.max(g.w,g.h),k=a+'x'+b;(agg[k]=agg[k]||{w:a,h:b,qty:0}).qty+=g.qty;});
+    const sizes=Object.values(agg);
+    const {used,oversized}=optimizeGlass(sizes,sheets,gkerf);
+    return {key,color:grp.color,thick:grp.thick,sizes,used,oversized};
+  });
+}
 function renderGlassCut(allGlass){
   const wrap=document.getElementById('glassCutOut'),sum=document.getElementById('glassCutSummary');
   wrap.innerHTML='';sum.innerHTML='';
@@ -306,18 +319,11 @@ function renderGlassCut(allGlass){
   const gkerf=+state.settings.glassKerf||0;
   if(!sheets.length){sum.innerHTML='<p class=warn>⚠ ยังไม่ได้กำหนดขนาดแผ่นกระจก (ดูในตั้งค่า)</p>';return {detail:[]};}
   if(!allGlass.length){sum.innerHTML='<p class=muted>—</p>';return {detail:[]};}
-  // แยกกลุ่มตามความหนา — คนละหนาตัดจากแผ่นเดียวกันไม่ได้
-  const groups={};
-  allGlass.forEach(g=>{const c=g.color||'(ไม่ระบุสี)',t=normThick(g.thick),k=c+'|'+t;(groups[k]=groups[k]||{color:c,thick:t,items:[]}).items.push(g);});
-  const keys=Object.keys(groups).sort((a,b)=>{const ga=groups[a],gb=groups[b];return ga.color.localeCompare(gb.color,'th')||(thickMm(ga.thick)-thickMm(gb.thick));});
+  const plan=gcGlassPlan_(allGlass,sheets,gkerf),keys=plan.map(p=>p.key);   // [GLWO] แผนตัดแยกฟังก์ชัน (ใบผลิตใช้ร่วม)
   const detail=[];
   let sumHtml=`<div class="note">ตัดแบบ guillotine · หมุนชิ้นได้ · เผื่อร่องตัด ${gkerf} ซม. · heuristic เศษน้อยสุด${keys.length>1?' · แยก optimize ตามสี+ความหนา':''}</div>`;
-  keys.forEach(gkey=>{
-    const grp=groups[gkey],t=grp.thick,color=grp.color;
-    const agg={};
-    grp.items.forEach(g=>{const a=Math.min(g.w,g.h),b=Math.max(g.w,g.h),k=a+'x'+b;(agg[k]=agg[k]||{w:a,h:b,qty:0}).qty+=g.qty;});
-    const sizes=Object.values(agg);
-    const {used,oversized}=optimizeGlass(sizes,sheets,gkerf);
+  plan.forEach(grp=>{
+    const t=grp.thick,color=grp.color,sizes=grp.sizes,used=grp.used,oversized=grp.oversized;
     const byClass={};used.forEach(u=>{const k=u.sheet.wi+'×'+u.sheet.hi;byClass[k]=(byClass[k]||0)+1;});
     const pieceArea=sizes.reduce((s,z)=>s+z.w*z.h*z.qty,0);
     const sheetArea=used.reduce((s,u)=>s+u.sheet.w*u.sheet.h,0);
@@ -592,129 +598,17 @@ function renderJobs(){
   tb.querySelectorAll('button[data-dup]').forEach(b=>b.addEventListener('click',e=>dupJob(e.target.getAttribute('data-dup'))));
 }
 
-function renderResults(){
-  const stock=+state.settings.stock||STOCK_DEFAULT, kerf=+state.settings.kerf||KERF_DEFAULT;
-  const perJob=document.getElementById('perJob'); perJob.innerHTML='';
-  const allByColorRail={};
-  const allGlass=[];
-  let anyValid=false;
-  state.jobs.forEach(j=>{
-    const W=+j.W,H=+j.H;
-    if(!W||!H)return;
-    if(!(W>0&&isFinite(W)&&H>0&&isFinite(H))){
-      const d=document.createElement('div');d.className='card';
-      d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ ขนาดกว้าง/สูงไม่ถูกต้อง (ต้องเป็นเลขบวก)</div>`;
-      perJob.appendChild(d);anyValid=true;return;
-    }
-    // clear-light validation
-    if(j.type==='บานกระทุ้ง'&&j.box==='ช่องแสงบน/ล่าง'&&!(+j.clearSize>0&&isFinite(+j.clearSize))){
-      const d=document.createElement('div');d.className='card';
-      d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ กรุณากรอก "ช่องแสง(ซม.)" สำหรับบานกระทุ้ง ช่องแสงบน/ล่าง</div>`;
-      perJob.appendChild(d);anyValid=true;return;
-    }
-    // โหมดกรอกส่วนล่าง: ตรวจ botH > 0 + ช่องแสงบนที่คำนวณได้ > 0
-    const jHasTop=(j.type==='บานเลื่อน'&&(j.clear==='บน'||j.clear==='ข้าง+บน'))||(j.type==='บานฟิกซ์'&&(j.box==='ช่องแสงบน'||j.box==='ช่องแสงบน+ซอย'));
-    if(jHasTop&&j.botMode==='ล่าง'){
-      if(!(+j.botH>0&&isFinite(+j.botH))){const d=document.createElement('div');d.className='card';d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ กรุณากรอกความสูงส่วนล่างให้เป็นเลขบวก</div>`;perJob.appendChild(d);anyValid=true;return;}
-      let topH;
-      if(j.clear==='บน')topH=clearTopDc(j);
-      else if(j.clear==='ข้าง+บน')topH=sideTopH1(j);
-      else if(j.box==='ช่องแสงบน')topH=fixTopDc(j);
-      else{const nh=Math.min(20,Math.max(1,parseInt(j.nh)||1));let s=0;for(let i=0;i<nh-1;i++)s+=(+((j.clearSizes||[])[i])||0);topH=r2(H-9-4.5*nh-(+j.botH)-s);}
-      if(!(topH>0)){const d=document.createElement('div');d.className='card';d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ ส่วนล่างสูงเกิน — ช่องแสงบนที่คำนวณได้ ≤ 0 (${topH})</div>`;perJob.appendChild(d);anyValid=true;return;}
-    }
-    if(isSideTop(j)){
-      const w1=+j.w1,w2=+j.w2,h1=sideTopH1(j),nn=parseInt(j.nSlit);
-      const okBase=(j.base==='บานตาย'||j.base==='สลับ'||j.base==='แบ่ง4');
-      if(!okBase){const d=document.createElement('div');d.className='card';d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ ช่องแสงข้าง+บน: ฐานบานเลื่อนกลางต้องเป็น บานตาย/สลับ/แบ่ง4</div>`;perJob.appendChild(d);anyValid=true;return;}
-      if(!(w1>0&&isFinite(w1)&&w2>0&&isFinite(w2)&&h1>0&&isFinite(h1))){const d=document.createElement('div');d.className='card';d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ กรอก w1/w2/h1 ให้เป็นเลขบวก</div>`;perJob.appendChild(d);anyValid=true;return;}
-      if(!(nn>=2&&nn<=60)){const d=document.createElement('div');d.className='card';d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ ซอยช่องแสงบน (n) ต้อง 2–60</div>`;perJob.appendChild(d);anyValid=true;return;}
-      if(W-w1-w2-18-0.2<=0){const d=document.createElement('div');d.className='card';d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ ช่องแสงข้างกว้างเกิน — บานเลื่อนกลางกว้างติดลบ</div>`;perJob.appendChild(d);anyValid=true;return;}
-      if(H-h1-9-0.2<=0){const d=document.createElement('div');d.className='card';d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ ช่องแสงบนสูงเกิน — บานเลื่อนกลางสูงติดลบ</div>`;perJob.appendChild(d);anyValid=true;return;}
-    }
-    if(isClear(j)&&!isSideTop(j)){
-      if(!clearSupported(j)){
-        const d=document.createElement('div');d.className='card';
-        d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ ช่องแสง รองรับ: บานตาย/สลับ (บน·ข้าง) และ แบ่ง4 (เฉพาะบน)</div>`;
-        perJob.appendChild(d);anyValid=true;return;
-      }
-      const _Dc=isClearTop(j)?clearTopDc(j):(+j.clearSize);
-      if(!(_Dc>0&&isFinite(_Dc))){
-        const d=document.createElement('div');d.className='card';
-        d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ กรุณากรอก "ช่องแสง(ซม.)" ให้เป็นเลขบวก</div>`;
-        perJob.appendChild(d);anyValid=true;return;
-      }
-      if(isClearTop(j)&&!(parseInt(j.nSlit)>=2)){
-        const d=document.createElement('div');d.className='card';
-        d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ กรุณากรอก "จำนวนซอย" (≥2)</div>`;
-        perJob.appendChild(d);anyValid=true;return;
-      }
-    }
-    if(j.type==='บานฟิกซ์'&&j.box==='ช่องแสงบน'){
-      const _Dc=fixTopDc(j);
-      if(!(_Dc>0&&isFinite(_Dc))){
-        const d=document.createElement('div');d.className='card';
-        d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ กรุณากรอก "ช่องแสง(ซม.)" ให้เป็นเลขบวก สำหรับบานฟิกซ์ ช่องแสงบน</div>`;
-        perJob.appendChild(d);anyValid=true;return;
-      }
-      if(H-_Dc-13.5<=0){
-        const d=document.createElement('div');d.className='card';
-        d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ ช่องแสงบน สูงเกินไป (ช่องแสง ≥ สูง−13.5) — กระจกบานหลักติดลบ</div>`;
-        perJob.appendChild(d);anyValid=true;return;
-      }
-    }
-    if(j.type==='บานฟิกซ์'&&j.box==='ช่องแสงบน+ซอย'){
-      const nh=Math.min(20,Math.max(1,parseInt(j.nh)||1));
-      const hs=[];
-      if(j.botMode==='ล่าง'){for(let i=0;i<nh-1;i++)hs.push(+((j.clearSizes||[])[i]));hs.push(r2(H-9-4.5*nh-(+j.botH)-hs.reduce((a,b)=>a+(+b||0),0)));}
-      else{for(let i=0;i<nh;i++)hs.push(+((j.clearSizes||[])[i]));}
-      if(hs.some(x=>!(x>0&&isFinite(x)))){
-        const d=document.createElement('div');d.className='card';
-        d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ กรุณากรอกความสูงช่องแสงทุกชั้นให้เป็นเลขบวก</div>`;
-        perJob.appendChild(d);anyValid=true;return;
-      }
-      if(H-9-4.5*nh-hs.reduce((a,b)=>a+b,0)+1.2<=0){
-        const d=document.createElement('div');d.className='card';
-        d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ ช่องแสงรวมสูงเกิน — บานหลักติดลบ</div>`;
-        perJob.appendChild(d);anyValid=true;return;
-      }
-    }
-    if(j.type==='บานฟิกซ์'&&(j.box==='แบ่งหลายช่อง'||j.box==='ช่องแสงบน+ซอย')){
-      const nn=parseInt(j.nSlit);
-      if(!(nn>=2)){
-        const d=document.createElement('div');d.className='card';
-        d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ กรุณากรอก "จำนวนช่อง" (≥2)</div>`;
-        perJob.appendChild(d);anyValid=true;return;
-      }
-      if(nn>60){
-        const d=document.createElement('div');d.className='card';
-        d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ จำนวนช่องมากเกินไป (สูงสุด 60)</div>`;
-        perJob.appendChild(d);anyValid=true;return;
-      }
-      if(W-9-4.5*(nn-1)+1.5<=0){
-        const d=document.createElement('div');d.className='card';
-        d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>⚠ จำนวนช่องมากเกินความกว้าง — กระจกกว้างติดลบ</div>`;
-        perJob.appendChild(d);anyValid=true;return;
-      }
-    }
-    anyValid=true;
+// ── [GLWO] คำนวณต่อชุด (ย้ายจาก renderResults ตรงตัว) — หน้าจอและสำเนาในใบผลิตใช้ฟังก์ชันเดียวกัน ──
+function gcJobCalc_(j){
     const ps=piecesFor(j);
     const label=jobLabel(j);
     const color=effectiveColor(j)||'(ไม่ระบุสี)';
-    const railPool=(allByColorRail[color]=allByColorRail[color]||{});
     const g={};
-    ps.forEach(p=>{(g[p.rail]=g[p.rail]||[]).push(p.len);
-      (railPool[p.rail]=railPool[p.rail]||[]).push({len:p.len,label});});
-    const div=document.createElement('div');div.className='card';
-    let rows=Object.keys(g).map(rail=>{
-      const arr=g[rail];
-      const counts={};arr.forEach(l=>counts[l]=(counts[l]||0)+1);
-      const detail=Object.keys(counts).map(l=>`${l}×${counts[l]}`).join(', ');
-      return `<tr><td>${rail}</td><td class=r>${arr.length}</td><td>${detail}</td></tr>`;
-    }).join('');
+    ps.forEach(p=>{(g[p.rail]=g[p.rail]||[]).push(p.len);});
     const gl=glassFor(j);
     const lukMode = j.mat==='ลูกฟูกตั้ง'?'ตั้ง':(j.mat==='ลูกฟูกนอน'?'นอน':null);
     let glassEntries=gl, lukRows=[];
+    const lukPieces=[];
     if(lukMode){
       glassEntries=[];
       gl.forEach(x=>{
@@ -728,10 +622,119 @@ function renderResults(){
           const len = r2(lukMode==='ตั้ง'?x.h:x.w);
           const count = perPane*want;
           lukRows.push({dir:lukMode,perPane,paneQty:want,len,count});
-          for(let i=0;i<count;i++)(railPool['ลูกฟูก']=railPool['ลูกฟูก']||[]).push({len,label});
+          for(let i=0;i<count;i++)lukPieces.push({len});
         }
       });
     }
+    const desc = j.type==='บานกระทุ้ง'?('บานกระทุ้ง · '+j.box+(j.box==='ช่องแสงบน/ล่าง'?' · ช่องแสง '+(+j.clearSize):''))
+      : j.type==='บานฟิกซ์'?('บานฟิกซ์ · '+(j.box||'ธรรมดา')+(j.box==='ช่องแสงบน'?' · ช่องแสง '+(+j.clearSize):j.box==='แบ่งหลายช่อง'?' · '+(parseInt(j.nSlit)||2)+' ช่อง':j.box==='ช่องแสงบน+ซอย'?' · '+(parseInt(j.nSlit)||2)+' ช่อง · ช่องแสง '+(Math.min(20,Math.max(1,parseInt(j.nh)||1)))+' ชั้น ('+((j.clearSizes||[]).slice(0,Math.min(20,Math.max(1,parseInt(j.nh)||1))).map(x=>+x||0).join('/'))+')':''))
+      : isSideTop(j)?(j.base+' + ช่องแสงข้าง+บน · ซ้าย '+(+j.w1||0)+' ขวา '+(+j.w2||0)+' บน '+(+j.h1||0)+' ซอย '+(parseInt(j.nSlit)||2))
+      : isClearTop(j)?(j.base+' + ช่องแสงบน · '+(j.clVariant||'ภายใน')+' · ซอย '+(parseInt(j.nSlit)||4)+' · ช่องแสง '+(+j.clearSize))
+      : isClear(j)?(j.base+' + ช่องแสง'+j.clear+' (ช่องแสง '+(+j.clearSize)+')')
+      : (j.base==='รางแขวน'||j.base==='รางแขวนแยกกลาง')?(j.base+(j.box==='เสริมกล่อง 2 ด้าน'?' · เสริมกล่อง 2 ด้าน':''))
+      : (j.base+' · '+j.box);
+    return {ps,label,color,g,lukMode,glassEntries,lukRows,lukPieces,desc};
+}
+// ── [GLWO] ตรวจความถูกต้องต่อชุด (ย้ายจาก renderResults) · คืนข้อความเตือน HTML หรือ '' ──
+function gcJobWarn_(j){
+    const W=+j.W,H=+j.H;
+    if(!(W>0&&isFinite(W)&&H>0&&isFinite(H))){
+      return `⚠ ขนาดกว้าง/สูงไม่ถูกต้อง (ต้องเป็นเลขบวก)`;
+    }
+    // clear-light validation
+    if(j.type==='บานกระทุ้ง'&&j.box==='ช่องแสงบน/ล่าง'&&!(+j.clearSize>0&&isFinite(+j.clearSize))){
+      return `⚠ กรุณากรอก "ช่องแสง(ซม.)" สำหรับบานกระทุ้ง ช่องแสงบน/ล่าง`;
+    }
+    // โหมดกรอกส่วนล่าง: ตรวจ botH > 0 + ช่องแสงบนที่คำนวณได้ > 0
+    const jHasTop=(j.type==='บานเลื่อน'&&(j.clear==='บน'||j.clear==='ข้าง+บน'))||(j.type==='บานฟิกซ์'&&(j.box==='ช่องแสงบน'||j.box==='ช่องแสงบน+ซอย'));
+    if(jHasTop&&j.botMode==='ล่าง'){
+      if(!(+j.botH>0&&isFinite(+j.botH))){return `⚠ กรุณากรอกความสูงส่วนล่างให้เป็นเลขบวก`;}
+      let topH;
+      if(j.clear==='บน')topH=clearTopDc(j);
+      else if(j.clear==='ข้าง+บน')topH=sideTopH1(j);
+      else if(j.box==='ช่องแสงบน')topH=fixTopDc(j);
+      else{const nh=Math.min(20,Math.max(1,parseInt(j.nh)||1));let s=0;for(let i=0;i<nh-1;i++)s+=(+((j.clearSizes||[])[i])||0);topH=r2(H-9-4.5*nh-(+j.botH)-s);}
+      if(!(topH>0)){return `⚠ ส่วนล่างสูงเกิน — ช่องแสงบนที่คำนวณได้ ≤ 0 (${topH})`;}
+    }
+    if(isSideTop(j)){
+      const w1=+j.w1,w2=+j.w2,h1=sideTopH1(j),nn=parseInt(j.nSlit);
+      const okBase=(j.base==='บานตาย'||j.base==='สลับ'||j.base==='แบ่ง4');
+      if(!okBase){return `⚠ ช่องแสงข้าง+บน: ฐานบานเลื่อนกลางต้องเป็น บานตาย/สลับ/แบ่ง4`;}
+      if(!(w1>0&&isFinite(w1)&&w2>0&&isFinite(w2)&&h1>0&&isFinite(h1))){return `⚠ กรอก w1/w2/h1 ให้เป็นเลขบวก`;}
+      if(!(nn>=2&&nn<=60)){return `⚠ ซอยช่องแสงบน (n) ต้อง 2–60`;}
+      if(W-w1-w2-18-0.2<=0){return `⚠ ช่องแสงข้างกว้างเกิน — บานเลื่อนกลางกว้างติดลบ`;}
+      if(H-h1-9-0.2<=0){return `⚠ ช่องแสงบนสูงเกิน — บานเลื่อนกลางสูงติดลบ`;}
+    }
+    if(isClear(j)&&!isSideTop(j)){
+      if(!clearSupported(j)){
+        return `⚠ ช่องแสง รองรับ: บานตาย/สลับ (บน·ข้าง) และ แบ่ง4 (เฉพาะบน)`;
+      }
+      const _Dc=isClearTop(j)?clearTopDc(j):(+j.clearSize);
+      if(!(_Dc>0&&isFinite(_Dc))){
+        return `⚠ กรุณากรอก "ช่องแสง(ซม.)" ให้เป็นเลขบวก`;
+      }
+      if(isClearTop(j)&&!(parseInt(j.nSlit)>=2)){
+        return `⚠ กรุณากรอก "จำนวนซอย" (≥2)`;
+      }
+    }
+    if(j.type==='บานฟิกซ์'&&j.box==='ช่องแสงบน'){
+      const _Dc=fixTopDc(j);
+      if(!(_Dc>0&&isFinite(_Dc))){
+        return `⚠ กรุณากรอก "ช่องแสง(ซม.)" ให้เป็นเลขบวก สำหรับบานฟิกซ์ ช่องแสงบน`;
+      }
+      if(H-_Dc-13.5<=0){
+        return `⚠ ช่องแสงบน สูงเกินไป (ช่องแสง ≥ สูง−13.5) — กระจกบานหลักติดลบ`;
+      }
+    }
+    if(j.type==='บานฟิกซ์'&&j.box==='ช่องแสงบน+ซอย'){
+      const nh=Math.min(20,Math.max(1,parseInt(j.nh)||1));
+      const hs=[];
+      if(j.botMode==='ล่าง'){for(let i=0;i<nh-1;i++)hs.push(+((j.clearSizes||[])[i]));hs.push(r2(H-9-4.5*nh-(+j.botH)-hs.reduce((a,b)=>a+(+b||0),0)));}
+      else{for(let i=0;i<nh;i++)hs.push(+((j.clearSizes||[])[i]));}
+      if(hs.some(x=>!(x>0&&isFinite(x)))){
+        return `⚠ กรุณากรอกความสูงช่องแสงทุกชั้นให้เป็นเลขบวก`;
+      }
+      if(H-9-4.5*nh-hs.reduce((a,b)=>a+b,0)+1.2<=0){
+        return `⚠ ช่องแสงรวมสูงเกิน — บานหลักติดลบ`;
+      }
+    }
+    if(j.type==='บานฟิกซ์'&&(j.box==='แบ่งหลายช่อง'||j.box==='ช่องแสงบน+ซอย')){
+      const nn=parseInt(j.nSlit);
+      if(!(nn>=2)){
+        return `⚠ กรุณากรอก "จำนวนช่อง" (≥2)`;
+      }
+      if(nn>60){
+        return `⚠ จำนวนช่องมากเกินไป (สูงสุด 60)`;
+      }
+      if(W-9-4.5*(nn-1)+1.5<=0){
+        return `⚠ จำนวนช่องมากเกินความกว้าง — กระจกกว้างติดลบ`;
+      }
+    }
+    return '';
+}
+function renderResults(){
+  const stock=+state.settings.stock||STOCK_DEFAULT, kerf=+state.settings.kerf||KERF_DEFAULT;
+  const perJob=document.getElementById('perJob'); perJob.innerHTML='';
+  const allByColorRail={};
+  const allGlass=[];
+  let anyValid=false;
+  state.jobs.forEach(j=>{
+    const W=+j.W,H=+j.H;
+    if(!W||!H)return;
+    const _warn=gcJobWarn_(j);   // [GLWO] ตรวจความถูกต้องแยกเป็นฟังก์ชัน (ใบผลิตใช้ร่วม)
+    if(_warn){const d=document.createElement('div');d.className='card';d.innerHTML=`<h4>${jobLabel(j)}</h4><div class=warn>${_warn}</div>`;perJob.appendChild(d);anyValid=true;return;}
+    anyValid=true;
+    const C=gcJobCalc_(j),ps=C.ps,label=C.label,color=C.color,g=C.g,lukMode=C.lukMode,glassEntries=C.glassEntries,lukRows=C.lukRows,desc=C.desc;
+    const railPool=(allByColorRail[color]=allByColorRail[color]||{});
+    ps.forEach(p=>(railPool[p.rail]=railPool[p.rail]||[]).push({len:p.len,label}));
+    C.lukPieces.forEach(p=>(railPool['ลูกฟูก']=railPool['ลูกฟูก']||[]).push({len:p.len,label}));
+    const div=document.createElement('div');div.className='card';
+    let rows=Object.keys(g).map(rail=>{
+      const arr=g[rail];
+      const counts={};arr.forEach(l=>counts[l]=(counts[l]||0)+1);
+      const detail=Object.keys(counts).map(l=>`${l}×${counts[l]}`).join(', ');
+      return `<tr><td>${rail}</td><td class=r>${arr.length}</td><td>${detail}</td></tr>`;
+    }).join('');
     glassEntries.forEach(x=>allGlass.push({set:label,part:x.label,w:x.w,h:x.h,qty:x.qty,thick:normThick(j.glassThick),color:effectiveGlassColor(j)||'(ไม่ระบุสี)'}));
     const glassTbl = glassEntries.length
       ? `<table class=inner style="margin-top:6px"><tr><th>กระจก</th><th>จำนวน</th><th>กว้าง×สูง (ซม.)</th></tr>`+glassEntries.map(g=>`<tr><td>${g.label||'แผ่นกระจก'}</td><td class=r>${g.qty}</td><td>${g.w} × ${g.h}</td></tr>`).join('')+`</table>`
@@ -741,13 +744,6 @@ function renderResults(){
       ? `<table class=inner style="margin-top:6px"><tr><th>ลูกฟูก (${lukRows[0].dir})</th><th>แผ่น/บาน</th><th>บาน</th><th>รวมแผ่น</th><th>ยาว/แผ่น (ซม.)</th></tr>`+lukRows.map(s=>`<tr><td>เรียงหน้า 10 ซม.</td><td class=r>${s.perPane}</td><td class=r>${s.paneQty}</td><td class=r>${s.count}</td><td class=r>${s.len}</td></tr>`).join('')+`</table>`
       : '';
     const glassHtml = glassTbl + lukTbl;
-    const desc = j.type==='บานกระทุ้ง'?('บานกระทุ้ง · '+j.box+(j.box==='ช่องแสงบน/ล่าง'?' · ช่องแสง '+(+j.clearSize):''))
-      : j.type==='บานฟิกซ์'?('บานฟิกซ์ · '+(j.box||'ธรรมดา')+(j.box==='ช่องแสงบน'?' · ช่องแสง '+(+j.clearSize):j.box==='แบ่งหลายช่อง'?' · '+(parseInt(j.nSlit)||2)+' ช่อง':j.box==='ช่องแสงบน+ซอย'?' · '+(parseInt(j.nSlit)||2)+' ช่อง · ช่องแสง '+(Math.min(20,Math.max(1,parseInt(j.nh)||1)))+' ชั้น ('+((j.clearSizes||[]).slice(0,Math.min(20,Math.max(1,parseInt(j.nh)||1))).map(x=>+x||0).join('/'))+')':''))
-      : isSideTop(j)?(j.base+' + ช่องแสงข้าง+บน · ซ้าย '+(+j.w1||0)+' ขวา '+(+j.w2||0)+' บน '+(+j.h1||0)+' ซอย '+(parseInt(j.nSlit)||2))
-      : isClearTop(j)?(j.base+' + ช่องแสงบน · '+(j.clVariant||'ภายใน')+' · ซอย '+(parseInt(j.nSlit)||4)+' · ช่องแสง '+(+j.clearSize))
-      : isClear(j)?(j.base+' + ช่องแสง'+j.clear+' (ช่องแสง '+(+j.clearSize)+')')
-      : (j.base==='รางแขวน'||j.base==='รางแขวนแยกกลาง')?(j.base+(j.box==='เสริมกล่อง 2 ด้าน'?' · เสริมกล่อง 2 ด้าน':''))
-      : (j.base+' · '+j.box);
     div.innerHTML=`<h4>${label} — ${desc}${lukMode?' · วัสดุบาน: ลูกฟูก'+lukMode:''} (${W}×${H})</h4>
       <table class=inner><tr><th>ราง</th><th>จำนวน</th><th>ความยาว (ซม.)</th></tr>${rows}</table>${glassHtml}`;
     perJob.appendChild(div);
@@ -875,14 +871,14 @@ function jobCost(job){
   return {alu:+alu||0,aluBars,glass:+glass||0,glassSheets,unpriced,priceMissing:!(price>0)&&glassEntries.length>0};
 }
 function renderCost(alumCost,glassInfo,alumDetail){
-  gcLastCost_=0;   // [GCALC] จำยอดรวมไว้ใส่การ์ดรายการ
+  gcLastCost_=0;gcLastAlu_=0;gcLastGlass_=0;   // [GCALC] จำยอดรวมไว้ใส่การ์ดรายการ + ใบผลิต
   const el=document.getElementById('costOut'); if(!el)return;
   const gdet=(glassInfo&&glassInfo.detail)||[];
   const glassCost=gdet.reduce((s,d)=>s+(+d.cost||0),0);
   const det=alumDetail||[];
   if(!alumCost&&!glassCost&&!det.length&&!gdet.length){el.innerHTML='<p class=muted>— (ยังไม่ตั้งราคา หรือไม่มีงาน)</p>';return;}
   const total=(+alumCost||0)+glassCost;
-  gcLastCost_=total;
+  gcLastCost_=total;gcLastAlu_=+alumCost||0;gcLastGlass_=glassCost;
   // แถวย่อยต่อสี + วินิจฉัย
   const colorRows=det.map(d=>{
     let note='';
@@ -1049,7 +1045,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 //  อ่านเร็ว: worker /gc-list /gc-get → สำรอง GAS pk_gcList / pk_gcGet · เขียน: GAS pk_gcSave / pk_gcSettingsSave / pk_gcDelete
 //  แยกเก็บ 2 ส่วน: งาน (site+jobs ต่องาน) กับ ราคา/ตั้งค่า (settings+pricing ใช้ร่วมทุกงาน)
 //  ร่างในเครื่อง (pk_gc_draft) กันข้อมูลหายตอนเน็ตหลุด · กันทับด้วย rev (บันทึกจากที่อื่นก่อน = หยุดบันทึก ให้โหลดใหม่)
-const GC_FORMULAS_VER='20261106a';   // ต้องตรงกับ ?v= ของ glass-formulas.js — แก้สูตรแล้ว bump ทั้งสองที่
+const GC_FORMULAS_VER='20261106b';   // ต้องตรงกับ ?v= ของ glass-formulas.js — แก้สูตรแล้ว bump ทั้งสองที่
 const API='https://pk-discord-relay.revenge2288.workers.dev/api';
 const GC_DRAFT_KEY='pk_gc_draft', GC_LAST_KEY='pk_gc_last';
 const GC={ user:null, ready:false, id:'', rev:0, sRev:0, lastProj:'', lastSet:'', timer:null, busy:false, again:false, conflict:false, items:[] };
@@ -1076,7 +1072,8 @@ async function gcFast_(path,action,extra){
   }catch(e){console.warn('[gcFast_] '+path+' error → GAS:',e&&e.message);}
   return gcCall_(Object.assign({action:action},extra||{}));
 }
-function gcProjJson_(){return JSON.stringify({site:state.site,jobs:state.jobs});}
+// เนื้องานที่บันทึก = site+jobs + สำเนาผลคำนวณ (ราคา/ตั้งค่าเปลี่ยน → สำเนาเปลี่ยน → บันทึกงานใหม่ให้ใบผลิตได้ตัวเลขล่าสุด)
+function gcProjJson_(){return JSON.stringify({site:state.site,jobs:state.jobs,snapshot:gcSnapshot_()});}
 function gcSetJson_(){return JSON.stringify({settings:state.settings,pricing:state.pricing});}
 // งานใหม่ที่ยังว่าง (ไม่มีชื่อหลัก/ไม่มีขนาด) ไม่สร้างแถวบนระบบ
 function gcHasData_(){return !!((state.site&&String(state.site.name||'').trim())||state.jobs.some(j=>+j.W||+j.H));}
@@ -1155,10 +1152,12 @@ async function gcOpen(id){
   // ร่างในเครื่องที่ยังไม่ได้ขึ้นระบบ (rev เดียวกัน แต่เนื้อไม่ตรง) → ใช้ร่าง แล้วบันทึกต่อ
   let restored=false;
   try{const d=JSON.parse(localStorage.getItem(GC_DRAFT_KEY)||'null');
-    if(d&&d.id===GC.id&&d.rev===GC.rev&&JSON.stringify({site:d.site,jobs:d.jobs})!==GC.lastProj){gcApply_({site:d.site,jobs:d.jobs});restored=true;}}catch(e){}
+    if(d&&d.id===GC.id&&d.rev===GC.rev&&JSON.stringify({site:d.site,jobs:d.jobs})!==JSON.stringify({site:state.site,jobs:state.jobs})){gcApply_({site:d.site,jobs:d.jobs});restored=true;}}catch(e){}
   try{localStorage.setItem(GC_LAST_KEY,GC.id);}catch(e){}
   GC.ready=true;gcRenderSel_();
-  if(restored)gcSchedule_();else{gcDraftSave_();gcStatus_('saved');}
+  // งานที่บันทึกก่อนมีสำเนา / ราคา-ตั้งค่า-สูตรเปลี่ยนหลังบันทึก → บันทึกสำเนาใหม่ให้เอง (ใบผลิตดึงได้ตัวเลขตรงจอ)
+  const stale=!restored&&JSON.stringify((r.data&&r.data.snapshot)||null)!==JSON.stringify(gcSnapshot_());
+  if(restored||stale){if(stale)GC.lastProj='';gcSchedule_();}else{gcDraftSave_();gcStatus_('saved');}
   return true;
 }
 async function gcNew(){
@@ -1219,8 +1218,42 @@ function gcDelBind_(){
     await gcNew();
   });
 }
+// ---- [GLWO] สำเนาผลคำนวณสำหรับใบผลิตกระจก (ไม่มีราคาต่อเส้น/ต่อแผ่น · ต้นทุนรวมแยกไว้ใน cost ให้ผู้จัดการ) ----
+//  ใช้ gcJobWarn_/gcJobCalc_/gcGlassPlan_/optimizeRail ตัวเดียวกับจอ → ใบผลิตได้ตัวเลขเดียวกับหน้าคำนวณเสมอ
+//  ไม่มีเวลาในสำเนา (กันบันทึกซ้ำโดยไม่จำเป็น) · บันทึกไปกับงานทุกครั้ง (data.snapshot) ใบผลิตดึงจาก /gc-get
+function gcSnapshot_(){
+  const stock=+state.settings.stock||STOCK_DEFAULT,kerf=+state.settings.kerf||KERF_DEFAULT,gkerf=+state.settings.glassKerf||0;
+  const sets=[],byColor={},allGlass=[];
+  state.jobs.forEach(j=>{
+    const W=+j.W,H=+j.H;if(!W||!H)return;
+    const base={seq:String(j.seq==null?'':j.seq),pos:String(j.name||''),label:jobLabel(j),W:W,H:H,type:gcTypeKey_(j)};
+    const warn=gcJobWarn_(j);
+    if(warn){sets.push(Object.assign(base,{warn:String(warn).replace(/<[^>]*>/g,'')}));return;}
+    const C=gcJobCalc_(j),pool=(byColor[C.color]=byColor[C.color]||{});
+    C.ps.forEach(p=>(pool[p.rail]=pool[p.rail]||[]).push({len:p.len,label:C.label}));
+    C.lukPieces.forEach(p=>(pool['ลูกฟูก']=pool['ลูกฟูก']||[]).push({len:p.len,label:C.label}));
+    const gColor=effectiveGlassColor(j)||'(ไม่ระบุสี)',thick=normThick(j.glassThick);
+    C.glassEntries.forEach(x=>allGlass.push({set:C.label,part:x.label,w:x.w,h:x.h,qty:x.qty,thick:thick,color:gColor}));
+    const rails=Object.keys(C.g).map(r=>{const c={};C.g[r].forEach(l=>c[l]=(c[l]||0)+1);return {rail:r,n:C.g[r].length,lens:Object.keys(c).map(l=>({len:+l,qty:c[l]}))};});
+    sets.push(Object.assign(base,{desc:C.desc+(C.lukMode?' · วัสดุบาน: ลูกฟูก'+C.lukMode:''),color:effectiveColor(j)||'',glassColor:gColor==='(ไม่ระบุสี)'?'':gColor,
+      thick:thick,thickLabel:thickInfo(thick).label,mat:j.mat||'กระจก',rails:rails,
+      glass:C.glassEntries.map(x=>({label:x.label||'แผ่นกระจก',w:x.w,h:x.h,qty:x.qty})),luk:C.lukRows,panes:C.glassEntries.reduce((a,x)=>a+(+x.qty||0),0)}));
+  });
+  const optimize=Object.keys(byColor).sort().map(color=>({color:color,rails:Object.keys(byColor[color]).sort().map(rail=>{
+    const pcs=byColor[color][rail],{bins,over}=optimizeRail(pcs,stock,kerf);
+    return {rail:rail,pieces:pcs.length,totalLen:r2(pcs.reduce((a,p)=>a+p.len,0)),
+      bars:bins.map(b=>{const m={};b.pieces.forEach(p=>{const k=p.len+'|'+p.label;(m[k]=m[k]||{len:p.len,label:p.label,n:0}).n++;});return {cuts:Object.values(m).sort((a,c)=>c.len-a.len),off:r2(stock-r2(b.used))};}),
+      over:over.map(p=>({len:p.len,label:p.label}))};})}));
+  const sheets=parseSheets(state.settings.glassSheets||GLASS_SHEETS_DEFAULT);
+  const glassCut=(sheets.length&&allGlass.length)?gcGlassPlan_(allGlass,sheets,gkerf).map(g=>({color:g.color,thick:g.thick,thickLabel:thickInfo(g.thick).label,
+    sheets:g.used.map(u=>({wi:u.sheet.wi,hi:u.sheet.hi,w:r2(u.sheet.w),h:r2(u.sheet.h),
+      placed:u.placed.map(p=>({x:r2(p.x),y:r2(p.y),w:r2(p.w),h:r2(p.h),pw:r2(p.piece.ref.w),ph:r2(p.piece.ref.h),rot:!!p.rot,label:String(p.label||'')}))})),
+    oversized:[...new Set((g.oversized||[]).map(o=>o.label))]})):[];
+  return {v:1,stock:stock,kerf:kerf,gkerf:gkerf,sets:sets,optimize:optimize,glassCut:glassCut,
+    cost:{alu:r2(+gcLastAlu_||0),glass:r2(+gcLastGlass_||0),total:r2(+gcLastCost_||0)}};
+}
 // ---- 📂 รายการงานคำนวณ (แบบหน้าใบเสนอราคา · ไม่มีเลขที่รัน) ----
-var gcLastCost_=0;
+var gcLastCost_=0,gcLastAlu_=0,gcLastGlass_=0;
 function gcTypeKey_(j){return j.type==='บานเลื่อน'?('บานเลื่อน '+(j.base||'')).trim():(j.type||'-');}
 function gcSummary_(){const t={};state.jobs.forEach(j=>{if(!(+j.W>0&&+j.H>0))return;const k=gcTypeKey_(j);t[k]=(t[k]||0)+1;});return {cost:Math.round((+gcLastCost_||0)*100)/100,types:t};}
 function gcMonthKey_(ts){if(!ts)return '';const d=new Date(+ts);return isNaN(d)?'':d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
