@@ -10040,7 +10040,8 @@ function dashCalRenderPanel(){
   if (_dashCmpMode) { p.innerHTML = dashRenderCompare_(); return; }
   const ds = _dashCalSel;
   const js = _dashCalJobs.filter(j => j.date === ds);
-  let html = dashDayNoteHtml_(ds);
+  let html = (isOfficeLevel() && js.some(j => String(j.team||'').trim())) ? '<div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><button class="btn btn-g btn-sm" onclick="ioOpen(\''+ds+'\')">🖨 ใบจ่ายงาน</button></div>' : '';   // [IORDER]
+  html += dashDayNoteHtml_(ds);
   const noTeam=js.filter(j=>!String(j.team||'').trim()).length;
   const noCf=js.filter(j=>j.sheetStatus!=='ยืนยันแล้ว').length;
   const cont=js.filter(j=>j.status==='continue').length;
@@ -10711,7 +10712,8 @@ async function dashJobProdLoad_(j){
 }
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){const m=document.getElementById('dashJobModal');if(m&&m.classList.contains('on'))dashJobClose();}});
 // ── Feature 1.2: ปุ่ม toggle โชว์/ซ่อนยอดให้ tech (office เท่านั้น) บนการ์ดงานติดตั้ง ──
-function dashMapBtn_(j){
+// ลิงก์แผนที่ของงาน (ใช้ร่วม: ปุ่มดูแผนที่ + ใบจ่ายงาน [IORDER]) — คืน {url,pin} · url ว่าง = ไม่มีข้อมูล
+function pkJobMapUrl_(j){
   var url = '', pin = false;
   // 1) server-provided link (e.g. /install-day jobs)
   if (j && j.mapLink) { url = j.mapLink; pin = (url.indexOf('/maps/search/?api=1&query=') === -1); }
@@ -10729,13 +10731,137 @@ function dashMapBtn_(j){
     if (m) { url = m[1].replace(/[?&]g_st=\S*/, '').trim(); pin = true; }
     else {
       var clean = addr.replace(/(https?:\/\/\S+)/g, '').replace(/\s+/g, ' ').trim();
-      if (!clean) return '';
+      if (!clean) return { url:'', pin:false };
       url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(clean);
     }
   }
+  return { url:url, pin:pin };
+}
+function dashMapBtn_(j){
+  var mu = pkJobMapUrl_(j), url = mu.url, pin = mu.pin;
+  if (!url) return '';
   var label = pin ? '🗺️ \u0e14\u0e39\u0e41\u0e1c\u0e19\u0e17\u0e35\u0e48 (\u0e1b\u0e31\u0e01\u0e2b\u0e21\u0e38\u0e14)' : '🗺️ \u0e14\u0e39\u0e41\u0e1c\u0e19\u0e17\u0e35\u0e48';
   return '<a href="' + url + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:9px;font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;border:1px solid var(--blu);background:transparent;color:var(--blu);cursor:pointer;text-decoration:none;">' + label + '</a>';
 }
+// ════════ [IORDER] 🖨 ใบจ่ายงานติดตั้ง (Dashboard · ออฟฟิศ/ผู้จัดการ · 7 พ.ย. 2026 · เจ้าของยืนยันแบบ) ════════
+//  A4 แนวตั้ง 1 ทีมต่อใบ (งานเยอะแบ่งหน้า) · ทีมช่างตัวใหญ่ด้านซ้าย · เรียงตามลำดับคิว · เฉพาะงานติดตั้ง (ไม่รวมงานวัด)
+//  ⛔ ยอดเงิน: งานที่ตั้ง "ซ่อนยอดจากช่าง" (showAmtTech=false) ขึ้น — และไม่นับในยอดรวม (ใบนี้ไปถึงมือช่าง · เจ้าของสั่ง)
+//  ช่างรับงาน = ชื่อจากหน้า "จัดทีม" ของวันนั้น (_allMembers) · ปุ่ม พิมพ์/PDF/แยกไฟล์ต่อทีม/LINE ใช้ตัวห่อเดียวกับใบผลิต (portrait)
+var IO_PER_PAGE=6;
+function ioThaiDate_(ds){
+  const x=String(ds).split('-'), d=new Date(Number(x[0]),Number(x[1])-1,Number(x[2]));
+  return ['วันอาทิตย์','วันจันทร์','วันอังคาร','วันพุธ','วันพฤหัสบดี','วันศุกร์','วันเสาร์'][d.getDay()]+'ที่ '+Number(x[2])+' '+PK_DASH_TH_M[Number(x[1])-1]+' '+(Number(x[0])+543);
+}
+function ioJobNote_(note){ return String(note||'').replace(/\[[^\]]*\]/g,' ').replace(/\s+/g,' ').trim(); }   // หมายเหตุอิสระ (ตัด tag ระบบ [tel:] [geo:] [wo:] ...)
+function ioAmountShown_(j){ return j.showAmtTech!==false && Number(j.amount)>0; }
+function ioTeams_(ds){
+  const js=(_dashCalJobs||[]).filter(function(j){ return j.date===ds; });
+  const grp=pkDashGroupTeam_(js);
+  return { teams:grp.order.filter(function(t){ return t!=='__none__'; }).map(function(t){ return { team:t, jobs:grp.g[t] }; }), noTeam:(grp.g.__none__||[]).length };
+}
+function ioOpen(ds){
+  if(!isOfficeLevel()) return;
+  const T=ioTeams_(ds);
+  if(!T.teams.length){ toast('วันนี้ยังไม่มีงานที่จัดทีมแล้ว'); return; }
+  const old=document.getElementById('ioModal'); if(old) old.remove();
+  const d=document.createElement('div'); d.id='ioModal';
+  d.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+  d.onclick=function(e){ if(e.target===d) d.remove(); };
+  const ck=function(id,label,on,hint){ return '<label style="display:flex;align-items:center;gap:7px;font-size:14px;cursor:pointer;"><input type="checkbox" id="'+id+'" '+(on?'checked':'')+' style="width:18px;height:18px;">'+label+(hint?'<span style="font-size:12px;color:var(--mu);">'+hint+'</span>':'')+'</label>'; };
+  d.innerHTML='<div class="modal" style="max-width:520px;width:100%;max-height:88vh;overflow:auto;padding:16px;">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><b style="flex:1;font-size:16px;">🖨 ใบจ่ายงานติดตั้ง</b><button class="btn btn-g btn-sm" onclick="document.getElementById(\'ioModal\').remove()">ปิด</button></div>'
+    +'<div style="font-size:14px;font-weight:700;margin-bottom:8px;">📅 '+escHtml(ioThaiDate_(ds))+'</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px 14px;margin-bottom:10px;">'+T.teams.map(function(t,i){ return ck('ioT'+i, '<span style="color:'+qmmTeamColor(t.team)+';">●</span> '+escHtml(t.team)+' ('+t.jobs.length+' งาน)', true); }).join('')+'</div>'
+    +(T.noTeam?'<div style="font-size:12.5px;color:var(--rd);margin-bottom:10px;">⚠ มี '+T.noTeam+' งานยังไม่จัดทีม — ไม่อยู่ในใบ</div>':'')
+    +'<div style="display:grid;gap:7px;margin-bottom:12px;">'
+      +ck('ioAmt','แสดงยอดเงิน',true,' (งานที่ซ่อนยอดจากช่างขึ้น —)')
+      +ck('ioTel','เบอร์โทรลูกค้า',true)+ck('ioNote','หมายเหตุงาน',true)+ck('ioDay','หมายเหตุวันนี้',true)+ck('ioQr','QR แผนที่',true)+'</div>'
+    +'<div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-p" onclick="ioPrint(\''+escAttr(ds)+'\')">🖨 เปิดใบพิมพ์</button></div></div>';
+  document.body.appendChild(d);
+}
+function ioLoadQr_(){
+  return new Promise(function(res){
+    if(typeof window.qrcode==='function') return res(true);
+    const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+    s.onload=function(){ res(typeof window.qrcode==='function'); }; s.onerror=function(){ res(false); }; document.head.appendChild(s);
+  });
+}
+function ioQr_(url){ try{ const q=window.qrcode(0,'M'); q.addData(url); q.make(); return q.createDataURL(3,0); }catch(e){ return ''; } }
+async function ioPrint(ds){
+  const T=ioTeams_(ds), g=function(id){ const e=document.getElementById(id); return !!(e&&e.checked); };
+  const opt={ amt:g('ioAmt'), tel:g('ioTel'), note:g('ioNote'), day:g('ioDay'), qr:g('ioQr') };
+  const teams=T.teams.filter(function(t,i){ return g('ioT'+i); });
+  if(!teams.length){ toast('เลือกอย่างน้อย 1 ทีม'); return; }
+  const win=window.open('','_blank');   // เปิดก่อนรอโหลด (กันป๊อปอัปบล็อก)
+  if(!win){ toast('เปิดหน้าต่างไม่ได้ (ตรวจป๊อปอัปบล็อก)'); return; }
+  win.document.write('<!doctype html><meta charset="utf-8"><p style="font-family:sans-serif">กำลังเตรียมใบจ่ายงาน…</p>');
+  if(opt.qr) opt.qr=await ioLoadQr_();
+  const m=document.getElementById('ioModal'); if(m) m.remove();
+  const x=ds.split('-'), dd=Number(x[2])+'-'+Number(x[1])+'-'+String(Number(x[0])+543).slice(-2);
+  pkpReqOpenDoc_(pkpProdDocWrap_(ioSheetsHTML_(ds, teams, opt), 'ใบจ่ายงาน '+dd, { portrait:true, css:IO_CSS }), win);
+}
+function ioSheetsHTML_(ds, teams, opt){
+  const esc=function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+  const money=function(n){ return (Number(n)||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})+' ฿'; };
+  const title=ioThaiDate_(ds), x=ds.split('-'), dd=Number(x[2])+'-'+Number(x[1])+'-'+String(Number(x[0])+543).slice(-2);
+  const dayNote=opt.day?String((typeof _dayNotes!=='undefined'&&_dayNotes[ds])||'').trim():'';
+  const printed=new Date().toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'});
+  let out='';
+  teams.forEach(function(t){
+    const col=qmmTeamColor(t.team), mem=((_allMembers||[]).find(function(m){ return m.team===t.team && m.date===ds; })||{}).members||[];
+    const shown=t.jobs.filter(ioAmountShown_), total=shown.reduce(function(a,j){ return a+(Number(j.amount)||0); },0);
+    const pages=[]; for(let i=0;i<t.jobs.length;i+=IO_PER_PAGE) pages.push(t.jobs.slice(i,i+IO_PER_PAGE));
+    pages.forEach(function(pg,pi){
+      const last=pi===pages.length-1;
+      let h='<div class="sheet io" data-wo="'+esc(t.team)+'" data-fn="'+esc('ใบจ่ายงาน '+t.team+' '+dd)+'">'
+        +'<div class="io-bar" style="background:'+col+'"></div>'
+        +'<div class="io-hd"><div class="io-team" style="border-color:'+col+'"><div class="io-tl">ทีมช่าง</div><div class="io-tn" style="color:'+col+'">'+esc(t.team)+'</div><div class="io-dt">'+esc(title)+'</div></div>'
+        +'<div class="io-sp"></div><div class="io-co"><div class="io-cn">มุ้งจีบ PK</div><div class="io-dn">ใบจ่ายงานติดตั้ง · INSTALL ORDER</div><div class="io-cnt">'+t.jobs.length+' งาน'+(pages.length>1?' · หน้า '+(pi+1)+'/'+pages.length:'')+'</div></div></div>'
+        +'<div class="io-th"><span>#&nbsp;&nbsp;&nbsp;ลูกค้า / รายการงาน</span><span>ยอดเงิน</span></div>';
+      pg.forEach(function(j,k){
+        const no=pi*IO_PER_PAGE+k+1, tel=opt.tel?telNorm(jobTel(j.note)||''):'', note=opt.note?ioJobNote_(j.note):'';
+        const mp=pkJobMapUrl_(j), addr=pkDashCleanAddr_(j.rawAddr||j.address||'');
+        const qr=(opt.qr&&mp.url)?ioQr_(mp.url):'';
+        const amt=(opt.amt&&ioAmountShown_(j))?'<div class="io-amt">'+money(j.amount)+'</div>':'<div class="io-amt h">—</div>';
+        h+='<div class="io-job"><div class="io-no">'+no+'</div><div class="io-nm">'+esc(j.name||'-')+'</div>'+amt
+          +'<div class="io-body">'+(qr?'<img class="io-qr" src="'+qr+'" alt="QR แผนที่">':'')+'<div class="io-txt">'
+          +'<div class="io-ad">'+esc(addr||'-')+(tel?' · <b>📞 '+esc(telFmt(tel))+'</b>':'')+'</div>'
+          +(mp.url&&mp.pin?'<div class="io-map">'+esc(mp.url)+'</div>':'')   // ลิงก์ค้นจากที่อยู่ (ยาว ไม่ใช่หมุด) ไม่พิมพ์ — ใช้ QR แทน
+          +'<div class="io-task">▪ '+esc(j.job||'-')+'</div>'
+          +(note?'<div class="io-note">📝 '+esc(note)+'</div>':'')+'</div></div></div>';
+      });
+      if(last){
+        h+='<div class="io-tot"><span>ยอดรวม</span><b>'+(opt.amt?money(total):'—')+'</b></div>'
+          +(dayNote?'<div class="io-day">📌 หมายเหตุวันนี้: '+esc(dayNote)+'</div>':'')
+          +'<div class="io-sg"><div><div class="io-ln"></div>ผู้มอบงาน</div><div class="io-c">'+t.jobs.length+' งาน</div>'
+          +'<div><div class="io-ln">'+esc(mem[0]||'')+'</div>ช่างรับงาน (คน 1)</div><div><div class="io-ln">'+esc(mem[1]||'')+'</div>ช่างรับงาน (คน 2)</div></div>';
+      }
+      h+='<div class="io-ft"><span>PK Dispatch · ใบจ่ายงานติดตั้ง · '+esc(t.team)+'</span><span>พิมพ์ '+esc(printed)+'</span></div></div>';
+      out+=h;
+    });
+  });
+  return out;
+}
+var IO_CSS='.sheet.io{display:block;min-height:297mm;padding:0 14mm 16mm;position:relative}'
+  +'.io-bar{height:8px;margin:0 -14mm 9mm}'
+  +'.io-hd{display:flex;align-items:stretch;gap:12px;padding-bottom:10px;border-bottom:1.5px solid #d9dde3}'
+  +'.io-team{border-left:6px solid;padding:2px 0 2px 12px}.io-tl{font-size:11px;font-weight:700;color:#6b7684;letter-spacing:1px}'
+  +'.io-tn{font-size:30px;font-weight:800;line-height:1.15}.io-dt{font-size:15px;font-weight:800;margin-top:2px}'
+  +'.io-sp{flex:1}.io-co{text-align:right;align-self:center}.io-cn{font-size:16px;font-weight:800}.io-dn{font-size:11px;color:#6b7684;letter-spacing:.4px}.io-cnt{font-size:12px;font-weight:700;color:#4a5562;margin-top:4px}'
+  +'.io-th{display:flex;justify-content:space-between;font-size:11.5px;color:#6b7684;font-weight:700;padding:10px 4px 6px}'
+  +'.io-job{display:grid;grid-template-columns:20px 1fr auto;gap:2px 10px;padding:9px 4px 11px;border-bottom:1px solid #e9ecef;break-inside:avoid}'
+  +'.io-no{color:#9aa3ad;font-weight:700;font-size:13px;padding-top:2px}.io-nm{font-weight:800;font-size:15.5px}'
+  +'.io-amt{font-weight:800;font-size:15.5px;text-align:right;white-space:nowrap}.io-amt.h{color:#9aa3ad;font-weight:600}'
+  +'.io-body{grid-column:2/4;display:flex;gap:10px;align-items:flex-start}.io-qr{width:22mm;height:22mm;flex:none;image-rendering:pixelated}.io-txt{flex:1;min-width:0}'
+  +'.io-ad{font-size:12.5px;color:#3d4753;font-weight:600;line-height:1.45}.io-ad b{color:#1b2430}'
+  +'.io-map{font-size:10.5px;color:#6b7684;word-break:break-all;margin-top:1px}'
+  +'.io-task{margin-top:5px;border-left:3px solid #d4a23a;padding:1px 0 1px 9px;font-size:13px;font-weight:700}'
+  +'.io-note{font-size:12px;color:#7a4a07;background:#fff7ec;border-radius:5px;padding:3px 8px;margin-top:4px}'
+  +'.io-tot{display:flex;justify-content:flex-end;align-items:baseline;gap:40px;padding:10px 4px;border-top:3px double #d8dbe0;margin-top:-1px}.io-tot span{font-size:12.5px;color:#6b7684;font-weight:700}.io-tot b{font-size:20px}'
+  +'.io-day{margin-top:8px;font-size:12.5px;background:#f4f6f8;border-radius:7px;padding:7px 10px}'
+  +'.io-sg{display:grid;grid-template-columns:1fr auto 1fr 1fr;gap:16px;align-items:end;margin-top:22px;border-top:1px dashed #d9dde3;padding-top:14px}'
+  +'.io-sg>div{text-align:center;font-size:12px;color:#6b7684}.io-ln{border-bottom:1.5px solid #1b2430;height:26px;font-size:15px;font-weight:800;color:#1b2430;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px}.io-c{font-size:12.5px;color:#1b2430!important;padding-bottom:8px}'
+  +'.io-ft{position:absolute;left:14mm;right:14mm;bottom:7mm;display:flex;justify-content:space-between;font-size:9.5px;color:#9aa3ad}';
 function dashShowAmtBtn(j){
   if (!isOfficeLevel()) return '';   // office + manager
   const hidden = (j.showAmtTech === false);
@@ -19936,7 +20062,7 @@ async function glsCutToggle(cb){
   finally{ cb.disabled=false; }
 }
 // ── ใบผลิต: ห่อ .sheet ทั้งหมดเป็นเอกสาร HTML พร้อมพิมพ์/บันทึก PDF (ใช้ร่วม) ──
-function pkpProdDocWrap_(sheets, fn){
+function pkpProdDocWrap_(sheets, fn, opt){   // opt={portrait,css} = [IORDER] ใบจ่ายงาน A4 แนวตั้ง
   var esc=function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   var CSS=':root{--ink:#111a25;--mut:#4b5a6e;--line:#94a1b2;--line2:#d3dbe6;--acc:#d4760f;--slate:#1c2733;--soft:#eaf0f6}'
     +'*{box-sizing:border-box;margin:0;padding:0}body{background:#aab3c0;font-family:Sarabun,sans-serif;color:var(--ink);padding:20px;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
@@ -19982,6 +20108,11 @@ function pkpProdDocWrap_(sheets, fn){
     +'<div class="toolbar"><button onclick="window.print()">🖨 พิมพ์</button><button id="pdfBtn" onclick="savePDF()">📄 บันทึก PDF'+(nWo>1?' (รวม)':'')+'</button>'+(nWo>1?'<button id="pdfSepBtn" onclick="saveSep()">📑 บันทึกแยกไฟล์</button>':'')+'<button id="lineBtn" onclick="shareAll(this)">📤 ส่งเข้า LINE'+(nWo>1?' (แยกไฟล์)':'')+'</button></div>'
     +sheets
     +'<'+'script>var FN='+JSON.stringify(fn)+';'+AUTOFIT+SAVEPDF+(nWo>1?SAVESEP+SHEETONE:'')+SHARELINE+'<'+'/script></body></html>';
+  if(opt && opt.css) doc=doc.replace('</style>', opt.css+'</style>');
+  if(opt && opt.portrait){   // ทุกจุดที่ผูกแนวนอน: ขนาดกระดาษ CSS · @page · jsPDF orientation + ขนาดหน้า (บันทึก PDF/แยกไฟล์/ต่อใบ/LINE)
+    doc=doc.split('orientation:"landscape"').join('orientation:"portrait"').split('pw=297,ph=210').join('pw=210,ph=297')
+      .split('size:A4 landscape').join('size:A4 portrait').split('.sheet{width:297mm').join('.sheet{width:210mm').split('.toolbar{max-width:297mm').join('.toolbar{max-width:210mm');
+  }
   return doc;
 }
 // ── พิมพ์ใบผลิตใบเดียว (จากข้อมูลบนจอ) ──
