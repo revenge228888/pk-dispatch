@@ -382,6 +382,24 @@ function slideGlass(job){
   if(!panes)return [];
   return [{label:'บานเลื่อน',w:r2(crossLen(base,box,W)+1.5),h:r2(postLen(box,H)-8),qty:panes}];
 }
+// ── [SCREEN] พร้อมมุ้ง: บานเลื่อน บานตาย เสริมกล่อง 4 ด้าน (เจ้าของกำหนด 7 พ.ย. 2026) ──
+//  ขนาดมุ้ง: กว้าง = (กว้างบานเลื่อน − 7.6)/2 + 4 · สูง = สูง − 10.4 · 1 บานต่อชุด
+//  ชิ้นตัด = สูตร "มุ้งบานเลื่อน" ของ PK Dispatch (PKP_SCUT['มุ้งบานเลื่อน'] ใน app.html) — ⚠ แก้ที่โน่นต้องแก้ที่นี่ด้วย (เทสเทียบให้)
+//  ปัดทศนิยม 1 ตำแหน่งต่อชิ้นแบบ PK Dispatch (Math.round(x*10)/10)
+function screenAllowed(job){return job.type==='บานเลื่อน'&&job.base==='บานตาย'&&job.box==='เสริม4'&&(!job.clear||job.clear==='ไม่มี');}
+function hasScreen(job){return screenAllowed(job)&&job.screen==='พร้อมมุ้ง';}
+function screenSize(job){return {w:r2((+job.W-7.6)/2+4),h:r2(+job.H-10.4)};}
+const SCREEN_SLIDE=[
+  {rail:'เส้นมุ้งบานเลื่อน',fn:(w,h)=>w+0.6,qty:2},   // บน/ล่าง (กว้าง+0.6)
+  {rail:'เส้นมุ้งบานเลื่อน',fn:(w,h)=>h+0.6,qty:2},   // ข้าง (สูง+0.6)
+  {rail:'เส้นกลาง (มุ้ง)',fn:(w,h)=>w-5,qty:1}         // กลาง (กว้าง-5)
+];
+function screenPieces(job){
+  const s=screenSize(job),out=[];
+  if(!(s.w>0&&s.h>0))return out;
+  SCREEN_SLIDE.forEach(r=>{const len=Math.round(r.fn(s.w,s.h)*10)/10;if(len>0)for(let i=0;i<r.qty;i++)out.push({rail:r.rail,len});});
+  return out;
+}
 function gcSideTopFirst_(fn){return job=>isSideTop(job)?sideTopGlass(job):fn(job);}
 const _PW=300,_PH=220;
 const GC_FORMULAS=[
@@ -403,6 +421,9 @@ const GC_FORMULAS=[
     probes:['บานตาย','สลับ','แบ่ง4'].reduce((a,base)=>a.concat(['ภายใน','ภายนอก'].map(v=>({type:'บานเลื่อน',base,box:'ไม่เสริม',clear:'บน',clVariant:v,nSlit:3,clearSize:40,W:_PW,H:_PH}))),[]) },
   { key:'clearSide', label:'บานเลื่อน ช่องแสงข้าง', match:clearSupported, pieces:clearPiecesFor, glass:clearSideGlass,
     probes:['บานตาย','สลับ'].map(base=>({type:'บานเลื่อน',base,box:'ไม่เสริม',clear:'ข้าง',clearSize:40,W:_PW,H:_PH})) },
+  { key:'slideScreen', label:'บานเลื่อน บานตาย เสริมกล่อง 4 ด้าน + มุ้ง', match:hasScreen,
+    pieces:j=>slidingPieces(j.base,j.box,+j.W,+j.H).concat([{rail:'ฉากกันตก',len:antiFallLen(j)}]).concat(screenPieces(j)), glass:slideGlass,
+    probes:[{type:'บานเลื่อน',base:'บานตาย',box:'เสริม4',clear:'ไม่มี',screen:'พร้อมมุ้ง',W:_PW,H:_PH}] },
   { key:'slide', label:'บานเลื่อน', match:()=>true, pieces:j=>slidingPieces(j.base,j.box,+j.W,+j.H).concat([{rail:'ฉากกันตก',len:antiFallLen(j)}]), glass:slideGlass,
     probes:['บานตาย','สลับ','แบ่ง4'].reduce((a,base)=>a.concat(['ไม่เสริม','เสริม3','เสริม4'].map(box=>({type:'บานเลื่อน',base,box,clear:'ไม่มี',W:_PW,H:_PH}))),[]) }
 ];
