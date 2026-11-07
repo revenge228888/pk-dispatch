@@ -19838,7 +19838,7 @@ function glwOpenCalc(){
 }
 // ── ฝ่ายผลิต/ผู้จัดการ: เปิดใบเต็ม (ใบพิมพ์ทุกหน้า) จากบอร์ดงานกระจก · ข้อมูลจาก /prod-get (prod: ใบอนุมัติแล้ว · ราคาถูกตัดที่ server) ──
 function glwCutOf_(gm){ try{ const m=typeof gm==='string'?JSON.parse(gm||'{}'):(gm||{}); return Array.isArray(m.cut)?m.cut.map(String):[]; }catch(e){ return []; } }
-function glsCanOpen_(){ return !!CURRENT_USER && (CURRENT_USER.role==='manager' || CURRENT_USER.role==='prod'); }
+function glsCanOpen_(){ return !!CURRENT_USER && (CURRENT_USER.role==='manager' || CURRENT_USER.role==='prod' || CURRENT_USER.role==='office'); }   // office เปิดใบกระจกได้เหมือนฝ่ายผลิต (7 พ.ย. 2026)
 async function glsOrder_(woId){
   const r=await getProdGetFast(woId);
   if(!r||!r.ok||!r.order) throw new Error((r&&r.error)||'เปิดใบไม่ได้');
