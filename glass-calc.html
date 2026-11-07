@@ -529,7 +529,7 @@ function renderJobs(){
     }
     if(!isK&&!isHang&&!isFix)flds.push(fld('วัสดุบาน',`<select data-id="${j.id}" data-f="mat">
         ${['กระจก','ลูกฟูกตั้ง','ลูกฟูกนอน'].map(o=>`<option ${(j.mat||'กระจก')===o?'selected':''}>${o}</option>`).join('')}</select>`));
-    if(screenAllowed(j))flds.push(fld('มุ้ง',`<select data-id="${j.id}" data-f="screen">${['ไม่มี','พร้อมมุ้ง'].map(o=>`<option ${((j.screen||'ไม่มี')===o)?'selected':''}>${o}</option>`).join('')}</select>`));   // [SCREEN]
+    if(screenAllowed(j))flds.push(fld('มุ้ง',`<span style="display:flex;align-items:center;gap:7px;min-height:38px;font-weight:600;color:var(--ink);font-size:14px"><input type="checkbox" data-id="${j.id}" data-scr="1" ${j.screen==='พร้อมมุ้ง'?'checked':''} style="width:20px;height:20px;margin:0"> พร้อมมุ้ง</span>`));   // [SCREEN] ติ๊กเลือก
     if(!isK&&!isHang&&!isFix&&isLuk)flds.push(fld('บานลูกฟูก (บาน)',`<input class="seq" value="${j.lukPanes??''}" data-id="${j.id}" data-f="lukPanes" inputmode="numeric" placeholder="ทุกบาน" title="จำนวนบานที่เป็นลูกฟูก (เว้นว่าง = ทุกบาน) ที่เหลือเป็นกระจก" autocomplete="off">`));
     flds.push(fld('กระจกหนา',`<select data-id="${j.id}" data-f="glassThick">
         ${GLASS_THICKS.map(t=>`<option value="${t.v}" ${normThick(j.glassThick)===t.v?'selected':''}>${t.label}</option>`).join('')}</select>`));
@@ -571,7 +571,7 @@ function renderJobs(){
     if(f==='type'){if(j.type==='บานกระทุ้ง'){j.box='ติดกล่อง';}else if(j.type==='บานฟิกซ์'){j.box='ธรรมดา';j.clear='ไม่มี';j.base=null;}else{j.box='ไม่เสริม';if(!['บานตาย','สลับ','แบ่ง4','3 รางอิสระ','3 ราง ฟิกข้าง','3 ราง','รางแขวน','รางแขวนแยกกลาง'].includes(j.base))j.base='สลับ';}}
     save();render();
   }));
-  tb.querySelectorAll('select[data-f="box"],select[data-f="mat"],select[data-f="botMode"],select[data-f="screen"]').forEach(el=>el.addEventListener('change',e=>{
+  tb.querySelectorAll('select[data-f="box"],select[data-f="mat"],select[data-f="botMode"]').forEach(el=>el.addEventListener('change',e=>{
     const j=state.jobs.find(x=>x.id===e.target.getAttribute('data-id'));
     const f=e.target.getAttribute('data-f'); j[f]=e.target.value; save(); render();
   }));
@@ -595,6 +595,10 @@ function renderJobs(){
   }));
   // เปลี่ยน nh → rebuild ช่องความสูง (render ตอน blur เพื่อไม่ให้ focus หลุดระหว่างพิมพ์)
   tb.querySelectorAll('input[data-f="nh"]').forEach(el=>el.addEventListener('change',()=>render()));
+  tb.querySelectorAll('input[data-scr]').forEach(el=>el.addEventListener('change',e=>{   // [SCREEN] ติ๊กพร้อมมุ้ง
+    const j=state.jobs.find(x=>x.id===e.target.getAttribute('data-id')); if(!j)return;
+    j.screen=e.target.checked?'พร้อมมุ้ง':''; save(); render();
+  }));
   tb.querySelectorAll('.del').forEach(b=>b.addEventListener('click',e=>delJob(e.target.getAttribute('data-id'))));
   tb.querySelectorAll('button[data-dup]').forEach(b=>b.addEventListener('click',e=>dupJob(e.target.getAttribute('data-dup'))));
 }
@@ -1239,7 +1243,8 @@ function gcSnapshot_(){
     const rails=Object.keys(C.g).map(r=>{const c={};C.g[r].forEach(l=>c[l]=(c[l]||0)+1);return {rail:r,n:C.g[r].length,lens:Object.keys(c).map(l=>({len:+l,qty:c[l]}))};});
     sets.push(Object.assign(base,{desc:C.desc+(C.lukMode?' · วัสดุบาน: ลูกฟูก'+C.lukMode:''),color:effectiveColor(j)||'',glassColor:gColor==='(ไม่ระบุสี)'?'':gColor,
       thick:thick,thickLabel:thickInfo(thick).label,mat:j.mat||'กระจก',rails:rails,
-      glass:C.glassEntries.map(x=>({label:x.label||'แผ่นกระจก',w:x.w,h:x.h,qty:x.qty})),luk:C.lukRows,panes:C.glassEntries.reduce((a,x)=>a+(+x.qty||0),0)}));
+      glass:C.glassEntries.map(x=>({label:x.label||'แผ่นกระจก',w:x.w,h:x.h,qty:x.qty})),luk:C.lukRows,panes:C.glassEntries.reduce((a,x)=>a+(+x.qty||0),0)},
+      hasScreen(j)?{screen:screenSize(j)}:{}));   // [SCREEN] {w,h} ของมุ้ง 1 บาน
   });
   const optimize=Object.keys(byColor).sort().map(color=>({color:color,rails:Object.keys(byColor[color]).sort().map(rail=>{
     const pcs=byColor[color][rail],{bins,over}=optimizeRail(pcs,stock,kerf);
