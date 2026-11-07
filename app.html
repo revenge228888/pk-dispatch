@@ -2287,7 +2287,9 @@ function renderOfficeShell(){
             </div>
           </div>
           <div style="font-size:12px;color:var(--mu);margin-bottom:10px;">รายการดึงจากชีตราคาต้นทุน · ล้อ/ข้อต่อ แยกสี ขาว/ดำ · เพิ่มสีได้ที่เมนูแก้ไขทุน · หักเอง (เฟสถัดไปจะหักอัตโนมัติตามใบเบิก)</div>
+          <div style="display:flex;gap:8px;margin-bottom:12px;"><button id="esVList" class="btn btn-sm btn-p" onclick="ecView('list')">📦 รายการ</button><button id="esVCount" class="btn btn-sm btn-g" onclick="ecView('count')">🔢 นับอุปกรณ์</button></div>
           <input id="esSearchInput" class="fi" style="margin-bottom:12px;" oninput="esRender()" placeholder="🔍 ค้นหา ชื่อ / สี">
+          <div id="ecHost" style="display:none;"></div>
           <div id="esBody"><div class="loading-row">กำลังโหลด...</div></div>
         </div>
       </div>
@@ -12716,7 +12718,114 @@ async function equipCatalogFetch(){
   });
   _equipCatalog=cat;
 }
-async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; var ab=document.getElementById('esAuditBtn'); if(ab&&CURRENT_USER&&CURRENT_USER.role==='manager')ab.style.display='inline-flex'; var rb=document.getElementById('esRecBtn'); if(rb&&CURRENT_USER&&CURRENT_USER.role==='manager')rb.style.display='inline-flex'; var kb=document.getElementById('esChkBtn'); if(kb&&CURRENT_USER&&CURRENT_USER.role==='manager')kb.style.display='inline-flex'; var mb=document.getElementById('esMissBtn'); if(mb&&CURRENT_USER&&(CURRENT_USER.role==='office'||CURRENT_USER.role==='manager'))mb.style.display='inline-flex'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); }
+// ════════════════════════════════════════
+//  🔢 นับอุปกรณ์ [ECOUNT] (ออฟฟิศ/ผู้จัดการ · 8 พ.ย. 2026) — หน้าตาแบบนับราง (ใช้ CSS ชุด rc-*)
+//  ช่องว่าง = ยังไม่นับรอบนี้ คงยอดเดิม · บันทึก = ตั้งยอดคลังเป็นจำนวนที่นับ (เจ้าของเลือก) + จดประวัติ "นับอุปกรณ์"
+//  ตัวเลขใหญ่ = ยอดในคลังตอนนี้ (ถูกตัดตามใบผลิตต่อจากที่นับ) · ใต้ตัวเลข = นับจริงล่าสุดเมื่อไหร่ · ไม่เคยนับ = "ยังไม่นับ"
+// ════════════════════════════════════════
+let _ecDraft={}, _ecKeys=[];
+function ecKey_(n,c){ return n+'|'+(c||''); }
+function ecModel_(){
+  var cells={}, order=[];
+  (_equipCatalog||[]).forEach(function(x){ var k=ecKey_(x.name,x.color); if(cells[k]) return; cells[k]={name:x.name,color:x.color||'',base:x.base||equipBaseOf_(x.name)||x.name,qty:0,countedAt:0,countedBy:'',inStock:false}; order.push(k); });
+  (_equipStock||[]).forEach(function(s){
+    var k=ecKey_(s.name,s.color);
+    if(!cells[k]){ if(!(Number(s.qty)||Number(s.countedAt))) return; cells[k]={name:s.name,color:s.color||'',base:equipBaseOf_(s.name)||s.name,qty:0,countedAt:0,countedBy:'',inStock:false}; order.push(k); }
+    Object.assign(cells[k],{qty:Number(s.qty)||0,countedAt:Number(s.countedAt)||0,countedBy:s.countedBy||'',inStock:true});
+  });
+  var bases=[]; order.forEach(function(k){ var b=cells[k].base; if(bases.indexOf(b)<0) bases.push(b); });
+  bases.sort(function(a,b){ var x=PK_EQUIP_NAMES.indexOf(a), y=PK_EQUIP_NAMES.indexOf(b); x=x<0?999:x; y=y<0?999:y; return x!==y?x-y:a.localeCompare(b,'th'); });
+  return { cells:cells, order:order, bases:bases };
+}
+function ecChanges_(draft, cells){
+  var items=[], bad=[];
+  Object.keys(draft||{}).forEach(function(k){
+    var v=String(draft[k]==null?'':draft[k]).trim(); if(v==='') return;
+    var x=cells[k]; if(!x) return;
+    if(!/^\d+$/.test(v)){ bad.push(x.name+(x.color?' '+x.color:'')); return; }
+    items.push({name:x.name, color:x.color, qty:Number(v), before:x.inStock?x.qty:0, counted:x.countedAt>0});
+  });
+  return {items:items, bad:bad};
+}
+function ecView(v){
+  var cnt=v==='count', s=document.getElementById('esSearchInput'), b=document.getElementById('esBody'), c=document.getElementById('ecHost');
+  if(s) s.style.display=cnt?'none':''; if(b) b.style.display=cnt?'none':''; if(c) c.style.display=cnt?'':'none';
+  var a=document.getElementById('esVList'), d=document.getElementById('esVCount');
+  if(a) a.className='btn btn-sm '+(cnt?'btn-g':'btn-p'); if(d) d.className='btn btn-sm '+(cnt?'btn-p':'btn-g');
+  if(cnt) ecRender_();
+}
+function ecRender_(){
+  var host=document.getElementById('ecHost'); if(!host) return;
+  var m=ecModel_(); _ecKeys=[];
+  var h=rcCss_()+'<style>.ec-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:14px;}.ec-cell{background:var(--surf2);border:1px solid var(--bdr);border-radius:12px;padding:10px;text-align:center;min-width:0;}.ec-nm{font-size:14px;font-weight:800;line-height:1.3;min-height:36px;word-break:break-word;}.ec-cl{display:inline-block;font-size:12px;font-weight:800;border:2px solid #1f1a16;border-radius:7px;padding:1px 8px;margin-top:3px;}</style>'
+    +'<div style="font-size:14px;color:var(--mu);margin-bottom:10px;">ตัวเลขใหญ่ = ยอดในคลังตอนนี้ · ใต้ตัวเลข = นับจริงล่าสุด · นับใหม่ให้กรอกในช่อง · เว้นว่าง = ยอดเดิมไม่เปลี่ยน · บันทึกแล้วยอดคลังเป็นยอดที่นับ</div>';
+  if(!m.order.length){ host.innerHTML=h+'<div class="loading-row">ยังไม่มีรายการอุปกรณ์ — เพิ่มในชีตราคาต้นทุน</div>'; return; }
+  var nAll=m.order.length, nDone=m.order.filter(function(k){ return m.cells[k].countedAt>0; }).length;
+  h+='<div class="rc-sum">เคยนับแล้ว <b>'+nDone+'</b>/'+nAll+' รายการ'+(nAll>nDone?' · <span class="rc-warn">ยังไม่เคยนับ '+(nAll-nDone)+' รายการ</span>':' · ครบแล้ว')+'</div>';
+  m.bases.forEach(function(b){
+    var ks=m.order.filter(function(k){ return m.cells[k].base===b; }); if(!ks.length) return;
+    h+='<div class="rc-head">'+escHtml(b)+'</div><div class="ec-grid">';
+    ks.forEach(function(k){
+      var x=m.cells[k], i=_ecKeys.length, v=_ecDraft[k]==null?'':String(_ecDraft[k]); _ecKeys.push(k);
+      var when=x.countedAt?rcWhen_(x.countedAt):'';
+      h+='<div class="ec-cell"><div class="ec-nm">'+escHtml(x.name)+(x.color?'<br><span class="ec-cl">'+escHtml(x.color)+'</span>':'')+'</div>'
+        +'<div class="rc-b'+(x.qty>0?'':' zero')+'">'+(Number(x.qty)||0)+'</div>'
+        +'<div class="rc-w" title="'+escAttr(x.countedBy?'นับโดย '+x.countedBy:'')+'">'+(when?'นับล่าสุด '+when:'<span class="rc-warn">ยังไม่เคยนับ</span>')+'</div>'
+        +'<input class="rc-i'+(v!==''?' on':'')+'" id="ecI'+i+'" type="text" inputmode="numeric" autocomplete="off" aria-label="'+escAttr(x.name+(x.color?' '+x.color:''))+'" placeholder="นับใหม่" value="'+escAttr(v)+'" oninput="ecInput('+i+',this.value)" onkeydown="ecKeyNext(event,'+i+')">'
+        +'<div class="rc-m" id="ecM'+i+'">'+ecMeta_(x,v)+'</div></div>';
+    });
+    h+='</div>';
+  });
+  h+='<div class="rc-bar" id="ecBar"></div>';
+  host.innerHTML=h; ecBar_();
+}
+function ecMeta_(x,v){
+  var t=String(v==null?'':v).trim(); if(t==='') return '';
+  if(!/^\d+$/.test(t)) return '<span class="dn">ตัวเลขไม่ถูกต้อง</span>';
+  var d=Number(t)-(Number(x.qty)||0);
+  return d?'<span class="'+(d>0?'up':'dn')+'">'+(d>0?'+':'')+d+' จากในคลัง</span>':'<span class="up">ตรงกับในคลัง</span>';
+}
+function ecInput(i,v){
+  var k=_ecKeys[i]; if(!k) return;
+  if(String(v).trim()==='') delete _ecDraft[k]; else _ecDraft[k]=v;
+  var x=ecModel_().cells[k], el=document.getElementById('ecI'+i), me=document.getElementById('ecM'+i);
+  if(el) el.classList.toggle('on', String(v).trim()!=='');
+  if(me) me.innerHTML=ecMeta_(x||{qty:0},v);
+  ecBar_();
+}
+function ecKeyNext(ev,i){ if(ev.key==='Enter'){ ev.preventDefault(); var n=document.getElementById('ecI'+(i+1)); if(n){ n.focus(); n.select(); } else ev.target.blur(); } }
+function ecBar_(){
+  var bar=document.getElementById('ecBar'); if(!bar) return;
+  var m=ecModel_(), ch=ecChanges_(_ecDraft, m.cells), n=ch.items.length;
+  bar.innerHTML='<b>นับรอบนี้ '+n+'/'+m.order.length+' รายการ</b>'+(ch.bad.length?'<span>⚠ แก้ '+ch.bad.length+' ช่องที่ไม่ใช่ตัวเลข</span>':'')+'<span style="flex:1;"></span>'
+    +'<button class="rc-btn ghost" '+(Object.keys(_ecDraft).length?'':'disabled')+' onclick="ecClear()">ล้าง</button>'
+    +'<button class="rc-btn" '+(n&&!ch.bad.length?'':'disabled')+' onclick="ecSave()">💾 บันทึกยอดที่นับ</button>';
+}
+function ecClear(){ if(!confirm('ล้างตัวเลขที่กรอกไว้ทั้งหมด? (ยังไม่ได้บันทึก)')) return; _ecDraft={}; ecRender_(); }
+async function ecSave(){
+  var m=ecModel_(), ch=ecChanges_(_ecDraft, m.cells); if(!ch.items.length || ch.bad.length) return;
+  var full=ch.items.length===m.order.length;   // นับครบทุกรายการในครั้งเดียว → จำวันปรับเทียบ (กันเตือนหักของใบเก่าซ้ำ)
+  var moved=ch.items.filter(function(x){ return x.qty!==x.before; });
+  var msg='บันทึกยอดที่นับ '+ch.items.length+' รายการ? ยอดคลังจะเป็นตามที่นับ\n\nยอดจะเปลี่ยน '+moved.length+' รายการ:\n'
+    +moved.slice(0,15).map(function(x){ return '• '+x.name+(x.color?' '+x.color:'')+': '+x.before+' → '+x.qty; }).join('\n')+(moved.length>15?'\n... และอีก '+(moved.length-15)+' รายการ':'')
+    +(full?'\n\n✔ นับครบทุกรายการ — ใบผลิตที่ติดตั้งก่อนวันนี้จะไม่ถูกเตือนให้หักของซ้ำ':'');
+  if(!confirm(msg)) return;
+  var sent=ch.items.map(function(x){ return {name:x.name, color:x.color, qty:x.qty}; });
+  showLoad('กำลังบันทึกยอดที่นับ...');
+  try{
+    var r=await call({action:'pk_equipCountSave', items:sent, full:full});
+    if(!(r&&r.ok)){ toast((r&&r.error)||'บันทึกไม่สำเร็จ — ตัวเลขที่กรอกยังอยู่'); return; }
+    (r.items||[]).forEach(function(x){
+      var f=_equipStock.find(function(y){ return y.name===x.name&&y.color===x.color; });
+      if(f) Object.assign(f,{qty:x.qty,countedAt:x.countedAt,countedBy:x.countedBy}); else _equipStock.push({name:x.name,color:x.color,qty:x.qty,countedAt:x.countedAt,countedBy:x.countedBy});
+      delete _ecDraft[ecKey_(x.name,x.color)];
+    });
+    toast('✅ บันทึกยอดที่นับ '+sent.length+' รายการแล้ว');
+    ecRender_(); esRender();
+  }catch(e){ toast('บันทึกไม่สำเร็จ — ตัวเลขที่กรอกยังอยู่: '+(e&&e.message||e)); }
+  finally{ hideLoad(); }
+}
+async function esLoad(){ if(!document.getElementById('esBody'))return; document.getElementById('esBody').innerHTML='<div class="loading-row">กำลังโหลด...</div>'; var ab=document.getElementById('esAuditBtn'); if(ab&&CURRENT_USER&&CURRENT_USER.role==='manager')ab.style.display='inline-flex'; var rb=document.getElementById('esRecBtn'); if(rb&&CURRENT_USER&&CURRENT_USER.role==='manager')rb.style.display='inline-flex'; var kb=document.getElementById('esChkBtn'); if(kb&&CURRENT_USER&&CURRENT_USER.role==='manager')kb.style.display='inline-flex'; var mb=document.getElementById('esMissBtn'); if(mb&&CURRENT_USER&&(CURRENT_USER.role==='office'||CURRENT_USER.role==='manager'))mb.style.display='inline-flex'; await Promise.all([equipStockFetch(), equipCatalogFetch()]); esRender(); var _ech=document.getElementById('ecHost'); if(_ech&&_ech.style.display!=='none') ecRender_(); }
 
 // 🔔 ตัวเตือน: มีใบผลิตที่ติดตั้งไปแล้วแต่ยังไม่เคยหักอุปกรณ์กี่ใบ (ขึ้นเป็นตัวเลขแดงบนเมนูคลังอุปกรณ์)
 //   นับเฉพาะใบที่ติดตั้ง "หลังวันปรับเทียบสต็อกล่าสุด" — ใบเก่ากว่านั้นของถูกนับรวมตอนปรับยอดแล้ว หักอีกจะซ้ำ
