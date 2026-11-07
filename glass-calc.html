@@ -297,7 +297,7 @@ body.gc-embed header,body.gc-embed .ruler{display:none}
 </section>
 
 </div>
-<script src="glass-formulas.js?v=20261106b"></script>
+<script src="glass-formulas.js?v=20261107a"></script>
 <script>
 // ── [GLWO] แผนตัดกระจก: แยกกลุ่มสี×ความหนา (คนละหนาตัดจากแผ่นเดียวกันไม่ได้) → optimize ต่อกลุ่ม (ย้ายจาก renderGlassCut ตรงตัว) ──
 function gcGlassPlan_(allGlass,sheets,gkerf){
@@ -366,7 +366,7 @@ function renderGlassCut(allGlass){
 // save() = เรียกทุกครั้งที่แก้ (เหมือนเครื่องมือเดิม) → ร่างในเครื่อง + นัดบันทึกขึ้นระบบ (gcSchedule_ ดูส่วน [GCALC] ท้ายไฟล์)
 function save(){gcSchedule_();}
 // load(s) = ตัวเดิม (ย้ายค่าเก่า → ใหม่) แต่รับ JSON string ของ state ทั้งก้อน แทนการอ่าน localStorage
-function load(s){try{if(s){const p=JSON.parse(s);if(p&&Array.isArray(p.jobs)){state=p;if(!state.settings)state.settings={stock:STOCK_DEFAULT,kerf:KERF_DEFAULT};if(state.settings.plusTop==null)state.settings.plusTop=2;if(state.settings.glassKerf==null)state.settings.glassKerf=0;if(!state.settings.glassSheets)state.settings.glassSheets=GLASS_SHEETS_DEFAULT;if(!state.pricing)state.pricing=defaultPricing();if(!state.pricing.colors)state.pricing.colors=[];if(!state.pricing.railWeight)state.pricing.railWeight={};if(!state.pricing.barPrice)state.pricing.barPrice={};if(!state.pricing.glassColors)state.pricing.glassColors=GLASS_COLORS_DEFAULT.slice();GLASS_THICKS.forEach(t=>{if(state.pricing[t.key]==null)state.pricing[t.key]=0;});if(!state.site)state.site={name:'',mainColor:'',glassColor:''};if(state.site.name==null)state.site.name='';if(state.site.mainColor==null)state.site.mainColor='';if(state.site.glassColor==null)state.site.glassColor='';state.jobs.forEach(j=>{if(j.base==='3 ราง')j.base='3 รางอิสระ';if(is3Track(j.base)){if(j.box==='เสริมเรียบ')j.box='เสริมเรียบ 3 ด้าน';else if(j.box==='เสริมกล่อง 1"*4"')j.box='เสริมกล่อง 1"*4" 3 ด้าน';}if((j.base==='รางแขวน'||j.base==='รางแขวนแยกกลาง')&&!['ไม่เสริม','เสริมกล่อง 2 ด้าน'].includes(j.box))j.box='ไม่เสริม';if(j.base==='บานฟิกซ์'||j.type==='บานฟิกซ์'){j.type='บานฟิกซ์';j.base=null;if(!['ธรรมดา','ช่องแสงบน','แบ่งหลายช่อง','ช่องแสงบน+ซอย'].includes(j.box))j.box='ธรรมดา';j.clear='ไม่มี';if(j.box==='ช่องแสงบน+ซอย'){j.nh=Math.min(20,Math.max(1,parseInt(j.nh)||1));if(!Array.isArray(j.clearSizes))j.clearSizes=(j.clearSize!==''&&j.clearSize!=null)?[j.clearSize]:[];}}j.glassThick=normThick(j.glassThick);if(j.glassColor==null)j.glassColor='';if(j.botMode==null)j.botMode='บน';if(j.botH==null)j.botH='';});}}}catch(e){}}
+function load(s){try{if(s){const p=JSON.parse(s);if(p&&Array.isArray(p.jobs)){state=p;if(!state.settings)state.settings={stock:STOCK_DEFAULT,kerf:KERF_DEFAULT};if(state.settings.plusTop==null)state.settings.plusTop=2;if(state.settings.glassKerf==null)state.settings.glassKerf=0;if(!state.settings.glassSheets)state.settings.glassSheets=GLASS_SHEETS_DEFAULT;if(!state.pricing)state.pricing=defaultPricing();if(!state.pricing.colors)state.pricing.colors=[];if(!state.pricing.railWeight)state.pricing.railWeight={};if(!state.pricing.barPrice)state.pricing.barPrice={};if(!state.pricing.glassColors)state.pricing.glassColors=GLASS_COLORS_DEFAULT.slice();GLASS_THICKS.forEach(t=>{if(state.pricing[t.key]==null)state.pricing[t.key]=0;});if(!state.site)state.site={name:'',mainColor:'',glassColor:''};if(state.site.name==null)state.site.name='';if(state.site.mainColor==null)state.site.mainColor='';if(state.site.glassColor==null)state.site.glassColor='';state.jobs.forEach(j=>{if(j.base==='3 ราง')j.base='3 รางอิสระ';if(is3Track(j.base)){if(j.box==='เสริมเรียบ')j.box='เสริมเรียบ 3 ด้าน';else if(j.box==='เสริมกล่อง 1"*4"')j.box='เสริมกล่อง 1"*4" 3 ด้าน';}if((j.base==='รางแขวน'||j.base==='รางแขวนแยกกลาง')&&!['ไม่เสริม','เสริมกล่อง 2 ด้าน'].includes(j.box))j.box='ไม่เสริม';if(j.base==='บานฟิกซ์'||j.type==='บานฟิกซ์'){j.type='บานฟิกซ์';j.base=null;if(!['ธรรมดา','ช่องแสงบน','แบ่งหลายช่อง','ช่องแสงบน+ซอย'].includes(j.box))j.box='ธรรมดา';j.clear='ไม่มี';if(j.box==='ช่องแสงบน+ซอย'){j.nh=Math.min(20,Math.max(1,parseInt(j.nh)||1));if(!Array.isArray(j.clearSizes))j.clearSizes=(j.clearSize!==''&&j.clearSize!=null)?[j.clearSize]:[];}}j.glassThick=normThick(j.glassThick);if(j.glassColor==null)j.glassColor='';if(j.botMode==null)j.botMode='บน';if(j.botH==null)j.botH='';if(j.screen==null)j.screen='';});}}}catch(e){}}
 function uid(){return Math.random().toString(36).slice(2,8);}
 
 function newJob(){const mx=state.jobs.reduce((m,j)=>Math.max(m,+j.seq||0),0);state.jobs.push({id:uid(),seq:mx+1,name:'',type:'บานเลื่อน',base:'สลับ',box:'ไม่เสริม',clear:'ไม่มี',clearSize:'',clVariant:'ภายใน',nSlit:4,nh:1,clearSizes:[],w1:'',w2:'',h1:'',botMode:'บน',botH:'',mat:'กระจก',lukPanes:'',glassThick:'5',glassColor:'',color:'',W:'',H:''});save();render();}
@@ -529,6 +529,7 @@ function renderJobs(){
     }
     if(!isK&&!isHang&&!isFix)flds.push(fld('วัสดุบาน',`<select data-id="${j.id}" data-f="mat">
         ${['กระจก','ลูกฟูกตั้ง','ลูกฟูกนอน'].map(o=>`<option ${(j.mat||'กระจก')===o?'selected':''}>${o}</option>`).join('')}</select>`));
+    if(screenAllowed(j))flds.push(fld('มุ้ง',`<select data-id="${j.id}" data-f="screen">${['ไม่มี','พร้อมมุ้ง'].map(o=>`<option ${((j.screen||'ไม่มี')===o)?'selected':''}>${o}</option>`).join('')}</select>`));   // [SCREEN]
     if(!isK&&!isHang&&!isFix&&isLuk)flds.push(fld('บานลูกฟูก (บาน)',`<input class="seq" value="${j.lukPanes??''}" data-id="${j.id}" data-f="lukPanes" inputmode="numeric" placeholder="ทุกบาน" title="จำนวนบานที่เป็นลูกฟูก (เว้นว่าง = ทุกบาน) ที่เหลือเป็นกระจก" autocomplete="off">`));
     flds.push(fld('กระจกหนา',`<select data-id="${j.id}" data-f="glassThick">
         ${GLASS_THICKS.map(t=>`<option value="${t.v}" ${normThick(j.glassThick)===t.v?'selected':''}>${t.label}</option>`).join('')}</select>`));
@@ -570,7 +571,7 @@ function renderJobs(){
     if(f==='type'){if(j.type==='บานกระทุ้ง'){j.box='ติดกล่อง';}else if(j.type==='บานฟิกซ์'){j.box='ธรรมดา';j.clear='ไม่มี';j.base=null;}else{j.box='ไม่เสริม';if(!['บานตาย','สลับ','แบ่ง4','3 รางอิสระ','3 ราง ฟิกข้าง','3 ราง','รางแขวน','รางแขวนแยกกลาง'].includes(j.base))j.base='สลับ';}}
     save();render();
   }));
-  tb.querySelectorAll('select[data-f="box"],select[data-f="mat"],select[data-f="botMode"]').forEach(el=>el.addEventListener('change',e=>{
+  tb.querySelectorAll('select[data-f="box"],select[data-f="mat"],select[data-f="botMode"],select[data-f="screen"]').forEach(el=>el.addEventListener('change',e=>{
     const j=state.jobs.find(x=>x.id===e.target.getAttribute('data-id'));
     const f=e.target.getAttribute('data-f'); j[f]=e.target.value; save(); render();
   }));
@@ -626,13 +627,14 @@ function gcJobCalc_(j){
         }
       });
     }
-    const desc = j.type==='บานกระทุ้ง'?('บานกระทุ้ง · '+j.box+(j.box==='ช่องแสงบน/ล่าง'?' · ช่องแสง '+(+j.clearSize):''))
+    let desc = j.type==='บานกระทุ้ง'?('บานกระทุ้ง · '+j.box+(j.box==='ช่องแสงบน/ล่าง'?' · ช่องแสง '+(+j.clearSize):''))
       : j.type==='บานฟิกซ์'?('บานฟิกซ์ · '+(j.box||'ธรรมดา')+(j.box==='ช่องแสงบน'?' · ช่องแสง '+(+j.clearSize):j.box==='แบ่งหลายช่อง'?' · '+(parseInt(j.nSlit)||2)+' ช่อง':j.box==='ช่องแสงบน+ซอย'?' · '+(parseInt(j.nSlit)||2)+' ช่อง · ช่องแสง '+(Math.min(20,Math.max(1,parseInt(j.nh)||1)))+' ชั้น ('+((j.clearSizes||[]).slice(0,Math.min(20,Math.max(1,parseInt(j.nh)||1))).map(x=>+x||0).join('/'))+')':''))
       : isSideTop(j)?(j.base+' + ช่องแสงข้าง+บน · ซ้าย '+(+j.w1||0)+' ขวา '+(+j.w2||0)+' บน '+(+j.h1||0)+' ซอย '+(parseInt(j.nSlit)||2))
       : isClearTop(j)?(j.base+' + ช่องแสงบน · '+(j.clVariant||'ภายใน')+' · ซอย '+(parseInt(j.nSlit)||4)+' · ช่องแสง '+(+j.clearSize))
       : isClear(j)?(j.base+' + ช่องแสง'+j.clear+' (ช่องแสง '+(+j.clearSize)+')')
       : (j.base==='รางแขวน'||j.base==='รางแขวนแยกกลาง')?(j.base+(j.box==='เสริมกล่อง 2 ด้าน'?' · เสริมกล่อง 2 ด้าน':''))
       : (j.base+' · '+j.box);
+    if(hasScreen(j)){const s=screenSize(j);desc+=' · พร้อมมุ้ง '+s.w+'×'+s.h;}   // [SCREEN]
     return {ps,label,color,g,lukMode,glassEntries,lukRows,lukPieces,desc};
 }
 // ── [GLWO] ตรวจความถูกต้องต่อชุด (ย้ายจาก renderResults) · คืนข้อความเตือน HTML หรือ '' ──
@@ -917,7 +919,7 @@ function renderCost(alumCost,glassInfo,alumDetail){
 
 function exportJSON(){
   const {stock,kerf,plusTop,glassKerf,glassSheets}=state.settings;
-  const jobs=state.jobs.filter(j=>+j.W&&+j.H).map(j=>({seq:j.seq,name:j.name,type:j.type,base:(j.type==='บานกระทุ้ง'||j.type==='บานฟิกซ์')?null:j.base,box:j.box,clear:j.clear||'ไม่มี',clearSize:j.clearSize||'',clVariant:j.clVariant||'ภายใน',nSlit:j.nSlit||4,nh:j.nh||1,clearSizes:Array.isArray(j.clearSizes)?j.clearSizes:[],w1:j.w1||'',w2:j.w2||'',h1:j.h1||'',botMode:j.botMode||'บน',botH:j.botH||'',mat:j.mat||'กระจก',lukPanes:j.lukPanes||'',glassThick:normThick(j.glassThick),glassColor:j.glassColor||'',color:j.color||'',W:+j.W,H:+j.H,pieces:piecesFor(j)}));
+  const jobs=state.jobs.filter(j=>+j.W&&+j.H).map(j=>({seq:j.seq,name:j.name,type:j.type,base:(j.type==='บานกระทุ้ง'||j.type==='บานฟิกซ์')?null:j.base,box:j.box,clear:j.clear||'ไม่มี',clearSize:j.clearSize||'',clVariant:j.clVariant||'ภายใน',nSlit:j.nSlit||4,nh:j.nh||1,clearSizes:Array.isArray(j.clearSizes)?j.clearSizes:[],w1:j.w1||'',w2:j.w2||'',h1:j.h1||'',botMode:j.botMode||'บน',botH:j.botH||'',mat:j.mat||'กระจก',lukPanes:j.lukPanes||'',glassThick:normThick(j.glassThick),glassColor:j.glassColor||'',color:j.color||'',screen:j.screen||'',W:+j.W,H:+j.H,pieces:piecesFor(j)}));
   const blob=new Blob([JSON.stringify({app:'pk_cut_v1',settings:{stock,kerf,plusTop,glassKerf:glassKerf||0,glassSheets:glassSheets||GLASS_SHEETS_DEFAULT},site:state.site,pricing:state.pricing,jobs},null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='pk_cut_export.json';a.click();
 }
@@ -940,7 +942,7 @@ function normImportJob(j){
   if(isFix&&!['ธรรมดา','ช่องแสงบน','แบ่งหลายช่อง','ช่องแสงบน+ซอย'].includes(bx))bx='ธรรมดา';
   let nh=Math.min(20,Math.max(1,parseInt(j.nh)||1)), clearSizes=Array.isArray(j.clearSizes)?j.clearSizes.slice():[];
   if(bx==='ช่องแสงบน+ซอย'&&!clearSizes.length&&j.clearSize!==''&&j.clearSize!=null){clearSizes=[j.clearSize];nh=1;}
-  return {id:uid(),seq:j.seq,name:j.name||'',type,base:b,box:bx,clear:isFix?'ไม่มี':(j.clear||'ไม่มี'),clearSize:j.clearSize||'',clVariant:j.clVariant||'ภายใน',nSlit:j.nSlit||4,nh:nh,clearSizes:clearSizes,w1:j.w1||'',w2:j.w2||'',h1:j.h1||'',botMode:j.botMode||'บน',botH:j.botH||'',mat:j.mat||'กระจก',lukPanes:j.lukPanes||'',glassThick:normThick(j.glassThick),glassColor:j.glassColor||'',color:j.color||'',W:j.W,H:j.H};}
+  return {id:uid(),seq:j.seq,name:j.name||'',type,base:b,box:bx,clear:isFix?'ไม่มี':(j.clear||'ไม่มี'),clearSize:j.clearSize||'',clVariant:j.clVariant||'ภายใน',nSlit:j.nSlit||4,nh:nh,clearSizes:clearSizes,w1:j.w1||'',w2:j.w2||'',h1:j.h1||'',botMode:j.botMode||'บน',botH:j.botH||'',mat:j.mat||'กระจก',lukPanes:j.lukPanes||'',glassThick:normThick(j.glassThick),glassColor:j.glassColor||'',color:j.color||'',screen:j.screen||'',W:j.W,H:j.H};}
 // sources: [{name, json}] where json = parsed object or null (parse/invalid)
 function buildImport(sources){
   let imported=[],firstSettings=null,firstPricing=null,firstSite=null,ok=0,err=[];
@@ -1045,7 +1047,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 //  อ่านเร็ว: worker /gc-list /gc-get → สำรอง GAS pk_gcList / pk_gcGet · เขียน: GAS pk_gcSave / pk_gcSettingsSave / pk_gcDelete
 //  แยกเก็บ 2 ส่วน: งาน (site+jobs ต่องาน) กับ ราคา/ตั้งค่า (settings+pricing ใช้ร่วมทุกงาน)
 //  ร่างในเครื่อง (pk_gc_draft) กันข้อมูลหายตอนเน็ตหลุด · กันทับด้วย rev (บันทึกจากที่อื่นก่อน = หยุดบันทึก ให้โหลดใหม่)
-const GC_FORMULAS_VER='20261106b';   // ต้องตรงกับ ?v= ของ glass-formulas.js — แก้สูตรแล้ว bump ทั้งสองที่
+const GC_FORMULAS_VER='20261107a';   // ต้องตรงกับ ?v= ของ glass-formulas.js — แก้สูตรแล้ว bump ทั้งสองที่
 const API='https://pk-discord-relay.revenge2288.workers.dev/api';
 const GC_DRAFT_KEY='pk_gc_draft', GC_LAST_KEY='pk_gc_last';
 const GC={ user:null, ready:false, id:'', rev:0, sRev:0, lastProj:'', lastSet:'', timer:null, busy:false, again:false, conflict:false, items:[] };
