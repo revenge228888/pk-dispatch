@@ -10413,6 +10413,7 @@ async function jobEditSave(){
     toast('บันทึกแล้ว');
     const wasMeasure = (_jobEditSheet === 'measure');
     jobEditClose();
+    if (payload.date && !wasMeasure) await woDateAfterMove_(r, payload.date);   // [WODATE]
     if (wasMeasure){
       // refresh ฝั่งวัดงานแบบ SWR — ข้อมูลเดิมยังโชว์/กดได้ระหว่างโหลด
       await measCalReload(true);
@@ -10665,6 +10666,44 @@ function dashJobProdStep_(label,state){
   const symbol=state==='done'?'✓':state==='active'?'●':state==='wait'?'!':'○',color=state==='done'?'var(--grn)':state==='active'?'var(--blu)':state==='wait'?'var(--rd)':'var(--mu)';
   return '<div style="flex:1;min-width:92px;text-align:center;color:'+color+';"><div style="font-size:18px;font-weight:800;">'+symbol+'</div><div style="font-size:10px;font-weight:700;">'+label+'</div></div>';
 }
+// ════════ [WODATE] วันติดตั้งในใบผลิต ↔ วันงานในคิว (8 พ.ย. 2026) ════════
+//  ย้ายวันงานที่ผูก WO (แก้งาน) → ถามว่าจะเปลี่ยนวันในใบผลิตด้วยไหม · หน้าต่างงานเตือนถ้าวันไม่ตรง + ปุ่มปรับ (ออฟฟิศ/ผู้จัดการ)
+//  งานต่อ ([cont:]) = วันต่อของงานเดิม ไม่เตือน/ไม่ถาม · ใบกระจกที่มีไฟล์ → บอกให้ผู้จัดการกด 🔄 ประทับใหม่ (ไฟล์ยังเป็นวันเดิม)
+function woDateTh_(d){ const p=String(d||'').split('-'); return p.length===3?(Number(p[2])+'/'+Number(p[1])+'/'+String(Number(p[0])+543).slice(-2)):(d||'ไม่ระบุ'); }
+function woDateWarnHtml_(r,j){
+  if(!r||!r.woId||!j||!j.date||/\[cont:/.test(j.note||'')) return '';
+  if(String(r.installDate||'')===String(j.date)) return '';
+  const can=isOfficeLevel();
+  return '<div id="woDateWarn" style="margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(245,158,11,.1);border:1px solid var(--amb);font-size:12.5px;">'
+    +'<b style="color:var(--amb);">⚠ วันติดตั้งในใบผลิตไม่ตรงกับคิว</b><br>ใบ '+escHtml(r.woId)+' ระบุ <b>'+escHtml(woDateTh_(r.installDate))+'</b> · คิวงานนี้ <b>'+escHtml(woDateTh_(j.date))+'</b>'
+    +(can?'<br><button class="btn btn-g btn-sm" style="margin-top:7px;" onclick="woDateFix(\''+escAttr(r.woId)+'\',\''+escAttr(j.date)+'\')">📅 ปรับวันในใบผลิตเป็น '+escHtml(woDateTh_(j.date))+'</button>':'')+'</div>';
+}
+async function woDateSet_(list, date){
+  const done=[], glass=[], fail=[];
+  for(const w of list){
+    let x; try{ x=await call({ action:'pk_prodSetInstallDate', woId:w.woId, date:date }); }catch(e){ x={ ok:false, error:'เชื่อมต่อไม่ได้' }; }
+    if(x&&x.ok){ done.push(w.woId); if(x.kind==='glass'&&Number(x.files)>0&&!x.unchanged) glass.push(w.woId); delete pkpWoCache[w.woId]; }
+    else fail.push(w.woId+': '+((x&&x.error)||'ไม่สำเร็จ'));
+  }
+  if(done.length) toast('📅 ปรับวันติดตั้งในใบผลิตแล้ว: '+done.join(', '));
+  if(fail.length) alert('ปรับวันในใบผลิตไม่สำเร็จ:\n'+fail.join('\n'));
+  if(glass.length) alert('ใบกระจก '+glass.join(', ')+' มีไฟล์แบบที่ประทับวันติดตั้งเดิมไว้\n→ ผู้จัดการเปิดใบผลิต แล้วกด 🔄 ประทับใหม่ ที่แต่ละไฟล์');
+  return done.length;
+}
+async function woDateAfterMove_(r, date){
+  if(!r || r.cont || !Array.isArray(r.woSync)) return;
+  const diff=r.woSync.filter(function(w){ return String(w.installDate||'')!==date; });
+  if(!diff.length) return;
+  const msg='งานนี้ผูกใบผลิตไว้ — เปลี่ยนวันติดตั้งในใบผลิตเป็น '+woDateTh_(date)+' ด้วยไหม?\n\n'
+    +diff.map(function(w){ return '• '+w.woId+(w.kind==='glass'?' (ใบกระจก)':'')+' · วันในใบ '+woDateTh_(w.installDate); }).join('\n')
+    +'\n\nกด "ยกเลิก" = คงวันในใบผลิตเดิม (จะมีป้ายเตือนวันไม่ตรงในหน้าต่างงาน)';
+  if(!confirm(msg)) return;
+  await woDateSet_(diff, date);
+}
+async function woDateFix(woId, date){
+  if(!confirm('ปรับวันติดตั้งในใบผลิต '+woId+' เป็น '+woDateTh_(date)+'?')) return;
+  if(await woDateSet_([{ woId:woId }], date)){ const w=document.getElementById('woDateWarn'); if(w) w.innerHTML='<span style="color:var(--grn);">✓ ปรับวันในใบผลิตเป็น '+escHtml(woDateTh_(date))+' แล้ว</span>'; }
+}
 function dashJobProdRender_(r,j){
   if(!r||!r.ok)return '<div style="color:var(--mu);">ตรวจสถานะใบผลิตไม่สำเร็จ</div>';
   // งานยังไม่มีเลขที่ใบจอง → แนะนำวิธีให้จับคู่ได้ตรง (ใส่เลขเดียวกันทั้งในงานนี้และช่อง "เลขที่ใบจอง" ของใบผลิต)
@@ -10696,6 +10735,7 @@ function dashJobProdRender_(r,j){
   if(r.via==='link'){
     const others=(r.linked||[]).filter(function(w){ return w!==r.woId; });
     html+='<div style="font-size:11.5px;color:var(--grn);margin-top:5px;">✓ ผูกใบผลิตกับงานนี้แล้ว'+(others.length?' · มีอีก '+others.length+' ใบ: '+escHtml(others.join(', ')):'')+'</div>';
+    html+=woDateWarnHtml_(r,j);   // [WODATE] วันติดตั้งในใบไม่ตรงคิว
   }
   else if(r.via==='ref'){
     html+='<div style="font-size:11.5px;color:var(--grn);margin-top:5px;">✓ จับคู่จากเลขที่ใบจองตรงกัน</div>';
