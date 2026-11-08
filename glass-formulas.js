@@ -467,6 +467,7 @@ function allKnownRails(){
 
 // glass per job (sliding only; clear-light glass is v2). count = #panes (ขวางบน qty)
 // v2 clear-light glass rule (recorded): FIX ข้าง -> w=clear+1.5, h=H-9+1.5 ; FIX บน -> h=clear+1.5, w=W-9+1.5
+// กระจกบานกระทุ้ง: ติดกล่อง W−18.8 · ไม่ติดกล่อง W−9.5 (เจ้าของยืนยัน 8 พ.ย. 2026 — เดิมเป็นค่าอนุมาน) · ใช้กับบานในของช่องแสงบน/ล่างด้วย (Wp×Hp)
 function awningGlass(W,H,box){
   const base = box==='ติดกล่อง'?[W-9-0.3,H-9-0.3]:[W,H];
   return {label:'กระจก',w:r2(base[0]-3-6.5),h:r2(base[1]-3-6.5),qty:1};
