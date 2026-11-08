@@ -297,7 +297,7 @@ body.gc-embed header,body.gc-embed .ruler{display:none}
 </section>
 
 </div>
-<script src="glass-formulas.js?v=20261107a"></script>
+<script src="glass-formulas.js?v=20261108a"></script>
 <script>
 // ── [GLWO] แผนตัดกระจก: แยกกลุ่มสี×ความหนา (คนละหนาตัดจากแผ่นเดียวกันไม่ได้) → optimize ต่อกลุ่ม (ย้ายจาก renderGlassCut ตรงตัว) ──
 function gcGlassPlan_(allGlass,sheets,gkerf){
@@ -529,7 +529,7 @@ function renderJobs(){
     }
     if(!isK&&!isHang&&!isFix)flds.push(fld('วัสดุบาน',`<select data-id="${j.id}" data-f="mat">
         ${['กระจก','ลูกฟูกตั้ง','ลูกฟูกนอน'].map(o=>`<option ${(j.mat||'กระจก')===o?'selected':''}>${o}</option>`).join('')}</select>`));
-    if(screenAllowed(j))flds.push(fld('มุ้ง',`<span style="display:flex;align-items:center;gap:7px;min-height:38px;font-weight:600;color:var(--ink);font-size:14px"><input type="checkbox" data-id="${j.id}" data-scr="1" ${j.screen==='พร้อมมุ้ง'?'checked':''} style="width:20px;height:20px;margin:0"> พร้อมมุ้ง</span>`));   // [SCREEN] ติ๊กเลือก
+    if(screenAllowed(j))flds.push(fld('มุ้ง',`<span style="display:flex;align-items:center;gap:7px;min-height:38px;font-weight:600;color:var(--ink);font-size:14px"><input type="checkbox" data-id="${j.id}" data-scr="1" ${j.screen==='พร้อมมุ้ง'?'checked':''} style="width:20px;height:20px;margin:0"> พร้อม${SCREEN_KINDS[screenKind(j)].label}</span>`));   // [SCREEN] ติ๊กเลือก
     if(!isK&&!isHang&&!isFix&&isLuk)flds.push(fld('บานลูกฟูก (บาน)',`<input class="seq" value="${j.lukPanes??''}" data-id="${j.id}" data-f="lukPanes" inputmode="numeric" placeholder="ทุกบาน" title="จำนวนบานที่เป็นลูกฟูก (เว้นว่าง = ทุกบาน) ที่เหลือเป็นกระจก" autocomplete="off">`));
     flds.push(fld('กระจกหนา',`<select data-id="${j.id}" data-f="glassThick">
         ${GLASS_THICKS.map(t=>`<option value="${t.v}" ${normThick(j.glassThick)===t.v?'selected':''}>${t.label}</option>`).join('')}</select>`));
@@ -638,7 +638,7 @@ function gcJobCalc_(j){
       : isClear(j)?(j.base+' + ช่องแสง'+j.clear+' (ช่องแสง '+(+j.clearSize)+')')
       : (j.base==='รางแขวน'||j.base==='รางแขวนแยกกลาง')?(j.base+(j.box==='เสริมกล่อง 2 ด้าน'?' · เสริมกล่อง 2 ด้าน':''))
       : (j.base+' · '+j.box);
-    if(hasScreen(j)){const s=screenSize(j);desc+=' · พร้อมมุ้ง '+s.w+'×'+s.h;}   // [SCREEN]
+    if(hasScreen(j)){const s=screenSize(j);desc+=' · พร้อม'+SCREEN_KINDS[screenKind(j)].label+' '+s.w+'×'+s.h;}   // [SCREEN] พร้อมมุ้ง / พร้อมมุ้งบานเปิด
     return {ps,label,color,g,lukMode,glassEntries,lukRows,lukPieces,desc};
 }
 // ── [GLWO] ตรวจความถูกต้องต่อชุด (ย้ายจาก renderResults) · คืนข้อความเตือน HTML หรือ '' ──
@@ -1051,7 +1051,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 //  อ่านเร็ว: worker /gc-list /gc-get → สำรอง GAS pk_gcList / pk_gcGet · เขียน: GAS pk_gcSave / pk_gcSettingsSave / pk_gcDelete
 //  แยกเก็บ 2 ส่วน: งาน (site+jobs ต่องาน) กับ ราคา/ตั้งค่า (settings+pricing ใช้ร่วมทุกงาน)
 //  ร่างในเครื่อง (pk_gc_draft) กันข้อมูลหายตอนเน็ตหลุด · กันทับด้วย rev (บันทึกจากที่อื่นก่อน = หยุดบันทึก ให้โหลดใหม่)
-const GC_FORMULAS_VER='20261107a';   // ต้องตรงกับ ?v= ของ glass-formulas.js — แก้สูตรแล้ว bump ทั้งสองที่
+const GC_FORMULAS_VER='20261108a';   // ต้องตรงกับ ?v= ของ glass-formulas.js — แก้สูตรแล้ว bump ทั้งสองที่
 const API='https://pk-discord-relay.revenge2288.workers.dev/api';
 const GC_DRAFT_KEY='pk_gc_draft', GC_LAST_KEY='pk_gc_last';
 const GC={ user:null, ready:false, id:'', rev:0, sRev:0, lastProj:'', lastSet:'', timer:null, busy:false, again:false, conflict:false, items:[] };
@@ -1244,7 +1244,7 @@ function gcSnapshot_(){
     sets.push(Object.assign(base,{desc:C.desc+(C.lukMode?' · วัสดุบาน: ลูกฟูก'+C.lukMode:''),color:effectiveColor(j)||'',glassColor:gColor==='(ไม่ระบุสี)'?'':gColor,
       thick:thick,thickLabel:thickInfo(thick).label,mat:j.mat||'กระจก',rails:rails,
       glass:C.glassEntries.map(x=>({label:x.label||'แผ่นกระจก',w:x.w,h:x.h,qty:x.qty})),luk:C.lukRows,panes:C.glassEntries.reduce((a,x)=>a+(+x.qty||0),0)},
-      hasScreen(j)?{screen:screenSize(j)}:{}));   // [SCREEN] {w,h} ของมุ้ง 1 บาน
+      hasScreen(j)?{screen:Object.assign(screenSize(j),{type:SCREEN_KINDS[screenKind(j)].woType,src:SCREEN_KINDS[screenKind(j)].src})}:{}));   // [SCREEN] {w,h,type,src} ของมุ้ง 1 บาน
   });
   const optimize=Object.keys(byColor).sort().map(color=>({color:color,rails:Object.keys(byColor[color]).sort().map(rail=>{
     const pcs=byColor[color][rail],{bins,over}=optimizeRail(pcs,stock,kerf);
