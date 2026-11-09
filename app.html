@@ -18262,11 +18262,12 @@ var PKP_SCUT={
  'มุ้งหน้าต่างบานเปิด':[
   {profile:'เส้นหน้าต่าง',label:'บน/ล่าง (กว้าง+1.7)',fn:function(w,h){return w+1.7;},qty:2},
   {profile:'เส้นหน้าต่าง',label:'ข้าง (สูง+1.7)',fn:function(w,h){return h+1.7;},qty:2},
-  {profile:'เส้นหน้าต่าง',label:'คาดกลาง (ด้านสั้น · จำนวน=ด้านยาว/70 ปัดลง)',fn:function(w,h){return Math.min(w,h);},qty:function(w,h){return Math.floor(Math.max(w,h)/70);}}],
+  // [9 พ.ย. 2026 เจ้าของสั่ง] คาดกลางบานเปิด (หน้าต่าง+ประตู) ใช้ "เส้นกลาง" (เดิมใช้เส้นหน้าต่าง/เส้นประตู) · ความยาว/จำนวนเท่าเดิม
+  {profile:'เส้นกลาง',label:'คาดกลาง (ด้านสั้น · จำนวน=ด้านยาว/70 ปัดลง)',fn:function(w,h){return Math.min(w,h);},qty:function(w,h){return Math.floor(Math.max(w,h)/70);}}],
  'มุ้งประตูบานเปิด':[
   {profile:'เส้นประตู',label:'บน/ล่าง (กว้าง+2.4)',fn:function(w,h){return w+2.4;},qty:2},
   {profile:'เส้นประตู',label:'ข้าง (สูง+2.4)',fn:function(w,h){return h+2.4;},qty:2},
-  {profile:'เส้นประตู',label:'คาดกลาง (ด้านสั้น · จำนวน=ด้านยาว/70 ปัดลง)',fn:function(w,h){return Math.min(w,h);},qty:function(w,h){return Math.floor(Math.max(w,h)/70);}}]
+  {profile:'เส้นกลาง',label:'คาดกลาง (ด้านสั้น · จำนวน=ด้านยาว/70 ปัดลง)',fn:function(w,h){return Math.min(w,h);},qty:function(w,h){return Math.floor(Math.max(w,h)/70);}}]
 };
 function pkpScutIs(t){ return !!PKP_SCUT[t]; }
 // ชิ้นตัดของ 1 บาน — ปัด 1 ตำแหน่ง · qty เป็นเลขหรือฟังก์ชัน (คาดกลางบานเปิด) · qty<=0 = ข้ามแถว
