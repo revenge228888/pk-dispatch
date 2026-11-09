@@ -384,7 +384,7 @@ function slideGlass(job){
   return [{label:'บานเลื่อน',w:r2(crossLen(base,box,W)+1.5),h:r2(postLen(box,H)-8),qty:panes}];
 }
 // ── [SCREEN] พร้อมมุ้ง: บานเลื่อน บานตาย เสริมกล่อง 4 ด้าน (เจ้าของกำหนด 7 พ.ย. 2026) ──
-//  ขนาดมุ้ง: กว้าง = (กว้างบานเลื่อน − 7.6)/2 + 4 · สูง = สูง − 10.4 · 1 บานต่อชุด
+//  ขนาดมุ้ง: กว้าง = (กว้างบานเลื่อน − 7.6)/2 + 4 · สูง = สูง − 10.3 · 1 บานต่อชุด (9 พ.ย. 2026 เจ้าของเปลี่ยนจาก −10.4)
 //  ชิ้นตัด = สูตร "มุ้งบานเลื่อน" ของ PK Dispatch (PKP_SCUT['มุ้งบานเลื่อน'] ใน app.html) — ⚠ แก้ที่โน่นต้องแก้ที่นี่ด้วย (เทสเทียบให้)
 //  ปัดทศนิยม 1 ตำแหน่งต่อชิ้นแบบ PK Dispatch (Math.round(x*10)/10)
 // [AWN 8 พ.ย.] + บานกระทุ้ง ช่องแสงบน/ล่าง "พร้อมมุ้งบานเปิด": ขนาดมุ้ง = Wp × Hp (ตัวบาน) · ตัดตามสูตร "มุ้งหน้าต่างบานเปิด" ของ PK Dispatch (PKP_SCUT ใน app.html)
@@ -399,7 +399,7 @@ function hasScreen(job){return screenAllowed(job)&&job.screen==='พร้อม
 const SCREEN_KINDS={ slide:{woType:'มุ้งบานเลื่อน',label:'มุ้ง',src:'บานเลื่อน'}, casement:{woType:'มุ้งหน้าต่างบานเปิด',label:'มุ้งบานเปิด',src:'บานกระทุ้ง'} };
 function screenSize(job){
   if(screenKind(job)==='casement'){const k=kraToongClear(job);return {w:k.Wp,h:k.Hp};}
-  return {w:r2((+job.W-7.6)/2+4),h:r2(+job.H-10.4)};
+  return {w:r2((+job.W-7.6)/2+4),h:r2(+job.H-10.3)};
 }
 const SCREEN_SLIDE=[
   {rail:'เส้นมุ้งบานเลื่อน',fn:(w,h)=>w+0.6,qty:2},   // บน/ล่าง (กว้าง+0.6)
