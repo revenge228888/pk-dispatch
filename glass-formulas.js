@@ -390,7 +390,7 @@ function slideGlass(job){
 // [AWN 8 พ.ย.] + บานกระทุ้ง ช่องแสงบน/ล่าง "พร้อมมุ้งบานเปิด": ขนาดมุ้ง = Wp × Hp (ตัวบาน) · ตัดตามสูตร "มุ้งหน้าต่างบานเปิด" ของ PK Dispatch (PKP_SCUT ใน app.html)
 function screenKind(job){
   if(job.type==='บานเลื่อน'&&job.base==='บานตาย'&&job.box==='เสริม4'&&(!job.clear||job.clear==='ไม่มี'))return 'slide';
-  if(job.type==='บานกระทุ้ง'&&job.box==='ช่องแสงบน/ล่าง')return 'casement';
+  if(job.type==='บานกระทุ้ง'&&(job.box==='ช่องแสงบน/ล่าง'||job.box==='ติดกล่อง'))return 'casement';   // [AWNBOX 9 พ.ย.] + บานกระทุ้งติดกล่อง
   return '';
 }
 function screenAllowed(job){return !!screenKind(job);}
@@ -398,7 +398,11 @@ function hasScreen(job){return screenAllowed(job)&&job.screen==='พร้อม
 // ชนิดมุ้ง → ชื่อชนิดในใบผลิตมุ้ง (ดึงเฉพาะมุ้ง) + ชื่อบานกระจกในหมายเหตุ
 const SCREEN_KINDS={ slide:{woType:'มุ้งบานเลื่อน',label:'มุ้ง',src:'บานเลื่อน'}, casement:{woType:'มุ้งหน้าต่างบานเปิด',label:'มุ้งบานเปิด',src:'บานกระทุ้ง'} };
 function screenSize(job){
-  if(screenKind(job)==='casement'){const k=kraToongClear(job);return {w:k.Wp,h:k.Hp};}
+  if(screenKind(job)==='casement'){
+    // [AWNBOX 9 พ.ย. 2026 เจ้าของยืนยัน] บานกระทุ้งติดกล่อง: มุ้ง = ขนาดตัวบาน (กว้าง−9.3) × (สูง−9.3) — ฐานเดียวกับ awningGlass ติดกล่อง
+    if(job.box==='ติดกล่อง')return {w:r2(+job.W-9-0.3),h:r2(+job.H-9-0.3)};
+    const k=kraToongClear(job);return {w:k.Wp,h:k.Hp};
+  }
   return {w:r2((+job.W-7.6)/2+4),h:r2(+job.H-10.3)};
 }
 const SCREEN_SLIDE=[
@@ -426,8 +430,8 @@ const GC_FORMULAS=[
     probes:['ธรรมดา','ช่องแสงบน','แบ่งหลายช่อง','ช่องแสงบน+ซอย'].map(box=>({type:'บานฟิกซ์',box,clearSize:40,nSlit:3,W:100,H:200})) },
   { key:'awningClear', label:'บานกระทุ้ง ช่องแสงบน/ล่าง', match:j=>j.type==='บานกระทุ้ง'&&j.box==='ช่องแสงบน/ล่าง', pieces:j=>kraToongClearPieces(j).concat(screenPieces(j)), glass:awningClearGlass,
     probes:[{type:'บานกระทุ้ง',box:'ช่องแสงบน/ล่าง',clearSize:40,W:100,H:200},{type:'บานกระทุ้ง',box:'ช่องแสงบน/ล่าง',clearSize:40,W:100,H:200,screen:'พร้อมมุ้ง'}] },
-  { key:'awning', label:'บานกระทุ้ง', match:j=>j.type==='บานกระทุ้ง', pieces:j=>awningPieces(+j.W,+j.H,j.box), glass:j=>[awningGlass(+j.W,+j.H,j.box)],
-    probes:['ติดกล่อง','ไม่ติดกล่อง'].map(box=>({type:'บานกระทุ้ง',box,clearSize:40,W:100,H:200})) },
+  { key:'awning', label:'บานกระทุ้ง', match:j=>j.type==='บานกระทุ้ง', pieces:j=>awningPieces(+j.W,+j.H,j.box).concat(screenPieces(j)), glass:j=>[awningGlass(+j.W,+j.H,j.box)],
+    probes:['ติดกล่อง','ไม่ติดกล่อง'].map(box=>({type:'บานกระทุ้ง',box,clearSize:40,W:100,H:200})).concat([{type:'บานกระทุ้ง',box:'ติดกล่อง',clearSize:40,W:100,H:200,screen:'พร้อมมุ้ง'}]) },
   { key:'hang', label:'รางแขวน', match:j=>j.base==='รางแขวน', pieces:j=>hangPieces(j.base,+j.W,+j.H,j.box), glass:gcSideTopFirst_(hangGlass),
     probes:[{type:'บานเลื่อน',base:'รางแขวน',box:'ไม่เสริม',clear:'ไม่มี',W:_PW,H:_PH}] },
   { key:'hangSplit', label:'รางแขวนแยกกลาง', match:j=>j.base==='รางแขวนแยกกลาง', pieces:j=>hangPieces(j.base,+j.W,+j.H,j.box), glass:gcSideTopFirst_(hangSplitGlass),
