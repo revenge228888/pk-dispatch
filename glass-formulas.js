@@ -337,7 +337,8 @@ function fixGlass(job){
   }
   if(mode==='แบ่งหลายช่อง'){
     const n=Math.min(60,Math.max(2,parseInt(job.nSlit)||2));
-    return [{label:'บานฟิกซ์',w:r2((W-9-4.5*(n-1)+1.5)/n),h:r2(H-9+1.2),qty:n}];
+    // [10 พ.ย. 2026 เจ้าของยืนยัน] +1.5 ทุกแผ่น เหมือนแบบซอย (เครื่องมือเดิมบวกก่อนหาร = แผ่นละ 1.5/n)
+    return [{label:'บานฟิกซ์',w:r2((W-9-4.5*(n-1))/n+1.5),h:r2(H-9+1.2),qty:n}];
   }
   return [{label:'บานฟิกซ์',w:r2(W-9+1.5),h:r2(H-9+1.2),qty:1}];
 }
