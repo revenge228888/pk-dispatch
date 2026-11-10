@@ -297,7 +297,7 @@ body.gc-embed header,body.gc-embed .ruler{display:none}
 </section>
 
 </div>
-<script src="glass-formulas.js?v=20261109d"></script>
+<script src="glass-formulas.js?v=20261110a"></script>
 <script>
 // ── [GLWO] แผนตัดกระจก: แยกกลุ่มสี×ความหนา (คนละหนาตัดจากแผ่นเดียวกันไม่ได้) → optimize ต่อกลุ่ม (ย้ายจาก renderGlassCut ตรงตัว) ──
 function gcGlassPlan_(allGlass,sheets,gkerf){
@@ -1051,7 +1051,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 //  อ่านเร็ว: worker /gc-list /gc-get → สำรอง GAS pk_gcList / pk_gcGet · เขียน: GAS pk_gcSave / pk_gcSettingsSave / pk_gcDelete
 //  แยกเก็บ 2 ส่วน: งาน (site+jobs ต่องาน) กับ ราคา/ตั้งค่า (settings+pricing ใช้ร่วมทุกงาน)
 //  ร่างในเครื่อง (pk_gc_draft) กันข้อมูลหายตอนเน็ตหลุด · กันทับด้วย rev (บันทึกจากที่อื่นก่อน = หยุดบันทึก ให้โหลดใหม่)
-const GC_FORMULAS_VER='20261109d';   // ต้องตรงกับ ?v= ของ glass-formulas.js — แก้สูตรแล้ว bump ทั้งสองที่
+const GC_FORMULAS_VER='20261110a';   // ต้องตรงกับ ?v= ของ glass-formulas.js — แก้สูตรแล้ว bump ทั้งสองที่
 const API='https://pk-discord-relay.revenge2288.workers.dev/api';
 const GC_DRAFT_KEY='pk_gc_draft', GC_LAST_KEY='pk_gc_last';
 const GC={ user:null, ready:false, id:'', rev:0, sRev:0, lastProj:'', lastSet:'', timer:null, busy:false, again:false, conflict:false, items:[] };
