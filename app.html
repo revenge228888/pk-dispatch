@@ -10813,13 +10813,29 @@ function ioOpen(ds){
   d.innerHTML='<div class="modal" style="max-width:520px;width:100%;max-height:88vh;overflow:auto;padding:16px;">'
     +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><b style="flex:1;font-size:16px;">🖨 ใบจ่ายงานติดตั้ง</b><button class="btn btn-g btn-sm" onclick="document.getElementById(\'ioModal\').remove()">ปิด</button></div>'
     +'<div style="font-size:14px;font-weight:700;margin-bottom:8px;">📅 '+escHtml(ioThaiDate_(ds))+'</div>'
-    +'<div style="display:flex;flex-wrap:wrap;gap:8px 14px;margin-bottom:10px;">'+T.teams.map(function(t,i){ return ck('ioT'+i, '<span style="color:'+qmmTeamColor(t.team)+';">●</span> '+escHtml(t.team)+' ('+t.jobs.length+' งาน)', true); }).join('')+'</div>'
+    +'<div style="display:grid;gap:8px;margin-bottom:10px;">'+T.teams.map(function(t,i){   // [IOMEM 12 พ.ย. 2026] ชื่อช่างต่อทีม (ดึงจากจัดทีมวันนั้น · แก้แล้วบันทึกกลับจัดทีม)
+      return '<div style="border:1px solid var(--bdr);border-radius:8px;padding:8px 10px;">'+ck('ioT'+i, '<span style="color:'+qmmTeamColor(t.team)+';">●</span> <b>'+escHtml(t.team)+'</b> ('+t.jobs.length+' งาน)', true)
+        +'<input class="fi" id="ioM'+i+'" value="'+escAttr(ioMembers_(t.team, ds).join(', '))+'" placeholder="👷 ชื่อช่างทีมนี้ คั่นด้วย , เช่น สมชาย, สมศักดิ์" style="margin-top:6px;width:100%;"></div>'; }).join('')+'</div>'
+    +'<div style="font-size:12px;color:var(--mu);margin:-4px 0 10px;">ชื่อช่างแสดงตัวใหญ่ใต้ชื่อทีมทุกหน้า + ช่องเซ็นรับงาน · แก้ชื่อแล้วระบบจำไว้ในหน้า "จัดทีม" ของวันนั้นให้ด้วย</div>'
     +(T.noTeam?'<div style="font-size:12.5px;color:var(--rd);margin-bottom:10px;">⚠ มี '+T.noTeam+' งานยังไม่จัดทีม — ไม่อยู่ในใบ</div>':'')
     +'<div style="display:grid;gap:7px;margin-bottom:12px;">'
       +ck('ioAmt','แสดงยอดเงิน',true,' (งานที่ซ่อนยอดจากช่างขึ้น —)')
       +ck('ioTel','เบอร์โทรลูกค้า',true)+ck('ioNote','หมายเหตุงาน',true)+ck('ioDay','หมายเหตุวันนี้',true)+ck('ioQr','QR แผนที่',true)+'</div>'
     +'<div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-p" onclick="ioPrint(\''+escAttr(ds)+'\')">🖨 เปิดใบพิมพ์</button></div></div>';
   document.body.appendChild(d);
+}
+// [IOMEM] ชื่อช่างของทีมวันนั้น (จากหน้า "จัดทีม" = ชีต TeamMembers) · กรอก/แก้ในหน้าต่างใบจ่ายงานได้ → บันทึกกลับ pk_setMembers
+function ioMembers_(team, ds){ return (((_allMembers||[]).find(function(m){ return m.team===team && m.date===ds; })||{}).members||[]).slice(); }
+function ioParseNames_(s){ const out=[]; String(s||'').split(/[,\n،、]+/).forEach(function(x){ x=x.replace(/\s+/g,' ').trim().slice(0,40); if(x && out.indexOf(x)===-1) out.push(x); }); return out.slice(0,8); }
+async function ioSaveMembers_(teams, ds){
+  const ch=teams.filter(function(t){ return t.members.join('|')!==ioMembers_(t.team, ds).join('|'); });
+  for(const t of ch){
+    try{
+      const r=await call({ action:'pk_setMembers', team:t.team, date:ds, members:t.members });
+      if(r&&r.ok){ _allMembers=(_allMembers||[]).filter(function(m){ return !(m.team===t.team && m.date===ds); }); if(t.members.length) _allMembers.push({ team:t.team, date:ds, members:t.members.slice() }); }
+      else toast('⚠ จำชื่อช่างทีม '+t.team+' ไม่สำเร็จ: '+((r&&r.error)||'?')+' (ใบพิมพ์ใช้ชื่อที่กรอกแล้ว)');
+    }catch(e){ toast('⚠ จำชื่อช่างทีม '+t.team+' ไม่สำเร็จ (เน็ต?)'); }
+  }
 }
 function ioLoadQr_(){
   return new Promise(function(res){
@@ -10832,11 +10848,12 @@ function ioQr_(url){ try{ const q=window.qrcode(0,'M'); q.addData(url); q.make()
 async function ioPrint(ds){
   const T=ioTeams_(ds), g=function(id){ const e=document.getElementById(id); return !!(e&&e.checked); };
   const opt={ amt:g('ioAmt'), tel:g('ioTel'), note:g('ioNote'), day:g('ioDay'), qr:g('ioQr') };
-  const teams=T.teams.filter(function(t,i){ return g('ioT'+i); });
+  const teams=T.teams.map(function(t,i){ const e=document.getElementById('ioM'+i); return Object.assign({}, t, { members:ioParseNames_(e?e.value:''), _i:i }); }).filter(function(t){ return g('ioT'+t._i); });
   if(!teams.length){ toast('เลือกอย่างน้อย 1 ทีม'); return; }
   const win=window.open('','_blank');   // เปิดก่อนรอโหลด (กันป๊อปอัปบล็อก)
   if(!win){ toast('เปิดหน้าต่างไม่ได้ (ตรวจป๊อปอัปบล็อก)'); return; }
   win.document.write('<!doctype html><meta charset="utf-8"><p style="font-family:sans-serif">กำลังเตรียมใบจ่ายงาน…</p>');
+  ioSaveMembers_(teams, ds);   // ไม่รอ — ใบพิมพ์ใช้ชื่อที่กรอกอยู่แล้ว
   if(opt.qr) opt.qr=await ioLoadQr_();
   const m=document.getElementById('ioModal'); if(m) m.remove();
   const x=ds.split('-'), dd=Number(x[2])+'-'+Number(x[1])+'-'+String(Number(x[0])+543).slice(-2);
@@ -10850,14 +10867,15 @@ function ioSheetsHTML_(ds, teams, opt){
   const printed=new Date().toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'});
   let out='';
   teams.forEach(function(t){
-    const col=qmmTeamColor(t.team), mem=((_allMembers||[]).find(function(m){ return m.team===t.team && m.date===ds; })||{}).members||[];
+    const col=qmmTeamColor(t.team), mem=Array.isArray(t.members)?t.members:ioMembers_(t.team, ds);
+    const memHtml=mem.length?'<div class="io-mem">👷 '+mem.map(esc).join(' · ')+'</div>':'<div class="io-mem e">👷 ช่าง: ........................................</div>';
     const shown=t.jobs.filter(ioAmountShown_), total=shown.reduce(function(a,j){ return a+(Number(j.amount)||0); },0);
     const pages=[]; for(let i=0;i<t.jobs.length;i+=IO_PER_PAGE) pages.push(t.jobs.slice(i,i+IO_PER_PAGE));
     pages.forEach(function(pg,pi){
       const last=pi===pages.length-1;
       let h='<div class="sheet io" data-wo="'+esc(t.team)+'" data-fn="'+esc('ใบจ่ายงาน '+t.team+' '+dd)+'">'
         +'<div class="io-bar" style="background:'+col+'"></div>'
-        +'<div class="io-hd"><div class="io-team" style="border-color:'+col+'"><div class="io-tl">ทีมช่าง</div><div class="io-tn" style="color:'+col+'">'+esc(t.team)+'</div><div class="io-dt">'+esc(title)+'</div></div>'
+        +'<div class="io-hd"><div class="io-team" style="border-color:'+col+'"><div class="io-tl">ทีมช่าง</div><div class="io-tn" style="color:'+col+'">'+esc(t.team)+'</div>'+memHtml+'<div class="io-dt">'+esc(title)+'</div></div>'
         +'<div class="io-sp"></div><div class="io-co"><div class="io-cn">มุ้งจีบ PK</div><div class="io-dn">ใบจ่ายงานติดตั้ง · INSTALL ORDER</div><div class="io-cnt">'+t.jobs.length+' งาน'+(pages.length>1?' · หน้า '+(pi+1)+'/'+pages.length:'')+'</div></div></div>'
         +'<div class="io-th"><span>#&nbsp;&nbsp;&nbsp;ลูกค้า / รายการงาน</span><span>ยอดเงิน</span></div>';
       pg.forEach(function(j,k){
@@ -10876,7 +10894,8 @@ function ioSheetsHTML_(ds, teams, opt){
         h+='<div class="io-tot"><span>ยอดรวม</span><b>'+(opt.amt?money(total):'—')+'</b></div>'
           +(dayNote?'<div class="io-day">📌 หมายเหตุวันนี้: '+esc(dayNote)+'</div>':'')
           +'<div class="io-sg"><div><div class="io-ln"></div>ผู้มอบงาน</div><div class="io-c">'+t.jobs.length+' งาน</div>'
-          +'<div><div class="io-ln">'+esc(mem[0]||'')+'</div>ช่างรับงาน (คน 1)</div><div><div class="io-ln">'+esc(mem[1]||'')+'</div>ช่างรับงาน (คน 2)</div></div>';
+          +(mem.length>2?'</div><div class="io-sg io-sg2">':'')
+          +(mem.length?mem:['','']).map(function(n,ni){ return '<div><div class="io-ln">'+esc(n)+'</div>ช่างรับงาน (คน '+(ni+1)+')</div>'; }).join('')+'</div>';   // ช่องเซ็นครบทุกคน
       }
       h+='<div class="io-ft"><span>PK Dispatch · ใบจ่ายงานติดตั้ง · '+esc(t.team)+'</span><span>พิมพ์ '+esc(printed)+'</span></div></div>';
       out+=h;
@@ -10889,6 +10908,8 @@ var IO_CSS='.sheet.io{display:block;min-height:297mm;padding:0 14mm 16mm;positio
   +'.io-hd{display:flex;align-items:stretch;gap:12px;padding-bottom:10px;border-bottom:1.5px solid #d9dde3}'
   +'.io-team{border-left:6px solid;padding:2px 0 2px 12px}.io-tl{font-size:11px;font-weight:700;color:#6b7684;letter-spacing:1px}'
   +'.io-tn{font-size:30px;font-weight:800;line-height:1.15}.io-dt{font-size:15px;font-weight:800;margin-top:2px}'
+  +'.io-mem{font-size:19px;font-weight:800;color:#1b2430;margin:3px 0 1px;line-height:1.3}.io-mem.e{color:#9aa3ad;font-weight:600;font-size:15px}'   // [IOMEM] ชื่อช่างตัวใหญ่ใต้ชื่อทีม
+  +'.io-sg2{grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin-top:16px;border-top:0;padding-top:4px}'
   +'.io-sp{flex:1}.io-co{text-align:right;align-self:center}.io-cn{font-size:16px;font-weight:800}.io-dn{font-size:11px;color:#6b7684;letter-spacing:.4px}.io-cnt{font-size:12px;font-weight:700;color:#4a5562;margin-top:4px}'
   +'.io-th{display:flex;justify-content:space-between;font-size:11.5px;color:#6b7684;font-weight:700;padding:10px 4px 6px}'
   +'.io-job{display:grid;grid-template-columns:20px 1fr auto;gap:2px 10px;padding:9px 4px 11px;border-bottom:1px solid #e9ecef;break-inside:avoid}'
@@ -12327,9 +12348,10 @@ let _prdQc=null;   // {woId, sets:null|[...], err}
 function prdQcSets_(order){
   var items=(order&&order.items)||[], mainAlu=(order&&order.mainColorAlu)||'', mainMesh=(order&&order.mainColorMesh)||'', out=[];
   var r2=function(x){ return Math.round(x*100)/100; };
+  var nos=pkpSetNos_(items);   // [WOSEQ]
   items.forEach(function(it, idx){
     if(!it || !it.type) return;
-    var s={ setNo:idx+1, type:it.type, patt:it.patt||'', split:pkpIsSplit(it.type), w:it.w, h:it.h, wl:it.wl, wr:it.wr,
+    var s={ setNo:nos[idx], type:it.type, patt:it.patt||'', split:pkpIsSplit(it.type), w:it.w, h:it.h, wl:it.wl, wr:it.wr,
       alu:it.cAlu||mainAlu||'', mesh:it.cMesh||mainMesh||'', rails:[], meshH:null, jeeb:null, jeebL:null, jeebR:null, sheets:0, scut:[], note:it.note||'', hole:null };
     if(pkpIsReqScreen(it.type)){
       var c=pkpCalcItem(it);
@@ -17590,7 +17612,7 @@ function pkpShowSnapshot(snap){
 // ════════ จัดตัดราง (1D cutting-stock · แยกสี) — frontend-only · ดึงชิ้นจาก engine ════════
 // ชิ้นรางต่อรายการ: ความยาวจาก pkpCalcItem (maajab/rangkang/rangbl/rangtia) × จำนวนจาก pkpRailCount → ตรงกับใบเบิก
 function pkpRailPieces(items, mainAlu, meta){
-  meta=meta||{}; var out=[];
+  meta=meta||{}; var out=[], nos=pkpSetNos_(items);   // [WOSEQ]
   (items||[]).forEach(function(it, idx){
     var t=it.type; if(!t||!pkpIsReqScreen(t)) return;
     if(it.noReq) return;
@@ -17605,7 +17627,7 @@ function pkpRailPieces(items, mainAlu, meta){
       if(!(len>0&&qty>0)) return;
       var k=rail+'|'+len, cut=Math.min(covered[k]||0, qty);
       if(cut>0){ covered[k]-=cut; qty-=cut; }
-      if(qty>0) out.push({rail:rail,len:len,qty:qty,color:col,wo:meta.wo||'',name:meta.name||'',setNo:idx+1,type:t});
+      if(qty>0) out.push({rail:rail,len:len,qty:qty,color:col,wo:meta.wo||'',name:meta.name||'',setNo:nos[idx],type:t});
     }
     P('handle', f.maajab,   rc.N);
     P('side',   f.rangkang, rc.O);
@@ -17937,12 +17959,13 @@ function pkpCutSetEff_(){ return (_pkCutSetSrv && _pkCutSetSrv.stock>0) ? { stoc
 // คืน [{wo, name, setNo, type, size, color}] · setNo ตรงกับ pkpRailPieces/pkpScutCollect (idx+1)
 function pkpCutSetsFrom_(items, mainAlu, meta){
   meta=meta||{}; var out=[];
+  var nos=pkpSetNos_(items);   // [WOSEQ]
   (items||[]).forEach(function(it, idx){
     var t=it.type; if(!t||it.noReq) return;
     var hasCut=(pkpIsReqScreen(t)&&pkpCalcItem(it).calculable)||pkpScutIs(t);
     if(!hasCut) return;
     var w=it.w||'', h=it.h||'', wl=it.wl||'', wr=it.wr||'';
-    out.push({wo:meta.wo||'',name:meta.name||'',setNo:idx+1,type:t,
+    out.push({wo:meta.wo||'',name:meta.name||'',setNo:nos[idx],type:t,
       size:pkpIsSplit(t)?((wl+'/'+wr)+'×'+h):(w+'×'+h),
       color:String(it.cAlu||mainAlu||'').trim()||PKP_NO_COLOR});
   });
@@ -18305,12 +18328,13 @@ function pkpScutPieces(it){
 // รวมชิ้นตัดจากรายการ WO — setNo = เลขลำดับที่กรอกใน WO (idx+1) ตรงกับเลขบนใบผลิตทุกใบ ไม่รันใหม่
 function pkpScutCollect(items, mainAlu, meta){
   meta=meta||{}; var out=[];
+  var nos=pkpSetNos_(items);   // [WOSEQ]
   (items||[]).forEach(function(it,idx){
     if(!it.type||!pkpScutIs(it.type)) return;
     if(it.noReq) return;   // ไม่เบิกอุปกรณ์ = ไม่เข้าแผนจัดตัดราง (เหมือน pkpRailPieces)
     var col=String(it.cAlu||mainAlu||'').trim()||PKP_NO_COLOR;
     pkpScutPieces(it).forEach(function(p){
-      out.push({rail:p.profile,profile:p.profile,len:p.len,qty:p.qty,color:col,wo:meta.wo||'',name:meta.name||'',setNo:idx+1,type:it.type});
+      out.push({rail:p.profile,profile:p.profile,len:p.len,qty:p.qty,color:col,wo:meta.wo||'',name:meta.name||'',setNo:nos[idx],type:it.type});
     });
   });
   return out;
@@ -18428,10 +18452,11 @@ async function pkpCoverMulti(){
     for(var i=0;i<ids.length;i++){
       var o=await pkpFetchWO(ids[i]); if(!o)continue;
       var cust=(o.customer&&o.customer.name)||'-';
-      var items=(o.items||[]).filter(function(it){return it&&it.type;});
-      items.forEach(function(it,idx){
+      var nosL=pkpSetNos_(o.items||[]);   // [WOSEQ] เลขเดียวกับใบผลิต
+      var items=(o.items||[]).map(function(it,k){ return {it:it,no:nosL[k]}; }).filter(function(e){return e.it&&e.it.type;});
+      items.forEach(function(e){ var it=e.it;
         labels.push({
-          cust:cust, wo:o.woId||'', setNo:idx+1, total:items.length,
+          cust:cust, wo:o.woId||'', setNo:e.no, total:items.length, gap:items.some(function(x,k){ return x.no!==k+1; }),   // เลขข้าม (1,3,4) → ไม่ขึ้น /ทั้งหมด
           size: pkpIsSplit(it.type) ? (nv(it.wl)+'+'+nv(it.wr)+' × '+nv(it.h)) : (nv(it.w)+' × '+nv(it.h)),
           style: pkpCoverStyleShort_(it.type, it.patt),
           cAlu: (it.cAlu||o.mainColorAlu||'-'), cMesh: (it.cMesh||o.mainColorMesh||'-'),
@@ -18449,7 +18474,7 @@ function pkpCoverDocHTML_(labels){
   for(var i=0;i<labels.length;i+=PER) pages.push(labels.slice(i,i+PER));
   var lb=function(l){
     return '<div class="lb"><div class="lbfit">'
-      + '<div class="top"><span class="cust">'+esc(l.cust)+'</span><span class="setwrap"><span class="setno">ชุด '+l.setNo+'/'+l.total+'</span><span class="wo">'+esc(l.wo)+'</span></span></div>'
+      + '<div class="top"><span class="cust">'+esc(l.cust)+'</span><span class="setwrap"><span class="setno">ชุด '+l.setNo+(l.gap?'':'/'+l.total)+'</span><span class="wo">'+esc(l.wo)+'</span></span></div>'
       + '<div class="size">'+esc(l.size)+' <small>ซม.</small></div>'
       + '<div class="style">'+esc(l.style)+'</div>'
       + '<div class="colors">🎨 อลู: <b>'+esc(l.cAlu)+'</b> · มุ้ง: <b>'+esc(l.cMesh)+'</b></div>'
@@ -18504,7 +18529,7 @@ async function pkpFetchWO(woId){
 function pkpWoResolvedItems(o){
   var ma=o.mainColorAlu||'';
   return (o.items||[]).filter(function(it){return it.type;}).map(function(it){
-    return { type:it.type, w:it.w, h:it.h, wl:it.wl, wr:it.wr, cAlu:(it.cAlu||ma), cMesh:it.cMesh, note:it.note, noReq:!!it.noReq,
+    return { type:it.type, w:it.w, h:it.h, wl:it.wl, wr:it.wr, cAlu:(it.cAlu||ma), cMesh:it.cMesh, note:it.note, noReq:!!it.noReq, seq:pkpSeqOf_(it)||'',   // [WOSEQ]
              lsCovered: Array.isArray(it.lsCovered)?it.lsCovered:[],
              lsUsedDim: Array.isArray(it.lsUsedDim)?it.lsUsedDim:[] };   // ♻ คงทะเบียนชุดค้างทุกประเภท
   });
@@ -18579,6 +18604,16 @@ var pkpLoadedStatus='';
 
 function pkpToday(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }   // เวลาท้องถิ่น (เดิม UTC — ช่วง 0:00-7:00 ได้วันเมื่อวาน)
 function pkpBlankItem(){ return { type:'', patt:'→', w:'', h:'', wl:'', wr:'', cAlu:'', cMesh:'', note:'', noReq:false }; }
+// [WOSEQ 12 พ.ย. 2026 เจ้าของสั่ง] เลขชุดของรายการในใบผลิต (ทุกจุด: ใบผลิต/ใบจัดตัด/ติ๊กตัด/ตรวจเช็ค/ป้าย/ร่างสั่งราง)
+//  ดึงจากหน้าคำนวณกระจก = เลขชุดเดิมของหน้าคำนวณ (it.seq · ข้ามเลขได้ เช่น 1,3,4) · กรอกเอง = ลำดับแถว idx+1 เหมือนเดิม
+//  ชนกัน (เลขซ้ำ/แถวกรอกเองตรงเลขที่ใช้แล้ว) → ต่อท้ายเลขสูงสุด · ใบเก่าที่ไม่มี seq = idx+1 ทุกแถว (ไม่เปลี่ยน · ติ๊กตัดเดิมไม่หลุด)
+function pkpSeqOf_(it){ var s=it&&it.seq; if(s==null||String(s).trim()==='') return 0; var v=Number(s); return (isFinite(v)&&v===Math.floor(v)&&v>0&&v<=500)?v:0; }
+function pkpSetNos_(items){
+  items=items||[]; var out=[], used={}, mx=0, i, v;
+  for(i=0;i<items.length;i++){ v=pkpSeqOf_(items[i]); if(v&&!used[v]){ used[v]=1; out[i]=v; if(v>mx) mx=v; } }
+  for(i=0;i<items.length;i++){ if(out[i]) continue; v=i+1; if(used[v]){ v=mx+1; while(used[v]) v++; } used[v]=1; out[i]=v; if(v>mx) mx=v; }
+  return out;
+}
 
 // ── ลายเซ็นดิจิทัล (แนบรูป) ──
 function pkpRenderSig(){
@@ -19437,7 +19472,7 @@ function pkpRenderRows(){
   if(dl && !dl.children.length){ dl.innerHTML=pkpAllTypes().map(function(t){return '<option value="'+t+'"></option>';}).join(''); }
   var q=function(s){ return String(s==null?'':s).replace(/"/g,'&quot;'); };
   var mainAlu=(document.getElementById('pkpMainAlu')||{}).value||'', mainMesh=(document.getElementById('pkpMainMesh')||{}).value||'';
-  var html='';
+  var html='', nosR=pkpSetNos_(pkpItems);   // [WOSEQ]
   pkpItems.forEach(function(it,i){
     var sp=pkpIsSplit(it.type);
     var cls=function(f){ return 'fi'+(pkpDimBad_(it[f])?' bad':''); };
@@ -19462,7 +19497,7 @@ function pkpRenderRows(){
       : '<div class="pkpc-row"><button type="button" class="pkpc-chip" onclick="pkpShowColor('+i+')">🎨 สี: ตามสีหลัก'+((mainAlu||mainMesh)?' ('+q(mainAlu||'-')+' / '+q(mainMesh||'-')+')':'')+' · <b>เปลี่ยนเฉพาะชุดนี้</b></button></div>';
     html+='<div class="pkp-card pkpc'+(hasBad?' err':'')+'" id="pkpCard'+i+'">'
       +'<div class="pkpc-hd">'
-        +'<div class="pkpc-no">'+(i+1)+'.</div>'
+        +'<div class="pkpc-no"'+(pkpSeqOf_(it)?' title="เลขชุดจากหน้าคำนวณกระจก"':'')+'>'+nosR[i]+'.</div>'
         +typeBtn
         +'<button type="button" class="pkpc-ic" id="pkpPatt'+i+'" onclick="pkpOnPatt('+i+')" title="รูปแบบ (กดวน)" style="font-size:18px;">'+(it.patt||'→')+'</button>'
         +'<button type="button" class="pkpc-ic" onclick="pkpDupItem('+i+')" title="คัดลอกชุดนี้">⧉</button>'
@@ -19564,7 +19599,7 @@ function pkpBody(){
     items: pkpItems.filter(function(it){return it.type;}).map(function(it){return {
       type:it.type, patt:it.patt||'',
       w:it.w, h:it.h, wl:it.wl, wr:it.wr,
-      cAlu:it.cAlu, cMesh:it.cMesh, note:it.note||'', noReq:!!it.noReq,
+      cAlu:it.cAlu, cMesh:it.cMesh, note:it.note||'', noReq:!!it.noReq, seq:pkpSeqOf_(it)||'',   // [WOSEQ]
       lsCovered: Array.isArray(it.lsCovered)?it.lsCovered:[],   // ♻ เส้นที่ดึงจากชุดค้าง — persist ไม่งั้น reload แล้วตัดเกิน (21 ก.ค. 2026)
       lsUsedDim: Array.isArray(it.lsUsedDim)?it.lsUsedDim:[]
     };}),
@@ -19721,7 +19756,7 @@ async function pkpOpen(woId, fresh){
     set('pkpCust',(o.customer&&o.customer.name)||''); set('pkpIssue',o.issueDate); set('pkpInstall',o.installDate);
     set('pkpRef',o.refNo); set('pkpNote',o.note); set('pkpMainAlu',o.mainColorAlu); set('pkpMainMesh',o.mainColorMesh);
     pkpItems=(o.items&&o.items.length?o.items:[pkpBlankItem()]).map(function(it){return {
-      type:it.type||'', patt:it.patt||'→', w:it.w||'', h:it.h||'', wl:it.wl||'', wr:it.wr||'', cAlu:it.cAlu||'', cMesh:it.cMesh||'', note:it.note||'', noReq:!!it.noReq,
+      type:it.type||'', patt:it.patt||'→', w:it.w||'', h:it.h||'', wl:it.wl||'', wr:it.wr||'', cAlu:it.cAlu||'', cMesh:it.cMesh||'', note:it.note||'', noReq:!!it.noReq, seq:pkpSeqOf_(it)||'',   // [WOSEQ]
       lsCovered: Array.isArray(it.lsCovered)?it.lsCovered:[],   // ♻ คงเส้นที่ดึงจากชุดค้าง ตอนเปิดใบเก่ามาแก้ (ไม่งั้นตัดเกิน)
       lsUsedDim: Array.isArray(it.lsUsedDim)?it.lsUsedDim:[]
     };});
@@ -19878,7 +19913,8 @@ function pkpProdSheetsHTML_(o){
   // แยกรายการ: มุ้งจีบ/อื่นๆ อยู่ใบผลิตหลัก · บานเลื่อน/บานเปิด (มีสูตรตัดราง) แยกใบผลิตของตัวเอง
   // เลข No. ยึดตามลำดับที่กรอกใน WO (ไม่รันใหม่) — เลขเดียวกันทั้งใบหลัก/ใบแยก/ใบตัดราง
   var scutItems=[], jeebItems=[];
-  (o.items||[]).forEach(function(it,idx){ (pkpScutIs(it.type)?scutItems:jeebItems).push({it:it,no:idx+1}); });
+  var nosW=pkpSetNos_(o.items||[]);   // [WOSEQ] ดึงจากหน้าคำนวณ = เลขชุดหน้าคำนวณ
+  (o.items||[]).forEach(function(it,idx){ (pkpScutIs(it.type)?scutItems:jeebItems).push({it:it,no:nosW[idx]}); });
   var PER=10, pages=[], cur=[];
   jeebItems.forEach(function(e){ cur.push(rowsForItem(e.it,e.no)); if(cur.length>=PER){pages.push(cur);cur=[];} });
   if(jeebItems.length && cur.length) pages.push(cur);
@@ -20139,7 +20175,7 @@ function glwScreenNote_(x, gcName){ return 'ชุดที่ '+x.seq+(x.pos?' 
 function glwScreenItems_(snap, gcName){
   return ((snap&&snap.sets)||[]).filter(function(x){ return !x.warn && x.screen && x.screen.w>0 && x.screen.h>0; }).map(function(x){
     // [AWN] ชนิดตามมุ้ง: บานเลื่อน → มุ้งบานเลื่อน · บานกระทุ้ง → มุ้งหน้าต่างบานเปิด (สำเนาเก่าไม่มี type = บานเลื่อน)
-    var it=pkpBlankItem(); it.type=x.screen.type||'มุ้งบานเลื่อน'; it.w=String(x.screen.w); it.h=String(x.screen.h); it.cAlu=x.color||''; it.note=glwScreenNote_(x, gcName); return it;
+    var it=pkpBlankItem(); it.type=x.screen.type||'มุ้งบานเลื่อน'; it.w=String(x.screen.w); it.h=String(x.screen.h); it.cAlu=x.color||''; it.note=glwScreenNote_(x, gcName); if(pkpSeqOf_({seq:x.seq})) it.seq=pkpSeqOf_({seq:x.seq}); return it;   // [WOSEQ] เลขชุด = หน้าคำนวณ
   });
 }
 async function glwScreenPull(){
