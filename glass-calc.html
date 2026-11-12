@@ -140,6 +140,30 @@ body.gc-embed header,body.gc-embed .ruler{display:none}
 .gc-btns{display:flex;flex-wrap:wrap;gap:6px}
 .gc-btns button{flex:1 1 auto;padding:7px 10px;font-size:13px}
 .gc-empty{grid-column:1/-1;text-align:center;color:var(--muted);padding:24px 8px}
+/* [GCFOLD] โฟลเดอร์รวมงาน + ผลรวมโฟลเดอร์ */
+.gc-fold{border:1px solid var(--line);border-radius:var(--radius);background:#f7fafa;padding:8px 10px;margin-bottom:12px}
+.gc-fh{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
+.gc-fh .gc-ftog{background:none;border:0;padding:6px 4px;font-size:15px;font-weight:700;color:var(--head);text-align:left;flex:1 1 200px;min-width:0;word-break:break-word}
+.gc-fh .gc-ftog small{font-weight:400;color:var(--muted);font-size:12.5px}
+.gc-fh button:not(.gc-ftog){padding:6px 10px;font-size:13px}
+.gc-fold.closed>.gc-grid{display:none}
+.gc-fold.closed .gc-fh{margin-bottom:0}
+.gc-sec{font-size:13px;color:var(--muted);font-weight:700;margin:4px 0 8px}
+#gcDlg{position:fixed;inset:0;background:rgba(20,50,63,.45);z-index:1000;display:none;align-items:center;justify-content:center;padding:16px}
+#gcDlg .gc-dlg{background:#fff;border-radius:12px;max-width:480px;width:100%;max-height:calc(100vh - 32px);display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+#gcDlg h3{margin:0;padding:14px 16px 8px;font-size:16px;color:var(--head)}
+#gcDlg .gc-dlg-b{padding:4px 16px;overflow:auto;min-height:0}
+#gcDlg .gc-dlg-b input[type=text],#gcDlg .gc-dlg-b select{width:100%}
+#gcDlg .gc-dlg-msg{color:var(--danger);font-size:13px;padding:0 16px;min-height:4px;font-weight:600}
+#gcDlg .gc-dlg-f{display:flex;gap:8px;justify-content:flex-end;padding:10px 16px 14px;border-top:1px solid var(--line);margin-top:8px}
+.gc-pk{display:flex;align-items:flex-start;gap:8px;padding:7px 2px;border-bottom:1px dashed var(--line);font-size:14px;cursor:pointer}
+.gc-pk input{width:18px;height:18px;margin:2px 0 0;flex:none}
+.gc-pk small{color:var(--muted)}
+#gcFvBar{display:none;background:#fff6e6;border:1.5px solid #e9b25b;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:14px}
+body.gc-fv #gcFvBar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#gcFvBar .sp{flex:1}
+#gcFvBar button{padding:7px 12px;font-size:13px}
+body.gc-fv #siteBar,body.gc-fv #jobs>.bar-actions,body.gc-fv #gcDelBtn{display:none!important}
 #gcGate{max-width:520px;margin:40px auto;padding:20px;background:#fff;border:1px solid var(--line);border-radius:10px;text-align:center;font-size:15px}
 .panel,.card{max-width:100%;min-width:0}
 .panel>div{max-width:100%}
@@ -184,6 +208,7 @@ body.gc-embed header,body.gc-embed .ruler{display:none}
   <button data-tab="tab-cost">💰 ต้นทุน</button>
 </nav>
 <div class="wrap">
+<div id="gcFvBar" class="no-print"><span id="gcFvTxt"></span><span class="sp"></span><button class="ghost" id="gcFvNewBtn" type="button">＋ คำนวณใหม่ในโฟลเดอร์นี้</button><button class="primary" id="gcFvExitBtn" type="button">✕ ออกจากผลรวม</button></div>
 
 <section class="tabsec" id="tab-list">
   <div class="panel no-print">
@@ -192,9 +217,10 @@ body.gc-embed header,body.gc-embed .ruler{display:none}
       <input id="gcSearch" type="search" placeholder="🔍 ค้นหาชื่อหลัก" aria-label="ค้นหาชื่อหลัก">
       <select id="gcMonth" aria-label="เดือน"><option value="all">ทุกเดือน</option></select>
       <label class="gc-chk"><input type="checkbox" id="gcShowDel"> แสดงที่ลบแล้ว</label>
+      <button class="ghost" id="gcFolderNewBtn" type="button">📁＋ โฟลเดอร์ใหม่</button>
       <button class="primary" id="gcNewBtn2" type="button">＋ คำนวณใหม่</button>
     </div>
-    <div id="gcList" class="gc-grid"></div>
+    <div id="gcList"></div>
   </div>
 </section>
 
@@ -462,6 +488,7 @@ function renderJobs(){
   document.getElementById('plusTop').value=set.plusTop??2;
   document.getElementById('gkerf').value=set.glassKerf??0;
   document.getElementById('gsheets').value=set.glassSheets||GLASS_SHEETS_DEFAULT;
+  if(GC.fv){gcFvJobsView_();return;}   // [GCFOLD] ผลรวมโฟลเดอร์ = อ่านอย่างเดียว (แก้ที่งานแต่ละงาน)
   // site bar (ชื่อหลัก/สีหลัก)
   const sn=document.getElementById('siteName'); if(sn&&document.activeElement!==sn)sn.value=(state.site&&state.site.name)||'';
   const scSel=document.getElementById('siteColor');
@@ -1054,7 +1081,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 const GC_FORMULAS_VER='20261110a';   // ต้องตรงกับ ?v= ของ glass-formulas.js — แก้สูตรแล้ว bump ทั้งสองที่
 const API='https://pk-discord-relay.revenge2288.workers.dev/api';
 const GC_DRAFT_KEY='pk_gc_draft', GC_LAST_KEY='pk_gc_last';
-const GC={ user:null, ready:false, id:'', rev:0, sRev:0, lastProj:'', lastSet:'', timer:null, busy:false, again:false, conflict:false, items:[] };
+const GC={ user:null, ready:false, id:'', rev:0, sRev:0, lastProj:'', lastSet:'', timer:null, busy:false, again:false, conflict:false, items:[], fv:null, newFolder:'' };   // fv = [GCFOLD] กำลังดูผลรวมโฟลเดอร์ {name,ids,srcs}
 const GC_DOCS=[
   { panel:'detailPanel',   label:'รายละเอียดต่อชุด', title:'รายละเอียดงานตัด (ต่อชุด)', printId:'titleDetail',   mode:'print-detail' },
   { panel:'optPanel',      label:'Optimize ราง',     title:'แผนตัดราง / Optimize',      printId:'titleOpt',      mode:'print-opt' },
@@ -1087,13 +1114,13 @@ function gcStatus_(k,msg){
   const el=document.getElementById('gcStatus');if(!el)return;
   const t=new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
   const M={dirty:['● ยังไม่บันทึก',''],saving:['⏳ กำลังบันทึก…','busy'],saved:['✓ บันทึกแล้ว '+t,'ok'],empty:['ใส่ชื่อหลักหรือขนาดแล้วระบบบันทึกให้เอง',''],
-    error:['⚠ บันทึกไม่สำเร็จ: '+(msg||'')+' (แก้อะไรก็ได้เพื่อลองใหม่)','err'],conflict:['⚠ '+(msg||'มีการบันทึกจากที่อื่นก่อน')+' · เลือกงานนี้ใหม่จากรายการเพื่อโหลดล่าสุด','err'],loading:['⏳ กำลังโหลด…','busy']};
+    error:['⚠ บันทึกไม่สำเร็จ: '+(msg||'')+' (แก้อะไรก็ได้เพื่อลองใหม่)','err'],conflict:['⚠ '+(msg||'มีการบันทึกจากที่อื่นก่อน')+' · เลือกงานนี้ใหม่จากรายการเพื่อโหลดล่าสุด','err'],loading:['⏳ กำลังโหลด…','busy'],fv:['📁 ผลรวมโฟลเดอร์ (อ่านอย่างเดียว)','ok']};
   const m=M[k]||['',''];el.textContent=m[0];el.className='gc-st '+m[1];
 }
 function gcDraftSave_(){try{localStorage.setItem(GC_DRAFT_KEY,JSON.stringify({id:GC.id,rev:GC.rev,site:state.site,jobs:state.jobs,at:Date.now()}));}catch(e){}}
 function gcSchedule_(){
   if(!GC.ready)return;
-  gcDraftSave_();
+  if(!GC.fv)gcDraftSave_();   // [GCFOLD] ผลรวมโฟลเดอร์ไม่ใช่งาน → ห้ามเป็นร่าง (เปิดใหม่จะกลายเป็นงานใหม่)
   if(GC.conflict)return;
   gcStatus_('dirty');clearTimeout(GC.timer);GC.timer=setTimeout(()=>gcFlush(false),1500);
 }
@@ -1102,19 +1129,20 @@ async function gcFlush(leaving){
   clearTimeout(GC.timer);
   if(GC.busy){GC.again=true;return;}
   const pj=gcProjJson_(),sj=gcSetJson_();
-  const needP=pj!==GC.lastProj&&gcHasData_(),needS=sj!==GC.lastSet;
-  if(!needP&&!needS){gcStatus_(GC.id||gcHasData_()?'saved':'empty');return;}
+  const needP=!GC.fv&&pj!==GC.lastProj&&gcHasData_(),needS=sj!==GC.lastSet;   // [GCFOLD] ผลรวมโฟลเดอร์: บันทึกเฉพาะราคา/ตั้งค่า
+  if(!needP&&!needS){gcStatus_(GC.fv?'fv':(GC.id||gcHasData_()?'saved':'empty'));return;}
   GC.busy=true;gcStatus_('saving');
   try{
     if(needS){const r=await gcCall_({action:'pk_gcSettingsSave',rev:GC.sRev,data:JSON.parse(sj)},leaving);if(!r.ok)throw r;GC.sRev=r.rev;GC.lastSet=sj;}
     if(needP){
-      const r=await gcCall_({action:'pk_gcSave',id:GC.id||'',rev:GC.rev,data:JSON.parse(pj),summary:gcSummary_()},leaving);if(!r.ok)throw r;
-      GC.id=r.id;GC.rev=r.rev;GC.lastProj=pj;
+      const nf=GC.id?'':(GC.newFolder||'');   // [GCFOLD] งานใหม่จาก "คำนวณใหม่ในโฟลเดอร์นี้" → สร้างในโฟลเดอร์เลย
+      const r=await gcCall_({action:'pk_gcSave',id:GC.id||'',rev:GC.rev,data:JSON.parse(pj),summary:gcSummary_(),folder:nf},leaving);if(!r.ok)throw r;
+      GC.id=r.id;GC.rev=r.rev;GC.lastProj=pj;GC.newFolder='';
       try{localStorage.setItem(GC_LAST_KEY,GC.id);}catch(e){}
       const it=GC.items.find(x=>x.id===r.id),nm=r.name!=null?r.name:String(state.site.name||'');
       const sm=gcSummary_(),who=(GC.user&&(GC.user.name||GC.user.username))||'';
       if(it){Object.assign(it,{name:nm,rev:r.rev,updatedAt:r.updatedAt,jobCount:state.jobs.length,summary:sm,updatedBy:who});}
-      else GC.items.unshift({id:r.id,name:nm,rev:r.rev,updatedAt:r.updatedAt,createdAt:r.updatedAt,jobCount:state.jobs.length,summary:sm,updatedBy:who,deletedAt:0});
+      else GC.items.unshift({id:r.id,name:nm,rev:r.rev,updatedAt:r.updatedAt,createdAt:r.updatedAt,jobCount:state.jobs.length,summary:sm,updatedBy:who,deletedAt:0,folder:nf});
       gcDraftSave_();gcRenderSel_();
     }
     gcStatus_('saved');
@@ -1129,8 +1157,11 @@ function gcItemLabel_(it){
 }
 function gcRenderSel_(){
   const sel=document.getElementById('gcSel');if(!sel)return;
-  let h=GC.id?'':'<option value="" selected>(งานใหม่ — ยังไม่บันทึก)</option>';
-  h+=GC.items.filter(it=>!it.deletedAt).map(it=>'<option value="'+gcEsc_(it.id)+'"'+(it.id===GC.id?' selected':'')+'>'+gcEsc_(gcItemLabel_(it))+'</option>').join('');
+  let h=GC.fv?'<option value="" selected>📁 ผลรวม: '+gcEsc_(GC.fv.name)+'</option>':(GC.id?'':'<option value="" selected>(งานใหม่ — ยังไม่บันทึก)</option>');
+  const opt=it=>'<option value="'+gcEsc_(it.id)+'"'+(it.id===GC.id&&!GC.fv?' selected':'')+'>'+gcEsc_(gcItemLabel_(it))+'</option>';
+  const live=GC.items.filter(it=>!it.deletedAt),fm=gcFolderMap_(live);   // [GCFOLD] จัดกลุ่มตามโฟลเดอร์
+  h+=Object.keys(fm).sort((a,b)=>a.localeCompare(b,'th')).map(f=>'<optgroup label="📁 '+gcEsc_(f)+'">'+fm[f].map(opt).join('')+'</optgroup>').join('');
+  h+=live.filter(it=>!it.folder).map(opt).join('');
   sel.innerHTML=h||'<option value="">(ยังไม่มีงาน)</option>';
   const del=document.getElementById('gcDelBtn');if(del)del.style.display=GC.id?'':'none';
   const c=document.getElementById('cntList');if(c)c.textContent=GC.items.filter(it=>!it.deletedAt).length;
@@ -1150,7 +1181,7 @@ async function gcOpen(id){
   gcStatus_('loading');
   const r=await gcFast_('/gc-get','pk_gcGet',{id:id});
   if(!r||!r.ok){gcStatus_('error',(r&&r.error)||'โหลดไม่ได้');gcRenderSel_();return false;}
-  GC.ready=false;
+  GC.ready=false;gcFvClear_();GC.newFolder='';
   GC.id=r.item.id;GC.rev=r.item.rev;GC.conflict=false;
   const it=GC.items.find(x=>x.id===r.item.id);if(it)Object.assign(it,r.item);else GC.items.unshift(r.item);
   gcApply_(r.data);
@@ -1166,9 +1197,10 @@ async function gcOpen(id){
   if(restored||stale){if(stale)GC.lastProj='';gcSchedule_();}else{gcDraftSave_();gcStatus_('saved');}
   return true;
 }
-async function gcNew(){
+async function gcNew(folder){
   if(GC.busy||GC.timer)await gcFlush(false);
-  GC.ready=false;GC.id='';GC.rev=0;GC.conflict=false;GC.lastProj='';
+  GC.ready=false;gcFvClear_();GC.id='';GC.rev=0;GC.conflict=false;GC.lastProj='';
+  GC.newFolder=typeof folder==='string'?folder:'';   // [GCFOLD] บันทึกครั้งแรกเข้าโฟลเดอร์นี้
   gcApply_({site:{name:'',mainColor:state.site.mainColor||'',glassColor:state.site.glassColor||''},jobs:[]});
   try{localStorage.removeItem(GC_LAST_KEY);}catch(e){}
   GC.ready=true;gcDraftSave_();gcRenderSel_();gcStatus_('empty');
@@ -1277,7 +1309,23 @@ function gcListRender_(){
   else if(ms&&ms.value!=='all')list=list.filter(it=>gcMonthKey_(it.updatedAt)===ms.value);
   list=list.slice().sort((a,b)=>(!!a.deletedAt-!!b.deletedAt)||(b.updatedAt-a.updatedAt));
   if(!list.length){w.innerHTML='<div class="gc-empty">'+(GC.items.length?'ไม่พบงานที่ตรงกับตัวกรอง':'ยังไม่มีงานคำนวณ<br><small>กด "＋ คำนวณใหม่" แล้วใส่ชื่อหลัก ระบบบันทึกให้เอง</small>')+'</div>';return;}
-  w.innerHTML=list.map(it=>{
+  // [GCFOLD] จัดกลุ่มตามโฟลเดอร์ (พับ/กางได้ · จำในเครื่อง) → งานนอกโฟลเดอร์อยู่ท้าย
+  const fm=gcFolderMap_(list),closed=gcFoldClosed_(),all=gcFolderMap_(GC.items.filter(it=>!it.deletedAt));
+  const fh=Object.keys(fm).sort((a,b)=>a.localeCompare(b,'th')).map(f=>{
+    const al=all[f]||[],sets=al.reduce((a,it)=>a+(+it.jobCount||0),0),cl=closed.indexOf(f)!==-1,fa=gcEsc_(f);
+    return '<div class="gc-fold'+(cl?' closed':'')+'" data-folder="'+fa+'"><div class="gc-fh">'
+      +'<button class="gc-ftog" data-fact="toggle" type="button">'+(cl?'▶':'▼')+' 📁 '+fa+' <small>('+al.length+' งาน · '+sets+' ชุด)</small></button>'
+      +'<button class="primary" data-fact="calc" type="button" title="Optimize ราง/กระจก + ต้นทุน + PDF รวมทุกงานในโฟลเดอร์">🧮 คำนวณรวม</button>'
+      +'<button class="ghost" data-fact="add" type="button">＋ เพิ่มงาน</button>'
+      +'<button class="ghost" data-fact="rename" type="button" title="เปลี่ยนชื่อโฟลเดอร์">✏️</button>'
+      +'<button class="ghost gc-del" data-fact="del" type="button" title="ลบโฟลเดอร์ (งานไม่หาย)">🗑</button>'
+      +'</div><div class="gc-grid">'+fm[f].map(gcCardHtml_).join('')+'</div></div>';
+  }).join('');
+  const loose=list.filter(it=>!it.folder);
+  w.innerHTML=fh+(loose.length?((fh?'<div class="gc-sec">── งานที่ยังไม่อยู่ในโฟลเดอร์ ──</div>':'')+'<div class="gc-grid">'+loose.map(gcCardHtml_).join('')+'</div>'):'');
+}
+function gcCardHtml_(it){
+  {
     const sm=it.summary||{cost:0,types:{}},del=!!it.deletedAt,cur=it.id===GC.id,id=gcEsc_(it.id);
     const when=it.updatedAt?new Date(it.updatedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}):'';
     const types=Object.keys(sm.types||{}).map(k=>'<span class="gc-chip">'+gcEsc_(k)+' '+sm.types[k]+'</span>').join('');
@@ -1288,8 +1336,8 @@ function gcListRender_(){
       +'<div class="gc-cost"><small>ต้นทุนวัสดุ (ตอนบันทึกล่าสุด)</small><b>฿'+fmt(sm.cost||0)+'</b></div>'
       +'<div class="gc-btns">'+(del
         ?'<button class="ghost" data-act="restore">↩ กู้คืน</button>'
-        :'<button class="primary" data-act="open">📂 เปิด</button><button class="ghost" data-act="dup">📋 ทำซ้ำ</button><button class="ghost gc-del" data-act="del">🗑 ลบ</button>')+'</div></div>';
-  }).join('');
+        :'<button class="primary" data-act="open">📂 เปิด</button><button class="ghost" data-act="move" title="ย้ายเข้า/ออกโฟลเดอร์">📁 ย้าย</button><button class="ghost" data-act="dup">📋 ทำซ้ำ</button><button class="ghost gc-del" data-act="del">🗑 ลบ</button>')+'</div></div>';
+  }
 }
 async function gcListReload_(){
   const r=await gcFast_('/gc-list','pk_gcList',{includeDeleted:!!(document.getElementById('gcShowDel')||{}).checked});
@@ -1301,10 +1349,16 @@ function gcListBind_(){
   document.getElementById('gcMonth').addEventListener('change',gcListRender_);
   document.getElementById('gcShowDel').addEventListener('change',gcListReload_);
   document.getElementById('gcNewBtn2').addEventListener('click',gcNew);
+  document.getElementById('gcFolderNewBtn').addEventListener('click',()=>gcFolderNew_());
+  document.getElementById('gcFvExitBtn').addEventListener('click',gcFvExit_);
+  document.getElementById('gcFvNewBtn').addEventListener('click',()=>{const f=GC.fv&&GC.fv.name;gcNew(f||'');});
   w.addEventListener('click',async e=>{
+    const fb=e.target.closest('button[data-fact]');   // [GCFOLD] ปุ่มหัวโฟลเดอร์
+    if(fb){const f=fb.closest('.gc-fold').getAttribute('data-folder');await gcFolderAct_(fb.getAttribute('data-fact'),f,fb);return;}
     const b=e.target.closest('button[data-act]');if(!b)return;
     const id=b.closest('.gc-card').getAttribute('data-id'),act=b.getAttribute('data-act');
     if(act==='open'){if(await gcOpen(id))showTab('tab-jobs');return;}
+    if(act==='move'){await gcMoveDlg_(id);return;}
     if(act==='dup'){b.disabled=true;await gcDup(id);b.disabled=false;return;}
     if(act==='restore'){b.disabled=true;const r=await gcCall_({action:'pk_gcRestore',id:id});if(!r.ok){gcStatus_('error',r.error);b.disabled=false;return;}GC.items.forEach(x=>{if(x.id===id)x.deletedAt=0;});gcRenderSel_();return;}
     if(act==='del'){   // กด 2 จังหวะ (เครื่องมือเดิมเลี่ยง confirm() — เบราว์เซอร์บล็อกได้)
@@ -1324,16 +1378,164 @@ async function gcDup(id){
   const g=await gcFast_('/gc-get','pk_gcGet',{id:id});
   if(!g||!g.ok){gcStatus_('error',(g&&g.error)||'โหลดไม่ได้');return;}
   const d=g.data||{};d.site=Object.assign({name:'',mainColor:'',glassColor:''},d.site||{});d.site.name=(String(d.site.name||'').trim()+' (สำเนา)').trim();
-  const r=await gcCall_({action:'pk_gcSave',id:'',rev:0,data:{site:d.site,jobs:d.jobs||[]},summary:(g.item&&g.item.summary)||null});
+  const r=await gcCall_({action:'pk_gcSave',id:'',rev:0,data:{site:d.site,jobs:d.jobs||[]},summary:(g.item&&g.item.summary)||null,folder:(g.item&&g.item.folder)||''});   // [GCFOLD] สำเนาอยู่โฟลเดอร์เดิม
   if(!r.ok){gcStatus_('error',r.error);return;}
   GC.items.unshift(Object.assign({},g.item,{id:r.id,name:r.name,rev:r.rev,createdAt:r.updatedAt,updatedAt:r.updatedAt,deletedAt:0,woId:''}));
   if(await gcOpen(r.id))showTab('tab-jobs');
 }
+// ════════ [GCFOLD 12 พ.ย. 2026] โฟลเดอร์รวมงาน + คำนวณรวมทั้งโฟลเดอร์ ════════
+//  โฟลเดอร์ = ชื่อที่เก็บในงาน (คอลัมน์ folder) · ย้าย/เปลี่ยนชื่อ/ลบ ผ่าน pk_gcFolderSet / pk_gcFolderRename (ไม่แตะเนื้องาน)
+//  คำนวณรวม = โหลดทุกงานในโฟลเดอร์ → รวมชุดเป็นก้อนเดียว (สี/สีกระจกหลักของแต่ละงานติดไปกับชุด) → ใช้ renderResults ตัวเดิม
+//    = Optimize ราง/สั่งกระจก/ตัดกระจก/ต้นทุน/Export 4 PDF ข้ามงาน · อ่านอย่างเดียว ไม่บันทึกเป็นงาน (แก้ที่งานแต่ละงาน)
+const GC_FOLD_KEY='pk_gc_fold_closed';
+function gcFolderMap_(list){const m={};(list||[]).forEach(it=>{const f=String(it.folder||'').trim();if(f)(m[f]=m[f]||[]).push(it);});return m;}
+function gcFolderName_(v){return String(v==null?'':v).replace(/\s+/g,' ').trim().slice(0,60);}   // = pkGcFolderName_ (GAS)
+function gcFoldClosed_(){try{const a=JSON.parse(localStorage.getItem(GC_FOLD_KEY)||'[]');return Array.isArray(a)?a:[];}catch(e){return [];}}
+function gcFoldToggle_(f){const a=gcFoldClosed_(),i=a.indexOf(f);if(i===-1)a.push(f);else a.splice(i,1);try{localStorage.setItem(GC_FOLD_KEY,JSON.stringify(a));}catch(e){}gcListRender_();}
+// หน้าต่างถาม (แทน prompt/confirm ที่เบราว์เซอร์บล็อกได้ในกรอบแอป) · collect(root) คืนค่า หรือ throw ข้อความเตือน
+function gcDlg_(title,bodyHtml,okText,collect){
+  return new Promise(res=>{
+    let bg=document.getElementById('gcDlg');
+    if(!bg){bg=document.createElement('div');bg.id='gcDlg';document.body.appendChild(bg);}
+    bg.innerHTML='<div class="gc-dlg" role="dialog" aria-modal="true"><h3>'+gcEsc_(title)+'</h3><div class="gc-dlg-b">'+bodyHtml+'</div><div class="gc-dlg-msg" role="alert"></div>'
+      +'<div class="gc-dlg-f"><button class="ghost" type="button" data-x>ยกเลิก</button><button class="primary" type="button" data-ok>'+gcEsc_(okText||'ตกลง')+'</button></div></div>';
+    bg.style.display='flex';
+    const done=v=>{bg.style.display='none';bg.innerHTML='';res(v);};
+    bg.querySelector('[data-x]').onclick=()=>done(null);
+    bg.onclick=e=>{if(e.target===bg)done(null);};
+    bg.querySelector('[data-ok]').onclick=()=>{try{done(collect?collect(bg):true);}catch(m){bg.querySelector('.gc-dlg-msg').textContent='⚠ '+(m&&m.message||m);}};
+    const inp=bg.querySelector('input[type=text]');if(inp)setTimeout(()=>{try{inp.focus();inp.select();}catch(e){}},30);
+  });
+}
+// รายการงานให้ติ๊กเลือก (ไม่รวมงานที่ลบแล้ว · ข้ามงานในโฟลเดอร์ skipFolder)
+function gcPickHtml_(skipFolder,checkedFolder){
+  const list=GC.items.filter(it=>!it.deletedAt&&(!skipFolder||it.folder!==skipFolder)).sort((a,b)=>(!!a.folder-!!b.folder)||(b.updatedAt-a.updatedAt));
+  if(!list.length)return '<div class="muted" style="padding:8px 0">ไม่มีงานให้เลือก</div>';
+  return list.map(it=>'<label class="gc-pk"><input type="checkbox" value="'+gcEsc_(it.id)+'"'+(checkedFolder&&it.folder===checkedFolder?' checked':'')+'><span>'+gcEsc_(it.name||'(ไม่มีชื่อ)')+' <small>· '+(it.jobCount||0)+' ชุด'+(it.folder?' · อยู่ใน 📁 '+gcEsc_(it.folder):'')+'</small></span></label>').join('');
+}
+function gcPicked_(root){return Array.from(root.querySelectorAll('.gc-pk input:checked')).map(x=>x.value);}
+async function gcFolderSet_(ids,folder){
+  gcStatus_('saving');
+  const r=await gcCall_({action:'pk_gcFolderSet',ids:ids,folder:folder});
+  if(!r||!r.ok){gcStatus_('error',(r&&r.error)||'ย้ายโฟลเดอร์ไม่สำเร็จ');return false;}
+  GC.items.forEach(it=>{if(ids.indexOf(it.id)!==-1)it.folder=r.folder;});
+  gcRenderSel_();gcStatus_(GC.fv?'fv':'saved');return true;
+}
+async function gcFolderNew_(){
+  const v=await gcDlg_('📁 สร้างโฟลเดอร์ใหม่','<label class="fld" style="margin-bottom:8px">ชื่อโฟลเดอร์<input type="text" id="gcDlgName" maxlength="60" placeholder="เช่น บจก.วีทูบี"></label><div class="gc-sec">เลือกงานที่จะใส่ (อย่างน้อย 1 งาน)</div>'+gcPickHtml_('',''),'สร้างโฟลเดอร์',root=>{
+    const n=gcFolderName_(root.querySelector('#gcDlgName').value);if(!n)throw 'ใส่ชื่อโฟลเดอร์ก่อน';
+    const ids=gcPicked_(root);if(!ids.length)throw 'เลือกงานอย่างน้อย 1 งาน (โฟลเดอร์ว่างจะไม่ถูกเก็บ)';
+    return {n,ids};});
+  if(!v)return;
+  if(await gcFolderSet_(v.ids,v.n)){const c=gcFoldClosed_().filter(x=>x!==v.n);try{localStorage.setItem(GC_FOLD_KEY,JSON.stringify(c));}catch(e){}gcListRender_();}
+}
+async function gcMoveDlg_(id){
+  const it=GC.items.find(x=>x.id===id);if(!it)return;
+  const fs=Object.keys(gcFolderMap_(GC.items.filter(x=>!x.deletedAt))).sort((a,b)=>a.localeCompare(b,'th'));
+  const cur=it.folder||'';
+  const opts='<option value="">— ไม่อยู่ในโฟลเดอร์ —</option>'+fs.map(f=>'<option value="'+gcEsc_(f)+'"'+(f===cur?' selected':'')+'>📁 '+gcEsc_(f)+'</option>').join('')+'<option value="__new">＋ โฟลเดอร์ใหม่…</option>';
+  const v=await gcDlg_('📁 ย้ายงาน "'+(it.name||'(ไม่มีชื่อ)')+'"','<label class="fld">ไปที่<select id="gcDlgSel">'+opts+'</select></label><label class="fld" id="gcDlgNewWrap" style="display:none;margin-top:8px">ชื่อโฟลเดอร์ใหม่<input type="text" id="gcDlgName" maxlength="60"></label>','ย้าย',root=>{
+    const s=root.querySelector('#gcDlgSel').value;
+    if(s!=='__new')return {f:s};
+    const n=gcFolderName_(root.querySelector('#gcDlgName').value);if(!n)throw 'ใส่ชื่อโฟลเดอร์ใหม่';return {f:n};});
+  // (select เปลี่ยน → โชว์ช่องชื่อใหม่ — ผูกหลังเปิดหน้าต่าง)
+  if(!v)return;
+  if(v.f===cur)return;
+  await gcFolderSet_([id],v.f);
+}
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='gcDlgSel'){const w=document.getElementById('gcDlgNewWrap');if(w){w.style.display=e.target.value==='__new'?'':'none';if(e.target.value==='__new'){const i=document.getElementById('gcDlgName');if(i)i.focus();}}}});
+async function gcFolderAct_(act,f,btn){
+  if(act==='toggle'){gcFoldToggle_(f);return;}
+  if(act==='calc'){btn.disabled=true;const t=btn.textContent;btn.textContent='⏳ กำลังรวม…';try{await gcFolderCalc(f);}finally{if(btn.isConnected){btn.disabled=false;btn.textContent=t;}}return;}
+  if(act==='add'){
+    const v=await gcDlg_('＋ เพิ่มงานเข้า 📁 '+f,gcPickHtml_(f,''),'เพิ่มเข้าโฟลเดอร์',root=>{const ids=gcPicked_(root);if(!ids.length)throw 'ยังไม่ได้เลือกงาน';return ids;});
+    if(v)await gcFolderSet_(v,f);return;
+  }
+  if(act==='rename'){
+    const v=await gcDlg_('✏️ เปลี่ยนชื่อโฟลเดอร์','<label class="fld">ชื่อใหม่<input type="text" id="gcDlgName" maxlength="60" value="'+gcEsc_(f)+'"></label><div class="note">ถ้าตั้งชื่อซ้ำกับโฟลเดอร์ที่มีอยู่ งานจะรวมเป็นโฟลเดอร์เดียวกัน</div>','บันทึกชื่อ',root=>{const n=gcFolderName_(root.querySelector('#gcDlgName').value);if(!n)throw 'ใส่ชื่อโฟลเดอร์';return n;});
+    if(!v||v===f)return;
+    await gcFolderRename_(f,v);return;
+  }
+  if(act==='del'){
+    const n=GC.items.filter(it=>it.folder===f).length;
+    const v=await gcDlg_('🗑 ลบโฟลเดอร์ '+f,'<div style="font-size:14px;line-height:1.7">ลบเฉพาะ<b>โฟลเดอร์</b> — งานข้างใน '+n+' งาน <b>ไม่ถูกลบ</b> จะกลับไปอยู่ "งานที่ยังไม่อยู่ในโฟลเดอร์"</div>','ลบโฟลเดอร์',()=>true);
+    if(v)await gcFolderRename_(f,'');
+  }
+}
+async function gcFolderRename_(from,to){
+  gcStatus_('saving');
+  const r=await gcCall_({action:'pk_gcFolderRename',from:from,to:to});
+  if(!r||!r.ok){gcStatus_('error',(r&&r.error)||'แก้โฟลเดอร์ไม่สำเร็จ');return false;}
+  GC.items.forEach(it=>{if(it.folder===r.from)it.folder=r.to;});
+  if(GC.fv&&GC.fv.name===r.from){if(r.to){GC.fv.name=r.to;gcFvBar_();}else gcFvExit_();}
+  gcRenderSel_();gcStatus_(GC.fv?'fv':'saved');return true;
+}
+// ---- 🧮 คำนวณรวมทั้งโฟลเดอร์ ----
+// รวมชุดจากหลายงาน: ชื่อตำแหน่ง = ชื่องาน_ตำแหน่ง (ป้ายในแผนตัดบอกที่มา) · สี/สีกระจกว่าง = ใช้สีหลักของงานนั้น (ไม่ใช่ของงานอื่น)
+function gcFolderMerge_(srcs){
+  const jobs=[];
+  srcs.forEach(s=>{
+    const site=(s.data&&s.data.site)||{},pj=String(site.name||s.name||'').trim()||'(ไม่มีชื่อ)';
+    ((s.data&&s.data.jobs)||[]).forEach(j=>{
+      const c=Object.assign({},j);
+      if(Array.isArray(c.clearSizes))c.clearSizes=c.clearSizes.slice();
+      c.id=uid();c._src=s.id;
+      const pos=String(j.name||'').trim();c.name=pos?pj+'_'+pos:pj;
+      c.color=String(j.color||'').trim()||String(site.mainColor||'').trim();
+      c.glassColor=String(j.glassColor||'').trim()||String(site.glassColor||'').trim();
+      jobs.push(c);
+    });
+  });
+  return jobs;
+}
+async function gcFolderCalc(f){
+  const its=GC.items.filter(it=>!it.deletedAt&&it.folder===f);
+  if(!its.length){gcStatus_('error','โฟลเดอร์นี้ไม่มีงาน');return false;}
+  if(GC.busy||GC.timer)await gcFlush(false);   // งานที่เปิดอยู่ต้องขึ้นระบบก่อน ผลรวมจะได้ตัวเลขล่าสุด
+  gcStatus_('loading');
+  const got=await Promise.all(its.map(it=>gcFast_('/gc-get','pk_gcGet',{id:it.id}).catch(e=>({ok:false,error:e&&e.message}))));
+  const bad=got.map((r,i)=>(!r||!r.ok)?(its[i].name||its[i].id):'').filter(Boolean);
+  if(bad.length){gcStatus_('error','โหลดงานไม่ได้ '+bad.length+' งาน: '+bad.slice(0,3).join(', ')+' — ยังไม่รวม (กันผลรวมขาด)');return false;}
+  const srcs=got.map((r,i)=>({id:its[i].id,name:its[i].name||'',data:r.data,rev:r.item&&r.item.rev}));
+  GC.ready=false;
+  GC.id='';GC.rev=0;GC.conflict=false;GC.lastProj='';GC.newFolder='';
+  GC.fv={name:f,ids:srcs.map(s=>s.id),srcs:srcs.map(s=>({id:s.id,name:s.name,sets:((s.data&&s.data.jobs)||[]).filter(j=>+j.W&&+j.H).length}))};
+  load(JSON.stringify({settings:state.settings,pricing:state.pricing,site:{name:'',mainColor:'',glassColor:''},jobs:gcFolderMerge_(srcs)}));
+  document.body.classList.add('gc-fv');gcFvBar_();
+  render();
+  GC.ready=true;gcRenderSel_();gcStatus_('fv');
+  showTab('tab-opt');
+  return true;
+}
+function gcFvBar_(){
+  const el=document.getElementById('gcFvTxt');if(!el||!GC.fv)return;
+  const sets=GC.fv.srcs.reduce((a,s)=>a+s.sets,0);
+  el.innerHTML='📁 <b>ผลรวมโฟลเดอร์: '+gcEsc_(GC.fv.name)+'</b> · '+GC.fv.srcs.length+' งาน · '+sets+' ชุด <span class="muted">(อ่านอย่างเดียว — แก้ขนาดที่งานแต่ละงาน)</span>';
+}
+function gcFvClear_(){if(!GC.fv)return;GC.fv=null;document.body.classList.remove('gc-fv');}
+// ออกจากผลรวม → กลับงานที่เปิดล่าสุด (ถ้ายังอยู่) ไม่งั้นงานใหม่
+async function gcFvExit_(){
+  let last='';try{last=localStorage.getItem(GC_LAST_KEY)||'';}catch(e){}
+  if(last&&GC.items.some(x=>x.id===last&&!x.deletedAt)&&await gcOpen(last)){showTab('tab-list');return;}
+  await gcNew();showTab('tab-list');
+}
+// แท็บงานในโหมดผลรวม: รายการงาน+ชุดแบบอ่านอย่างเดียว พร้อมปุ่มเปิดงานไปแก้
+function gcFvJobsView_(){
+  const tb=document.getElementById('jobsBody');if(!tb||!GC.fv)return;
+  tb.innerHTML=GC.fv.srcs.map(s=>{
+    const js=state.jobs.filter(j=>j._src===s.id);
+    const rows=js.map(j=>'<tr><td>#'+gcEsc_(j.seq==null?'':j.seq)+'</td><td>'+gcEsc_(j.name||'')+'</td><td>'+gcEsc_(gcTypeKey_(j)+(j.box&&j.type!=='บานเลื่อน'?' · '+j.box:''))+'</td><td class=r>'+gcEsc_((j.W||'?')+' × '+(j.H||'?'))+'</td><td>'+gcEsc_(j.color||'')+'</td></tr>').join('');
+    return '<div class="job-card"><div class="jc-head"><b style="font-size:15px;color:var(--head)">'+gcEsc_(s.name||'(ไม่มีชื่อ)')+'</b><span class="muted" style="font-size:12.5px">'+s.sets+' ชุด</span><span class="sp"></span><button class="ghost" type="button" data-fvopen="'+gcEsc_(s.id)+'">📂 เปิดงานนี้ไปแก้</button></div>'
+      +'<div class="tbl-scroll"><table class="inner"><thead><tr><th>ชุด</th><th>ตำแหน่ง</th><th>แบบ</th><th>ขนาด</th><th>สีอลู</th></tr></thead><tbody>'+(rows||'<tr><td colspan=5 class=muted>ไม่มีชุด</td></tr>')+'</tbody></table></div></div>';
+  }).join('');
+  tb.querySelectorAll('button[data-fvopen]').forEach(b=>b.addEventListener('click',async()=>{if(await gcOpen(b.getAttribute('data-fvopen')))showTab('tab-jobs');}));
+}
 // ---- หัวกระดาษ/ชื่อไฟล์: ชื่อหลัก นำหน้าชื่อเอกสาร ----
-function gcBaseName_(){return (String(state.site.name||'').replace(/[\\/:*?"<>|\[\]]+/g,' ').replace(/\s+/g,' ').trim())||'ไม่มีชื่อ';}
+function gcTitleName_(){return GC.fv?GC.fv.name:String(state.site.name||'');}   // [GCFOLD] ผลรวมโฟลเดอร์ใช้ชื่อโฟลเดอร์นำหน้า
+function gcBaseName_(){return (gcTitleName_().replace(/[\\/:*?"<>|\[\]]+/g,' ').replace(/\s+/g,' ').trim())||'ไม่มีชื่อ';}
 let _gcDocTitle=null;
 function gcPrintTitles_(mode){
-  const nm=String(state.site.name||'').trim();
+  const nm=gcTitleName_().trim();
   GC_DOCS.concat([{printId:'titleCost',title:'สรุปต้นทุนวัสดุ',label:'ต้นทุน',mode:'print-cost'}]).forEach(d=>{const el=document.getElementById(d.printId);if(el)el.textContent=(nm?nm+' — ':'')+'PK — '+d.title;});
   if(_gcDocTitle==null)_gcDocTitle=document.title;
   const d=GC_DOCS.concat([{label:'ต้นทุน',mode:'print-cost'}]).find(x=>x.mode===mode);
@@ -1355,8 +1557,8 @@ async function gcPanelPdf_(doc,dateTxt){
   const src=document.getElementById(doc.panel);
   let stage=document.getElementById('gcPdfStage');
   if(!stage){stage=document.createElement('div');stage.id='gcPdfStage';document.body.appendChild(stage);}
-  const nm=String(state.site.name||'').trim();
-  stage.innerHTML='<div class="gc-pt">'+gcEsc_((nm?nm+' — ':'')+'PK — '+doc.title)+'</div><div class="gc-ps">'+gcEsc_(state.jobs.length+' ชุด · พิมพ์ '+dateTxt)+'</div>';
+  const nm=gcTitleName_().trim();
+  stage.innerHTML='<div class="gc-pt">'+gcEsc_((nm?nm+' — ':'')+'PK — '+doc.title)+'</div><div class="gc-ps">'+gcEsc_((GC.fv?'ผลรวมโฟลเดอร์ '+GC.fv.srcs.length+' งาน · ':'')+state.jobs.length+' ชุด · พิมพ์ '+dateTxt)+'</div>';
   const cl=src.cloneNode(true);cl.removeAttribute('id');stage.appendChild(cl);
   await new Promise(r=>setTimeout(r,30));
   const breaks=gcBreaks_(stage),H=stage.scrollHeight,W=stage.scrollWidth;
