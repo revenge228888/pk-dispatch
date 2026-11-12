@@ -403,7 +403,7 @@ body.pk-modal-open{position:fixed;left:0;right:0;width:100%;overflow:hidden;}
 @media(max-width:520px){.wb-head{padding:6px 8px;gap:6px}.wb-head>span:first-child{font-size:13px}.wb-tool{min-width:34px;height:32px;padding:0 7px}.user-chip{display:none}}
 
 /* LOADING / TOAST */
-.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(70px);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);background:var(--surf2);border:1px solid var(--bdr);color:var(--tx);border-radius:var(--r-md);padding:11px 18px;font-size:13px;z-index:300;opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,.5);}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(70px);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);background:var(--surf2);border:1px solid var(--bdr);color:var(--tx);border-radius:var(--r-md);padding:11px 18px;font-size:13px;z-index:100000;opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);white-space:normal;max-width:calc(100vw - 32px);text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.5);pointer-events:none;}/* z สูงสุด: เดิม 300 ถูกหน้าต่าง .quom-bg (600) บัง → ข้อความเตือนในหน้าต่างมองไม่เห็น (12 พ.ย. 2026) */
 .toast.on{transform:translateX(-50%) translateY(0);opacity:1;}
 .loading{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;gap:12px;flex-direction:column;z-index:400;color:#fff;font-size:14px;}
 .loading.on{display:flex;}
@@ -16375,32 +16375,46 @@ async function poOpenReceive(){
   let cat=[]; try{ const rc=await getRailCountFast(); if(rc&&rc.ok) cat=rc.catalog||[]; }catch(e){}
   _poRecv = { id:f.id, mode:f.mode, items:(f.items||[]).map((it,i)=>{
     const sizes=it.stockType==='rail'?poRecvSizes_(it,cat):[];
-    return { i, desc:it.desc||'', qty:Number(it.qty)||0, oldRecv:Number(it.receivedQty)||0, recv:Number(it.receivedQty)||0, stockType:it.stockType||'', sizes, size:String(it.stockSize||'')||(sizes.length===1?sizes[0]:'') };
+    return { i, desc:it.desc||'', qty:Number(it.qty)||0, oldRecv:Number(it.receivedQty)||0, recv:Number(it.receivedQty)||0, round:0, stockType:it.stockType||'', sizes, size:String(it.stockSize||'')||(sizes.length===1?sizes[0]:'') };
   }) };
   poRenderReceive();
   document.getElementById('poRecvModal').classList.add('on');
 }
 function poCloseReceive(){ document.getElementById('poRecvModal').classList.remove('on'); _poRecv = null; }
+// 12 พ.ย. 2026: ช่องกรอก = "รับรอบนี้" (เดิมเป็นยอดสะสม → ออฟฟิศพิมพ์ยอดรอบนี้แล้วคลังถูกหักคืน)
+//   ส่ง server เป็นยอดสะสม = รับก่อนหน้า + รอบนี้ เหมือนเดิม (pkPOReceive คิดเฉพาะส่วนต่าง · ไม่แตะ backend)
+//   รอบนี้ติดลบได้ไม่เกินที่รับไว้ (ใช้แก้รับเกิน) · รวมแล้วไม่เกินยอดสั่ง
+function poRecvClampRound_(r, val){
+  let v = Number(val); if(!isFinite(v)) v=0;
+  if (v < -r.oldRecv) v = -r.oldRecv;
+  if (v > r.qty - r.oldRecv) v = Math.max(0, r.qty - r.oldRecv);
+  return Math.round(v*100)/100;
+}
 function poRecvSet(i, val){
   const r = _poRecv.items.find(x=>x.i===i); if(!r) return;
-  let v = Number(val); if(!isFinite(v)||v<0) v=0; if(v>r.qty) v=r.qty; r.recv = v;
+  r.round = poRecvClampRound_(r, val); r.recv = Math.round((r.oldRecv + r.round)*100)/100;
   const d = document.getElementById('poRecvDelta'+i);
-  if(d){ const dl=v-r.oldRecv; d.textContent=(dl>0?('+'+dl):String(dl))+(r.stockType?(' '+(r.stockType==='rail'?'ราง':'อุปกรณ์')):''); d.style.color = dl>0?'var(--grn)':(dl<0?'var(--red,#e5484d)':'var(--mu)'); }
+  if(d){ d.textContent='รวม '+fmt(r.recv)+'/'+fmt(r.qty); d.style.color = r.round>0?'var(--grn)':(r.round<0?'var(--red,#e5484d)':'var(--mu)'); }
+  poRecvMsg_('');
 }
-function poRecvSize(i,v){ const r=_poRecv.items.find(x=>x.i===i); if(r) r.size=v; }
-function poRecvFill(i){ const r=_poRecv.items.find(x=>x.i===i); if(!r) return; r.recv=r.qty; poRenderReceive(); }
+function poRecvSize(i,v){ const r=_poRecv.items.find(x=>x.i===i); if(!r) return; r.size=v; const s=document.getElementById('poRecvSizeSel'+i); if(s) s.style.outline=''; poRecvMsg_(''); }
+function poRecvFill(i){ const r=_poRecv.items.find(x=>x.i===i); if(!r) return; r.round=Math.max(0, r.qty-r.oldRecv); r.recv=r.oldRecv+r.round; poRenderReceive(); }
+// ข้อความเตือนในหน้าต่างรับของ (ไม่พึ่ง toast อย่างเดียว)
+function poRecvMsg_(m){ const el=document.getElementById('poRecvMsg'); if(!el) return; el.textContent=m||''; el.style.display=m?'block':'none'; }
 function poRenderReceive(){
   const stLabel = { rail:'🛤 ราง', equip:'🔩 อุปกรณ์', '':'— ไม่นับ' };
   const body = document.getElementById('poRecvBody');
-  body.innerHTML = '<div style="font-size:12px;color:var(--mu);margin-bottom:8px;">ตั้ง “จำนวนที่รับแล้วสะสม” ต่อรายการ — ระบบปรับ stock เฉพาะส่วนต่าง (เพิ่ม/ลดคืน) เฉพาะรายการที่ตั้งคลังไว้</div>'
+  body.innerHTML = '<div style="font-size:12px;color:var(--mu);margin-bottom:8px;">กรอก “รับรอบนี้” เฉพาะของที่มาส่งรอบนี้ — ระบบบวกเข้าคลังให้เอง (เฉพาะรายการที่ตั้งคลังไว้) · รับเกินไปแล้วใส่ติดลบเพื่อแก้</div>'
+    + '<div id="poRecvMsg" style="display:none;background:rgba(229,72,77,.12);border:1px solid var(--red,#e5484d);color:var(--red,#e5484d);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:13px;font-weight:600;"></div>'
     + _poRecv.items.map(r => ''
       + '<div class="row-form" style="gap:6px;align-items:flex-end;border-bottom:1px dashed var(--bdr);padding:6px 0;">'
       +   '<div class="fg" style="flex:1;min-width:140px;"><label class="fl">รายการ</label><div style="padding:6px 0;">'+escHtml(r.desc)+' <span style="font-size:11px;color:var(--mu);">['+stLabel[r.stockType||'']+']</span></div></div>'
       +   '<div class="fg" style="width:60px;"><label class="fl">สั่ง</label><div style="padding:6px 0;font-family:var(--mono);">'+fmt(r.qty)+'</div></div>'
-      +   '<div class="fg" style="width:90px;"><label class="fl">รับแล้ว</label><input class="fi" type="number" step="0.01" value="'+r.recv+'" oninput="poRecvSet('+r.i+',this.value)"></div>'
-      +   '<button class="btn btn-g" style="padding:6px 8px;" onclick="poRecvFill('+r.i+')" title="รับครบ">ครบ</button>'
-      +   (r.sizes.length>1?'<div class="fg" style="width:110px;"><label class="fl">ความยาว</label><select class="fi" onchange="poRecvSize('+r.i+',this.value)"><option value="">เลือก</option>'+r.sizes.map(z=>'<option value="'+escAttr(z)+'"'+(z===r.size?' selected':'')+'>'+escHtml(z)+' ม.</option>').join('')+'</select></div>':(r.size?'<div class="fg" style="width:70px;"><label class="fl">ความยาว</label><div style="padding:6px 0;font-family:var(--mono);">'+escHtml(r.size)+' ม.</div></div>':''))
-      +   '<div class="fg" style="width:90px;"><label class="fl">Δ stock</label><div style="padding:6px 0;font-family:var(--mono);" id="poRecvDelta'+r.i+'">'+((r.recv-r.oldRecv)>0?'+':'')+(r.recv-r.oldRecv)+'</div></div>'
+      +   '<div class="fg" style="width:70px;"><label class="fl">รับก่อนหน้า</label><div style="padding:6px 0;font-family:var(--mono);">'+fmt(r.oldRecv)+'</div></div>'
+      +   '<div class="fg" style="width:90px;"><label class="fl">รับรอบนี้</label><input class="fi" type="number" step="0.01" value="'+(r.round||'')+'" placeholder="0" oninput="poRecvSet('+r.i+',this.value)"></div>'
+      +   '<button class="btn btn-g" style="padding:6px 8px;" onclick="poRecvFill('+r.i+')" title="รับส่วนที่เหลือครบ">ครบ</button>'
+      +   (r.sizes.length>1?'<div class="fg" style="width:110px;"><label class="fl">ความยาว</label><select class="fi" id="poRecvSizeSel'+r.i+'" onchange="poRecvSize('+r.i+',this.value)"><option value="">เลือก</option>'+r.sizes.map(z=>'<option value="'+escAttr(z)+'"'+(z===r.size?' selected':'')+'>'+escHtml(z)+' ม.</option>').join('')+'</select></div>':(r.size?'<div class="fg" style="width:70px;"><label class="fl">ความยาว</label><div style="padding:6px 0;font-family:var(--mono);">'+escHtml(r.size)+' ม.</div></div>':''))
+      +   '<div class="fg" style="width:90px;"><label class="fl">หลังรับ</label><div style="padding:6px 0;font-family:var(--mono);" id="poRecvDelta'+r.i+'">รวม '+fmt(r.recv)+'/'+fmt(r.qty)+'</div></div>'
       + '</div>').join('');
   const bar = document.getElementById('poRecvBar');
   bar.innerHTML = '<span style="margin-left:auto;"></span><button class="btn btn-d" onclick="poCloseReceive()">ยกเลิก</button><button class="btn btn-p" id="poRecvSaveBtn" onclick="poSubmitReceive()">✅ ยืนยันรับของ</button>';
@@ -16409,9 +16423,14 @@ async function poSubmitReceive(){
   if (!_poRecv) return;
   const changed = _poRecv.items.filter(r => r.recv !== r.oldRecv);
   const noSize = changed.find(r => r.recv > r.oldRecv && r.sizes.length > 1 && !r.size);   // กำกวมห้ามเดา — ยอดจะไปผิดช่องในหน้านับราง
-  if (noSize){ toast('เลือกความยาวของ "'+noSize.desc+'" ก่อนรับของ'); return; }
+  if (noSize){
+    const m='เลือกความยาวของ "'+noSize.desc+'" ก่อนรับของ';
+    poRecvMsg_('⚠️ '+m); toast(m);
+    const s=document.getElementById('poRecvSizeSel'+noSize.i); if(s){ s.style.outline='2px solid var(--red,#e5484d)'; try{ s.scrollIntoView({block:'center',behavior:'smooth'}); s.focus(); }catch(e){} }
+    return;
+  }
   const lines = changed.map(r => ({ i:r.i, received:r.recv, size:r.size||'' }));
-  if (!lines.length){ toast('ไม่มีการเปลี่ยนแปลงจำนวนรับ'); return; }
+  if (!lines.length){ poRecvMsg_('⚠️ ยังไม่ได้กรอก “รับรอบนี้” รายการไหนเลย'); toast('ยังไม่ได้กรอกจำนวนรับรอบนี้'); return; }
   const id = _poRecv.id, mode = _poRecv.mode;
   const btn = document.getElementById('poRecvSaveBtn'); if(btn){ btn.disabled=true; btn.textContent='⏳ กำลังบันทึก...'; }
   const r = await call({ action:'pk_poReceive', id, lines });
@@ -16423,7 +16442,7 @@ async function poSubmitReceive(){
     poCloseReceive();
     await poOpenLoaded(id, mode==='view'?'view':'edit'); // refresh ใบ
     poLoad();
-  } else { toast('รับของไม่สำเร็จ: '+((r&&r.error)||'?')); }
+  } else { const m='รับของไม่สำเร็จ: '+((r&&r.error)||'?'); poRecvMsg_('⚠️ '+m); toast(m); }
 }
 
 // ── F-PO-B: หน้าจัดการ supplier + stock map (modal) ──
