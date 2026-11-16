@@ -117,6 +117,29 @@ a.sidebar-item{text-decoration:none;-webkit-user-drag:none;}   /* เมนู�
 .exp-badge{display:inline-block;min-width:18px;padding:0 5px;height:18px;line-height:18px;text-align:center;font-size:11px;border-radius:var(--r-md);background:var(--rd);color:#fff;margin-left:6px;font-weight:700;}
 .exp-badge:empty{display:none;}
 .exp-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;}
+/* [EXPAPV2 16 พ.ย. 2026] หน้าอนุมัติเบิกแบบมือถือ (ตามแบบร่าง localtest/mock/exp-approve.html) */
+.eav-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.eav-sum>div{background:var(--surf2);border:1px solid var(--bdr);border-radius:12px;padding:8px 10px;cursor:pointer;min-width:0}
+.eav-sum>div.on{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc-t)}
+.eav-sum small{display:block;font-size:11px;color:var(--mu)}.eav-sum b{font-size:16px;display:block}.eav-sum i{font-style:normal;font-size:11px;color:var(--mu);font-family:var(--mono);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eav-chips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}.eav-chips::-webkit-scrollbar{display:none}
+.eav-chip{flex:none;border:1px solid var(--bdr);background:var(--surf2);border-radius:999px;padding:6px 12px;font-size:12.5px;color:var(--tx);white-space:nowrap;cursor:pointer;font-family:var(--sans)}
+.eav-chip.on{background:var(--acc);border-color:var(--acc);color:#fff}.eav-chip.warn.on{background:var(--amb);border-color:var(--amb)}
+.eav-grp{grid-column:1/-1;display:flex;justify-content:space-between;align-items:baseline;margin:6px 2px -4px;font-size:13px;font-weight:700;color:var(--mu)}.eav-grp span{font-family:var(--mono);font-weight:600}
+.eav-flags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.eav-fl{font-size:11px;border-radius:999px;padding:2px 8px;background:var(--bg);color:var(--mu)}.eav-fl.w{background:var(--amb-t);color:var(--amb);font-weight:600}.eav-fl.r{background:rgba(226,59,59,.12);color:var(--rd);font-weight:600}
+.eav-thumb{width:56px;height:56px;border-radius:10px;object-fit:cover;border:1px solid var(--bdr);background:var(--bg);flex:none;cursor:zoom-in}
+.eav-sw{position:relative;border-radius:var(--r-lg);overflow:hidden}.eav-sw>.exp-card{position:relative;touch-action:pan-y}
+.eav-bg{position:absolute;inset:0;display:flex;align-items:center;padding:0 22px;font-weight:700;color:#fff;opacity:0}.eav-bg.a{background:var(--grn)}.eav-bg.r{background:var(--rd);justify-content:flex-end}
+.eav-acts{display:flex;gap:8px;margin-top:10px}.eav-acts .btn{flex:1;padding:11px 8px;font-size:14px;font-weight:700}
+.eav-pay{background:var(--surf2);border:1px solid var(--bdr);border-radius:var(--r-lg);padding:12px}
+.eav-pay h4{display:flex;justify-content:space-between;gap:8px;font-size:15px;margin:0}
+.eav-bank{margin-top:8px;background:var(--bg);border-radius:10px;padding:8px 10px;font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.eav-bank b{font-family:var(--mono);font-size:14px}
+.eav-plist{margin-top:8px;font-size:12.5px}.eav-plist>div{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed var(--bdr)}
+.eav-big{text-align:center;font-size:30px;font-weight:700;color:var(--acc);margin:6px 0}
+#eavSnack{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#2b211a;color:#fff;border-radius:12px;padding:10px 14px;font-size:14px;display:none;align-items:center;gap:14px;z-index:99999;max-width:calc(100vw - 24px);white-space:nowrap}
+#eavSnack button{background:none;border:0;color:#ffcf9c;font-weight:700;font-size:14px;cursor:pointer;font-family:var(--sans)}
+.eav-rs{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
 .exp-card{background:var(--surf2);border:1px solid var(--bdr);border-radius:var(--r-lg);padding:14px;cursor:pointer;transition:all .15s;}
 .exp-card:hover{border-color:var(--acc);transform:translateY(-2px);}
 .exp-card-head{display:flex;align-items:center;gap:10px;}
@@ -911,7 +934,8 @@ tbody tr:nth-child(even){background:rgba(120,96,72,.04);}
   <div class="modal" style="padding:18px;">
     <div style="font-weight:700;font-size:15px;margin-bottom:4px;">↩️ ตีกลับคำขอเบิก</div>
     <div id="expRejectId" style="color:var(--mu);font-size:12px;font-family:var(--mono);margin-bottom:12px;"></div>
-    <label class="fl">เหตุผล (บังคับ)</label>
+    <label class="fl">เหตุผล (บังคับ) — แตะเลือก หรือพิมพ์เอง</label>
+    <div class="eav-rs" id="expRejectChips"></div>
     <textarea class="fi" id="expRejectReason" rows="3" placeholder="ระบุเหตุผลที่ตีกลับ — ผู้ตั้งเบิกจะเห็นในหมายเหตุ"></textarea>
     <div style="display:flex;gap:8px;margin-top:14px;">
       <button class="btn btn-g" style="flex:1;" onclick="expenseRejectCancel()">ยกเลิก</button>
@@ -1362,6 +1386,20 @@ function _pkReadSignal_(ms){
     setTimeout(function(){ try { c.abort(); } catch(e){} }, ms || PK_READ_TIMEOUT_MS);
     return c.signal;
   } catch(e){ return undefined; }   // เบราว์เซอร์เก่าไม่รองรับ → ทำงานแบบเดิม ไม่พัง
+}
+// [CPUTRIM 16 พ.ย. 2026] ดึงอัตโนมัติหยุดตอนจอดับ/สลับแอป (เดิมดึงต่อทั้งวันในกระเป๋า = ภาระ worker) → กลับมาที่แอป ดึงที่ค้างเกินรอบทันที
+const _pkPollAt = { tech:0, prd:0 };
+let _pkPollBound = false;
+function pkPollDue_(last, every, now){ return !last || (now - last) >= every; }   // คำนวณล้วน (เทสได้)
+function pkPollResumeBind_(){
+  if (_pkPollBound) return; _pkPollBound = true;
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden || !CURRENT_USER) return;
+    const now = Date.now();
+    try { if (typeof _techRefreshTimer !== 'undefined' && _techRefreshTimer && typeof _techDate !== 'undefined' && _techDate && pkPollDue_(_pkPollAt.tech, 30000, now)) { _pkPollAt.tech = now; techLoadJobs(); } } catch(e){}
+    try { if (CURRENT_USER.role === 'prod' && typeof _prdCutOn !== 'undefined' && !_prdCutOn && document.getElementById('prdBody') && pkPollDue_(_pkPollAt.prd, 60000, now)) { _pkPollAt.prd = now; prdLoad(true); } } catch(e){}
+    try { const wm = document.getElementById('wbModal'); if (wm && wm.classList.contains('on') && typeof wbLoad === 'function') wbLoad(); } catch(e){}
+  });
 }
 async function _pkFastPost_(path, extra){
   const r = await fetch(API.replace(/\/api$/, path), {
@@ -1959,7 +1997,8 @@ function enterApp(){
   if (!window._pkHashBound) { window._pkHashBound = true; window.addEventListener('hashchange', function(){ try{ pkApplyHashTab_(); }catch(e){} }); }
 
   if (window._pkTaskDotInterval) clearInterval(window._pkTaskDotInterval);
-  if (CURRENT_USER.role !== 'prod') window._pkTaskDotInterval = setInterval(() => { try { pkRefreshMyTaskDot(); } catch(e){} }, 300000);
+  if (CURRENT_USER.role !== 'prod') window._pkTaskDotInterval = setInterval(() => { if (document.hidden) return; try { pkRefreshMyTaskDot(); } catch(e){} }, 300000);
+  pkPollResumeBind_();   // [CPUTRIM] กลับมาที่แอป → ดึงที่ค้างทันที
 
   if (window._pkSessionInterval) clearInterval(window._pkSessionInterval);
   window._pkSessionFails = 0;
@@ -2975,8 +3014,10 @@ function renderOfficeShell(){
       <!-- อนุมัติเบิก (manager) -->
       <div id="tabExpenseapprove" style="display:none;">
         <div class="section-pad">
+          <div id="expApvSum" class="eav-sum"></div>   <!-- [EXPAPV2] กล่องสรุป รออนุมัติ/รอจ่าย/ตีกลับ -->
+          <div id="expApvChips" class="eav-chips"></div>
           <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
-            <select class="fi" id="expApproveFilter" onchange="expenseApproveFilterChanged()" style="flex:1;">
+            <select class="fi" id="expApproveFilter" onchange="expenseApproveFilterChanged()" style="display:none;">
               <option value="รออนุมัติ">⏳ รออนุมัติ</option>
               <option value="อนุมัติแล้ว">💰 อนุมัติแล้ว (รอจ่าย)</option>
               <option value="จ่ายแล้ว">✅ จ่ายแล้ว</option>
@@ -3279,14 +3320,40 @@ let _expPayeeMap = {};     // ชื่อผู้รับ → {bank, account}
 let _expPayeeAutofilled = false;  // ช่องบัญชีถูกเติมจากผู้รับเดิมอยู่หรือไม่ (ใช้ล้างค่าเมื่อสลับเป็นชื่อใหม่)
 let _expCurrentList = [];  // รายการที่โหลดล่าสุด (สำหรับ detail modal lookup)
 
-function _expFileToBase64(file){
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload  = () => resolve({ name:file.name, mimeType:file.type, bytes: reader.result.split(',')[1] });
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+// [IMGSHRINK 16 พ.ย. 2026] รูปใบเสร็จ/สลิป ย่อก่อนอัปโหลด (เดิมส่งเต็มไฟล์กล้อง 3-5MB/รูป = กินพื้นที่ Drive หลัก)
+//  ด้านยาวสุด 2000px · JPEG 85% → ตัวหนังสือใบเสร็จ/สลิปยังอ่านชัด (เจ้าของสั่ง: อย่าย่อจนเห็นไม่ชัด · หน้ารวมสลิปใช้ 1280 อยู่แล้ว ไม่แตะ)
+//  ไม่ใช่รูป (PDF) = ส่งเดิม · รูปเล็กอยู่แล้ว / ย่อแล้วไม่เล็กลง / อ่านรูปไม่ได้ = ส่งเดิม (ไม่ทำให้แย่ลง)
+const PK_SHRINK_MAX = 2000, PK_SHRINK_Q = 0.85, PK_SHRINK_KEEP = 450 * 1024;
+function _pkReadDataUrl_(file){ return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); }); }
+function pkShrinkPlan_(w, h, size, maxSide, keepBytes){   // คำนวณล้วน (เทสได้): ต้องย่อไหม + ขนาดใหม่
+  const long = Math.max(w, h);
+  if (!(w > 0 && h > 0)) return null;
+  if (long <= maxSide && size <= keepBytes) return null;   // เล็กพออยู่แล้ว
+  const k = Math.min(1, maxSide / long);
+  return { w: Math.max(1, Math.round(w * k)), h: Math.max(1, Math.round(h * k)) };
 }
+async function pkShrinkImage_(file, maxSide, q){
+  maxSide = maxSide || PK_SHRINK_MAX; q = q || PK_SHRINK_Q;
+  const src = await _pkReadDataUrl_(file);
+  const orig = { name:file.name, mimeType:file.type, bytes:String(src).split(',')[1] || '', size:file.size, shrunk:false };
+  if (String(file.type || '').indexOf('image/') !== 0 || /gif|svg/i.test(file.type)) return orig;
+  let img;
+  try { img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; }); }
+  catch (e) { return orig; }
+  const plan = pkShrinkPlan_(img.naturalWidth, img.naturalHeight, file.size, maxSide, PK_SHRINK_KEEP);
+  if (!plan) return orig;
+  const c = document.createElement('canvas'); c.width = plan.w; c.height = plan.h;
+  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, plan.w, plan.h);   // PNG โปร่งใส → พื้นขาว (ไม่ดำ)
+  g.drawImage(img, 0, 0, plan.w, plan.h);
+  const out = c.toDataURL('image/jpeg', q), b64 = out.split(',')[1] || '', nb = Math.floor(b64.length * 3 / 4);
+  if (!b64 || nb >= file.size) return orig;
+  return { name:String(file.name || 'image').replace(/\.[^.]+$/, '') + '.jpg', mimeType:'image/jpeg', bytes:b64, size:nb, shrunk:true };
+}
+async function _expFileToBase64(file){
+  const x = await pkShrinkImage_(file);
+  return { name:x.name, mimeType:x.mimeType, bytes:x.bytes, size:x.size };
+}
+const PK_UP_MAX_ORIG = 30 * 1024 * 1024, PK_UP_MAX = 5 * 1024 * 1024;   // ต้นฉบับรับได้ถึง 30MB (ย่อแล้วต้อง ≤ 5MB)
 
 // ── ใบแจ้งหนี้: แนบได้หลายรูป (สะสมจากทั้งเลือกไฟล์และถ่ายรูป) ──
 const EXP_MAX_FILES = 6;
@@ -3658,12 +3725,15 @@ async function expenseSubmit(){
   // ใบแจ้งหนี้: แนบได้หลายรูป → ส่งเป็น filesData (backend รองรับ fileData เดี่ยวของเดิมด้วย)
   let filesData = null;
   if (_expPickedFiles.length){
-    const big = _expPickedFiles.find(f => f.size > 5*1024*1024);
-    if (big){ _expSubmitBusy = false; toast('ไฟล์ "' + big.name + '" ใหญ่เกิน 5MB'); return; }
-    const total = _expPickedFiles.reduce((s,f) => s + f.size, 0);
-    if (total > 18*1024*1024){ _expSubmitBusy = false; toast('รวมทุกไฟล์ใหญ่เกิน 18MB — ลบบางรูปออกก่อน'); return; }
-    try { filesData = await Promise.all(_expPickedFiles.map(f => _expFileToBase64(f))); }
+    const huge = _expPickedFiles.find(f => f.size > PK_UP_MAX_ORIG);
+    if (huge){ _expSubmitBusy = false; toast('ไฟล์ "' + huge.name + '" ใหญ่เกิน 30MB'); return; }
+    try { filesData = await Promise.all(_expPickedFiles.map(f => _expFileToBase64(f))); }   // [IMGSHRINK] รูปย่อก่อน
     catch(e){ _expSubmitBusy = false; toast('อ่านไฟล์ไม่ได้'); return; }
+    const big = filesData.find(f => f.size > PK_UP_MAX);   // เช็คหลังย่อ (รูปกล้องเต็มไฟล์ผ่านได้แล้ว · PDF ใหญ่ยังกัน)
+    if (big){ _expSubmitBusy = false; toast('ไฟล์ "' + big.name + '" ใหญ่เกิน 5MB'); return; }
+    const total = filesData.reduce((s,f) => s + f.size, 0);
+    if (total > 18*1024*1024){ _expSubmitBusy = false; toast('รวมทุกไฟล์ใหญ่เกิน 18MB — ลบบางไฟล์ออกก่อน'); return; }
+    filesData = filesData.map(f => ({ name:f.name, mimeType:f.mimeType, bytes:f.bytes }));
   }
 
   const payload = { action:'pk_expenseSubmit', formData, filesData };
@@ -3857,7 +3927,7 @@ async function expenseApproveLoad(){
   const fEl = document.getElementById('expApproveFilter');
   const sf = fEl ? fEl.value : 'รออนุมัติ';
   // ปุ่มรวบจ่ายแสดงเฉพาะสถานะ "อนุมัติแล้ว"
-  const canBatch = (sf === 'อนุมัติแล้ว' || sf === 'รออนุมัติ');
+  const canBatch = (sf === 'รออนุมัติ');   // [EXPAPV2] รอจ่ายใช้ "💸 รวบจ่ายทั้งหมด" (รวมต่อผู้รับให้เอง) แทนการเลือกทีละใบ
   const tgl = document.getElementById('expBatchToggle');
   if (tgl){ tgl.style.display = canBatch ? '' : 'none';
     if (!_batchMode) tgl.textContent = (sf === 'รออนุมัติ') ? '✅ อนุมัติหลายใบ' : '🧾 รวบจ่าย'; }
@@ -3867,6 +3937,7 @@ async function expenseApproveLoad(){
     if (!r.ok){ box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">' + (r.error||'โหลดไม่ได้') + '</div>'; return; }
     const items = r.items || [];
     _expCurrentList = items.slice();
+    _eavCounts = r.counts || null;   // [EXPAPV2] worker ส่งจำนวน/ยอดทุกสถานะ · GAS fallback ไม่มี → นับจากรายการที่โหลด
     if (sf === 'รออนุมัติ') expenseSetBadge(items.length);
     expenseApproveRender();
   } catch(e){ box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">เชื่อมต่อไม่ได้</div>'; }
@@ -3874,12 +3945,187 @@ async function expenseApproveLoad(){
 
 function expenseApproveRender(){
   const box = document.getElementById('expApproveList');
-  const items = expenseFilterItems_(_expCurrentList || [], 'expSearchAll');
+  const sf = (document.getElementById('expApproveFilter')||{}).value || '';
+  eavRenderTop_(sf);
+  // [EXPAPV2] ซ่อนใบที่เพิ่งเปลี่ยนสถานะ (อนุมัติ/ตีกลับ) ออกจากหน้าสถานะเดิมทันที · โหมดเลือกหลายใบ/ทั้งหมด = เหมือนเดิม
+  let items = expenseFilterItems_(_expCurrentList || [], 'expSearchAll');
+  if (sf && !_batchMode) items = items.filter(it => it.status === sf);
+  items = items.filter(eavPass_);
   expenseFilteredTotal_(items, 'expApproveTotal');
-  const fn = _batchMode ? expenseBatchCardHtml : expenseCardHtml;
-  box.innerHTML = items.length ? items.map(fn).join('') : '<div class="loading-row" style="grid-column:1/-1;">ไม่มีรายการ</div>';
-  if (_batchMode) expenseBatchUpdateBar();
+  if (_batchMode){
+    box.innerHTML = items.length ? items.map(expenseBatchCardHtml).join('') : '<div class="loading-row" style="grid-column:1/-1;">ไม่มีรายการ</div>';
+    expenseBatchUpdateBar(); return;
+  }
+  if (sf === 'อนุมัติแล้ว'){ box.innerHTML = eavPayListHtml_(items); return; }
+  if (!items.length){ box.innerHTML = '<div class="loading-row" style="grid-column:1/-1;">' + (sf === 'รออนุมัติ' ? '🎉 ไม่มีรายการรออนุมัติ' : 'ไม่มีรายการ') + '</div>'; return; }
+  const g = {}, order = [];
+  items.forEach(it => { const k = eavDayKey_(it.date); if (!g[k]){ g[k] = []; order.push(k); } g[k].push(it); });
+  box.innerHTML = order.map(k => '<div class="eav-grp">' + eavDayLabel_(k) + ' <span>' + g[k].length + ' ใบ · ฿' + eavBaht_(g[k].reduce((s,x) => s + (Number(x.amount)||0), 0)) + '</span></div>'
+    + g[k].map(it => '<div class="eav-sw" id="eavSw_' + escAttr(it.id) + '"><div class="eav-bg a">✅ อนุมัติ</div><div class="eav-bg r">ตีกลับ ↩️</div>' + expenseCardHtml(it) + '</div>').join('')).join('');
+  if (CURRENT_USER.role === 'manager') eavBindSwipe_(box);
 }
+
+// ════════ [EXPAPV2 16 พ.ย. 2026] หน้าอนุมัติเบิกแบบมือถือ (เจ้าของยืนยันแบบร่าง) ════════
+//  กล่องสรุป + ชิปกรอง · การ์ดมีรูปใบเสร็จ + ป้ายเตือน · ปัดขวา=อนุมัติ / ซ้าย=ตีกลับ · เลิกทำ · รอจ่ายรวมต่อผู้รับ + รวบจ่ายไล่ทีละราย
+//  ⛔ ไม่เปลี่ยนความหมายเงิน: ใช้คำสั่งเดิมทั้งหมด (pk_expenseApprove / Reject / Unapprove / MarkPaid / BatchPay) · สลิปผูกเฉพาะ id ของผู้รับรายนั้น
+let _eavCounts = null, _eavF = { cat:'', by:'', warn:false };
+function eavBaht_(n){ return (Number(n)||0).toLocaleString('th-TH', { minimumFractionDigits:0, maximumFractionDigits:2 }); }
+function eavDayKey_(d){ const t = d ? new Date(d).getTime() : NaN; return isNaN(t) ? '' : new Date(t + 7*3600000).toISOString().slice(0,10); }
+function eavDayLabel_(k){
+  if (!k) return 'ไม่ระบุวันที่';
+  const today = eavDayKey_(new Date()), n = Math.round((new Date(today) - new Date(k)) / 86400000);
+  if (n === 0) return 'วันนี้'; if (n === 1) return 'เมื่อวาน';
+  return new Date(k + 'T00:00:00').toLocaleDateString('th-TH', { weekday:'short', day:'numeric', month:'short' });
+}
+// ป้ายเตือน (คำนวณล้วน · เทสได้): ไม่มีใบเสร็จ · อาจซ้ำ (ผู้รับ+ยอด+ประเภทเดียวกัน ห่างไม่เกิน 2 วัน)
+function eavFlags_(it, list){
+  const f = [];
+  if (!String(it.invoiceUrl||'').trim() && it.mainCat !== 'ค่าเดินทาง' && it.mainCat !== 'ค่าแรง') f.push(['w','⚠ ไม่มีใบเสร็จ']);
+  const t = new Date(it.date).getTime();
+  const dup = (list||[]).find(x => x !== it && x.id !== it.id && x.status !== 'ยกเลิก' && x.status !== 'ตีกลับ'
+    && String(x.payee||'') === String(it.payee||'') && String(x.payee||'') !== ''
+    && Number(x.amount) === Number(it.amount) && String(x.subType||'') === String(it.subType||'')
+    && Math.abs(new Date(x.date).getTime() - t) <= 2*86400000);
+  if (dup) f.push(['r','⚠ อาจซ้ำ ' + dup.id]);
+  return f;
+}
+function eavPass_(it){
+  if (_eavF.cat && it.mainCat !== _eavF.cat) return false;
+  if (_eavF.by && it.createdBy !== _eavF.by) return false;
+  if (_eavF.warn && !eavFlags_(it, _expCurrentList).length) return false;
+  return true;
+}
+function eavSetStatus(s){ const f = document.getElementById('expApproveFilter'); if (f){ f.value = s; } expenseApproveFilterChanged(); }
+function eavToggle(k, v){ if (k === 'warn') _eavF.warn = !_eavF.warn; else _eavF[k] = (_eavF[k] === v ? '' : v); expenseApproveRender(); }
+function eavRenderTop_(sf){
+  const sumEl = document.getElementById('expApvSum'), chEl = document.getElementById('expApvChips');
+  if (!sumEl || !chEl) return;
+  const cnt = s => { if (_eavCounts && _eavCounts[s]) return _eavCounts[s]; if (_eavCounts) return { n:0, amt:0 };
+    const a = (_expCurrentList||[]).filter(x => x.status === s); return a.length || s === sf ? { n:a.length, amt:a.reduce((t,x) => t + (Number(x.amount)||0), 0) } : null; };
+  sumEl.innerHTML = [['รออนุมัติ','⏳ รออนุมัติ'],['อนุมัติแล้ว','💸 รอจ่าย'],['ตีกลับ','↩️ ตีกลับ']].map(([k,l]) => { const c = cnt(k);
+    return '<div class="' + (sf === k ? 'on' : '') + '" onclick="eavSetStatus(\'' + k + '\')"><small>' + l + '</small><b>' + (c ? c.n + ' ใบ' : '–') + '</b><i>' + (c ? '฿' + eavBaht_(c.amt) : 'แตะเพื่อดู') + '</i></div>'; }).join('');
+  const st = [['รออนุมัติ','⏳ รออนุมัติ'],['อนุมัติแล้ว','💸 รอจ่าย'],['จ่ายแล้ว','✅ จ่ายแล้ว'],['ตีกลับ','↩️ ตีกลับ'],['ยกเลิก','🚫 ยกเลิก'],['','📋 ทั้งหมด']];
+  const list = _expCurrentList || [];
+  let h = st.map(([k,l]) => '<button class="eav-chip' + (sf === k ? ' on' : '') + '" onclick="eavSetStatus(\'' + k + '\')">' + l + '</button>').join('');
+  const nW = list.filter(x => (!sf || x.status === sf) && eavFlags_(x, list).length).length;
+  if (nW || _eavF.warn) h += '<button class="eav-chip warn' + (_eavF.warn ? ' on' : '') + '" onclick="eavToggle(\'warn\')">⚠ ต้องเช็ค ' + nW + '</button>';
+  [['ค่าเดินทาง','🚗'],['ค่าแรง','💪']].concat([...new Set(list.map(x => x.mainCat).filter(c => c && c !== 'ค่าเดินทาง' && c !== 'ค่าแรง'))].map(c => [c,'📦']))
+    .forEach(([c,i]) => { if (list.some(x => x.mainCat === c) || _eavF.cat === c) h += '<button class="eav-chip' + (_eavF.cat === c ? ' on' : '') + '" onclick="eavToggle(\'cat\',' + JSON.stringify(c).replace(/"/g,'&quot;') + ')">' + i + ' ' + escHtml(c) + '</button>'; });
+  [...new Set(list.map(x => x.createdBy).filter(Boolean))].forEach(b => { h += '<button class="eav-chip' + (_eavF.by === b ? ' on' : '') + '" onclick="eavToggle(\'by\',' + JSON.stringify(b).replace(/"/g,'&quot;') + ')">👤 ' + escHtml(b) + '</button>'; });
+  chEl.innerHTML = h;
+}
+// ── ปัดการ์ด (มือถือ): ขวา = อนุมัติ · ซ้าย = เปิดตีกลับ (ต้องใส่เหตุผลเสมอ) ──
+function eavBindSwipe_(box){
+  box.querySelectorAll('.eav-sw').forEach(sw => {
+    const card = sw.querySelector('.exp-card'), id = card && card.getAttribute('data-eid');
+    const it = (_expCurrentList||[]).find(x => x.id === id); if (!it || it.status !== 'รออนุมัติ') return;
+    let x0 = null, y0 = 0, dx = 0, lock = null;
+    card.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; lock = null; card.style.transition = 'none'; }, { passive:true });
+    card.addEventListener('touchmove', e => { if (x0 === null) return; const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+      if (lock === null && (Math.abs(mx) > 8 || Math.abs(my) > 8)) lock = Math.abs(mx) > Math.abs(my) ? 'x' : 'y';
+      if (lock !== 'x') return; dx = mx; card.style.transform = 'translateX(' + dx + 'px)';
+      sw.querySelector('.eav-bg.a').style.opacity = dx > 0 ? 1 : 0; sw.querySelector('.eav-bg.r').style.opacity = dx < 0 ? 1 : 0; }, { passive:true });
+    card.addEventListener('touchend', () => { card.style.transition = 'transform .2s'; const w = card.offsetWidth;
+      if (lock === 'x' && dx > w * 0.35){ card.style.transform = 'translateX(110%)'; expenseQuickApprove(id); }
+      else { card.style.transform = ''; if (lock === 'x' && dx < -w * 0.35) expenseRejectOpen(id); }
+      if (lock === 'x') card.addEventListener('click', ev => { ev.stopPropagation(); ev.preventDefault(); }, { capture:true, once:true });   // ปัดแล้วไม่เปิดรายละเอียด
+      x0 = null; });
+  });
+}
+// ── แถบล่าง "เลิกทำ" ──
+let _eavSnackT = null;
+function eavSnack_(text, undo){
+  let s = document.getElementById('eavSnack');
+  if (!s){ s = document.createElement('div'); s.id = 'eavSnack'; s.innerHTML = '<span></span><button type="button">↶ เลิกทำ</button>'; document.body.appendChild(s); }
+  s.querySelector('span').textContent = text;
+  const b = s.querySelector('button'); b.style.display = undo ? '' : 'none';
+  b.onclick = () => { s.style.display = 'none'; clearTimeout(_eavSnackT); if (undo) undo(); };
+  s.style.display = 'flex'; clearTimeout(_eavSnackT); _eavSnackT = setTimeout(() => { s.style.display = 'none'; }, 6000);
+}
+// ── 💸 รอจ่าย: รวมต่อผู้รับ (ผู้รับว่าง = แยกรายใบ — รวบจ่ายฝั่ง server ต้องมีชื่อผู้รับเดียวกัน) ──
+function eavPayGroups_(items){
+  const g = {}, keys = [];
+  items.forEach(it => { const p = String(it.payee||'').trim(), k = p ? 'p:' + p : 'id:' + it.id; if (!g[k]){ g[k] = { key:k, payee:p, items:[] }; keys.push(k); } g[k].items.push(it); });
+  return keys.map(k => g[k]).map(x => Object.assign(x, { total:x.items.reduce((s,i) => s + (Number(i.amount)||0), 0) })).sort((a,b) => b.total - a.total);
+}
+function eavFmtAcc_(a){ return String(a||'').replace(/^(\d{3})(\d)(\d{5})(\d)$/, '$1-$2-$3-$4'); }
+function eavGroupName_(g){ return g.payee || ('ไม่ระบุผู้รับ · ' + (g.items[0].vehicle ? '🚗 ' + g.items[0].vehicle + ' · ' : '') + 'เบิกโดย ' + (g.items[0].createdBy||'-')); }
+function eavPayListHtml_(items){
+  if (!items.length) return '<div class="loading-row" style="grid-column:1/-1;">ไม่มีรายการรอจ่าย</div>';
+  const gs = eavPayGroups_(items), tot = items.reduce((s,x) => s + (Number(x.amount)||0), 0);
+  let h = '<button class="btn btn-p" style="grid-column:1/-1;padding:14px;font-size:16px;font-weight:700;line-height:1.4;white-space:normal;text-align:center;display:block;width:100%;" onclick="eavRunStart(\'\')">💸 รวบจ่ายทั้งหมด<br><span style="font-size:12.5px;font-weight:500;">' + gs.length + ' ราย · ' + items.length + ' ใบ · ฿' + eavBaht_(tot) + ' — รวมให้รายละก้อนเดียว ไล่จ่ายทีละราย</span></button>'
+    + '<div class="eav-grp">รวมตามผู้รับเงิน (ยอดมากก่อน) <span>' + items.length + ' ใบ · ฿' + eavBaht_(tot) + '</span></div>';
+  h += gs.map(g => { const f = g.items[0];
+    return '<div class="eav-pay"><h4><span>👤 ' + escHtml(eavGroupName_(g)) + ' <small style="font-weight:400;color:var(--mu);">' + g.items.length + ' ใบ</small></span><span style="color:var(--acc);">฿' + eavBaht_(g.total) + '</span></h4>'
+      + (f.payeeAccount ? '<div class="eav-bank">🏦 ' + escHtml(f.payeeBank||'') + ' <b>' + escHtml(eavFmtAcc_(f.payeeAccount)) + '</b> <button type="button" class="btn btn-g btn-sm" style="margin-left:auto;" onclick="pkCopyAccount(\'' + String(f.payeeAccount).replace(/'/g,"\\'") + '\',this)">📋 คัดลอก</button></div>'
+                        : '<div class="eav-bank" style="background:var(--amb-t);color:var(--amb);">⚠ ไม่มีเลขบัญชี — จ่ายเงินสด หรือเพิ่มบัญชีในแท็บบัญชีผู้รับเงิน</div>')
+      + '<div class="eav-plist">' + g.items.map(x => '<div onclick="expenseDetailOpen(\'' + x.id + '\')" style="cursor:pointer;"><span>' + eavDayLabel_(eavDayKey_(x.date)) + ' · ' + escHtml(x.subType||'') + ' <small style="color:var(--mu);font-family:var(--mono);">' + x.id + '</small></span><span>฿' + eavBaht_(x.amount) + '</span></div>').join('') + '</div>'
+      + '<div class="eav-acts"><button class="btn btn-p" onclick="eavRunStart(' + JSON.stringify(g.key).replace(/"/g,'&quot;') + ')">💸 จ่ายรายนี้ ฿' + eavBaht_(g.total) + '</button></div></div>'; }).join('');
+  return h;
+}
+// ── รวบจ่ายไล่ทีละราย: คัดลอกบัญชี/ยอด → ติ๊กออกได้ → ถ่ายสลิป → บันทึกจริงทีละราย (สำเร็จค่อยไปรายถัดไป) ──
+let _eavRun = null;
+function eavRunStart(onlyKey){
+  const sf = (document.getElementById('expApproveFilter')||{}).value || '';
+  const items = (_expCurrentList||[]).filter(x => x.status === 'อนุมัติแล้ว' && (sf === 'อนุมัติแล้ว' ? eavPass_(x) : true));
+  const gs = eavPayGroups_(items).filter(g => !onlyKey || g.key === onlyKey);
+  if (!gs.length){ toast('ไม่มีรายการรอจ่าย'); return; }
+  _eavRun = { q:gs.map(g => ({ key:g.key, payee:g.payee, name:eavGroupName_(g), ids:g.items.map(x => x.id) })), i:0, done:[], skip:[], off:{}, slip:{}, busy:false, err:'' };
+  let bg = document.getElementById('eavPayModal');
+  if (!bg){ bg = document.createElement('div'); bg.id = 'eavPayModal'; bg.className = 'modal-bg'; bg.innerHTML = '<div class="modal" style="padding:16px;max-width:480px;max-height:92vh;overflow:auto;" id="eavPayBody"></div>'; document.body.appendChild(bg); }
+  bg.classList.add('on'); eavRunStep_();
+}
+function eavRunItems_(){ const r = _eavRun.q[_eavRun.i]; return r.ids.map(id => (_expCurrentList||[]).find(x => x.id === id)).filter(Boolean); }
+function eavRunStep_(){
+  const R = _eavRun, body = document.getElementById('eavPayBody'); if (!R || !body) return;
+  if (R.i >= R.q.length) return eavRunEnd_();
+  const g = R.q[R.i], a = eavRunItems_(), on = a.filter(x => !R.off[x.id]), t = on.reduce((s,x) => s + (Number(x.amount)||0), 0), f = a[0] || {}, n = R.q.length, slip = R.slip[g.key];
+  const amtTxt = String(Math.round(t * 100) / 100);
+  body.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;"><b style="font-size:16px;">💸 รวบจ่าย</b><span style="font-size:12px;color:var(--mu);font-family:var(--mono);">ราย ' + (R.i+1) + '/' + n + '</span></div>'
+    + '<div style="height:6px;background:var(--bg);border-radius:3px;margin:8px 0 12px;"><div style="height:6px;border-radius:3px;background:var(--grn);width:' + Math.round(R.i/n*100) + '%;"></div></div>'
+    + '<div style="text-align:center;font-size:18px;font-weight:700;">👤 ' + escHtml(g.name) + '</div>'
+    + '<div class="eav-big">฿' + eavBaht_(t) + '</div><div style="text-align:center;font-size:12px;color:var(--mu);">' + on.length + ' จาก ' + a.length + ' ใบ</div>'
+    + (f.payeeAccount ? '<div class="eav-bank" style="margin-top:10px;justify-content:center;">🏦 ' + escHtml(f.payeeBank||'') + '<b style="font-size:19px;width:100%;text-align:center;">' + escHtml(eavFmtAcc_(f.payeeAccount)) + '</b>'
+        + '<div style="display:flex;gap:8px;width:100%;"><button type="button" class="btn btn-g" style="flex:1;" onclick="pkCopyAccount(\'' + String(f.payeeAccount).replace(/'/g,"\\'") + '\',this)">📋 เลขบัญชี</button><button type="button" class="btn btn-g" style="flex:1;" onclick="pkCopyAccount(\'' + amtTxt + '\',this)">📋 ยอด ' + eavBaht_(t) + '</button></div></div>'
+      : '<div class="eav-bank" style="margin-top:10px;background:var(--amb-t);color:var(--amb);">⚠ ไม่มีเลขบัญชี — จ่ายเงินสดแล้วกดยืนยัน (สลิปไม่บังคับ)</div>')
+    + '<div style="margin:12px 0 4px;font-size:12.5px;color:var(--mu);">ใบที่จ่ายรอบนี้ (ติ๊กออก = เก็บไว้จ่ายทีหลัง)</div><div class="eav-plist">'
+    + a.map(x => '<label style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px dashed var(--bdr);cursor:pointer;"><input type="checkbox" ' + (R.off[x.id] ? '' : 'checked') + ' onchange="eavRunTick(\'' + x.id + '\',this.checked)" style="width:20px;height:20px;"><span style="flex:1;">' + eavDayLabel_(eavDayKey_(x.date)) + ' · ' + escHtml(x.subType||'') + (x.detail ? ' · ' + escHtml(String(x.detail).slice(0,40)) : '') + ' <small style="color:var(--mu);font-family:var(--mono);">' + x.id + '</small></span><b>฿' + eavBaht_(x.amount) + '</b></label>').join('') + '</div>'
+    + '<label class="btn btn-g" style="display:block;text-align:center;border:2px dashed var(--bdr);border-radius:14px;padding:14px;font-size:14.5px;cursor:pointer;margin-top:12px;">' + (slip ? '✅ แนบสลิปแล้ว: ' + escHtml(slip.name) + ' (แตะเพื่อเปลี่ยน)' : '📷 ถ่ายรูป / เลือกสลิป') + '<input type="file" accept="image/*,application/pdf" style="display:none;" onchange="eavRunSlip(this)"></label>'
+    + '<div style="text-align:center;font-size:11.5px;color:var(--mu);margin-top:4px;">ไม่มีสลิปก็ยืนยันได้ · แนะนำแนบตอนนี้</div>'
+    + (R.err ? '<div style="margin-top:10px;background:rgba(226,59,59,.12);border:1px solid var(--rd);color:var(--rd);border-radius:8px;padding:8px 10px;font-size:13px;font-weight:600;">⚠ ' + escHtml(R.err) + '</div>' : '')
+    + '<div class="eav-acts"><button class="btn btn-g" ' + (R.busy ? 'disabled' : '') + ' onclick="eavRunSkip()">ข้ามไปก่อน</button><button class="btn btn-p" style="background:var(--grn);border-color:var(--grn);" ' + (on.length && !R.busy ? '' : 'disabled') + ' onclick="eavRunPaid()">' + (R.busy ? '⏳ กำลังบันทึก...' : '✅ จ่ายแล้ว' + (R.i + 1 < n ? ' → รายถัดไป' : '')) + '</button></div>'
+    + '<button class="btn btn-g" style="width:100%;margin-top:8px;" ' + (R.busy ? 'disabled' : '') + ' onclick="eavRunClose()">หยุดไว้ก่อน (รายที่ยืนยันแล้วบันทึกแล้ว)</button>';
+}
+function eavRunTick(id, on){ if (on) delete _eavRun.off[id]; else _eavRun.off[id] = 1; eavRunStep_(); }
+function eavRunSlip(inp){ const f = inp.files && inp.files[0]; if (!f) return; if (f.size > PK_UP_MAX_ORIG){ toast('ไฟล์ใหญ่เกิน 30MB'); return; } _eavRun.slip[_eavRun.q[_eavRun.i].key] = f; eavRunStep_(); }
+function eavRunSkip(){ _eavRun.skip.push(_eavRun.q[_eavRun.i].name); _eavRun.i++; _eavRun.err = ''; eavRunStep_(); }
+async function eavRunPaid(){
+  const R = _eavRun; if (!R || R.busy) return;
+  const g = R.q[R.i], ids = g.ids.filter(id => !R.off[id]); if (!ids.length) return;
+  R.busy = true; R.err = ''; eavRunStep_();
+  try {
+    let slipData = null;
+    const sf = R.slip[g.key];
+    if (sf){ slipData = await _expFileToBase64(sf); if (slipData.size > PK_UP_MAX) throw new Error('สลิปใหญ่เกิน 5MB'); slipData = { name:slipData.name, mimeType:slipData.mimeType, bytes:slipData.bytes }; }
+    // ⛔ ใช้คำสั่งเดิม: ≥2 ใบ ผู้รับเดียวกัน = รวบจ่าย (server ตรวจผู้รับซ้ำ) · 1 ใบ = จ่ายใบเดียว · สลิปผูกเฉพาะ id ชุดนี้
+    const r = (ids.length >= 2 && g.payee) ? await call({ action:'pk_expenseBatchPay', ids:ids, slipData:slipData })
+                                           : await call({ action:'pk_expenseMarkPaid', id:ids[0], slipData:slipData });
+    if (!r || !r.ok) throw new Error((r && r.error) || 'บันทึกไม่สำเร็จ');
+    const amt = ids.reduce((s,id) => { const it = (_expCurrentList||[]).find(x => x.id === id); if (it){ it.status = 'จ่ายแล้ว'; return s + (Number(it.amount)||0); } return s; }, 0);
+    R.done.push({ name:g.name, n:ids.length, amt:amt, slip:!!sf });
+    R.busy = false; R.i++; eavRunStep_();
+  } catch(e){ R.busy = false; R.err = (e && e.message) || String(e); eavRunStep_(); }
+}
+function eavRunEnd_(){
+  const R = _eavRun, t = R.done.reduce((s,d) => s + d.amt, 0), noSlip = R.done.filter(d => !d.slip).length;
+  document.getElementById('eavPayBody').innerHTML = '<b style="font-size:16px;">✅ รวบจ่ายเสร็จ</b><div class="eav-big">฿' + eavBaht_(t) + '</div>'
+    + '<div style="text-align:center;font-size:12.5px;color:var(--mu);margin-bottom:10px;">จ่ายแล้ว ' + R.done.length + ' ราย' + (R.skip.length ? ' · ข้าม ' + R.skip.length + ' ราย (ยังรอจ่าย)' : '') + '</div><div class="eav-plist">'
+    + R.done.map(d => '<div><span>👤 ' + escHtml(d.name) + ' · ' + d.n + ' ใบ ' + (d.slip ? '🧾' : '<span style="color:var(--amb);">ไม่มีสลิป</span>') + '</span><b>฿' + eavBaht_(d.amt) + '</b></div>').join('')
+    + R.skip.map(n => '<div><span style="color:var(--mu);">⏭ ' + escHtml(n) + '</span><span></span></div>').join('') + '</div>'
+    + (noSlip ? '<div style="margin-top:10px;font-size:12.5px;color:var(--amb);">📎 ' + noSlip + ' รายไม่มีสลิป</div>' : '')
+    + '<button class="btn btn-p" style="width:100%;margin-top:12px;" onclick="eavRunClose()">เสร็จ</button>';
+}
+function eavRunClose(){ const bg = document.getElementById('eavPayModal'); if (bg) bg.classList.remove('on'); const had = _eavRun && _eavRun.done.length; _eavRun = null; if (had) expenseApproveLoad(); else expenseApproveRender(); }
 
 // ════════ รวบจ่าย (ผู้รับเดียวกัน) ════════
 let _batchMode = false, _batchSel = [], _batchPayee = null, _batchAction = 'pay';
@@ -3985,10 +4231,12 @@ async function expenseBatchConfirm(){
   const fEl = document.getElementById('expBatchSlip');
   if (fEl && fEl.files && fEl.files[0]){
     const file = fEl.files[0];
-    if (file.size > 5*1024*1024){ toast('ไฟล์ใหญ่เกิน 5MB'); return; }
+    if (file.size > PK_UP_MAX_ORIG){ toast('ไฟล์ใหญ่เกิน 30MB'); return; }
     showLoad('อัปโหลดสลิป...');
-    try { slipData = await _expFileToBase64(file); }
+    try { slipData = await _expFileToBase64(file); }   // [IMGSHRINK] ย่อก่อน
     catch(e){ hideLoad(); toast('อ่านไฟล์ไม่ได้'); return; }
+    if (slipData.size > PK_UP_MAX){ hideLoad(); toast('ไฟล์ใหญ่เกิน 5MB'); return; }
+    slipData = { name:slipData.name, mimeType:slipData.mimeType, bytes:slipData.bytes };
   } else { showLoad('รวบจ่าย...'); }
   try {
     const r = await call({ action:'pk_expenseBatchPay', ids: _batchSel.slice(), slipData: slipData });
@@ -4015,7 +4263,12 @@ function expenseCardHtml(it){
   const d = it.date ? new Date(it.date).toLocaleDateString('th-TH') : '';
   const amt = (Number(it.amount)||0).toLocaleString('th-TH', { minimumFractionDigits:2 });
   const catIcon = it.mainCat==='ค่าเดินทาง' ? '🚗' : (it.mainCat==='ค่าแรง' ? '💪' : '📦');
-  return '<div class="exp-card" onclick="expenseDetailOpen(\'' + it.id + '\')">' +
+  // [EXPAPV2] รูปใบเสร็จย่อบนการ์ด (แตะ = เปิดเต็ม) + ป้ายเตือน
+  const _inv = expUrlList_(it.invoiceUrl), _th = _inv.find(u => u.indexOf('lh3.googleusercontent.com') !== -1);
+  const _fl = eavFlags_(it, _expCurrentList);
+  const _extra = (_th || _fl.length) ? '<div style="display:flex;gap:10px;align-items:flex-end;margin-top:6px;"><div class="eav-flags" style="flex:1;min-width:0;">' + _fl.map(f => '<span class="eav-fl ' + f[0] + '">' + escHtml(f[1]) + '</span>').join('') + '</div>'
+    + (_th ? '<img class="eav-thumb" loading="lazy" referrerpolicy="no-referrer" src="' + escAttr(_th) + '" data-url="' + escAttr(_th) + '" onclick="event.stopPropagation();window.open(this.dataset.url,\'_blank\')" alt="ใบเสร็จ">' : '') + '</div>' : '';
+  return '<div class="exp-card" data-eid="' + escAttr(it.id) + '" onclick="expenseDetailOpen(\'' + it.id + '\')">' +
     '<div class="exp-card-head">' +
       '<div class="exp-avatar">' + initial + '</div>' +
       '<div style="flex:1;min-width:0;">' +
@@ -4028,12 +4281,12 @@ function expenseCardHtml(it){
     '<div class="exp-card-cat">' + catIcon + ' ' + (it.mainCat||'') + ' · ' + (it.subType||'') + '</div>' +
     (it.payee ? '<div style="font-size:13px;font-weight:600;margin-top:4px;">👤 ' + it.payee + '</div>'
               : (it.vehicle ? '<div style="font-size:13px;margin-top:4px;">🚗 ' + it.vehicle + '</div>' : '')) +
-    '<div class="exp-card-desc">' + escHtml(it.detail||'-') + '</div>' +
+    '<div class="exp-card-desc">' + escHtml(it.detail||'-') + '</div>' + _extra +
     '<div class="exp-card-foot">' + (it.jobRef ? '🔗 ' + escHtml(it.jobRef) + ' · ' : '') + (it.invoiceUrl ? ('🧾' + (expUrlList_(it.invoiceUrl).length > 1 ? '×' + expUrlList_(it.invoiceUrl).length : '') + ' ') : '') + (it.slipUrl ? '💳 ' : '') + 'ดูรายละเอียด →</div>' +
     (CURRENT_USER.role === 'manager' && it.status === 'รออนุมัติ'
-      ? '<div style="display:flex;gap:6px;margin-top:8px;">' +
-        '<button class="btn btn-p btn-sm" style="flex:1;" onclick="event.stopPropagation();expenseQuickApprove(\'' + it.id + '\')">✅ อนุมัติ</button>' +
-        '<button class="btn btn-d btn-sm" style="flex:1;" onclick="event.stopPropagation();expenseRejectOpen(\'' + it.id + '\')">↩️ ตีกลับ</button></div>'
+      ? '<div class="eav-acts">' +   // [EXPAPV2] ปุ่มใหญ่กดง่าย (ตีกลับซ้าย · อนุมัติขวา ตามทิศปัด)
+        '<button class="btn btn-d" onclick="event.stopPropagation();expenseRejectOpen(\'' + it.id + '\')">↩️ ตีกลับ</button>' +
+        '<button class="btn btn-p" style="background:var(--grn);border-color:var(--grn);" onclick="event.stopPropagation();expenseQuickApprove(\'' + it.id + '\')">✅ อนุมัติ</button></div>'
       : '') + '</div>';
 }
 
@@ -4050,9 +4303,19 @@ async function expenseQuickApprove(id){
   const prev = it.status;
   it.status = 'อนุมัติแล้ว';
   expenseRenderActive_();
-  toast('✅ อนุมัติ ' + id + ' — กำลังบันทึก... (กดพลาดใช้ ⏪ ในรายละเอียด)');
+  // [EXPAPV2] เลิกทำได้ 6 วิ = รออนุมัติสำเร็จก่อน แล้วยกเลิกอนุมัติด้วยคำสั่งเดิม (pk_expenseUnapprove)
+  const p = call({ action:'pk_expenseApprove', id: id });
+  eavSnack_('✅ อนุมัติ ' + id + ' · ฿' + eavBaht_(it.amount), async () => {
+    let ok = false; try { const r0 = await p; ok = !!(r0 && r0.ok); } catch(e){}
+    if (!ok) return;   // อนุมัติไม่สำเร็จอยู่แล้ว (ด้านล่างคืนสถานะให้)
+    try {
+      const r2 = await call({ action:'pk_expenseUnapprove', id: id, reason: 'เลิกทำทันทีหลังกดอนุมัติ' });
+      if (r2 && r2.ok){ it.status = 'รออนุมัติ'; expenseRenderActive_(); toast('↶ เลิกทำแล้ว — ' + id + ' กลับไปรออนุมัติ'); }
+      else toast('❌ เลิกทำไม่สำเร็จ: ' + ((r2 && r2.error) || '?') + ' (ใช้ ⏪ ยกเลิกอนุมัติในรายละเอียด)');
+    } catch(e){ toast('❌ เลิกทำไม่สำเร็จ — เชื่อมต่อไม่ได้'); }
+  });
   try {
-    const r = await call({ action:'pk_expenseApprove', id: id });
+    const r = await p;
     if (!r.ok){ it.status = prev; expenseRenderActive_(); toast('❌ อนุมัติไม่สำเร็จ: ' + (r.error || '?')); }
   } catch(e){ it.status = prev; expenseRenderActive_(); toast('❌ เชื่อมต่อไม่ได้ — ยังไม่อนุมัติ'); }
 }
@@ -4235,10 +4498,12 @@ async function expensePayConfirm(){
   const fEl = document.getElementById('expPaySlip');
   if (fEl && fEl.files && fEl.files[0]){
     const file = fEl.files[0];
-    if (file.size > 5*1024*1024){ toast('ไฟล์ใหญ่เกิน 5MB'); return; }
+    if (file.size > PK_UP_MAX_ORIG){ toast('ไฟล์ใหญ่เกิน 30MB'); return; }
     showLoad('อัปโหลดสลิป...');
-    try { slipData = await _expFileToBase64(file); }
+    try { slipData = await _expFileToBase64(file); }   // [IMGSHRINK] ย่อก่อน
     catch(e){ hideLoad(); toast('อ่านไฟล์ไม่ได้'); return; }
+    if (slipData.size > PK_UP_MAX){ hideLoad(); toast('ไฟล์ใหญ่เกิน 5MB'); return; }
+    slipData = { name:slipData.name, mimeType:slipData.mimeType, bytes:slipData.bytes };
   } else { showLoad('บันทึก...'); }
   try {
     const r = await call({ action:'pk_expenseMarkPaid', id: _expPayId, slipData: slipData });
@@ -4942,7 +5207,16 @@ function expenseRejectOpen(id){
   _expRejectId = id;
   document.getElementById('expRejectId').textContent = id;
   document.getElementById('expRejectReason').value = '';
+  const ch = document.getElementById('expRejectChips');   // [EXPAPV2] เหตุผลสำเร็จรูป แตะ = เติม/เอาออกในช่องเหตุผล
+  if (ch) ch.innerHTML = EAV_REASONS.map(r => '<button type="button" class="eav-chip" onclick="eavReasonTap(this)">' + r + '</button>').join('');
   document.getElementById('expRejectModal').classList.add('on');
+}
+const EAV_REASONS = ['ไม่มีใบเสร็จ', 'ยอดไม่ตรงใบเสร็จ', 'ผิดหมวด', 'รายการซ้ำ', 'ขอรายละเอียดเพิ่ม', 'ไม่อนุมัติรายการนี้'];
+function eavReasonTap(b){
+  const ta = document.getElementById('expRejectReason'), r = b.textContent;
+  let parts = ta.value.split(' · ').map(s => s.trim()).filter(Boolean);
+  if (b.classList.toggle('on')) { if (parts.indexOf(r) < 0) parts.push(r); } else parts = parts.filter(x => x !== r);
+  ta.value = parts.join(' · ');
 }
 function expenseRejectCancel(){
   document.getElementById('expRejectModal').classList.remove('on');
@@ -6750,9 +7024,9 @@ function officeAttachRef(jobId){
     if (!files.length) return;
     showLoad('อัปโหลดรูป...');
     try {
-      const photos = await Promise.all(files.map(f => new Promise((res, rej) => {
-        const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f);
-      })));
+      const photos = await Promise.all(files.map(async f => {   // [IMGSHRINK] ย่อก่อนส่ง (เดิมส่งเต็มไฟล์กล้อง)
+        const x = await pkShrinkImage_(f); return 'data:' + x.mimeType + ';base64,' + x.bytes;
+      }));
       const r = await call({ action:'pk_setJobRefPhotos', id: jobId, photos: photos });
       hideLoad();
       if (!r.ok){ toast('❌ ' + (r.error||'แนบรูปไม่ได้')); return; }
@@ -8292,7 +8566,7 @@ async function initTech(){
     // start auto-refresh
     if (_techRefreshTimer) clearInterval(_techRefreshTimer);
     _techRefreshTimer = setInterval(() => {
-      if (_techDate) techLoadJobs();
+      if (_techDate && !document.hidden) { _pkPollAt.tech = Date.now(); techLoadJobs(); }   // [CPUTRIM] จอดับ/สลับแอป = ไม่ดึง (กลับมาดึงทันที — pkPollResume_)
     }, 30000);
     // ── load records auto for tech ──
     setTimeout(recordsLoad, 200);
@@ -11192,10 +11466,12 @@ async function ptLoad(){
 }
 // ติดตามงานผลิต: Worker /prod-track ก่อน → fallback GAS pk_prodTrackList (ใช้ร่วม ออฟฟิศ/ผู้จัดการ + ฝ่ายผลิต)
 //  คืน { ok, jobs, cap:{rail,mesh}, pendingApproval } · ฝ่ายผลิตได้เฉพาะใบอนุมัติแล้ว (server กรอง)
-async function getProdTrackFast(){
+// [CPUTRIM 16 พ.ย. 2026] ค่าเริ่ม = ขอเฉพาะงานล่าสุด (worker ไม่ส่งใบมุ้งที่จบเกิน 7 วัน → ข้อมูลเล็กลงมาก · ลด CPU worker)
+//  full=true เมื่อผู้ใช้กด "แสดง" งานเก่า · GAS fallback ส่งครบเสมอ (หน้าจอกรองเองอยู่แล้ว)
+async function getProdTrackFast(full){
   if(USE_SHEETS_PRODTRACK && CURRENT_USER){
     try{
-      var data=await _pkFastPost_('/prod-track');
+      var data=await _pkFastPost_('/prod-track', full?{}:{ recent:1 });
       if(data&&data.ok&&Array.isArray(data.jobs)){ _markJobSource('sheets', data.ms); return data; }
       console.warn('[getProdTrackFast] /prod-track ไม่ ok → fallback GAS:', data&&data.error);
     }catch(e){ console.warn('[getProdTrackFast] /prod-track error → fallback GAS:', e&&e.message); }
@@ -11205,8 +11481,9 @@ async function getProdTrackFast(){
 let _ptCap={rail:0,mesh:0};
 async function ptFetch(){
   try{
-    var g=await getProdTrackFast();
+    var g=await getProdTrackFast(_ptShowOld);
     _ptAll=(g&&g.ok)?(g.jobs||[]):[]; if(g&&g.cap) _ptCap=g.cap;
+    _ptOldHidden=(g&&g.ok&&g.recent)?(Number(g.oldHidden)||0):0;   // [CPUTRIM] จำนวนที่ worker ไม่ได้ส่งมา
     ptApplyOld_();
     if(!(g&&g.ok)) console.warn('[ptFetch]', g&&g.error);
   }catch(e){ _ptAll=[]; _ptJobs=[]; console.warn('[ptFetch] error:',e&&e.message); }
@@ -11215,9 +11492,14 @@ async function ptFetch(){
 function ptIsOldDone_(j, today){ if(!prdIsDone_(j)) return false; if(!j.doneDate) return true; return prdDays_(j.doneDate, today)>7; }
 // [GLASS] ใบกระจกแยกไปส่วน 🪟 งานกระจก (ptGlassRender_) ไม่ปนบอร์ด/ตาราง/ลำดับคิวของใบมุ้ง
 function ptApplyOld_(){ var t=pkTodayStr_(), m=_ptAll.filter(function(j){ return j.kind!=='glass'; }); _ptJobs=_ptShowOld?m:m.filter(function(j){ return !ptIsOldDone_(j,t); }); }
-function ptOldToggle(){ _ptShowOld=!_ptShowOld; ptApplyOld_(); ptSetView(_ptView); }
+var _ptOldHidden=0;
+async function ptOldToggle(){
+  _ptShowOld=!_ptShowOld;
+  if(_ptShowOld && _ptOldHidden){ showLoad('กำลังโหลดงานเก่า...'); try{ await ptFetch(); } finally{ hideLoad(); } }   // [CPUTRIM] ชุดเต็มดึงตอนกดแสดงเท่านั้น
+  ptApplyOld_(); ptSetView(_ptView);
+}
 function ptOldBar_(){
-  var t=pkTodayStr_(), n=_ptAll.filter(function(j){ return ptIsOldDone_(j,t); }).length; if(!n) return '';
+  var t=pkTodayStr_(), n=_ptAll.filter(function(j){ return ptIsOldDone_(j,t); }).length+_ptOldHidden; if(!n) return '';
   return '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mu);margin-bottom:8px;">'+(_ptShowOld?'กำลังแสดงงานที่จบเกิน 7 วันด้วย '+n+' งาน':'ซ่อนงานที่จบเกิน 7 วัน '+n+' งาน')
     +'<button class="btn btn-g btn-sm" onclick="ptOldToggle()">'+(_ptShowOld?'ซ่อน':'แสดง')+'</button></div>';
 }
@@ -11668,7 +11950,7 @@ function prdInit(){
   if(!_prdDept){ document.getElementById('prdBody').innerHTML='<div class="empty-section"><h2>บัญชีนี้ยังไม่ได้ระบุฝ่าย</h2><p>ให้ผู้จัดการตั้ง team ของบัญชีเป็น "ราง" "ผ้ามุ้ง" หรือ "กระจก" ในหน้าจัดการผู้ใช้</p></div>'; return; }
   prdLoad();
   if(_prdTimer) clearInterval(_prdTimer);
-  _prdTimer=setInterval(function(){ if(CURRENT_USER&&CURRENT_USER.role==='prod'&&!_prdCutOn&&document.getElementById('prdBody')) prdLoad(true); }, 60000);   // ออฟฟิศเปลี่ยนสถานะ → แท็บเล็ตเห็นภายใน 1 นาที
+  _prdTimer=setInterval(function(){ if(CURRENT_USER&&CURRENT_USER.role==='prod'&&!_prdCutOn&&!document.hidden&&document.getElementById('prdBody')){ _pkPollAt.prd=Date.now(); prdLoad(true); } }, 60000);   // [CPUTRIM] จอดับ = ไม่ดึง   // ออฟฟิศเปลี่ยนสถานะ → แท็บเล็ตเห็นภายใน 1 นาที
 }
 async function prdLoad(quiet){
   if(!quiet){ var b=document.getElementById('prdBody'); if(b&&!_prdJobs.length) b.innerHTML='<div class="loading-row">กำลังโหลด...</div>'; }
@@ -21359,7 +21641,7 @@ function wbOpen(){
   wbApplyPan();
   wbLoad();
   if (_wbTimer) clearInterval(_wbTimer);
-  _wbTimer = setInterval(wbLoad, 12000);
+  _wbTimer = setInterval(function(){ if(!document.hidden) wbLoad(); }, 12000);   // [CPUTRIM] จอดับ = ไม่ดึง
 }
 function wbClose(){
   const modal = document.getElementById('wbModal');
