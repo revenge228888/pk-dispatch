@@ -4418,6 +4418,10 @@ function expenseDetailOpen(id){
         '<button class="btn btn-d" style="flex:1;" onclick="expenseRejectOpen(\'' + it.id + '\')">↩️ ตีกลับ</button></div>';
     }
   }
+  // [EXPEDIT] ผู้จัดการแก้ใบได้ (เฉพาะยังไม่จ่าย — ยอดหักเงินเดือนนับเฉพาะจ่ายแล้ว)
+  if (CURRENT_USER.role === 'manager' && (it.status === 'รออนุมัติ' || it.status === 'อนุมัติแล้ว')){
+    actions += '<button class="btn btn-g" style="width:100%;margin-top:8px;" onclick="expMgrEditOpen(\'' + it.id + '\')">✏️ แก้ใบนี้ (ผู้จัดการ)</button>';
+  }
   // ปุ่มรับทราบ — เจ้าของใบที่ถูกตีกลับ และยังไม่รับทราบ
   if (it.status === 'ตีกลับ' && it.createdBy === CURRENT_USER.username && !it.rejectSeen){
     actions += '<button class="btn btn-p" style="width:100%;margin-top:14px;" onclick="expenseAckReject(\'' + it.id + '\')">✓ รับทราบการตีกลับ</button>';
@@ -4452,6 +4456,59 @@ function expenseDetailOpen(id){
   document.getElementById('expDetailModal').classList.add('on');
 }
 function expenseDetailClose(){ document.getElementById('expDetailModal').classList.remove('on'); }
+// ════════ [EXPEDIT 17 พ.ย. 2026] ผู้จัดการแก้ใบเบิก — ถามยืนยันโดยโชว์ "เดิม → ใหม่" (server dryRun) ก่อนบันทึกจริง ════════
+let _emeId = '';
+async function expMgrEditOpen(id){
+  const it = (_expCurrentList || []).find(x => x.id === id); if (!it) return;
+  await expenseEnsureMaster();
+  const m = _expMaster || {}, travel = it.mainCat === 'ค่าเดินทาง';
+  const types = it.mainCat === 'ค่าแรง' ? (m.wageTypes || []) : (travel ? (m.travelTypes || []) : (m.costTypes || []));
+  const typeOpts = types.concat(types.indexOf(it.subType) === -1 && it.subType ? [it.subType] : []).map(t => '<option' + (t === it.subType ? ' selected' : '') + '>' + escHtml(t) + '</option>').join('');
+  const d = it.date ? new Date(new Date(it.date).getTime() + 7 * 3600000).toISOString().slice(0, 10) : '';
+  _emeId = id; expenseDetailClose();
+  let bg = document.getElementById('expMgrEditModal');
+  if (!bg){ bg = document.createElement('div'); bg.id = 'expMgrEditModal'; bg.className = 'modal-bg'; bg.innerHTML = '<div class="modal" style="padding:18px;max-width:520px;max-height:92vh;overflow:auto;"><div id="emeBody"></div></div>'; bg.onclick = e => { if (e.target === bg) bg.classList.remove('on'); }; document.body.appendChild(bg); }
+  const payeeList = (m.payees || []).map(p => '<option value="' + escAttr(p.name) + '"></option>').join('') + (it.mainCat === 'ค่าแรง' ? (m.employees || []).map(n => '<option value="' + escAttr(n) + '"></option>').join('') : '');
+  document.getElementById('emeBody').innerHTML = '<h3 style="margin:0 0 4px;">✏️ แก้ใบเบิก ' + escHtml(id) + '</h3>'
+    + '<div style="font-size:12px;color:var(--mu);margin-bottom:12px;">หมวด ' + escHtml(it.mainCat || '-') + ' (เปลี่ยนหมวดไม่ได้) · สถานะ ' + escHtml(it.status) + ' · ระบบจดว่าแก้อะไรจากเท่าไรเป็นเท่าไรไว้ในใบ</div>'
+    + '<div class="row-form"><div class="fg"><label class="fl">วันที่</label><input class="fi" type="date" id="emeDate" value="' + escAttr(d) + '"></div>'
+    + '<div class="fg"><label class="fl">ประเภท</label><select class="fi" id="emeType">' + typeOpts + '</select></div></div>'
+    + '<div class="fg"><label class="fl">รายละเอียด</label><textarea class="fi" id="emeDetail" rows="2">' + escHtml(it.detail || '') + '</textarea></div>'
+    + '<div class="row-form"><div class="fg"><label class="fl">ยอด (บาท)</label><input class="fi" id="emeAmount" type="text" inputmode="decimal" value="' + escAttr(it.amount) + '" style="font-family:var(--mono);font-size:16px;font-weight:700;"></div>'
+    + (travel ? '<div class="fg"><label class="fl">ทะเบียนรถ</label><select class="fi" id="emeVehicle">' + (m.vehicles || []).concat((m.vehicles || []).indexOf(it.vehicle) === -1 && it.vehicle ? [it.vehicle] : []).map(v => '<option' + (v === it.vehicle ? ' selected' : '') + '>' + escHtml(v) + '</option>').join('') + '</select></div>'
+              : '<div class="fg"><label class="fl">ผู้รับเงิน' + (it.mainCat === 'ค่าแรง' ? ' (ต้องเป็นพนักงาน)' : '') + '</label><input class="fi" id="emePayee" list="emePayees" value="' + escAttr(it.payee || '') + '"><datalist id="emePayees">' + payeeList + '</datalist></div>') + '</div>'
+    + '<div class="fg"><label class="fl">งาน (เลข WO/ใบจอง — เว้นว่างได้)</label><input class="fi" id="emeJob" value="' + escAttr(it.jobRef || '') + '"></div>'
+    + '<div class="fg"><label class="fl">เหตุผลที่แก้ (ไม่บังคับ)</label><input class="fi" id="emeReason" maxlength="200" placeholder="เช่น ยอดตามใบเสร็จจริง"></div>'
+    + '<div id="emeMsg" style="display:none;margin-top:8px;font-size:13px;font-weight:600;color:var(--rd);"></div>'
+    + '<div style="display:flex;gap:8px;margin-top:14px;"><button class="btn btn-g" style="flex:1;" onclick="document.getElementById(\'expMgrEditModal\').classList.remove(\'on\')">ยกเลิก</button><button class="btn btn-p" style="flex:1;" id="emeBtn" onclick="expMgrEditSave()">ตรวจแล้วบันทึก →</button></div>';
+  bg.classList.add('on');
+}
+function expMgrEditPayload_(){
+  const it = (_expCurrentList || []).find(x => x.id === _emeId) || {}, v = id => { const e = document.getElementById(id); return e ? e.value : undefined; };
+  const p = { action:'pk_expenseManagerEdit', id:_emeId, expenseDate:v('emeDate'), subType:v('emeType'), detail:v('emeDetail'), amount:v('emeAmount'), jobRef:v('emeJob'), reason:v('emeReason') };
+  if (it.mainCat === 'ค่าเดินทาง') p.vehicle = v('emeVehicle'); else p.payee = v('emePayee');
+  if (p.payee !== undefined && _expPayeeMap && _expPayeeMap[String(p.payee).trim()]){ p.payeeBank = _expPayeeMap[String(p.payee).trim()].bank; p.payeeAccount = _expPayeeMap[String(p.payee).trim()].account; }
+  return p;
+}
+async function expMgrEditSave(){
+  const msg = document.getElementById('emeMsg'), btn = document.getElementById('emeBtn');
+  const show = t => { msg.textContent = t ? '⚠ ' + t : ''; msg.style.display = t ? 'block' : 'none'; };
+  const p = expMgrEditPayload_();
+  btn.disabled = true; btn.textContent = '⏳ กำลังตรวจ...';
+  let r;
+  try { r = await call(Object.assign({}, p, { dryRun:true })); } catch(e){ r = { ok:false, error:'เชื่อมต่อไม่ได้' }; }
+  btn.disabled = false; btn.textContent = 'ตรวจแล้วบันทึก →';
+  if (!r || !r.ok){ show((r && r.error) || 'ตรวจไม่ผ่าน'); return; }
+  show('');
+  if (!confirm('ยืนยันแก้ใบ ' + _emeId + '\n\n' + r.changes.map(c => '• ' + c[0] + ': ' + c[1] + ' → ' + c[2]).join('\n') + (p.reason ? '\n\nเหตุผล: ' + p.reason : ''))) return;
+  btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...';
+  try { r = await call(p); } catch(e){ r = { ok:false, error:'เชื่อมต่อไม่ได้' }; }
+  btn.disabled = false; btn.textContent = 'ตรวจแล้วบันทึก →';
+  if (!r || !r.ok){ show((r && r.error) || 'บันทึกไม่สำเร็จ'); return; }
+  document.getElementById('expMgrEditModal').classList.remove('on');
+  toast('✅ แก้ใบ ' + _emeId + ' แล้ว');
+  expenseReloadActive();
+}
 function expenseDetailApprove(id){ expenseDetailClose(); expenseDoApprove(id); }
 
 let _expOwnEditId = '';
@@ -9411,7 +9468,9 @@ function pyeCard_(p){
       +     '<div style="font-family:var(--mono);font-size:14px;letter-spacing:.5px;">' + (p.account ? escHtml(p.account) : '<span style="color:var(--mu);font-family:var(--sans);font-size:12.5px;">— ยังไม่มีเลขบัญชี —</span>') + '</div>'
       +     (sus ? '<div style="font-size:11.5px;color:var(--amb);margin-top:2px;">⚠ มี ' + p.account.length + ' หลัก — น่าจะขาด 0 ด้านหน้า (ชีตเคยแปลงเป็นตัวเลข) ตรวจแล้วแก้ให้ครบ</div>' : '')
       +   '</div>'
-      +   '<button class="btn btn-g btn-sm" onclick="pyeStartEdit(' + idx + ')">✏️ แก้ไข</button>'
+      +   '<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;"><button class="btn btn-g btn-sm" onclick="pyeStartEdit(' + idx + ')">✏️ บัญชี</button>'
+      +   '<button class="btn btn-g btn-sm" onclick="pyeRename(' + idx + ')">🔤 ชื่อ</button>'   // [EXPEDIT]
+      +   '<button class="btn btn-g btn-sm" style="color:var(--rd);" onclick="pyeDelete(' + idx + ')">🗑 ลบ</button></div>'
       + '</div>';
   } else {
     h += '<div style="font-weight:700;margin-bottom:8px;">' + escHtml(p.name) + '</div>'
@@ -9433,6 +9492,40 @@ function pyeStartEdit(idx){
   const el = document.getElementById('pyeAcc'); if (el) el.focus();
 }
 function pyeCancel(){ _pyeEdit = ''; pyeRender(); }
+// ── [EXPEDIT 17 พ.ย. 2026] เปลี่ยนชื่อ/รวม/ลบผู้รับเงิน — server นับผลกระทบก่อน (dryRun) → ยืนยัน → ทำจริง ──
+function pyeStatusTxt_(bs){ return Object.keys(bs || {}).map(k => k + ' ' + bs[k]).join(', ') || '-'; }
+async function pyeAfterChange_(msg){ _expMaster = null; _expPayeeMap = {}; await pyeLoad(true); toast(msg); }
+async function pyeRename(idx){
+  const p = _pyeList[idx]; if (!p) return;
+  const nn = (prompt('เปลี่ยนชื่อผู้รับเงิน "' + p.name + '" เป็น:\n(ใส่ชื่อที่มีอยู่แล้ว = รวมเป็นรายเดียว)', p.name) || '').replace(/\s+/g, ' ').trim();
+  if (!nn || nn === p.name) return;
+  showLoad('กำลังตรวจผลกระทบ...');
+  let r; try { r = await call({ action:'pk_expPayeeRename', name:p.name, newName:nn, dryRun:true }); } catch(e){ r = { ok:false, error:'เชื่อมต่อไม่ได้' }; }
+  hideLoad();
+  if (!r || !r.ok){ toast('❌ ' + ((r && r.error) || 'ทำไม่ได้')); return; }
+  const txt = (r.merge ? '🔀 รวม "' + p.name + '" เข้ากับ "' + nn + '" (มีอยู่แล้ว)\nบัญชีที่ใช้ต่อ: ' + (r.keepBank || '-') + ' ' + (r.keepAccount || '-') + (r.dropAccount ? '\nบัญชีของ "' + p.name + '" (' + (r.dropBank || '-') + ' ' + r.dropAccount + ') จะถูกทิ้ง' + (r.keepAccount ? '' : ' — แต่ปลายทางยังไม่มีบัญชี จึงใช้ของเดิมแทน') : '')
+    : '🔤 เปลี่ยนชื่อ "' + p.name + '" → "' + nn + '"')
+    + '\n\nใบเบิกที่ใช้ชื่อเดิมจะเปลี่ยนตาม: ' + r.count + ' ใบ (' + pyeStatusTxt_(r.byStatus) + ')\nบันทึกประวัติไว้ใน AuditLog';
+  if (!confirm(txt + '\n\nยืนยัน?')) return;
+  showLoad('กำลังบันทึก...');
+  try { r = await call({ action:'pk_expPayeeRename', name:p.name, newName:nn }); } catch(e){ r = { ok:false, error:'เชื่อมต่อไม่ได้' }; }
+  hideLoad();
+  if (!r || !r.ok){ toast('❌ ' + ((r && r.error) || 'ไม่สำเร็จ')); return; }
+  await pyeAfterChange_('✅ ' + (r.merge ? 'รวมเข้ากับ ' : 'เปลี่ยนชื่อเป็น ') + nn + ' แล้ว · ใบเบิก ' + r.count + ' ใบเปลี่ยนตาม');
+}
+async function pyeDelete(idx){
+  const p = _pyeList[idx]; if (!p) return;
+  showLoad('กำลังตรวจผลกระทบ...');
+  let r; try { r = await call({ action:'pk_expPayeeDelete', name:p.name, dryRun:true }); } catch(e){ r = { ok:false, error:'เชื่อมต่อไม่ได้' }; }
+  hideLoad();
+  if (!r || !r.ok){ toast('❌ ' + ((r && r.error) || 'ลบไม่ได้')); return; }
+  if (!confirm('🗑 ลบ "' + p.name + '" ออกจากรายชื่อผู้รับเงิน\n(' + (p.bank || '-') + ' ' + (p.account || '-') + ')\n\nใบเบิกเก่าที่ใช้ชื่อนี้ ' + r.count + ' ใบ (' + pyeStatusTxt_(r.byStatus) + ') ไม่ถูกแตะ — แค่ไม่โชว์เลขบัญชีแล้ว\nบันทึกบัญชีเดิมไว้ใน AuditLog\n\nยืนยัน?')) return;
+  showLoad('กำลังลบ...');
+  try { r = await call({ action:'pk_expPayeeDelete', name:p.name }); } catch(e){ r = { ok:false, error:'เชื่อมต่อไม่ได้' }; }
+  hideLoad();
+  if (!r || !r.ok){ toast('❌ ' + ((r && r.error) || 'ไม่สำเร็จ')); return; }
+  await pyeAfterChange_('✅ ลบ ' + p.name + ' ออกจากรายชื่อแล้ว');
+}
 function pyeAccHint(){
   const el = document.getElementById('pyeAcc'), h = document.getElementById('pyeAccHint');
   if (!el || !h) return;
