@@ -1,0 +1,277 @@
+{
+  "id": "mungjeeb",
+  "name": "มุ้งจีบ",
+  "en": "Pleated Mesh",
+  "summary": "สเปก สี รูปแบบการเปิดปิด และรางของมุ้งจีบ",
+  "cover": "catalog-media/p-split.jpg",
+  "facts": [
+    {
+      "label": "อลูมิเนียมหนา",
+      "value": "1.2 mm"
+    },
+    {
+      "label": "ผ้ามุ้ง",
+      "value": "Polyethylene"
+    },
+    {
+      "label": "สูงสุด",
+      "value": "3.5 m"
+    },
+    {
+      "label": "สีเฟรม",
+      "value": "9 สี"
+    }
+  ],
+  "sections": [
+    {
+      "type": "videos",
+      "title": "รูปแบบการเปิด-ปิด",
+      "en": "Model",
+      "lead": "เลือกตามความกว้างของช่องและฝั่งที่อยากเก็บมุ้ง",
+      "hidden": false,
+      "items": [
+        {
+          "name": "บานเดี่ยว",
+          "sub": "เก็บซ้าย",
+          "src": "catalog-media/single-left.mp4",
+          "poster": "catalog-media/p-single-left.jpg",
+          "youtube": ""
+        },
+        {
+          "name": "บานเดี่ยว",
+          "sub": "เก็บขวา",
+          "src": "catalog-media/single-right.mp4",
+          "poster": "catalog-media/p-single-right.jpg",
+          "youtube": ""
+        },
+        {
+          "name": "บานแยกกลาง",
+          "sub": "เก็บสองข้าง",
+          "src": "catalog-media/split.mp4",
+          "poster": "catalog-media/p-split.jpg",
+          "youtube": ""
+        },
+        {
+          "name": "บานอิสระ",
+          "sub": "เปิดได้ทั้งสองทาง",
+          "src": "catalog-media/free.mp4",
+          "poster": "catalog-media/p-free.jpg",
+          "youtube": ""
+        },
+        {
+          "name": "บาน 4 มือจับ",
+          "sub": "ประตูบานใหญ่",
+          "src": "catalog-media/four.mp4",
+          "poster": "catalog-media/p-four.jpg",
+          "youtube": ""
+        }
+      ]
+    },
+    {
+      "type": "specs",
+      "title": "วัสดุ",
+      "en": "Material",
+      "lead": "",
+      "hidden": false,
+      "cards": [
+        {
+          "title": "อลูมิเนียม · Aluminium",
+          "rows": [
+            [
+              "ความหนา",
+              "1.2 mm"
+            ],
+            [
+              "สี",
+              "9 สี"
+            ]
+          ]
+        },
+        {
+          "title": "ผ้ามุ้ง · Mesh",
+          "rows": [
+            [
+              "วัตถุดิบ",
+              "Polyethylene"
+            ],
+            [
+              "ความสูง",
+              "ทำได้สูงสุด 3.5 เมตร"
+            ],
+            [
+              "สี",
+              "เทา · ดำ"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "type": "swatches",
+      "title": "สีเฟรม",
+      "en": "Colours",
+      "lead": "",
+      "hidden": false,
+      "groups": [
+        {
+          "name": "สีธรรมดา",
+          "items": [
+            {
+              "name": "อบขาว",
+              "img": "catalog-media/c-white.png"
+            },
+            {
+              "name": "ดำ",
+              "img": "catalog-media/c-black.png"
+            },
+            {
+              "name": "เงินอลูมิเนียม (NA)",
+              "img": "catalog-media/c-na.png"
+            }
+          ]
+        },
+        {
+          "name": "สีลายไม้",
+          "items": [
+            {
+              "name": "ลายไม้สักแดง",
+              "img": "catalog-media/c-teak-red.png"
+            },
+            {
+              "name": "ลายไม้สักทอง",
+              "img": "catalog-media/c-teak-gold.png"
+            }
+          ]
+        },
+        {
+          "name": "สีพิเศษ",
+          "items": [
+            {
+              "name": "น้ำตาลแดง",
+              "img": "catalog-media/c-redbrown.png"
+            },
+            {
+              "name": "น้ำตาลเข้ม",
+              "img": "catalog-media/c-darkbrown.png"
+            },
+            {
+              "name": "เทาเงินซาฮาร่า",
+              "img": "catalog-media/c-sahara-silver.png"
+            },
+            {
+              "name": "เทาเข้มซาฮาร่า",
+              "img": "catalog-media/c-sahara-dark.png"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "swatches",
+      "title": "ผ้ามุ้ง",
+      "en": "Mesh",
+      "lead": "",
+      "hidden": false,
+      "groups": [
+        {
+          "name": "",
+          "items": [
+            {
+              "name": "ผ้ามุ้งเทา",
+              "img": "catalog-media/m-grey.png"
+            },
+            {
+              "name": "ผ้ามุ้งดำ",
+              "img": "catalog-media/m-black.png"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "gallery",
+      "title": "รูปแบบราง",
+      "en": "Rail Profile",
+      "lead": "",
+      "hidden": false,
+      "items": [
+        {
+          "name": "รางธรรมดา",
+          "note": "รางบน-ล่าง",
+          "imgs": [
+            "catalog-media/rail-std.jpg",
+            "catalog-media/rail-std2.jpg"
+          ]
+        },
+        {
+          "name": "รางเตี้ย",
+          "note": "",
+          "imgs": [
+            "catalog-media/rail-low2.jpg",
+            "catalog-media/rail-low3.jpg",
+            "catalog-media/rail-low.jpg"
+          ]
+        },
+        {
+          "name": "รางข้าง",
+          "note": "",
+          "imgs": [
+            "catalog-media/rail-side.jpg"
+          ]
+        },
+        {
+          "name": "รางหลบลูกบิด",
+          "note": "",
+          "imgs": [
+            "catalog-media/rail-knob2.jpg",
+            "catalog-media/rail-knob.jpg"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "gallery",
+      "title": "ผลงานติดตั้งจริง",
+      "en": "Projects",
+      "lead": "",
+      "hidden": false,
+      "items": [
+        {
+          "name": "ช่องหน้าต่างบานใหญ่",
+          "note": "",
+          "imgs": [
+            "catalog-media/work-14.jpg"
+          ]
+        },
+        {
+          "name": "ประตูบานเลื่อนออกสวน",
+          "note": "",
+          "imgs": [
+            "catalog-media/work-22.jpg"
+          ]
+        },
+        {
+          "name": "ประตูระเบียง",
+          "note": "",
+          "imgs": [
+            "catalog-media/work-28.jpg"
+          ]
+        },
+        {
+          "name": "ประตูระเบียงชั้นบน",
+          "note": "",
+          "imgs": [
+            "catalog-media/work-12.jpg"
+          ]
+        },
+        {
+          "name": "หน้าต่างบานกระทุ้ง",
+          "note": "",
+          "imgs": [
+            "catalog-media/work-8.jpg"
+          ]
+        }
+      ]
+    }
+  ]
+}
