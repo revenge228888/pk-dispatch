@@ -9371,7 +9371,9 @@ async function cfgOpen(key, force){
 function cfgRender_(msg){
   const box = document.getElementById('cfgBody'); if (!box) return;
   const L = cfgList_(), cur = CFG_LIST.find(c => c.key === _cfg.key) || {};
-  let h = '<div style="font-weight:700;font-size:16px;margin-bottom:4px;">⚙️ ตั้งค่าระบบ</div><div style="font-size:12.5px;color:var(--mu);margin-bottom:10px;">แก้ค่าตั้งต้นของระบบบนเว็บ (แทนการเข้าไปแก้ในชีต) · ทุกครั้งที่บันทึกระบบจดค่าเดิมไว้ใน AuditLog</div>'
+  let h = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;"><div style="font-weight:700;font-size:16px;flex:1;">⚙️ ตั้งค่าระบบ</div>'
+    + (CURRENT_USER && CURRENT_USER.role === 'manager' ? '<button class="btn btn-g btn-sm" onclick="migOpen()">🚚 ตรวจความพร้อมย้ายข้อมูล</button>' : '') + '</div>'   // [MIG0]
+    + '<div style="font-size:12.5px;color:var(--mu);margin-bottom:10px;">แก้ค่าตั้งต้นของระบบบนเว็บ (แทนการเข้าไปแก้ในชีต) · ทุกครั้งที่บันทึกระบบจดค่าเดิมไว้ใน AuditLog</div>'
     + '<div class="eav-chips">' + L.map(c => '<button class="eav-chip' + (c.key === _cfg.key ? ' on' : '') + '" onclick="cfgOpen(\'' + c.key + '\')">' + escHtml(c.title) + '</button>').join('') + '</div>';
   if (cur.hint) h += '<div style="font-size:12.5px;background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:8px 10px;margin-bottom:10px;">💡 ' + escHtml(cur.hint) + '</div>';
   if (msg){ document.getElementById('cfgBody').innerHTML = h + msg; return; }
@@ -9403,6 +9405,61 @@ function cfgRender_(msg){
       + Object.keys(_cfg.defaults).map(k => '<div><code>' + escHtml(k) + '</code> = ' + escHtml(JSON.stringify(_cfg.defaults[k])) + (CFG_QLABEL[k] ? ' <span style="color:var(--mu);">' + escHtml(CFG_QLABEL[k]) + '</span>' : '') + '</div>').join('') + '</div></details>';
   }
   box.innerHTML = h;
+}
+// ════════ [MIG0 17 พ.ย. 2026] 🚚 ตรวจความพร้อมย้ายไป Cloudflare (ผู้จัดการ · อ่านอย่างเดียว · worker /mig-sheets /mig-scan ทีละชีต) ════════
+let _mig = null;
+async function migOpen(){
+  let bg = document.getElementById('migModal');
+  if (!bg){ bg = document.createElement('div'); bg.id = 'migModal'; bg.className = 'modal-bg'; bg.innerHTML = '<div class="modal" style="padding:16px;max-width:720px;width:100%;max-height:92vh;overflow:auto;"><div id="migBody"></div></div>'; bg.onclick = e => { if (e.target === bg && !(_mig && _mig.busy)) bg.classList.remove('on'); }; document.body.appendChild(bg); }
+  bg.classList.add('on');
+  _mig = { busy:true, list:[], res:[], at:new Date() };
+  migRender_('กำลังอ่านรายชื่อชีต...');
+  try {
+    const l = await _pkFastPost_('/mig-sheets', {});
+    if (!l || !l.ok){ _mig.busy = false; migRender_('❌ ' + ((l && l.error) || 'อ่านรายชื่อชีตไม่ได้')); return; }
+    _mig.list = l.sheets || [];
+    for (let i = 0; i < _mig.list.length; i++){
+      const s = _mig.list[i];
+      migRender_('กำลังตรวจ ' + (i + 1) + '/' + _mig.list.length + ' · ' + s.sheet);
+      let r; try { r = await _pkFastPost_('/mig-scan', { ss:s.ss, sheet:s.sheet }); } catch(e){ r = { ok:false, error:e.message }; }
+      _mig.res.push(Object.assign({ ss:s.ss, sheet:s.sheet, rowCount:s.rowCount }, r || {}));
+    }
+  } catch(e){ migRender_('❌ ' + e.message); }
+  _mig.busy = false; migRender_();
+}
+function migCopy(){
+  const t = migReportText_(), done = () => toast('📋 คัดลอกรายงานแล้ว — วางในแชตส่งให้ผู้ดูแลระบบได้เลย');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done).catch(() => { pkCopyFallback(t); done(); });
+  else { pkCopyFallback(t); done(); }
+}
+function migReportText_(){
+  const R = _mig.res, t = R.reduce((a, r) => a + (r.dataRows || 0), 0), kb = R.reduce((a, r) => a + (r.kb || 0), 0);
+  const lines = ['รายงานตรวจความพร้อมย้ายข้อมูล ' + _mig.at.toLocaleString('th-TH'), 'ชีต ' + R.length + ' · แถวข้อมูลรวม ' + t + ' · ขนาด ~' + Math.round(kb) + ' KB', ''];
+  R.forEach(r => {
+    lines.push('[' + r.ss + '] ' + r.sheet + ': ' + (r.ok ? (r.dataRows + ' แถว · ' + r.cols + ' คอลัมน์ · ' + r.kb + ' KB') : ('อ่านไม่ได้ — ' + r.error)));
+    (r.issues || []).forEach(i => lines.push('   ⚠ ' + i.kind + ' ' + i.n + ' · ' + (i.ex || []).join(' | ')));
+    (r.money || []).forEach(m => lines.push('   ฿ รวม ' + m.col + ' = ' + m.sum));
+    if (r.byStatus) Object.keys(r.byStatus).forEach(s => lines.push('   ฿ ' + s + ': ' + r.byStatus[s].n + ' ใบ · ' + r.byStatus[s].amt));
+  });
+  return lines.join('\n');
+}
+function migRender_(msg){
+  const b = document.getElementById('migBody'); if (!b) return;
+  let h = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><b style="flex:1;font-size:16px;">🚚 ตรวจความพร้อมย้ายข้อมูล</b>' + (_mig && !_mig.busy ? '<button class="btn btn-g btn-sm" onclick="document.getElementById(\'migModal\').classList.remove(\'on\')">ปิด</button>' : '') + '</div>'
+    + '<div style="font-size:12.5px;color:var(--mu);margin-bottom:10px;">อ่านอย่างเดียว ไม่แก้ข้อมูล · ตรวจจำนวนแถว ขนาด และจุดที่จะแปลงพลาดตอนย้าย (รหัสซ้ำ วันที่อ่านไม่ได้ เลขบัญชีเสี่ยง 0 หาย) + ยอดเงินรวมไว้เทียบหลังย้าย</div>';
+  if (msg) h += '<div class="loading-row">' + escHtml(msg) + '</div>';
+  const R = (_mig && _mig.res) || [];
+  if (R.length){
+    const nIss = R.reduce((a, r) => a + (r.issues || []).length, 0), bad = R.filter(r => !r.ok).length;
+    h += '<div style="font-size:13px;margin-bottom:8px;">ตรวจแล้ว <b>' + R.length + '</b> ชีต · แถวข้อมูลรวม <b>' + R.reduce((a, r) => a + (r.dataRows || 0), 0).toLocaleString() + '</b> · ~' + Math.round(R.reduce((a, r) => a + (r.kb || 0), 0)).toLocaleString() + ' KB'
+      + (nIss ? ' · <b style="color:var(--amb)">⚠ ' + nIss + ' จุดต้องดู</b>' : ' · ✅ ไม่พบปัญหา') + (bad ? ' · <b style="color:var(--rd)">อ่านไม่ได้ ' + bad + '</b>' : '') + '</div>';
+    if (!_mig.busy) h += '<button class="btn btn-p" style="width:100%;margin-bottom:10px;" onclick="migCopy()">📋 คัดลอกรายงาน (ส่งให้ผู้ดูแลระบบ)</button>';
+    h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:480px;"><thead><tr style="text-align:left;color:var(--mu);"><th style="padding:4px;">ไฟล์</th><th style="padding:4px;">ชีต</th><th style="padding:4px;text-align:right;">แถว</th><th style="padding:4px;text-align:right;">KB</th><th style="padding:4px;">ผล</th></tr></thead><tbody>'
+      + R.map(r => '<tr style="border-top:1px solid var(--bdr);vertical-align:top;"><td style="padding:4px;font-family:var(--mono);">' + escHtml(r.ss) + '</td><td style="padding:4px;">' + escHtml(r.sheet) + '</td><td style="padding:4px;text-align:right;font-family:var(--mono);">' + (r.ok ? (r.dataRows || 0).toLocaleString() : '-') + '</td><td style="padding:4px;text-align:right;font-family:var(--mono);">' + (r.ok ? r.kb : '-') + '</td><td style="padding:4px;">'
+        + (!r.ok ? '<span style="color:var(--rd);">อ่านไม่ได้: ' + escHtml(String(r.error || '').slice(0, 80)) + '</span>' : ((r.issues || []).length ? r.issues.map(i => '<div style="color:var(--amb);">⚠ ' + escHtml(i.kind) + ' ' + i.n + '<br><span style="color:var(--mu);font-size:11px;">' + escHtml((i.ex || []).join(' · ')) + '</span></div>').join('') : '✅'))
+        + (r.byStatus ? '<div style="font-size:11px;color:var(--mu);">' + Object.keys(r.byStatus).map(s => escHtml(s) + ' ' + r.byStatus[s].n).join(' · ') + '</div>' : '') + '</td></tr>').join('') + '</tbody></table></div>';
+  }
+  b.innerHTML = h;
 }
 function cfgMarkDirty_(){ const was = _cfg.dirty; _cfg.dirty = JSON.stringify(_cfg.rows) !== JSON.stringify(_cfg.base); if (was !== _cfg.dirty) cfgRender_(); }
 function cfgCell(i, c, v){ const r = _cfg.rows[i]; if (!r) return; while (r.length <= c) r.push(''); r[c] = v; cfgMarkDirty_(); }
