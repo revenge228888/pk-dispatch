@@ -9400,7 +9400,7 @@ function cfgRender_(msg){
   const box = document.getElementById('cfgBody'); if (!box) return;
   const L = cfgList_(), cur = CFG_LIST.find(c => c.key === _cfg.key) || {};
   let h = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;"><div style="font-weight:700;font-size:16px;flex:1;">⚙️ ตั้งค่าระบบ</div>'
-    + (CURRENT_USER && CURRENT_USER.role === 'manager' ? '<button class="btn btn-g btn-sm" onclick="migOpen()">🚚 ตรวจความพร้อมย้ายข้อมูล</button>' : '') + '</div>'   // [MIG0]
+    + (CURRENT_USER && CURRENT_USER.role === 'manager' ? '<button class="btn btn-g btn-sm" onclick="migOpen()">🚚 ตรวจความพร้อมย้ายข้อมูล</button> <button class="btn btn-g btn-sm" onclick="migOpen(\'dry\')">🧪 ซ้อมย้าย (ไม่บันทึกจริง)</button>' : '') + '</div>'   // [MIG0]
     + '<div style="font-size:12.5px;color:var(--mu);margin-bottom:10px;">แก้ค่าตั้งต้นของระบบบนเว็บ (แทนการเข้าไปแก้ในชีต) · ทุกครั้งที่บันทึกระบบจดค่าเดิมไว้ใน AuditLog</div>'
     + '<div class="eav-chips">' + L.map(c => '<button class="eav-chip' + (c.key === _cfg.key ? ' on' : '') + '" onclick="cfgOpen(\'' + c.key + '\')">' + escHtml(c.title) + '</button>').join('') + '</div>';
   if (cur.hint) h += '<div style="font-size:12.5px;background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:8px 10px;margin-bottom:10px;">💡 ' + escHtml(cur.hint) + '</div>';
@@ -9436,11 +9436,11 @@ function cfgRender_(msg){
 }
 // ════════ [MIG0 17 พ.ย. 2026] 🚚 ตรวจความพร้อมย้ายไป Cloudflare (ผู้จัดการ · อ่านอย่างเดียว · worker /mig-sheets /mig-scan ทีละชีต) ════════
 let _mig = null;
-async function migOpen(){
+async function migOpen(mode){
   let bg = document.getElementById('migModal');
   if (!bg){ bg = document.createElement('div'); bg.id = 'migModal'; bg.className = 'modal-bg'; bg.innerHTML = '<div class="modal" style="padding:16px;max-width:720px;width:100%;max-height:92vh;overflow:auto;"><div id="migBody"></div></div>'; bg.onclick = e => { if (e.target === bg && !(_mig && _mig.busy)) bg.classList.remove('on'); }; document.body.appendChild(bg); }
   bg.classList.add('on');
-  _mig = { busy:true, list:[], res:[], at:new Date() };
+  _mig = { busy:true, list:[], res:[], at:new Date(), mode: mode === 'dry' ? 'dry' : 'scan' };
   migRender_('กำลังอ่านรายชื่อชีต...');
   try {
     const l = await _pkFastPost_('/mig-sheets', {});
@@ -9448,12 +9448,57 @@ async function migOpen(){
     _mig.list = l.sheets || [];
     for (let i = 0; i < _mig.list.length; i++){
       const s = _mig.list[i];
-      migRender_('กำลังตรวจ ' + (i + 1) + '/' + _mig.list.length + ' · ' + s.sheet);
-      let r; try { r = await _pkFastPost_('/mig-scan', { ss:s.ss, sheet:s.sheet }); } catch(e){ r = { ok:false, error:e.message }; }
+      migRender_((_mig.mode === 'dry' ? 'กำลังซ้อมย้าย ' : 'กำลังตรวจ ') + (i + 1) + '/' + _mig.list.length + ' · ' + s.sheet);
+      let r; try { r = await _pkFastPost_('/mig-scan', _mig.mode === 'dry' ? { ss:s.ss, sheet:s.sheet, mode:'dry' } : { ss:s.ss, sheet:s.sheet }); } catch(e){ r = { ok:false, error:e.message }; }
       _mig.res.push(Object.assign({ ss:s.ss, sheet:s.sheet, rowCount:s.rowCount }, r || {}));
     }
   } catch(e){ migRender_('❌ ' + e.message); }
   _mig.busy = false; migRender_();
+}
+// ════════ [MIGDRY 17 พ.ย. 2026] 🧪 ซ้อมย้าย Sheets → D1 (worker migPlan · ไม่เขียนฐานจริง) ════════
+//  แปลงทุกแถวแบบเดียวกับตอนบันทึกจริง แล้วถอดกลับเทียบทีละช่อง + เทียบยอดเงินก่อน/หลัง · สรุปขนาดต่อฐาน + โควตาเขียน D1 ฟรี (100,000 แถว/วัน)
+const MIG_D1_FREE_MB = 500, MIG_D1_FREE_WRITES = 100000;
+function migDrySum_(){
+  const R = (_mig && _mig.res) || [], by = {};
+  R.forEach(r => { if (!r.db) return; const o = by[r.db] || (by[r.db] = { sheets:0, rows:0, kb:0, writes:0 }); o.sheets++; o.rows += r.rows || 0; o.kb += r.kb || 0; o.writes += r.writes || 0; });
+  const writes = Object.keys(by).reduce((a, k) => a + by[k].writes, 0);
+  return { by, writes, days: Math.max(1, Math.ceil(writes / (MIG_D1_FREE_WRITES * 0.8))), bad: R.filter(r => !r.ok), err: R.filter(r => !r.db) };
+}
+function migDryText_(){
+  const R = _mig.res, S = migDrySum_();
+  const lines = ['รายงานซ้อมย้ายข้อมูล (ไม่บันทึกจริง) ' + _mig.at.toLocaleString('th-TH'), ''];
+  Object.keys(S.by).forEach(k => lines.push(k + ': ' + S.by[k].sheets + ' ชีต · ' + S.by[k].rows + ' แถว · ~' + (S.by[k].kb / 1024).toFixed(2) + ' MB (ฟรี ' + MIG_D1_FREE_MB + ' MB)'));
+  lines.push('เขียนครั้งแรก ~' + S.writes + ' แถว (ฟรี ' + MIG_D1_FREE_WRITES + '/วัน) → ' + S.days + ' วัน', 'แปลงไม่ตรง: ' + S.bad.length + ' ชีต · อ่านไม่ได้: ' + S.err.length + ' ชีต', '');
+  R.forEach(r => {
+    if (!r.db) { lines.push('[' + r.ss + '] ' + r.sheet + ': อ่านไม่ได้ — ' + (r.error || '')); return; }
+    lines.push('[' + r.ss + '] ' + r.sheet + ' → ' + r.db + ': ' + r.rows + ' แถว · ' + r.kb + ' KB · ' + (r.ok ? 'ตรง ✓' : 'ไม่ตรง ✗') + (r.noKey ? ' · ไม่มีรหัส ' + r.noKey : ''));
+    if (r.mismatch) lines.push('   ✗ ค่าเปลี่ยน ' + r.mismatch + ' ช่อง · ' + (r.mismatchEx || []).join(' | '));
+    if (!r.moneySame) lines.push('   ✗ ยอดเงินก่อน/หลังไม่ตรง');
+    (r.tooBig || []).forEach(t => lines.push('   ✗ แถวใหญ่เกิน 1 MB: ' + t));
+    (r.money || []).forEach(m => lines.push('   ฿ รวม ' + m.col + ' = ' + m.sum));
+    if (r.byStatus) Object.keys(r.byStatus).forEach(st => lines.push('   ฿ ' + st + ': ' + r.byStatus[st].n + ' ใบ · ' + r.byStatus[st].amt));
+  });
+  return lines.join('\n');
+}
+function migDryHtml_(msg){
+  let h = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><b style="flex:1;font-size:16px;">🧪 ซ้อมย้ายข้อมูล (ไม่บันทึกจริง)</b>' + (_mig && !_mig.busy ? '<button class="btn btn-g btn-sm" onclick="document.getElementById(\'migModal\').classList.remove(\'on\')">ปิด</button>' : '') + '</div>'
+    + '<div style="font-size:12.5px;color:var(--mu);margin-bottom:10px;">อ่านชีตทีละแผ่น → แปลงแบบเดียวกับตอนย้ายจริง → ถอดกลับมาเทียบทุกช่อง + เทียบยอดเงินก่อน/หลัง · <b>ไม่เขียนอะไรลงฐานใหม่และไม่แตะชีต</b></div>';
+  if (msg) h += '<div class="loading-row">' + escHtml(msg) + '</div>';
+  const R = (_mig && _mig.res) || [];
+  if (!R.length) return h;
+  const S = migDrySum_();
+  h += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">' + Object.keys(S.by).map(k => '<div class="card" style="flex:1;min-width:150px;padding:10px;"><div style="font-size:12px;color:var(--mu);">ฐาน ' + escHtml(k) + '</div><div style="font-size:18px;font-weight:700;">' + S.by[k].rows.toLocaleString() + ' แถว</div><div style="font-size:12px;">~' + (S.by[k].kb / 1024).toFixed(2) + ' MB จากฟรี ' + MIG_D1_FREE_MB + ' MB · ' + S.by[k].sheets + ' ชีต</div></div>').join('')
+    + '<div class="card" style="flex:1;min-width:150px;padding:10px;"><div style="font-size:12px;color:var(--mu);">เขียนครั้งแรก</div><div style="font-size:18px;font-weight:700;">~' + S.writes.toLocaleString() + '</div><div style="font-size:12px;">ฟรี ' + MIG_D1_FREE_WRITES.toLocaleString() + '/วัน → ใช้ ' + S.days + ' วัน</div></div></div>';
+  h += '<div style="font-size:13.5px;margin-bottom:8px;">' + (S.bad.length || S.err.length ? '<b style="color:var(--rd)">✗ ไม่ตรง ' + S.bad.length + ' ชีต' + (S.err.length ? ' · อ่านไม่ได้ ' + S.err.length : '') + '</b>' : (_mig.busy ? '' : '<b style="color:var(--gr,#16a34a)">✅ ทุกชีตแปลงแล้วค่าตรงทุกช่อง ยอดเงินตรง</b>')) + '</div>';
+  if (!_mig.busy) h += '<button class="btn btn-p" style="width:100%;margin-bottom:10px;" onclick="migCopy()">📋 คัดลอกรายงาน (ส่งให้ผู้ดูแลระบบ)</button>';
+  h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:480px;"><thead><tr style="text-align:left;color:var(--mu);"><th style="padding:4px;">ชีต</th><th style="padding:4px;">ฐาน</th><th style="padding:4px;text-align:right;">แถว</th><th style="padding:4px;text-align:right;">KB</th><th style="padding:4px;">ผล</th></tr></thead><tbody>'
+    + R.map(r => '<tr style="border-top:1px solid var(--bdr);vertical-align:top;"><td style="padding:4px;">' + escHtml(r.sheet) + ' <span style="color:var(--mu);font-size:11px;">' + escHtml(r.ss) + '</span></td><td style="padding:4px;font-family:var(--mono);">' + escHtml(r.db || '-') + '</td><td style="padding:4px;text-align:right;font-family:var(--mono);">' + (r.db ? (r.rows || 0).toLocaleString() : '-') + '</td><td style="padding:4px;text-align:right;font-family:var(--mono);">' + (r.db ? r.kb : '-') + '</td><td style="padding:4px;">'
+      + (!r.db ? '<span style="color:var(--rd);">อ่านไม่ได้: ' + escHtml(String(r.error || '').slice(0, 80)) + '</span>'
+        : (r.ok ? '✅ ตรง' : '<span style="color:var(--rd);">✗ ' + (r.mismatch ? 'ค่าเปลี่ยน ' + r.mismatch + ' ช่อง ' : '') + (!r.moneySame ? 'ยอดเงินไม่ตรง ' : '') + ((r.tooBig || []).length ? 'แถวใหญ่เกิน ' : '') + '</span><br><span style="color:var(--mu);font-size:11px;">' + escHtml((r.mismatchEx || []).concat(r.tooBig || []).join(' · ')) + '</span>')
+        + (r.byStatus ? '<div style="font-size:11px;color:var(--mu);">' + Object.keys(r.byStatus).map(st => escHtml(st) + ' ' + r.byStatus[st].n + ' ใบ ฿' + Number(r.byStatus[st].amt).toLocaleString()) .join(' · ') + '</div>' : '')
+        + ((r.money && !r.byStatus) ? '<div style="font-size:11px;color:var(--mu);">' + r.money.map(m => '฿ ' + escHtml(m.col) + ' ' + Number(m.sum).toLocaleString()).join(' · ') + '</div>' : ''))
+      + '</td></tr>').join('') + '</tbody></table></div>';
+  return h;
 }
 function migCopy(){
   const t = migReportText_(), done = () => toast('📋 คัดลอกรายงานแล้ว — วางในแชตส่งให้ผู้ดูแลระบบได้เลย');
@@ -9461,6 +9506,7 @@ function migCopy(){
   else { pkCopyFallback(t); done(); }
 }
 function migReportText_(){
+  if (_mig.mode === 'dry') return migDryText_();   // [MIGDRY]
   const R = _mig.res, t = R.reduce((a, r) => a + (r.dataRows || 0), 0), kb = R.reduce((a, r) => a + (r.kb || 0), 0);
   const lines = ['รายงานตรวจความพร้อมย้ายข้อมูล ' + _mig.at.toLocaleString('th-TH'), 'ชีต ' + R.length + ' · แถวข้อมูลรวม ' + t + ' · ขนาด ~' + Math.round(kb) + ' KB', ''];
   R.forEach(r => {
@@ -9474,6 +9520,7 @@ function migReportText_(){
 }
 function migRender_(msg){
   const b = document.getElementById('migBody'); if (!b) return;
+  if (_mig && _mig.mode === 'dry') { b.innerHTML = migDryHtml_(msg); return; }   // [MIGDRY]
   let h = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><b style="flex:1;font-size:16px;">🚚 ตรวจความพร้อมย้ายข้อมูล</b>' + (_mig && !_mig.busy ? '<button class="btn btn-g btn-sm" onclick="document.getElementById(\'migModal\').classList.remove(\'on\')">ปิด</button>' : '') + '</div>'
     + '<div style="font-size:12.5px;color:var(--mu);margin-bottom:10px;">อ่านอย่างเดียว ไม่แก้ข้อมูล · ตรวจจำนวนแถว ขนาด และจุดที่จะแปลงพลาดตอนย้าย (รหัสซ้ำ วันที่อ่านไม่ได้ เลขบัญชีเสี่ยง 0 หาย) + ยอดเงินรวมไว้เทียบหลังย้าย</div>';
   if (msg) h += '<div class="loading-row">' + escHtml(msg) + '</div>';
