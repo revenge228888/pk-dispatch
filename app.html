@@ -9400,7 +9400,7 @@ function cfgRender_(msg){
   const box = document.getElementById('cfgBody'); if (!box) return;
   const L = cfgList_(), cur = CFG_LIST.find(c => c.key === _cfg.key) || {};
   let h = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;"><div style="font-weight:700;font-size:16px;flex:1;">⚙️ ตั้งค่าระบบ</div>'
-    + (CURRENT_USER && CURRENT_USER.role === 'manager' ? '<button class="btn btn-g btn-sm" onclick="migOpen()">🚚 ตรวจความพร้อมย้ายข้อมูล</button> <button class="btn btn-g btn-sm" onclick="migOpen(\'dry\')">🧪 ซ้อมย้าย (ไม่บันทึกจริง)</button> <button class="btn btn-g btn-sm" onclick="migOpen(\'load\')">📥 ย้ายเข้าฐานใหม่ (ไม่แตะชีต)</button>' : '') + '</div>'   // [MIG0]
+    + (CURRENT_USER && CURRENT_USER.role === 'manager' ? '<button class="btn btn-g btn-sm" onclick="migOpen()">🚚 ตรวจความพร้อมย้ายข้อมูล</button> <button class="btn btn-g btn-sm" onclick="migOpen(\'dry\')">🧪 ซ้อมย้าย (ไม่บันทึกจริง)</button> <button class="btn btn-g btn-sm" onclick="migOpen(\'load\')">📥 ย้ายเข้าฐานใหม่ (ไม่แตะชีต)</button> <button class="btn btn-g btn-sm" onclick="migSyncOpen()">🔄 สถานะซิงก์ฐานใหม่</button>' : '') + '</div>'   // [MIG0]
     + '<div style="font-size:12.5px;color:var(--mu);margin-bottom:10px;">แก้ค่าตั้งต้นของระบบบนเว็บ (แทนการเข้าไปแก้ในชีต) · ทุกครั้งที่บันทึกระบบจดค่าเดิมไว้ใน AuditLog</div>'
     + '<div class="eav-chips">' + L.map(c => '<button class="eav-chip' + (c.key === _cfg.key ? ' on' : '') + '" onclick="cfgOpen(\'' + c.key + '\')">' + escHtml(c.title) + '</button>').join('') + '</div>';
   if (cur.hint) h += '<div style="font-size:12.5px;background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:8px 10px;margin-bottom:10px;">💡 ' + escHtml(cur.hint) + '</div>';
@@ -9555,6 +9555,25 @@ async function migLoadStart(){
     }
   } catch(e){ _mig.stop = e.message; }
   _mig.busy = false; migRender_();
+}
+// [MIGSYNC 17 พ.ย. 2026] 🔄 สถานะซิงก์: ฐานใหม่ตามชีตทันแค่ไหน (cron ซิงก์ทีละชีต/นาที · ยังไม่มีหน้าไหนอ่านฐานใหม่)
+async function migSyncOpen(){
+  let bg = document.getElementById('migModal');
+  if (!bg){ bg = document.createElement('div'); bg.id = 'migModal'; bg.className = 'modal-bg'; bg.innerHTML = '<div class="modal" style="padding:16px;max-width:720px;width:100%;max-height:92vh;overflow:auto;"><div id="migBody"></div></div>'; bg.onclick = e => { if (e.target === bg) bg.classList.remove('on'); }; document.body.appendChild(bg); }
+  bg.classList.add('on'); _mig = null;
+  const b = document.getElementById('migBody');
+  b.innerHTML = '<div class="loading-row">กำลังโหลดสถานะ...</div>';
+  let r; try { r = await _pkFastPost_('/mig-sync-status', {}); } catch(e){ r = { ok:false, error:e.message }; }
+  if (!r || !r.ok){ b.innerHTML = '<div style="color:var(--rd);">❌ ' + escHtml((r && r.error) || 'โหลดไม่ได้') + '</div>'; return; }
+  const now = new Date(r.now).getTime(), L = r.sheets || [];
+  const ago = t => { if (!t) return '-'; const m = Math.round((now - new Date(t).getTime()) / 60000); return m < 1 ? 'เพิ่งซิงก์' : m < 60 ? m + ' นาทีก่อน' : Math.round(m / 60) + ' ชม.ก่อน'; };
+  const notes = L.filter(x => x.note), old = L.filter(x => x.synced_at && now - new Date(x.synced_at).getTime() > 90 * 60000);
+  b.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><b style="flex:1;font-size:16px;">🔄 สถานะซิงก์ฐานใหม่</b><button class="btn btn-g btn-sm" onclick="migSyncOpen()">↻</button><button class="btn btn-g btn-sm" onclick="document.getElementById(\'migModal\').classList.remove(\'on\')">ปิด</button></div>'
+    + '<div style="font-size:12.5px;color:var(--mu);margin-bottom:8px;">ระบบคัดลอกชีตเข้าฐานใหม่เองทีละชีตทุก 1 นาที (ครบทุกชีตราว 45 นาที) · ตอนนี้ยังไม่มีหน้าไหนอ่านจากฐานใหม่ — ระบบที่ใช้งานอ่านจากชีตเหมือนเดิม</div>'
+    + '<div style="font-size:13.5px;margin-bottom:8px;">' + (notes.length ? '<b style="color:var(--amb)">⚠ มีหมายเหตุ ' + notes.length + ' ชีต</b>' : old.length ? '<b style="color:var(--amb)">⚠ ค้างเกิน 90 นาที ' + old.length + ' ชีต</b>' : '<b style="color:var(--gr,#16a34a)">✅ ซิงก์ปกติ ' + L.length + ' ชีต</b>') + '</div>'
+    + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;"><thead><tr style="text-align:left;color:var(--mu);"><th style="padding:4px;">ชีต</th><th style="padding:4px;">ฐาน</th><th style="padding:4px;">ซิงก์ล่าสุด</th></tr></thead><tbody>'
+    + L.map(x => '<tr style="border-top:1px solid var(--bdr);vertical-align:top;"><td style="padding:4px;">' + escHtml(x.sheet) + ' <span style="color:var(--mu);font-size:11px;">' + escHtml(x.ss) + '</span>' + (x.note ? '<div style="color:var(--amb);font-size:11.5px;">⚠ ' + escHtml(x.note) + '</div>' : '') + '</td><td style="padding:4px;font-family:var(--mono);">' + escHtml(x.db) + '</td><td style="padding:4px;">' + ago(x.synced_at) + '</td></tr>').join('')
+    + '</tbody></table></div>';
 }
 function migLoadText_(){
   const R = _mig.res, ld = R.filter(r => r.db), bad = ld.filter(r => !r.ok);
