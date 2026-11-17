@@ -9436,6 +9436,7 @@ function cfgRender_(msg){
 }
 // ════════ [MIG0 17 พ.ย. 2026] 🚚 ตรวจความพร้อมย้ายไป Cloudflare (ผู้จัดการ · อ่านอย่างเดียว · worker /mig-sheets /mig-scan ทีละชีต) ════════
 let _mig = null;
+const MIG_GAP_MS = 2000, MIG_RETRY_429 = 3, MIG_WAIT_429_S = 30;   // [17 พ.ย.] กันโควตาอ่าน Google 60/นาที (ใช้ร่วมกับระบบจริง)
 async function migOpen(mode){
   let bg = document.getElementById('migModal');
   if (!bg){ bg = document.createElement('div'); bg.id = 'migModal'; bg.className = 'modal-bg'; bg.innerHTML = '<div class="modal" style="padding:16px;max-width:720px;width:100%;max-height:92vh;overflow:auto;"><div id="migBody"></div></div>'; bg.onclick = e => { if (e.target === bg && !(_mig && _mig.busy)) bg.classList.remove('on'); }; document.body.appendChild(bg); }
@@ -9449,7 +9450,15 @@ async function migOpen(mode){
     for (let i = 0; i < _mig.list.length; i++){
       const s = _mig.list[i];
       migRender_((_mig.mode === 'dry' ? 'กำลังซ้อมย้าย ' : 'กำลังตรวจ ') + (i + 1) + '/' + _mig.list.length + ' · ' + s.sheet);
-      let r; try { r = await _pkFastPost_('/mig-scan', _mig.mode === 'dry' ? { ss:s.ss, sheet:s.sheet, mode:'dry' } : { ss:s.ss, sheet:s.sheet }); } catch(e){ r = { ok:false, error:e.message }; }
+      // [17 พ.ย.] Google Sheets จำกัดอ่าน 60 ครั้ง/นาที ใช้ร่วมกับทั้งระบบ → เว้น 2 วิ/ชีต (≤30/นาที เหลือให้งานจริง) · เจอ 429 รอ 30 วิแล้วลองใหม่ (สูงสุด 3 รอบ)
+      if (i) await new Promise(res => setTimeout(res, MIG_GAP_MS));
+      let r;
+      for (let t = 0; t <= MIG_RETRY_429; t++){
+        try { r = await _pkFastPost_('/mig-scan', _mig.mode === 'dry' ? { ss:s.ss, sheet:s.sheet, mode:'dry' } : { ss:s.ss, sheet:s.sheet }); } catch(e){ r = { ok:false, error:e.message }; }
+        if (!(r && r.ok === false && /429|Quota exceeded/.test(String(r.error || ''))) || t === MIG_RETRY_429) break;
+        for (let w = MIG_WAIT_429_S; w > 0; w--){ migRender_('Google จำกัดการอ่านชั่วคราว — รอ ' + w + ' วิ แล้วอ่าน ' + s.sheet + ' ใหม่ (รอบ ' + (t + 2) + ')'); await new Promise(res => setTimeout(res, 1000)); }
+      }
+      if (r && r.ok === false && r.error) r.error = String(r.error).slice(0, 160);
       _mig.res.push(Object.assign({ ss:s.ss, sheet:s.sheet, rowCount:s.rowCount }, r || {}));
     }
   } catch(e){ migRender_('❌ ' + e.message); }
@@ -9462,7 +9471,7 @@ function migDrySum_(){
   const R = (_mig && _mig.res) || [], by = {};
   R.forEach(r => { if (!r.db) return; const o = by[r.db] || (by[r.db] = { sheets:0, rows:0, kb:0, writes:0 }); o.sheets++; o.rows += r.rows || 0; o.kb += r.kb || 0; o.writes += r.writes || 0; });
   const writes = Object.keys(by).reduce((a, k) => a + by[k].writes, 0);
-  return { by, writes, days: Math.max(1, Math.ceil(writes / (MIG_D1_FREE_WRITES * 0.8))), bad: R.filter(r => !r.ok), err: R.filter(r => !r.db) };
+  return { by, writes, days: Math.max(1, Math.ceil(writes / (MIG_D1_FREE_WRITES * 0.8))), bad: R.filter(r => r.db && !r.ok), err: R.filter(r => !r.db) };   // อ่านไม่ได้ ≠ แปลงไม่ตรง (เคยนับซ้ำ)
 }
 function migDryText_(){
   const R = _mig.res, S = migDrySum_();
