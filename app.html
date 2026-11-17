@@ -848,6 +848,7 @@ tbody tr:nth-child(even){background:rgba(120,96,72,.04);}
       <div class="fg"><label class="fl">ที่อยู่</label><textarea class="fi" id="jeAddr" rows="2"></textarea></div>
       <div class="fg"><label class="fl">รายการงาน</label><textarea class="fi" id="jeJob" rows="2"></textarea></div>
       <div class="fg"><label class="fl">เลขที่ใบจอง <span style="color:var(--mu);font-weight:400;">(ให้ตรงกับใบผลิต — จับคู่สถานะได้ตรงตัว)</span></label><input class="fi" id="jeRef" autocomplete="off"></div>
+      <div class="fg"><label class="fl">หมายเหตุงาน <span style="color:var(--mu);font-weight:400;">(ข้อมูลระบบเช่น เบอร์/พิกัด/เลข WO ไม่หาย)</span></label><textarea class="fi" id="jeNote" rows="2" maxlength="500"></textarea></div>   <!-- [CFGWEB] -->
       <div class="row-form">
         <div class="fg"><label class="fl">ยอด (บาท)</label><input class="fi" id="jeAmount" type="number" inputmode="decimal"></div>
         <div class="fg"><label class="fl">คะแนน</label><input class="fi" id="jeScore" type="number" inputmode="decimal"></div>
@@ -2095,6 +2096,8 @@ function renderOfficeShell(){
           <div class="sidebar-group">ระบบ</div>
           <a class="sidebar-item" data-tab="sheetcap" href="#tab=sheetcap" onclick="return pkNavTab(event,'sheetcap',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="19" cy="18" r="2.5"/></svg></span><span class="sidebar-label">สถานะชีต</span></a>
           <a class="sidebar-item" data-tab="usermgr" href="#tab=usermgr" onclick="return pkNavTab(event,'usermgr',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><path d="M16 5.5a3 3 0 0 1 0 5M17 14c2.5.5 4 2.5 4 6"/></svg></span><span class="sidebar-label">จัดการผู้ใช้</span></a>` : ''}
+          ${CURRENT_USER.role === 'office' ? '<div class="sidebar-group">ระบบ</div>' : ''}
+          <a class="sidebar-item" data-tab="sysconfig" href="#tab=sysconfig" onclick="return pkNavTab(event,'sysconfig',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></span><span class="sidebar-label">ตั้งค่าระบบ</span></a>
         </div>
         <div class="sidebar-bottom">
           <div class="sidebar-user"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></span><span class="sidebar-label">${CURRENT_USER.name || CURRENT_USER.username}</span></div>
@@ -2704,6 +2707,8 @@ function renderOfficeShell(){
       <div id="tabGlasscalc" style="display:none"></div>
       <div id="tabSlips" style="display:none"></div>
       <div id="tabPayees" style="display:none"></div>
+      <div id="tabSysconfig" style="display:none"><div class="section-pad" id="cfgBody"></div></div>   <!-- [CFGWEB] ⚙️ ตั้งค่าระบบ -->
+
       <div id="tabSheetcap" style="display:none"></div>
       <div id="tabUsermgr" style="display:none"></div>
 
@@ -5345,7 +5350,7 @@ function gcalcTabInit(){
 function gcalcTabReload_(){const f=document.getElementById('gcalcFrame');if(f)f.src='glass-calc.html?embed=1';}
 function mapTabReload_(){const f=document.getElementById('mapTabFrame');if(f)f.src='map.html?embed=1';}
 function setTab(t, btn){
-  ['Dash','Access','Gpssetup','Booking','Jobs','Customers','Followup','Assign','Cfqueue','Qtrack','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Payees','Mytasks','Taskmgr','Slips','Map','Sheetcap','Usermgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po','Glasscalc'].forEach(x => {
+  ['Dash','Access','Gpssetup','Booking','Jobs','Customers','Followup','Assign','Cfqueue','Qtrack','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Payees','Mytasks','Taskmgr','Slips','Map','Sheetcap','Usermgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po','Glasscalc','Sysconfig'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -5372,6 +5377,7 @@ function setTab(t, btn){
   if (t === 'qtrack') qtLoad();
   if (t === 'outstanding') outstandingInit();
   if (t === 'payees') pyeInit();
+  if (t === 'sysconfig') cfgInit();   // [CFGWEB]
   if (t === 'mytasks') myTasksLoad();
   if (t === 'taskmgr') taskMgrInit();
   if (t === 'slips') slpInit();
@@ -9265,6 +9271,99 @@ function pyeShell_(){
     + '<div id="pyeList"><div class="loading-row">กำลังโหลด...</div></div>'
     + '</div>';
 }
+// ════════ [CFGWEB 17 พ.ย. 2026] ⚙️ ตั้งค่าระบบ — แก้ชีตตั้งค่าบนเว็บแทนการเปิดชีต (เตรียมย้าย Cloudflare) ════════
+//  ชุดที่แก้ได้ = PK_CFG (Code_Config.gs) = CFG_DEFS (worker) = CFG_LIST ข้างล่าง (เทส cfgweb เทียบ) · อ่านเร็ว /cfg-get → สำรอง pk_cfgGet · บันทึก pk_cfgSave
+const CFG_LIST = [
+  { key:'zone',      title:'📍 โซนพื้นที่',          roles:['office','manager'], hint:'คำค้น = คำที่อยู่ในที่อยู่ลูกค้า (เช่น บางนา) → ระบบจัดโซนให้งานเอง · lat/lng ใช้เดาพิกัดเมื่อที่อยู่ไม่มีหมุด (เว้นว่างได้)' },
+  { key:'queue',     title:'🗓 ตั้งค่าจัดคิว',        roles:['manager'], hint:'ค่าที่ไม่มีในตาราง = ใช้ค่าเริ่มของระบบ (ดูตารางค่าเริ่มด้านล่าง) · แก้แล้วมีผลกับการแนะนำคิว/ความจุทันที' },
+  { key:'score',     title:'⭐ คะแนนงาน',            roles:['manager'], hint:'ประเภทงาน + ช่วงคะแนน — ใช้เป็นค่าเริ่มตอนลงคิว' },
+  { key:'settings',  title:'📊 เพดานคะแนน (Settings)', roles:['manager'], hint:'แถวที่ 1 คอลัมน์ 3 = เพดานคะแนนช่าง/วัน · แถวที่ 2 คอลัมน์ 3 = เพดานคะแนนเซลล์/วัน · คอลัมน์ 1-2 = ประเภทงาน + หน่วยภาระ (สรุป LINE) — ⚠ อย่าสลับลำดับ 2 แถวแรก' },
+  { key:'expVehicle',title:'🚗 ทะเบียนรถ',           roles:['office','manager'], hint:'ช่องเลือกรถตอนตั้งเบิกค่าเดินทาง' },
+  { key:'expTravel', title:'⛽ ประเภทค่าเดินทาง',    roles:['office','manager'], hint:'ได้สูงสุด 16 รายการ' },
+  { key:'expCost',   title:'📦 ประเภทค่าใช้จ่ายอื่น', roles:['office','manager'], hint:'ได้สูงสุด 16 รายการ' },
+  { key:'expEmp',    title:'👥 พนักงาน (ช่องเลือกตอนเบิก)', roles:['manager'], hint:'รายชื่อในช่องเลือกตอนตั้งเบิก — ข้อมูลเงินเดือนแก้ที่แท็บทะเบียนพนักงาน' },
+  { key:'expWage',   title:'💪 ประเภทค่าแรง',        roles:['office','manager'], hint:'ดูอย่างเดียว — ผูกกับสิทธิ์ตั้งเบิกค่าแรงในระบบ แก้ต้องให้ผู้ดูแลระบบแก้โค้ดพร้อมกัน' }
+];
+const CFG_QLABEL = { capPerTeam:'เพดานคะแนน/ทีม/วัน', bufferPct:'ต้องเหลือว่างก่อนเสนอ (สัดส่วน เช่น 0.15)', horizonDays:'มองล่วงหน้ากี่วัน', salesTeams:'จำนวนทีมเซลล์', techTeams:'จำนวนทีมช่างหลัก', glassTeams:'จำนวนทีมทำกระจก',
+  glassTeamList:'รายชื่อทีมทำกระจก (คั่น ,)', zoneNearKm:'ระยะ "ใกล้" (กม.)', zoneMidKm:'ระยะ "กลาง" (กม.)', zoneFarKm:'ระยะ "ไกล" (กม.)', assignPickMode:'วิธีเลือกทีม (cost/threshold)', loadKmPerScore:'โหลด 1 คะแนน = กี่กม.',
+  emptyTeamKm:'ทีมว่างคิดระยะเสมือน (กม.)', wOffset:'โทษต่อวันที่ห่างวันเป้า', wZoneNear:'โบนัสโซนใกล้', wZoneMid:'โบนัสโซนกลาง', wEmpty:'โบนัสวันโล่ง', depotLat:'พิกัดโรงงาน lat', depotLng:'พิกัดโรงงาน lng',
+  maxSuggestions:'จำนวนวันที่แนะนำ', rushZoneMaxScore:'งานด่วน: คะแนนสูงสุด', rushZoneMinDays:'งานด่วน: อย่างน้อยกี่วัน', rushZoneBonus:'งานด่วน: โบนัส', rushMaxAbsMinDays:'งานด่วน: ห่างสูงสุด (วัน)', rushBackupTeams:'งานด่วน: ทีมสำรอง' };
+let _cfg = { key:'', data:null, base:null, rows:[], defaults:null, dirty:false };
+function cfgList_(){ const r = (CURRENT_USER && CURRENT_USER.role) || ''; return CFG_LIST.filter(c => c.roles.indexOf(r) !== -1); }
+async function getCfgFast(key){
+  if (CURRENT_USER){
+    try { const d = await _pkFastPost_('/cfg-get', { key:key }); if (d && d.ok){ _markJobSource('sheets', d.ms); return d; } console.warn('[getCfgFast] /cfg-get ไม่ ok → fallback GAS:', d && d.error); }
+    catch(e){ console.warn('[getCfgFast] /cfg-get error → fallback GAS:', e.message); }
+  }
+  const g = await call({ action:'pk_cfgGet', key:key }); _markJobSource('gas'); return g;
+}
+function cfgInit(){ const L = cfgList_(); if (!_cfg.key || !L.some(c => c.key === _cfg.key)) _cfg.key = (L[0] || {}).key || ''; cfgOpen(_cfg.key, true); }
+async function cfgOpen(key, force){
+  if (!force && _cfg.dirty && key !== _cfg.key && !confirm('ยังไม่ได้บันทึก — ทิ้งที่แก้ไว้?')) return;
+  _cfg = { key:key, data:null, base:null, rows:[], defaults:_cfg.key === key ? _cfg.defaults : null, dirty:false };
+  cfgRender_('<div class="loading-row">กำลังโหลด...</div>');
+  try {
+    const d = await getCfgFast(key);
+    if (!d || !d.ok){ cfgRender_('<div class="loading-row">' + escHtml((d && d.error) || 'โหลดไม่ได้') + '</div>'); return; }
+    _cfg.data = d; _cfg.base = JSON.parse(JSON.stringify(d.rows || [])); _cfg.rows = JSON.parse(JSON.stringify(d.rows || []));
+    if (d.defaults) _cfg.defaults = d.defaults;
+    cfgRender_();
+    if (key === 'queue' && !_cfg.defaults) call({ action:'pk_cfgGet', key:'queue' }).then(g => { if (g && g.ok && g.defaults && _cfg.key === 'queue'){ _cfg.defaults = g.defaults; cfgRender_(); } }).catch(() => {});   // ค่าเริ่มอยู่ในโค้ด GAS
+  } catch(e){ cfgRender_('<div class="loading-row">เชื่อมต่อไม่ได้</div>'); }
+}
+function cfgRender_(msg){
+  const box = document.getElementById('cfgBody'); if (!box) return;
+  const L = cfgList_(), cur = CFG_LIST.find(c => c.key === _cfg.key) || {};
+  let h = '<div style="font-weight:700;font-size:16px;margin-bottom:4px;">⚙️ ตั้งค่าระบบ</div><div style="font-size:12.5px;color:var(--mu);margin-bottom:10px;">แก้ค่าตั้งต้นของระบบบนเว็บ (แทนการเข้าไปแก้ในชีต) · ทุกครั้งที่บันทึกระบบจดค่าเดิมไว้ใน AuditLog</div>'
+    + '<div class="eav-chips">' + L.map(c => '<button class="eav-chip' + (c.key === _cfg.key ? ' on' : '') + '" onclick="cfgOpen(\'' + c.key + '\')">' + escHtml(c.title) + '</button>').join('') + '</div>';
+  if (cur.hint) h += '<div style="font-size:12.5px;background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:8px 10px;margin-bottom:10px;">💡 ' + escHtml(cur.hint) + '</div>';
+  if (msg){ document.getElementById('cfgBody').innerHTML = h + msg; return; }
+  const d = _cfg.data || {}, ro = !!d.readOnly, head = d.head || [], w = head.length || 1, num = d.num || [];
+  if (d.missing) h += '<div style="font-size:12.5px;color:var(--amb);margin-bottom:8px;">ยังไม่มีชีตนี้ — บันทึกครั้งแรกระบบสร้างให้</div>';
+  h += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table class="cfg-t" style="width:100%;border-collapse:collapse;font-size:13px;min-width:' + (w > 2 ? 520 : 280) + 'px;"><thead><tr><th style="width:34px;"></th>' + head.map(x => '<th style="text-align:left;padding:6px;color:var(--mu);">' + escHtml(x) + '</th>').join('')
+    + (_cfg.key === 'queue' ? '<th style="text-align:left;padding:6px;color:var(--mu);">ความหมาย / ค่าเริ่ม</th>' : '') + (ro ? '' : '<th style="width:40px;"></th>') + '</tr></thead><tbody>';
+  _cfg.rows.forEach((r, i) => {
+    h += '<tr style="border-top:1px solid var(--bdr);"><td style="color:var(--mu);font-family:var(--mono);font-size:11px;padding:4px;">' + (i + 1) + '</td>';
+    for (let c = 0; c < w; c++){
+      const v = r[c] == null ? '' : r[c];
+      h += '<td style="padding:3px;">' + (ro ? escHtml(v) : '<input class="fi" style="padding:6px 8px;font-size:13px;' + (num.indexOf(c) !== -1 ? 'font-family:var(--mono);' : '') + '" ' + (num.indexOf(c) !== -1 ? 'inputmode="decimal" ' : '') + 'value="' + escAttr(v) + '" oninput="cfgCell(' + i + ',' + c + ',this.value)">') + '</td>';
+    }
+    if (_cfg.key === 'queue'){ const k = String(r[0] || ''), df = _cfg.defaults && k in _cfg.defaults ? _cfg.defaults[k] : undefined;
+      h += '<td style="padding:4px;font-size:11.5px;color:var(--mu);">' + escHtml(CFG_QLABEL[k] || (k ? '(ไม่รู้จักคีย์นี้ — ระบบไม่ใช้)' : '')) + (df !== undefined ? ' · เริ่ม ' + escHtml(String(df)) : '') + '</td>'; }
+    if (!ro) h += '<td style="padding:3px;"><button class="btn btn-g btn-sm" title="ลบแถว" onclick="cfgDel(' + i + ')">🗑</button></td>';
+    h += '</tr>';
+  });
+  if (!_cfg.rows.length) h += '<tr><td colspan="' + (w + 3) + '" style="padding:12px;color:var(--mu);text-align:center;">ยังไม่มีข้อมูล</td></tr>';
+  h += '</tbody></table></div>';
+  if (!ro){
+    h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center;"><button class="btn btn-g" onclick="cfgAdd()">＋ เพิ่มแถว</button>'
+      + (_cfg.key === 'queue' && _cfg.defaults ? '<select class="fi" style="flex:1;min-width:160px;max-width:320px;" onchange="cfgAddKey(this.value);this.value=\'\';"><option value="">＋ เพิ่มคีย์ที่ระบบรู้จัก…</option>' + Object.keys(_cfg.defaults).filter(k => !_cfg.rows.some(r => String(r[0]) === k)).map(k => '<option value="' + escAttr(k) + '">' + escHtml(k + (CFG_QLABEL[k] ? ' — ' + CFG_QLABEL[k] : '')) + '</option>').join('') + '</select>' : '')
+      + '<span style="flex:1;"></span><span style="font-size:12px;color:' + (_cfg.dirty ? 'var(--amb)' : 'var(--mu)') + ';">' + (_cfg.dirty ? '● ยังไม่บันทึก' : _cfg.rows.length + ' แถว') + '</span>'
+      + '<button class="btn btn-g" ' + (_cfg.dirty ? '' : 'disabled') + ' onclick="cfgOpen(_cfg.key, true)">↩ ยกเลิกที่แก้</button><button class="btn btn-p" id="cfgSaveBtn" ' + (_cfg.dirty ? '' : 'disabled') + ' onclick="cfgSave()">💾 บันทึก</button></div>';
+  }
+  if (_cfg.key === 'queue' && _cfg.defaults){
+    h += '<details style="margin-top:12px;"><summary style="cursor:pointer;font-size:13px;color:var(--mu);">ดูค่าเริ่มของระบบทั้งหมด</summary><div style="font-size:12px;columns:2 220px;margin-top:6px;">'
+      + Object.keys(_cfg.defaults).map(k => '<div><code>' + escHtml(k) + '</code> = ' + escHtml(JSON.stringify(_cfg.defaults[k])) + (CFG_QLABEL[k] ? ' <span style="color:var(--mu);">' + escHtml(CFG_QLABEL[k]) + '</span>' : '') + '</div>').join('') + '</div></details>';
+  }
+  box.innerHTML = h;
+}
+function cfgMarkDirty_(){ const was = _cfg.dirty; _cfg.dirty = JSON.stringify(_cfg.rows) !== JSON.stringify(_cfg.base); if (was !== _cfg.dirty) cfgRender_(); }
+function cfgCell(i, c, v){ const r = _cfg.rows[i]; if (!r) return; while (r.length <= c) r.push(''); r[c] = v; cfgMarkDirty_(); }
+function cfgAdd(){ const w = ((_cfg.data && _cfg.data.head) || [1]).length; if (_cfg.data && _cfg.data.maxRows && _cfg.rows.length >= _cfg.data.maxRows){ toast('ได้สูงสุด ' + _cfg.data.maxRows + ' รายการ'); return; } _cfg.rows.push(new Array(w).fill('')); _cfg.dirty = true; cfgRender_();
+  setTimeout(() => { const ins = document.querySelectorAll('#cfgBody tbody tr:last-child input'); if (ins[0]) ins[0].focus(); }, 30); }
+function cfgAddKey(k){ if (!k) return; _cfg.rows.push([k, String(_cfg.defaults && k in _cfg.defaults ? _cfg.defaults[k] : '')]); _cfg.dirty = true; cfgRender_(); }
+function cfgDel(i){ _cfg.rows.splice(i, 1); cfgMarkDirty_(); cfgRender_(); }
+async function cfgSave(force){
+  const btn = document.getElementById('cfgSaveBtn'); if (btn){ btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...'; }
+  let r;
+  try { r = await call({ action:'pk_cfgSave', key:_cfg.key, rows:_cfg.rows, base:_cfg.base, confirmShrink:!!force }); } catch(e){ r = { ok:false, error:'เชื่อมต่อไม่ได้' }; }
+  if (r && r.needConfirm){ if (btn){ btn.disabled = false; btn.textContent = '💾 บันทึก'; } if (confirm('⚠ ' + r.error + '\n\nแน่ใจไหม? (ค่าเดิมถูกจดใน AuditLog กู้คืนได้)')) return cfgSave(true); return; }
+  if (!r || !r.ok){ if (btn){ btn.disabled = false; btn.textContent = '💾 บันทึก'; } toast('❌ ' + ((r && r.error) || 'บันทึกไม่สำเร็จ')); return; }
+  _cfg.base = JSON.parse(JSON.stringify(r.rows || [])); _cfg.rows = JSON.parse(JSON.stringify(r.rows || [])); _cfg.dirty = false;
+  if (_cfg.data) _cfg.data.missing = false;   // บันทึกครั้งแรกสร้างชีตแล้ว
+  if (String(_cfg.key).indexOf('exp') === 0) _expMaster = null;   // ช่องเลือกตอนตั้งเบิกโหลดค่าใหม่ครั้งหน้า
+  cfgRender_(); toast('✅ บันทึกแล้ว (' + r.count + ' แถว)');
+}
 function pyeInit(){
   const w = document.getElementById('tabPayees');
   if (w && !document.getElementById('pyeList')) w.innerHTML = pyeShell_();
@@ -10614,6 +10713,7 @@ function jobEditOpen(id, sheet){
   document.getElementById('jeAddr').value   = j.rawAddr||'';
   document.getElementById('jeJob').value    = j.job||'';
   document.getElementById('jeRef').value    = jobRef(j.note||'');
+  document.getElementById('jeNote').value   = jobNoteFree_(j.note||'');   // [CFGWEB] เฉพาะข้อความอิสระ (ไม่โชว์ tag ระบบ)
   document.getElementById('jeAmount').value = (j.amount!=null ? j.amount : '');
   document.getElementById('jeScore').value  = (j.score!=null ? j.score : '');
   document.getElementById('jeOrder').value  = (j.orderStr!=null ? String(j.orderStr).replace(/[^0-9]/g,'') : '');
@@ -10647,6 +10747,8 @@ async function jobConvertToMeasure(){
   if (_dashInstallView === 'range') await dashRangeRun();
   measCalReload(true);
 }
+// [CFGWEB] ข้อความอิสระในหมายเหตุงาน (ตัด tag ระบบ [..] ออก · คงบรรทัด) — คู่กับ pkNoteFreeSet_ ฝั่ง GAS
+function jobNoteFree_(note){ return String(note||'').replace(/\[[^\]]*\]/g, ' ').replace(/\r/g, '').replace(/[^\S\n]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim(); }
 async function jobEditSave(){
   if (!_jobEditCur) return;
   const cur = _jobEditCur;
@@ -10672,6 +10774,8 @@ async function jobEditSave(){
   if (phoneV !== curPhone) payload.phone = phoneV;
   const refV = gv('jeRef').trim();
   if (refV !== jobRef(cur.note||'')) payload.ref = refV;   // ว่าง = ลบเลขใบจอง (server ลบ tag)
+  const noteV = gv('jeNote').trim();
+  if (noteV !== jobNoteFree_(cur.note||'')) payload.note = noteV;   // [CFGWEB] server แทนเฉพาะข้อความอิสระ · tag ครบ (pkNoteFreeSet_)
   const curAmt = (cur.amount!=null ? Number(cur.amount) : 0);
   if (amtEl.value!=='' && Number(amtEl.value) !== curAmt) payload.amount = amtEl.value;
   const curOrd = (cur.orderStr!=null ? String(cur.orderStr).replace(/[^0-9]/g,'') : '');
