@@ -2053,6 +2053,8 @@ function renderOfficeShell(){
           <div class="sidebar-group">วัด & เสนอราคา</div>
           <a class="sidebar-item" data-tab="records" href="#tab=records" onclick="return pkNavTab(event,'records',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 17L17 3l4 4L7 21z"/><path d="M8 8l2 2M11 5l2 2M5 11l2 2"/></svg></span><span class="sidebar-label">จดขนาด</span></a>
           <a class="sidebar-item" data-tab="quotes" href="#tab=quotes" onclick="return pkNavTab(event,'quotes',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2"/></svg></span><span class="sidebar-label">คำนวณราคา</span></a>
+          <!-- [CATALOG] -->
+          <a class="sidebar-item" data-tab="catalog" href="#tab=catalog" onclick="return pkNavTab(event,'catalog',this,setTab)"><span class="sidebar-ico">📘</span><span class="sidebar-label">แคตตาล็อก</span></a>
           <a class="sidebar-item" data-tab="qtrack" href="#tab=qtrack" onclick="return pkNavTab(event,'qtrack',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M15 3v4h4M9 12l2 2 4-5M9 18h6"/></svg></span><span class="sidebar-label">ติดตามใบเสนอ</span><span id="qtBadge" class="exp-badge"></span></a>
           <a class="sidebar-item" data-tab="followup" href="#tab=followup" onclick="return pkNavTab(event,'followup',this,setTab)"><span class="sidebar-ico">📋</span><span class="sidebar-label">ตามใบเสนอ</span><span id="fuBadge" class="exp-badge"></span></a>
           ${CURRENT_USER.role === 'manager' ? `<a class="sidebar-item" data-tab="quoteprice" href="#tab=quoteprice" onclick="return pkNavTab(event,'quoteprice',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 11l8-8 9 9-8 8z"/><circle cx="9" cy="9" r="1.5"/></svg></span><span class="sidebar-label">แก้ราคาขาย</span></a>
@@ -2705,6 +2707,7 @@ function renderOfficeShell(){
 
       <div id="tabMap" style="display:none"></div>
       <div id="tabGlasscalc" style="display:none"></div>
+      <div id="tabCatalog" style="display:none"></div><!-- [CATALOG] -->
       <div id="tabSlips" style="display:none"></div>
       <div id="tabPayees" style="display:none"></div>
       <div id="tabSysconfig" style="display:none"><div class="section-pad" id="cfgBody"></div></div>   <!-- [CFGWEB] ⚙️ ตั้งค่าระบบ -->
@@ -5406,8 +5409,28 @@ function gcalcTabInit(){
 }
 function gcalcTabReload_(){const f=document.getElementById('gcalcFrame');if(f)f.src='glass-calc.html?embed=1';}
 function mapTabReload_(){const f=document.getElementById('mapTabFrame');if(f)f.src='map.html?embed=1';}
+// [CATALOG] One iframe per shell, same viewport sizing and lifetime as GlassCalc.
+function catTabResize_(){
+  const f=document.getElementById('catTabFrame'),box=document.getElementById('tabCatalog')||document.getElementById('sTabCatalog');
+  if(!f||!box||box.style.display==='none')return;
+  const top=Math.max(0,f.getBoundingClientRect().top);
+  f.style.height='calc('+(window.CSS&&CSS.supports('height','100dvh')?'100dvh':window.innerHeight+'px')+' - '+top+'px)';
+}
+function catTabInit(){
+  if(!CURRENT_USER||!['manager','office','sales'].includes(CURRENT_USER.role))return;
+  const box=document.getElementById('tabCatalog')||document.getElementById('sTabCatalog');if(!box)return;
+  if(!document.getElementById('catTabFrame')){
+    box.innerHTML='<div style="display:flex;gap:12px;flex-wrap:wrap;padding:6px 10px;font-size:13px"><a href="catalog.html" target="_blank" rel="noopener">↗ เปิดเต็มจอ</a><button type="button" class="btn btn-g btn-sm" onclick="catTabCopy_()">คัดลอกลิงก์แคตตาล็อก</button></div><iframe id="catTabFrame" title="แคตตาล็อกสินค้า" src="catalog.html?embed=1" style="display:block;border:0;width:100%"></iframe>';
+    window.addEventListener('resize',catTabResize_);
+  }
+  setTimeout(catTabResize_,0);
+}
+async function catTabCopy_(){
+  const catUrl='https://revenge228888.github.io/pk-dispatch/catalog.html#home';
+  try{await navigator.clipboard.writeText(catUrl);toast('คัดลอกลิงก์แล้ว');}catch(e){toast(catUrl);}
+}
 function setTab(t, btn){
-  ['Dash','Access','Gpssetup','Booking','Jobs','Customers','Followup','Assign','Cfqueue','Qtrack','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Payees','Mytasks','Taskmgr','Slips','Map','Sheetcap','Usermgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po','Glasscalc','Sysconfig'].forEach(x => {
+  ['Dash','Access','Gpssetup','Booking','Jobs','Customers','Followup','Assign','Cfqueue','Qtrack','Records','Quotes','Salesreport','Expensesubmit','Expensemy','Expenseapprove','Employees','Timelog','Production','Summary','Payroll','Outstanding','Payees','Mytasks','Taskmgr','Slips','Map','Sheetcap','Usermgr','Prodtrack','Railstock','Costedit','Equipstock','Quoteprice','Quoteheader','Po','Glasscalc','Sysconfig','Catalog'].forEach(x => {
     const el = document.getElementById('tab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -5440,6 +5463,7 @@ function setTab(t, btn){
   if (t === 'slips') slpInit();
   if (t === 'map') mapTabInit();
   if (t === 'glasscalc') gcalcTabInit();
+  if (t === 'catalog') catTabInit(); // [CATALOG]
   mapTabMessage_(t === 'map' ? 'resume' : 'pause');
   if (t === 'sheetcap') shcInit();
   if (t === 'usermgr') umInit();
@@ -7556,6 +7580,8 @@ function renderSalesStub(){
           <a class="sidebar-item" data-tab="mytasks" href="#tab=mytasks" onclick="return pkNavTab(event,'mytasks',this,setSalesTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></span><span class="sidebar-label">งานของฉัน</span></a>
           <a class="sidebar-item" data-tab="records" href="#tab=records" onclick="return pkNavTab(event,'records',this,setSalesTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 17L17 3l4 4L7 21z"/><path d="M8 8l2 2M11 5l2 2M5 11l2 2"/></svg></span><span class="sidebar-label">จดขนาด</span></a>
           <a class="sidebar-item" data-tab="quotes" href="#tab=quotes" onclick="return pkNavTab(event,'quotes',this,setSalesTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2"/></svg></span><span class="sidebar-label">คำนวณราคา</span></a>
+          <!-- [CATALOG] -->
+          <a class="sidebar-item" data-tab="catalog" href="#tab=catalog" onclick="return pkNavTab(event,'catalog',this,setSalesTab)"><span class="sidebar-ico">📘</span><span class="sidebar-label">แคตตาล็อก</span></a>
           <a class="sidebar-item" data-tab="qtrack" href="#tab=qtrack" onclick="return pkNavTab(event,'qtrack',this,setSalesTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M15 3v4h4M9 12l2 2 4-5M9 18h6"/></svg></span><span class="sidebar-label">ติดตามใบเสนอ</span><span id="qtBadge" class="exp-badge"></span></a>
         </div>
         <div class="sidebar-bottom">
@@ -7752,6 +7778,7 @@ function renderSalesStub(){
       </div>
 
       <!-- QUOTES (💰 คำนวณราคา) -->
+      <div id="sTabCatalog" style="display:none"></div><!-- [CATALOG] -->
       <div id="sTabQuotes" style="display:none;">
         <div class="quo-subtabs" id="quoSubtabs">
           <button class="quo-subtab on" data-cat="calc" onclick="quoteSetCat('calc')">คำนวณราคา</button>
@@ -7830,7 +7857,7 @@ let _sSlotTimer = null;
 let _sEditingId = null;
 
 function setSalesTab(t, btn){
-  ['Booking','Measure','My','Records','Quotes','Qtrack','Mytasks'].forEach(x => {
+  ['Booking','Measure','My','Records','Quotes','Qtrack','Mytasks','Catalog'].forEach(x => {
     const el = document.getElementById('sTab'+x); if (el) el.style.display = 'none';
   });
   const tgt = document.getElementById('sTab'+t.charAt(0).toUpperCase()+t.slice(1));
@@ -7848,6 +7875,7 @@ function setSalesTab(t, btn){
   if (t === 'booking') initSalesBooking();
   if (t === 'measure') initSalesMeasure();
   if (t === 'my') initSalesMy();
+  if (t === 'catalog') catTabInit(); // [CATALOG]
   if (t === 'records') recordsInit();
   if (t === 'quotes') quotesInit();
   if (t === 'qtrack') qtLoad();
@@ -9438,6 +9466,7 @@ function migReportText_(){
   R.forEach(r => {
     lines.push('[' + r.ss + '] ' + r.sheet + ': ' + (r.ok ? (r.dataRows + ' แถว · ' + r.cols + ' คอลัมน์ · ' + r.kb + ' KB') : ('อ่านไม่ได้ — ' + r.error)));
     (r.issues || []).forEach(i => lines.push('   ⚠ ' + i.kind + ' ' + i.n + ' · ' + (i.ex || []).join(' | ')));
+    (r.notes || []).forEach(i => lines.push('   ℹ ' + i.kind + ' ' + i.n));
     (r.money || []).forEach(m => lines.push('   ฿ รวม ' + m.col + ' = ' + m.sum));
     if (r.byStatus) Object.keys(r.byStatus).forEach(s => lines.push('   ฿ ' + s + ': ' + r.byStatus[s].n + ' ใบ · ' + r.byStatus[s].amt));
   });
@@ -9457,6 +9486,7 @@ function migRender_(msg){
     h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:480px;"><thead><tr style="text-align:left;color:var(--mu);"><th style="padding:4px;">ไฟล์</th><th style="padding:4px;">ชีต</th><th style="padding:4px;text-align:right;">แถว</th><th style="padding:4px;text-align:right;">KB</th><th style="padding:4px;">ผล</th></tr></thead><tbody>'
       + R.map(r => '<tr style="border-top:1px solid var(--bdr);vertical-align:top;"><td style="padding:4px;font-family:var(--mono);">' + escHtml(r.ss) + '</td><td style="padding:4px;">' + escHtml(r.sheet) + '</td><td style="padding:4px;text-align:right;font-family:var(--mono);">' + (r.ok ? (r.dataRows || 0).toLocaleString() : '-') + '</td><td style="padding:4px;text-align:right;font-family:var(--mono);">' + (r.ok ? r.kb : '-') + '</td><td style="padding:4px;">'
         + (!r.ok ? '<span style="color:var(--rd);">อ่านไม่ได้: ' + escHtml(String(r.error || '').slice(0, 80)) + '</span>' : ((r.issues || []).length ? r.issues.map(i => '<div style="color:var(--amb);">⚠ ' + escHtml(i.kind) + ' ' + i.n + '<br><span style="color:var(--mu);font-size:11px;">' + escHtml((i.ex || []).join(' · ')) + '</span></div>').join('') : '✅'))
+        + (r.notes || []).map(i => '<div style="color:var(--mu);font-size:11.5px;">ℹ ' + escHtml(i.kind) + ' ' + i.n + '</div>').join('')
         + (r.byStatus ? '<div style="font-size:11px;color:var(--mu);">' + Object.keys(r.byStatus).map(s => escHtml(s) + ' ' + r.byStatus[s].n).join(' · ') + '</div>' : '') + '</td></tr>').join('') + '</tbody></table></div>';
   }
   b.innerHTML = h;
