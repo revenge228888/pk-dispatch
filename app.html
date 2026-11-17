@@ -9469,17 +9469,19 @@ async function migOpen(mode){
 const MIG_D1_FREE_MB = 500, MIG_D1_FREE_WRITES = 100000;
 function migDrySum_(){
   const R = (_mig && _mig.res) || [], by = {};
-  R.forEach(r => { if (!r.db) return; const o = by[r.db] || (by[r.db] = { sheets:0, rows:0, kb:0, writes:0 }); o.sheets++; o.rows += r.rows || 0; o.kb += r.kb || 0; o.writes += r.writes || 0; });
+  R.forEach(r => { if (!r.db || r.skip) return; const o = by[r.db] || (by[r.db] = { sheets:0, rows:0, kb:0, writes:0 }); o.sheets++; o.rows += r.rows || 0; o.kb += r.kb || 0; o.writes += r.writes || 0; });
   const writes = Object.keys(by).reduce((a, k) => a + by[k].writes, 0);
-  return { by, writes, days: Math.max(1, Math.ceil(writes / (MIG_D1_FREE_WRITES * 0.8))), bad: R.filter(r => r.db && !r.ok), err: R.filter(r => !r.db) };   // อ่านไม่ได้ ≠ แปลงไม่ตรง (เคยนับซ้ำ)
+  return { by, writes, days: Math.max(1, Math.ceil(writes / (MIG_D1_FREE_WRITES * 0.8))), bad: R.filter(r => r.db && !r.ok), err: R.filter(r => !r.db && !r.skip), skip: R.filter(r => r.skip), arch: R.filter(r => r.archRows) };   // อ่านไม่ได้ ≠ แปลงไม่ตรง (เคยนับซ้ำ)
 }
 function migDryText_(){
   const R = _mig.res, S = migDrySum_();
   const lines = ['รายงานซ้อมย้ายข้อมูล (ไม่บันทึกจริง) ' + _mig.at.toLocaleString('th-TH'), ''];
   Object.keys(S.by).forEach(k => lines.push(k + ': ' + S.by[k].sheets + ' ชีต · ' + S.by[k].rows + ' แถว · ~' + (S.by[k].kb / 1024).toFixed(2) + ' MB (ฟรี ' + MIG_D1_FREE_MB + ' MB)'));
-  lines.push('เขียนครั้งแรก ~' + S.writes + ' แถว (ฟรี ' + MIG_D1_FREE_WRITES + '/วัน) → ' + S.days + ' วัน', 'แปลงไม่ตรง: ' + S.bad.length + ' ชีต · อ่านไม่ได้: ' + S.err.length + ' ชีต', '');
+  lines.push('เขียนครั้งแรก ~' + S.writes + ' แถว (ฟรี ' + MIG_D1_FREE_WRITES + '/วัน) → ' + S.days + ' วัน', 'แปลงไม่ตรง: ' + S.bad.length + ' ชีต · อ่านไม่ได้: ' + S.err.length + ' ชีต · ไม่ย้าย: ' + S.skip.length + ' ชีต', '');
   R.forEach(r => {
+    if (r.skip) { lines.push('[' + r.ss + '] ' + r.sheet + ': ⏭ ไม่ย้าย (' + r.skip + ')'); return; }
     if (!r.db) { lines.push('[' + r.ss + '] ' + r.sheet + ': อ่านไม่ได้ — ' + (r.error || '')); return; }
+    if (r.keepDays) lines.push('   🗄 เก่ากว่า ' + r.keepDays + ' วัน ' + (r.archRows || 0) + ' แถว · ' + (r.archKb || 0) + ' KB → เก็บเป็นไฟล์ (ไม่เข้าฐาน)');
     lines.push('[' + r.ss + '] ' + r.sheet + ' → ' + r.db + ': ' + r.rows + ' แถว · ' + r.kb + ' KB · ' + (r.ok ? 'ตรง ✓' : 'ไม่ตรง ✗') + (r.noKey ? ' · ไม่มีรหัส ' + r.noKey : ''));
     if (r.mismatch) lines.push('   ✗ ค่าเปลี่ยน ' + r.mismatch + ' ช่อง · ' + (r.mismatchEx || []).join(' | '));
     if (!r.moneySame) lines.push('   ✗ ยอดเงินก่อน/หลังไม่ตรง');
@@ -9502,9 +9504,10 @@ function migDryHtml_(msg){
   if (!_mig.busy) h += '<button class="btn btn-p" style="width:100%;margin-bottom:10px;" onclick="migCopy()">📋 คัดลอกรายงาน (ส่งให้ผู้ดูแลระบบ)</button>';
   h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:480px;"><thead><tr style="text-align:left;color:var(--mu);"><th style="padding:4px;">ชีต</th><th style="padding:4px;">ฐาน</th><th style="padding:4px;text-align:right;">แถว</th><th style="padding:4px;text-align:right;">KB</th><th style="padding:4px;">ผล</th></tr></thead><tbody>'
     + R.map(r => '<tr style="border-top:1px solid var(--bdr);vertical-align:top;"><td style="padding:4px;">' + escHtml(r.sheet) + ' <span style="color:var(--mu);font-size:11px;">' + escHtml(r.ss) + '</span></td><td style="padding:4px;font-family:var(--mono);">' + escHtml(r.db || '-') + '</td><td style="padding:4px;text-align:right;font-family:var(--mono);">' + (r.db ? (r.rows || 0).toLocaleString() : '-') + '</td><td style="padding:4px;text-align:right;font-family:var(--mono);">' + (r.db ? r.kb : '-') + '</td><td style="padding:4px;">'
-      + (!r.db ? '<span style="color:var(--rd);">อ่านไม่ได้: ' + escHtml(String(r.error || '').slice(0, 80)) + '</span>'
+      + (r.skip ? '<span style="color:var(--mu);">⏭ ไม่ย้าย · ' + escHtml(r.skip) + '</span>' : !r.db ? '<span style="color:var(--rd);">อ่านไม่ได้: ' + escHtml(String(r.error || '').slice(0, 80)) + '</span>'
         : (r.ok ? '✅ ตรง' : '<span style="color:var(--rd);">✗ ' + (r.mismatch ? 'ค่าเปลี่ยน ' + r.mismatch + ' ช่อง ' : '') + (!r.moneySame ? 'ยอดเงินไม่ตรง ' : '') + ((r.tooBig || []).length ? 'แถวใหญ่เกิน ' : '') + '</span><br><span style="color:var(--mu);font-size:11px;">' + escHtml((r.mismatchEx || []).concat(r.tooBig || []).join(' · ')) + '</span>')
         + (r.byStatus ? '<div style="font-size:11px;color:var(--mu);">' + Object.keys(r.byStatus).map(st => escHtml(st) + ' ' + r.byStatus[st].n + ' ใบ ฿' + Number(r.byStatus[st].amt).toLocaleString()) .join(' · ') + '</div>' : '')
+        + (r.keepDays ? '<div style="font-size:11px;color:var(--mu);">🗄 เก่ากว่า ' + r.keepDays + ' วัน ' + Number(r.archRows || 0).toLocaleString() + ' แถว → เก็บเป็นไฟล์</div>' : '')
         + ((r.money && !r.byStatus) ? '<div style="font-size:11px;color:var(--mu);">' + r.money.map(m => '฿ ' + escHtml(m.col) + ' ' + Number(m.sum).toLocaleString()).join(' · ') + '</div>' : ''))
       + '</td></tr>').join('') + '</tbody></table></div>';
   return h;
