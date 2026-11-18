@@ -9556,6 +9556,18 @@ async function migLoadStart(){
   } catch(e){ _mig.stop = e.message; }
   _mig.busy = false; migRender_();
 }
+// [MIGSHADOW 18 พ.ย. 2026] ผลเทียบเงียบ: ทุกครั้งที่หน้าเว็บอ่านชีต ระบบสุ่มเทียบกับฐานใหม่ · ตรง / ตามไม่ทัน (ปกติ — ชีตเพิ่งเปลี่ยน) / ผิดจริง (ต้องแก้ก่อนสลับ)
+function migShadowHtml_(S){
+  const by = {}; S.forEach(x => { const o = by[x.sheet] || (by[x.sheet] = { sheet:x.sheet, db:x.db, same:0, lag:0, bug:0, last:'' }); o.same += x.same || 0; o.lag += x.lag || 0; o.bug += x.bug || 0; if (x.last_bug && !o.last) o.last = x.last_bug; });
+  const L = Object.values(by).sort((a, b) => b.bug - a.bug || a.sheet.localeCompare(b.sheet)), T = L.reduce((a, o) => ({ same:a.same + o.same, lag:a.lag + o.lag, bug:a.bug + o.bug }), { same:0, lag:0, bug:0 });
+  let h = '<div class="card" style="padding:10px;margin-bottom:10px;"><b>🔍 เทียบเงียบ ฐานใหม่ ↔ ชีต (7 วัน)</b><div style="font-size:12px;color:var(--mu);margin:2px 0 6px;">หน้าเว็บยังอ่านจากชีต · ระบบแอบเทียบว่าฐานใหม่ให้ข้อมูลเหมือนกันไหม · "ตามไม่ทัน" = ชีตเพิ่งแก้ ปกติ · "ผิด" = ต้องแก้ก่อนสลับ</div>';
+  if (!L.length) return h + '<div style="font-size:12.5px;">ยังไม่มีผล — รอมีคนใช้งานหน้าเว็บสักพัก</div></div>';
+  h += '<div style="font-size:13.5px;margin-bottom:6px;">' + (T.bug ? '<b style="color:var(--rd)">✗ ผิด ' + T.bug + ' ครั้ง</b> · ' : '<b style="color:var(--gr,#16a34a)">✅ ยังไม่พบผิด</b> · ') + 'ตรง ' + T.same + ' · ตามไม่ทัน ' + T.lag + '</div>'
+    + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="text-align:left;color:var(--mu);"><th style="padding:3px;">ชีต</th><th style="padding:3px;text-align:right;">ตรง</th><th style="padding:3px;text-align:right;">ตามไม่ทัน</th><th style="padding:3px;text-align:right;">ผิด</th></tr></thead><tbody>'
+    + L.map(o => '<tr style="border-top:1px solid var(--bdr);vertical-align:top;"><td style="padding:3px;">' + escHtml(o.sheet) + (o.last ? '<div style="color:var(--rd);font-size:11px;">' + escHtml(o.last) + '</div>' : '') + '</td><td style="padding:3px;text-align:right;">' + o.same + '</td><td style="padding:3px;text-align:right;">' + o.lag + '</td><td style="padding:3px;text-align:right;' + (o.bug ? 'color:var(--rd);font-weight:700;' : '') + '">' + o.bug + '</td></tr>').join('')
+    + '</tbody></table></div></div>';
+  return h;
+}
 // [MIGSYNC 17 พ.ย. 2026] 🔄 สถานะซิงก์: ฐานใหม่ตามชีตทันแค่ไหน (cron ซิงก์ทีละชีต/นาที · ยังไม่มีหน้าไหนอ่านฐานใหม่)
 async function migSyncOpen(){
   let bg = document.getElementById('migModal');
@@ -9571,6 +9583,7 @@ async function migSyncOpen(){
   b.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><b style="flex:1;font-size:16px;">🔄 สถานะซิงก์ฐานใหม่</b><button class="btn btn-g btn-sm" onclick="migSyncOpen()">↻</button><button class="btn btn-g btn-sm" onclick="document.getElementById(\'migModal\').classList.remove(\'on\')">ปิด</button></div>'
     + '<div style="font-size:12.5px;color:var(--mu);margin-bottom:8px;">ระบบคัดลอกชีตเข้าฐานใหม่เองทีละชีตทุก 1 นาที (ครบทุกชีตราว 45 นาที) · ตอนนี้ยังไม่มีหน้าไหนอ่านจากฐานใหม่ — ระบบที่ใช้งานอ่านจากชีตเหมือนเดิม</div>'
     + '<div style="font-size:13.5px;margin-bottom:8px;">' + (notes.length ? '<b style="color:var(--amb)">⚠ มีหมายเหตุ ' + notes.length + ' ชีต</b>' : old.length ? '<b style="color:var(--amb)">⚠ ค้างเกิน 90 นาที ' + old.length + ' ชีต</b>' : '<b style="color:var(--gr,#16a34a)">✅ ซิงก์ปกติ ' + L.length + ' ชีต</b>') + '</div>'
+    + migShadowHtml_(r.shadow || [])
     + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;"><thead><tr style="text-align:left;color:var(--mu);"><th style="padding:4px;">ชีต</th><th style="padding:4px;">ฐาน</th><th style="padding:4px;">ซิงก์ล่าสุด</th></tr></thead><tbody>'
     + L.map(x => '<tr style="border-top:1px solid var(--bdr);vertical-align:top;"><td style="padding:4px;">' + escHtml(x.sheet) + ' <span style="color:var(--mu);font-size:11px;">' + escHtml(x.ss) + '</span>' + (x.note ? '<div style="color:var(--amb);font-size:11.5px;">⚠ ' + escHtml(x.note) + '</div>' : '') + '</td><td style="padding:4px;font-family:var(--mono);">' + escHtml(x.db) + '</td><td style="padding:4px;">' + ago(x.synced_at) + '</td></tr>').join('')
     + '</tbody></table></div>';
