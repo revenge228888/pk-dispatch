@@ -1,0 +1,34 @@
+{
+ "id": "mungluean",
+ "name": "มุ้งบานเลื่อน",
+ "en": "Sliding Screen",
+ "summary": "วัสดุ ข้อจำกัดขนาด รางมุ้งของหน้าต่างอลูมิเนียมกับ UPVC และแบบมีคาดกลาง",
+ "cover": "catalog-media/sl-with-bar.jpg",
+ "facts": [
+  {"label": "อลูมิเนียมหนา", "value": "1.2 mm"},
+  {"label": "ผ้ามุ้ง", "value": "Fiberglass"},
+  {"label": "กว้างสูงสุด/บาน", "value": "150 cm"},
+  {"label": "สูงสุด/บาน", "value": "300 cm"}
+ ],
+ "sections": [
+  {"type": "specs", "title": "วัสดุ", "en": "Material", "lead": "", "hidden": false,
+   "cards": [
+    {"title": "อลูมิเนียม · Aluminium", "rows": [["ความหนา", "1.2 mm"]]},
+    {"title": "ผ้ามุ้ง · Mesh", "rows": [["วัสดุ", "Fiberglass"]]}
+   ]},
+  {"type": "specs", "title": "ข้อจำกัด", "en": "Limits", "lead": "หากกว้างหรือสูงมากกว่าข้อจำกัด ต้องประเมินเพิ่มความหนาราง หรือแบ่งผ้ามุ้ง", "hidden": false,
+   "cards": [
+    {"title": "ขนาดต่อบาน", "rows": [["ความกว้างสูงสุด/บาน", "150 เซนติเมตร"], ["ความสูงสูงสุด/บาน", "300 เซนติเมตร"]]}
+   ]},
+  {"type": "gallery", "title": "มุ้งบานเลื่อน vs มุ้งบานเลื่อน UPVC", "en": "Rail", "lead": "รางและล้อของมุ้งบานเลื่อนทั้ง 2 ชนิดไม่เหมือนกัน รางมุ้งมีหน้าตาตามรูป", "hidden": false,
+   "items": [
+    {"name": "มุ้งบานเลื่อนธรรมดา", "note": "รางอลูมิเนียมชุดตลาด 4 นิ้ว", "imgs": ["catalog-media/sl-rail-alu.jpg"]},
+    {"name": "มุ้งบานเลื่อน UPVC", "note": "รางหน้าต่าง UPVC", "imgs": ["catalog-media/sl-rail-upvc.jpg"]}
+   ]},
+  {"type": "gallery", "title": "มีคาดกลาง vs ไม่มีคาดกลาง", "en": "Middle Bar", "lead": "", "hidden": false,
+   "items": [
+    {"name": "มีคาดกลาง", "note": "คาด 2 เส้น แบ่งผ้ามุ้งเป็น 3 ช่อง", "imgs": ["catalog-media/sl-with-bar.jpg"]},
+    {"name": "ไม่มีคาดกลาง", "note": "", "imgs": ["catalog-media/sl-no-bar.jpg"]}
+   ]}
+ ]
+}
