@@ -2294,6 +2294,7 @@ function renderOfficeShell(){
           <div id="pkpSigWrap" style="margin-top:12px;"></div>
           <div class="row-form pkp-btn-row" style="margin-top:6px;">
             <button class="btn btn-g pkp-mesh-only" onclick="pkpAddItem()">+ เพิ่มรายการ</button>
+            <button class="btn btn-g pkp-mesh-only" onclick="rcpPull()">📋 ดึงจากใบจดขนาด</button>
             <button class="btn btn-g pkp-mesh-only" onclick="glwScreenPull()">🧮 ดึงมุ้งจากงานคำนวณ</button>
             <button class="btn btn-p" id="pkpSaveBtn" onclick="pkpSave()">💾 บันทึกใบผลิต</button>
           </div>
@@ -21027,6 +21028,109 @@ function glwScreenApply(){
   pkpRenderRows(); pkpAutosave();
   const m=document.getElementById('glwScr'); if(m) m.remove();
   toast('✅ เพิ่มมุ้ง '+s.items.length+' รายการแล้ว — ตรวจสี/ทิศ แล้วกดบันทึกใบผลิต');
+}
+// ── [RECPULL 23 พ.ย. 2026 · เจ้าของสั่ง] ใบผลิตมุ้ง: ดึงขนาด+รูปแบบจากใบจดขนาด ──
+//  เจ้าของเคาะ: ขนาดตรงตามที่จด · ไม่มีช่องสลิง → ใส่แบบไม่สลิง (คนทำใบเปลี่ยนเอง) · มุ้งบานเปิด สูง>170 = ประตู ไม่เกิน = หน้าต่าง
+//  สีผ้ามุ้งเว้นว่าง · แยกกลาง = บานคู่ปกติ (ไม่ใช่ "ไม่เท่ากัน") · จำนวน N = แตก N แถว · กระจกข้าม (ใช้หน้าคำนวณกระจก)
+//  แค่เติมลงฟอร์ม ไม่บันทึกเอง · แถวที่ระบบเดา (ไม่ได้เลือกราง/สีลายไม้/ไม่ได้ติ๊กแบบ) ขึ้น ⚠ ในตารางตรวจก่อนเพิ่ม
+var RCP_COLOR={ white:'อบขาว', black:'ดำ', na:'NA', brown_red:'น้ำตาลแดง', brown_dark:'น้ำตาลเข้ม', gray_silver:'เทาเงินซาฮาร่า', gray_dark:'เทาเข้มซาฮาร่า' };   // ลายไม้ (wood_light/wood_dark) ชื่อไม่ตรงกับใบผลิต → ให้เลือกเอง
+function rcpColor_(id){ id=String(id||'').trim(); if(!id) return { c:'' }; if(RCP_COLOR[id]) return { c:RCP_COLOR[id] }; return { c:'', warn:/^wood/.test(id)?'สีลายไม้ — เลือกสีเอง':'สีไม่รู้จัก — เลือกสีเอง' }; }
+function rcpType_(opt, rang, h){
+  var low=rang==='รางเตี้ย', guess=!rang;   // ไม่ได้เลือกราง → รางธรรมดา + ⚠
+  var J=function(normal, lowT, patt){ return { type:low?lowT:normal, patt:patt||'', warn:guess?'ใบจดไม่ได้เลือกราง — ใส่รางธรรมดาไว้':'' }; };
+  switch(opt){
+    case 'เก็บซ้าย': return J('มุ้งจีบมีรางธรรมดาบานเดี่ยว','มุ้งจีบรางเตี้ยบานเดี่ยวซ้าย','→');
+    case 'เก็บขวา':  return J('มุ้งจีบมีรางธรรมดาบานเดี่ยว','มุ้งจีบรางเตี้ยบานเดี่ยวขวา','←');
+    case 'แยกกลาง':  return J('มุ้งจีบมีรางธรรมดาบานคู่','มุ้งจีบรางเตี้ยบานคู่');
+    case 'อิสระ':    return J('มุ้งจีบมีรางธรรมดาบานอิสระ','มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ');
+    case '4 มือจับ': return J('มุ้งจีบมีรางธรรมดาบานอิสระ 4 มือจับ','มุ้งจีบรางเตี้ยบานเดี่ยวอิสระ 4 มือจับ');
+    case 'มุ้งบานเลื่อน': return { type:'มุ้งบานเลื่อน', patt:'' };
+    case 'มุ้งบานเลื่อนแยกกลาง': return { type:'มุ้งบานเลื่อนแยกกลาง', patt:'' };
+    case 'มุ้งบานเปิด': return { type:(Number(h)>170?'มุ้งประตูบานเปิด':'มุ้งหน้าต่างบานเปิด'), patt:'' };
+    case 'มุ้งบานเปิดแยกกลาง': return { type:'มุ้งบานเปิดแยกกลาง', patt:'' };
+  }
+  return { type:'', patt:'', warn:'แบบ "'+opt+'" ไม่รู้จัก — เลือกชนิดเอง' };
+}
+// rec = JSON ใบจดขนาด → { items:[ใบผลิต + _warn], skipped:[{n,why}], mainAlu, mainWarn }
+function rcpItems_(rec){
+  var out=[], skipped=[], mc=rcpColor_(rec&&rec.mainColor);
+  ((rec&&rec.entries)||[]).forEach(function(e, i){
+    var n=i+1; if(!e || e.isEmpty) return;
+    var w=e.width, h=e.height, muang=Array.isArray(e.muang)?e.muang:[], kr=Array.isArray(e.krachok)?e.krachok:[];
+    if(!muang.length && kr.length){ skipped.push({ n:n, why:'กระจก ('+kr.join(', ')+') — ใช้หน้าคำนวณกระจก' }); return; }
+    if(w==null || w==='' || h==null || h===''){ skipped.push({ n:n, why:'ไม่มีขนาด' }); return; }
+    var qty=Math.max(1, parseInt(e.qty,10)||1), col=rcpColor_(e.colorId);
+    var note=[String(e.location||'').trim(), String(e.detail||'').trim()].filter(Boolean).join(' · ');
+    (muang.length?muang:['']).forEach(function(opt){
+      var t=opt?rcpType_(opt, e.rang, h):{ type:'', patt:'', warn:'ใบจดไม่ได้ติ๊กแบบมุ้ง — เลือกชนิดเอง' };
+      var warn=[t.warn, col.warn].filter(Boolean).join(' · ');
+      for(var k=0;k<qty;k++){
+        var it=pkpBlankItem(); it.type=t.type; it.patt=t.patt||pkpArrowFor_(t.type)||'→'; it.w=String(w); it.h=String(h); it.cAlu=col.c; it.note=note;
+        it._warn=warn; it._n=n; out.push(it);
+      }
+    });
+  });
+  return { items:out, skipped:skipped, mainAlu:mc.c, mainWarn:mc.warn||'' };
+}
+async function rcpPull(){
+  if(pkpKind==='glass'){ toast('ใช้กับใบผลิตมุ้ง (กด 🧵 มุ้ง ก่อน)'); return; }
+  const old=document.getElementById('rcpBox'); if(old) old.remove();
+  const d=document.createElement('div'); d.id='rcpBox';
+  d.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+  d.onclick=function(e){ if(e.target===d) d.remove(); };
+  const cu=String((document.getElementById('pkpCust')||{}).value||'').trim();
+  d.innerHTML='<div class="modal" style="max-width:680px;width:100%;max-height:86vh;overflow:auto;padding:14px;">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><b style="flex:1;">📋 ดึงขนาดจากใบจดขนาด</b><button class="btn btn-g btn-sm" onclick="document.getElementById(\'rcpBox\').remove()">ปิด</button></div>'
+    +'<div style="display:flex;gap:6px;margin-bottom:8px;"><input class="fi" id="rcpQ" style="flex:1;" placeholder="ค้นชื่อลูกค้า / เบอร์ / เลขงาน" value="'+escAttr(cu)+'" onkeydown="if(event.key===\'Enter\')rcpSearch()"><button class="btn btn-g btn-sm" onclick="rcpSearch()">ค้นหา</button></div>'
+    +'<select class="fi" id="rcpSel" style="width:100%;margin-bottom:8px;"><option value="">กำลังโหลดรายการ…</option></select>'
+    +'<div id="rcpBody" style="font-size:13px;color:var(--mu,#6b7a94);">เลือกใบจดขนาด</div></div>';
+  document.body.appendChild(d);
+  document.getElementById('rcpSel').onchange=function(){ rcpPreview_(this.value); };
+  rcpSearch();
+}
+async function rcpSearch(){
+  const sel=document.getElementById('rcpSel'); if(!sel) return;
+  const q=String((document.getElementById('rcpQ')||{}).value||'').trim();
+  sel.innerHTML='<option value="">กำลังโหลดรายการ…</option>';
+  let r; try{ r=await getRecordListFast({ search:q, limit:40 }); }catch(e){ sel.innerHTML='<option value="">❌ เชื่อมต่อไม่ได้</option>'; return; }
+  const list=(r&&r.ok&&r.records)||[];
+  if(!list.length){ sel.innerHTML='<option value="">'+(q?'ไม่พบใบจดขนาดของ "'+escHtml(q)+'" — ลองค้นคำอื่น':'ยังไม่มีใบจดขนาด')+'</option>'; return; }
+  const dt=function(ms){ try{ return new Date(Number(ms)).toLocaleDateString('th-TH',{ day:'numeric', month:'short', year:'2-digit' }); }catch(e){ return ''; } };
+  sel.innerHTML='<option value="">— เลือกใบจดขนาด ('+list.length+' ใบ) —</option>'+list.map(function(x){
+    return '<option value="'+escAttr(x.id)+'">'+escHtml((x.customerName||'(ไม่มีชื่อ)')+' · '+(x.entryCount||0)+' รายการ · '+dt(x.updatedAt)+(x.linkedJobId?' · งาน '+x.linkedJobId:'')+' · '+(x.createdBy||''))+'</option>'; }).join('');
+  if(list.length===1){ sel.value=list[0].id; rcpPreview_(list[0].id); }
+}
+var _rcp=null;
+function pkpReqHas_(t){ return !!pkpREQ[t]; }   // มุ้งจีบ → บอกกลุ่มราง (รางธรรมดา/รางเตี้ย) หน้าชื่อสั้น
+async function rcpPreview_(id){
+  const b=document.getElementById('rcpBody'); if(!b) return; _rcp=null;
+  if(!id){ b.innerHTML='เลือกใบจดขนาด'; return; }
+  b.innerHTML='⏳ กำลังโหลด…';
+  let r; try{ r=await getRecordGetFast(id); }catch(e){ b.innerHTML='❌ เชื่อมต่อไม่ได้'; return; }
+  if(!r||!r.ok||!r.record){ b.innerHTML='❌ '+escHtml((r&&r.error)||'โหลดไม่ได้'); return; }
+  const m=rcpItems_(r.record), td='padding:4px;border-top:1px solid var(--line,#2a3344);';
+  const sk=m.skipped.length?'<div style="margin-top:8px;color:var(--mu,#6b7a94);font-size:12px;">ข้าม: '+m.skipped.map(function(s){ return 'รายการที่ '+s.n+' '+escHtml(s.why); }).join(' · ')+'</div>':'';
+  if(!m.items.length){ b.innerHTML='<div style="color:var(--amb,#B45309);">ใบนี้ไม่มีรายการมุ้งที่ดึงได้</div>'+sk; return; }
+  _rcp={ id:id, name:(r.record.customer&&r.record.customer.name)||'', m:m };
+  const nw=m.items.filter(function(it){ return it._warn; }).length;
+  b.innerHTML='<div style="color:var(--tx);margin-bottom:6px;">จะเพิ่ม <b>'+m.items.length+'</b> รายการลงใบนี้ (ขนาดตรงตามที่จด)'+(nw?' · <span style="color:var(--amb,#B45309);">⚠ '+nw+' แถวต้องตรวจ</span>':'')+':</div>'
+    +(m.mainAlu?'<div style="font-size:12px;margin-bottom:6px;">สีหลักในใบจด: <b>'+escHtml(m.mainAlu)+'</b> (ใส่ช่องสีหลัก-อลู ถ้ายังว่าง)</div>':(m.mainWarn?'<div style="font-size:12px;margin-bottom:6px;color:var(--amb,#B45309);">⚠ สีหลักในใบจด: '+escHtml(m.mainWarn)+'</div>':''))
+    +'<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:520px;"><thead><tr style="text-align:left;"><th style="padding:4px;">จด#</th><th style="padding:4px;">ชนิด</th><th style="padding:4px;">ทิศ</th><th style="padding:4px;">กว้าง×สูง</th><th style="padding:4px;">สีอลู</th><th style="padding:4px;">หมายเหตุ</th></tr></thead><tbody>'
+    +m.items.map(function(it){ return '<tr'+(it._warn?' style="background:rgba(245,158,11,.12);"':'')+'><td style="'+td+'">'+it._n+'</td><td style="'+td+'">'+(it.type?escHtml((pkpReqHas_(it.type)?pkpGroupShort_(pkpTypeGroup_(it.type))+' · ':'')+pkpShortType_(it.type)):'<i>— เลือกเอง —</i>')+(it._warn?'<div style="color:var(--amb,#B45309);font-size:11.5px;">⚠ '+escHtml(it._warn)+'</div>':'')+'</td><td style="'+td+'">'+escHtml(it.patt)+'</td><td style="'+td+'white-space:nowrap;"><b>'+escHtml(it.w)+' × '+escHtml(it.h)+'</b></td><td style="'+td+'">'+(escHtml(it.cAlu)||'(สีหลัก)')+'</td><td style="'+td+'">'+escHtml(it.note)+'</td></tr>'; }).join('')
+    +'</tbody></table></div>'+sk
+    +'<div style="margin-top:6px;font-size:11.5px;color:var(--mu,#6b7a94);">มุ้งจีบใส่แบบไม่มีสลิง — ถ้าเป็นสลิงให้เปลี่ยนชนิดในใบ · สีผ้ามุ้งเว้นว่าง</div>'
+    +'<div style="margin-top:10px;display:flex;justify-content:flex-end;"><button class="btn btn-p btn-sm" onclick="rcpApply()">➕ เพิ่ม '+m.items.length+' รายการ</button></div>';
+}
+function rcpApply(){
+  const s=_rcp; if(!s) return;
+  const has=pkpItems.filter(function(it){ return it.type||it.w||it.h||it.wl||it.wr||it.note; });
+  if(has.length && !confirm('ใบนี้มีรายการอยู่แล้ว '+has.length+' รายการ — เพิ่มอีก '+s.m.items.length+' รายการต่อท้ายไหม?')) return;
+  pkpItems=has.concat(s.m.items.map(function(it){ const c=Object.assign({}, it); delete c._warn; delete c._n; return c; }));
+  const cu=document.getElementById('pkpCust'); if(cu && !String(cu.value||'').trim() && s.name) cu.value=s.name;
+  const ma=document.getElementById('pkpMainAlu'); if(ma && !String(ma.value||'').trim() && s.m.mainAlu) ma.value=s.m.mainAlu;
+  pkpRenderRows(); pkpAutosave();
+  const box=document.getElementById('rcpBox'); if(box) box.remove();
+  toast('✅ เพิ่ม '+s.m.items.length+' รายการจากใบจดขนาดแล้ว — ตรวจชนิด/สลิง/สี แล้วกดบันทึกใบผลิต');
 }
 // ── ฝ่ายผลิต/ผู้จัดการ: เปิดใบเต็ม (ใบพิมพ์ทุกหน้า) จากบอร์ดงานกระจก · ข้อมูลจาก /prod-get (prod: ใบอนุมัติแล้ว · ราคาถูกตัดที่ server) ──
 function glwCutOf_(gm){ try{ const m=typeof gm==='string'?JSON.parse(gm||'{}'):(gm||{}); return Array.isArray(m.cut)?m.cut.map(String):[]; }catch(e){ return []; } }
