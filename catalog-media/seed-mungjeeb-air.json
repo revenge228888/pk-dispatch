@@ -1,0 +1,165 @@
+{
+ "id": "mungjeeb-air",
+ "name": "มุ้งจีบ ผ้ามุ้งกั้นแอร์",
+ "en": "Pleated Air Divider",
+ "summary": "มุ้งจีบผ้าทึบ Polyester แบบรังผึ้ง ใช้กั้นความเย็นจากแอร์ระหว่างห้อง พับเก็บข้างได้เหมือนมุ้งจีบ",
+ "cover": "catalog-media/air-cover.jpg",
+ "facts": [
+  {
+   "label": "ผ้า",
+   "value": "Polyester"
+  },
+  {
+   "label": "ลักษณะผ้า",
+   "value": "รังผึ้ง"
+  },
+  {
+   "label": "เปิด-ปิด",
+   "value": "พับเก็บข้าง"
+  },
+  {
+   "label": "ติดตั้ง",
+   "value": "ประตู · หน้าต่าง · บันได"
+  }
+ ],
+ "sections": [
+  {
+   "lead": "",
+   "hidden": false,
+   "type": "text",
+   "title": "ใช้ทำอะไร",
+   "en": "Use",
+   "body": "กั้นความเย็นจากแอร์ให้อยู่ในพื้นที่ที่ต้องการ เช่น ห้องที่เปิดโล่งต่อกับโถงบันได ห้องครัว หรือทางเดิน\nเปิด-ปิดแบบพับจีบเก็บข้างเหมือนมุ้งจีบ ไม่กินพื้นที่ ไม่ต้องทำประตูบานใหญ่\nผ้าทึบช่วยบังสายตาระหว่างห้อง"
+  },
+  {
+   "lead": "",
+   "hidden": false,
+   "type": "specs",
+   "title": "วัสดุ",
+   "en": "Material",
+   "cards": [
+    {
+     "title": "ผ้า · Fabric",
+     "rows": [
+      [
+       "วัสดุ",
+       "Polyester"
+      ],
+      [
+       "โครงสร้าง",
+       "รังผึ้ง (Honeycomb)"
+      ],
+      [
+       "การเปิด-ปิด",
+       "พับจีบเก็บข้าง"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "lead": "ภาพจำลองเพื่อแสดงลักษณะเนื้อผ้า ดูของจริงได้ในผลงานติดตั้งด้านล่าง",
+   "hidden": false,
+   "type": "gallery",
+   "title": "ผ้ารังผึ้ง",
+   "en": "Honeycomb fabric",
+   "items": [
+    {
+     "name": "หน้าตัดรังผึ้ง",
+     "note": "ช่องอากาศเรียงกันในเนื้อผ้า",
+     "imgs": [
+      "catalog-media/air-hc1.jpg"
+     ]
+    },
+    {
+     "name": "จีบผ้าพับเก็บ",
+     "note": "",
+     "imgs": [
+      "catalog-media/air-hc2.jpg"
+     ]
+    },
+    {
+     "name": "ตัวอย่างผ้า",
+     "note": "",
+     "imgs": [
+      "catalog-media/air-hc3.jpg"
+     ]
+    }
+   ]
+  },
+  {
+   "lead": "",
+   "hidden": false,
+   "type": "gallery",
+   "title": "ผลงานติดตั้งจริง",
+   "en": "Projects",
+   "items": [
+    {
+     "name": "ประตูบานเดี่ยว",
+     "note": "",
+     "imgs": [
+      "catalog-media/air-p01.jpg",
+      "catalog-media/air-p03.jpg",
+      "catalog-media/air-p07.jpg",
+      "catalog-media/air-p15.jpg"
+     ]
+    },
+    {
+     "name": "ประตูบานคู่",
+     "note": "",
+     "imgs": [
+      "catalog-media/air-p14.jpg",
+      "catalog-media/air-p17.jpg"
+     ]
+    },
+    {
+     "name": "ประตูโค้ง",
+     "note": "",
+     "imgs": [
+      "catalog-media/air-p13.jpg"
+     ]
+    },
+    {
+     "name": "ประตูมีช่องแสงด้านบน",
+     "note": "",
+     "imgs": [
+      "catalog-media/air-p11.jpg",
+      "catalog-media/air-p12.jpg"
+     ]
+    },
+    {
+     "name": "โถงบันได",
+     "note": "กั้นแอร์ไม่ให้ไหลขึ้น-ลงบันได",
+     "imgs": [
+      "catalog-media/air-p10.jpg"
+     ]
+    },
+    {
+     "name": "หน้าต่างห้องครัว",
+     "note": "",
+     "imgs": [
+      "catalog-media/air-p04.jpg",
+      "catalog-media/air-p05.jpg"
+     ]
+    },
+    {
+     "name": "หน้าต่าง",
+     "note": "",
+     "imgs": [
+      "catalog-media/air-p06.jpg",
+      "catalog-media/air-p08.jpg",
+      "catalog-media/air-p09.jpg",
+      "catalog-media/air-p16.jpg"
+     ]
+    },
+    {
+     "name": "ช่องผนังกว้าง",
+     "note": "",
+     "imgs": [
+      "catalog-media/air-p02.jpg"
+     ]
+    }
+   ]
+  }
+ ]
+}
