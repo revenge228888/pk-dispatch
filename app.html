@@ -2193,6 +2193,7 @@ function renderOfficeShell(){
             </div>
             <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
               <input id="mfQ" class="fi" type="search" placeholder="ค้นชื่อ / เบอร์ / รหัสงาน" oninput="mfRender()" style="width:220px;">
+              <button class="btn btn-g btn-sm" id="mfMultiBtn" onclick="mfMultiToggle()">☑ เลือกหลายงาน</button>
               <button class="btn btn-g btn-sm" onclick="mfLoad(true)">↻ โหลดใหม่</button>
             </div>
           </div>
@@ -3509,6 +3510,7 @@ function expQrClear(){
 }
 function expQrRender(){
   const box = document.getElementById('expQrBox'); if (!box) return;
+  expQrPayeeHint_();   // อัปเดตข้อความช่องบัญชี (แนบ/เอา QR ออก) — แตะเฉพาะข้อความ ไม่แตะค่าที่กรอก
   if (_expQrUrl) { try { URL.revokeObjectURL(_expQrUrl); } catch(e){} _expQrUrl = ''; }
   const q = _expQr; if (!q) { box.innerHTML = ''; return; }
   _expQrUrl = URL.createObjectURL(q.file);
@@ -3665,8 +3667,18 @@ function expensePayeeCheck(){
     hint.textContent = '(ผู้รับใหม่ — กรอกเพื่อบันทึกเข้าระบบ)';
   }
   bankEl.readOnly = false; accEl.readOnly = false;   // กรอก/แก้ได้เสมอ
+  hint.dataset.base = hint.textContent;
+  expQrPayeeHint_();
   hint.style.display = '';
   wrap.style.display = '';
+}
+// [EXPQR 28 พ.ย. เจ้าของขอ] แนบ QR แล้ว = ไม่ต้องกรอกบัญชี (ระบบไม่เคยบังคับ แต่ข้อความเดิมชวนให้เข้าใจว่าต้องกรอก) · แตะเฉพาะข้อความ
+function expQrPayeeHint_(){
+  const hint = document.getElementById('expPayeeNewHint'); if (!hint) return;
+  const qr = !!(_expQr && _expQr.file);
+  if (hint.dataset.base === undefined) hint.dataset.base = hint.textContent;
+  hint.textContent = qr ? '(แนบ QR แล้ว — ไม่ต้องกรอกบัญชี)' : hint.dataset.base;
+  hint.style.color = qr ? 'var(--grn)' : '';
 }
 
 // ════════ UI ค่าแรง (เลือกพนักงาน → ประเภท → ปฏิทินรายวัน) ════════
@@ -4226,7 +4238,8 @@ function eavPayListHtml_(items){
     const nQr = g.items.filter(x => _expQrMap[x.id]).length;   // [EXPQR]
     return '<div class="eav-pay"><h4><span>👤 ' + escHtml(eavGroupName_(g)) + ' <small style="font-weight:400;color:var(--mu);">' + g.items.length + ' ใบ</small>' + (nQr ? ' <small style="font-weight:700;color:var(--acc);">🔳 มี QR ' + nQr + '</small>' : '') + '</span><span style="color:var(--acc);">฿' + eavBaht_(g.total) + '</span></h4>'
       + (f.payeeAccount ? '<div class="eav-bank">🏦 ' + escHtml(f.payeeBank||'') + ' <b>' + escHtml(eavFmtAcc_(f.payeeAccount)) + '</b> <button type="button" class="btn btn-g btn-sm" style="margin-left:auto;" onclick="pkCopyAccount(\'' + String(f.payeeAccount).replace(/'/g,"\\'") + '\',this)">📋 คัดลอก</button></div>'
-                        : '<div class="eav-bank" style="background:var(--amb-t);color:var(--amb);">⚠ ไม่มีเลขบัญชี — จ่ายเงินสด หรือเพิ่มบัญชีในแท็บบัญชีผู้รับเงิน</div>')
+                        : (nQr === g.items.length ? '<div class="eav-bank">🔳 จ่ายด้วย QR ที่แนบมา (ไม่ต้องใช้เลขบัญชี)</div>'   // [EXPQR 28 พ.ย.]
+                        : '<div class="eav-bank" style="background:var(--amb-t);color:var(--amb);">⚠ ไม่มีเลขบัญชี — จ่ายเงินสด หรือเพิ่มบัญชีในแท็บบัญชีผู้รับเงิน</div>'))
       + '<div class="eav-plist">' + g.items.map(x => '<div onclick="expenseDetailOpen(\'' + x.id + '\')" style="cursor:pointer;"><span>' + eavDayLabel_(eavDayKey_(x.date)) + ' · ' + escHtml(x.subType||'') + ' <small style="color:var(--mu);font-family:var(--mono);">' + x.id + '</small></span><span>฿' + eavBaht_(x.amount) + '</span></div>').join('') + '</div>'
       + '<div class="eav-acts"><button class="btn btn-p" onclick="eavRunStart(' + JSON.stringify(g.key).replace(/"/g,'&quot;') + ')">💸 จ่ายรายนี้ ฿' + eavBaht_(g.total) + '</button></div></div>'; }).join('');
   return h;
@@ -4255,7 +4268,8 @@ function eavRunStep_(){
     + '<div class="eav-big">฿' + eavBaht_(t) + '</div><div style="text-align:center;font-size:12px;color:var(--mu);">' + on.length + ' จาก ' + a.length + ' ใบ</div>'
     + (f.payeeAccount ? '<div class="eav-bank" style="margin-top:10px;justify-content:center;">🏦 ' + escHtml(f.payeeBank||'') + '<b style="font-size:19px;width:100%;text-align:center;">' + escHtml(eavFmtAcc_(f.payeeAccount)) + '</b>'
         + '<div style="display:flex;gap:8px;width:100%;"><button type="button" class="btn btn-g" style="flex:1;" onclick="pkCopyAccount(\'' + String(f.payeeAccount).replace(/'/g,"\\'") + '\',this)">📋 เลขบัญชี</button><button type="button" class="btn btn-g" style="flex:1;" onclick="pkCopyAccount(\'' + amtTxt + '\',this)">📋 ยอด ' + eavBaht_(t) + '</button></div></div>'
-      : '<div class="eav-bank" style="margin-top:10px;background:var(--amb-t);color:var(--amb);">⚠ ไม่มีเลขบัญชี — จ่ายเงินสดแล้วกดยืนยัน (สลิปไม่บังคับ)</div>')
+      : (on.length && on.every(x => _expQrMap[x.id]) ? '<div class="eav-bank" style="margin-top:10px;justify-content:center;">🔳 สแกน QR ด้านล่างจ่ายได้เลย (ไม่ต้องใช้เลขบัญชี)</div>'   // [EXPQR 28 พ.ย.]
+      : '<div class="eav-bank" style="margin-top:10px;background:var(--amb-t);color:var(--amb);">⚠ ไม่มีเลขบัญชี — จ่ายเงินสดแล้วกดยืนยัน (สลิปไม่บังคับ)</div>'))
     + expQrPayHtml_(on)   // [EXPQR] QR สแกนจ่ายของใบในรอบนี้
     + '<div style="margin:12px 0 4px;font-size:12.5px;color:var(--mu);">ใบที่จ่ายรอบนี้ (ติ๊กออก = เก็บไว้จ่ายทีหลัง)</div><div class="eav-plist">'
     + a.map(x => '<label style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px dashed var(--bdr);cursor:pointer;"><input type="checkbox" ' + (R.off[x.id] ? '' : 'checked') + ' onchange="eavRunTick(\'' + x.id + '\',this.checked)" style="width:20px;height:20px;"><span style="flex:1;">' + eavDayLabel_(eavDayKey_(x.date)) + ' · ' + escHtml(x.subType||'') + (x.detail ? ' · ' + escHtml(String(x.detail).slice(0,40)) : '') + ' <small style="color:var(--mu);font-family:var(--mono);">' + x.id + '</small></span><b>฿' + eavBaht_(x.amount) + '</b></label>').join('') + '</div>'
@@ -22156,7 +22170,51 @@ async function mfLoad(force){
   } catch(e){ host.innerHTML = '<div class="empty-section">โหลดรายการตามงานวัดไม่สำเร็จ — ลองกด ↻</div>'; console.warn('[mfLoad]', e); }
   finally { _mfLoading = false; }
 }
-function mfSetTab(t){ _mfTab = t; mfRender(); }
+function mfSetTab(t){ _mfTab = t; _mfChecked = {}; mfRender(); }   // เปลี่ยนหมวด = ล้างที่เลือก (กันกดใส่งานที่มองไม่เห็น)
+// ── [MFOLLOW 28 พ.ย. 2026 เจ้าของขอ] เลือกหลายงาน → เปลี่ยนสถานะพร้อมกัน (pk_mfUpdateBulk) · งานที่ลงคิวติดตั้งแล้ว (ปิดอัตโนมัติ) เลือกไม่ได้ ──
+let _mfMulti = false, _mfChecked = {};
+function mfMultiToggle(){ _mfMulti = !_mfMulti; _mfChecked = {}; const b = document.getElementById('mfMultiBtn'); if (b) b.textContent = _mfMulti ? '✕ เลิกเลือกหลายงาน' : '☑ เลือกหลายงาน';
+  const p = document.getElementById('mfPanel'); if (p) p.style.display = _mfMulti ? 'none' : '';   // โหมดเลือกหลายงาน: ตารางกว้างขึ้น
+  mfRender(); }
+function mfCheck(id, on){ const it = _mfItems.find(function(x){ return x.id === id; }); if (!it || it.auto) return; if (on) _mfChecked[id] = 1; else delete _mfChecked[id]; mfRender(); }
+function mfCheckAll(ids, on){ ids.forEach(function(id){ const it = _mfItems.find(function(x){ return x.id === id; }); if (!it || it.auto) return; if (on) _mfChecked[id] = 1; else delete _mfChecked[id]; }); mfRender(); }
+function mfRowClick(id){ if (_mfMulti) mfCheck(id, !_mfChecked[id]); else mfPick(id); }
+function mfBulkBar_(visibleIds){
+  const n = Object.keys(_mfChecked).length, pickable = visibleIds.filter(function(id){ const it = _mfItems.find(function(x){ return x.id === id; }); return it && !it.auto; });
+  const allOn = pickable.length && pickable.every(function(id){ return _mfChecked[id]; });
+  const b = 'min-height:40px;border-radius:9px;font-weight:700;font-size:13px;cursor:pointer;padding:0 12px;';
+  // คงค่าที่กรอกไว้ (ติ๊กเพิ่ม = วาดตารางใหม่)
+  const pv = function(id, d){ const el = document.getElementById(id); return el ? String(el.value) : d; };
+  const pNote = pv('mfBulkNote', ''), pDays = pv('mfBulkDays', '3'), pReason = pv('mfBulkReason', '');
+  const dOpt = ['2','3','7','14'].map(function(v){ return '<option value="' + v + '"' + (v === pDays ? ' selected' : '') + '>อีก ' + v + ' วัน</option>'; }).join('');
+  return '<div class="card" style="padding:10px 12px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;position:sticky;top:0;z-index:2;">'
+    + '<b style="font-size:14px;">เลือก ' + n + ' งาน</b>'
+    + '<button class="btn btn-g btn-sm" onclick=\'mfCheckAll(' + JSON.stringify(pickable).replace(/'/g, '&#39;') + ',' + (allOn ? 'false' : 'true') + ')\'>' + (allOn ? 'ไม่เลือกทั้งหมด' : 'เลือกทั้งหมดในหมวดนี้ (' + pickable.length + ')') + '</button>'
+    + '<span style="flex:1;"></span>'
+    + '<input id="mfBulkNote" class="fi" maxlength="300" placeholder="หมายเหตุ (ไม่บังคับ)" style="width:170px;" value="' + escAttr(pNote) + '">'
+    + '<select id="mfBulkDays" class="fi" style="width:auto;">' + dOpt + '</select>'
+    + '<button style="' + b + 'border:1px solid #E8C36A;background:#FFF6E0;color:#7A4A00;" onclick="mfBulkAct(\'snooze\')">ตามแล้ว รอต่อ</button>'
+    + '<button style="' + b + 'border:1px solid #8FCBA6;background:#E5F5EB;color:#145C33;" onclick="mfBulkAct(\'done\')">ปิดงานแล้ว</button>'
+    + '<select id="mfBulkReason" class="fi" style="width:auto;"><option value="">เหตุผลไม่ได้งาน…</option>' + _mfReasons.map(function(r){ return '<option' + (r === pReason ? ' selected' : '') + '>' + escHtml(r) + '</option>'; }).join('') + '</select>'
+    + '<button style="' + b + 'border:1px solid #C3C8CF;background:#EEF0F2;color:#3F4752;" onclick="mfBulkAct(\'lost\')">ไม่ได้งาน</button>'
+    + '<button class="btn btn-g btn-sm" onclick="mfBulkAct(\'reopen\')">↩ ยกเลิกสถานะ</button></div>';
+}
+async function mfBulkAct(mode){
+  const ids = Object.keys(_mfChecked); if (!ids.length) { toast('ยังไม่ได้เลือกงาน'); return; }
+  const note = String((document.getElementById('mfBulkNote') || {}).value || '').trim();
+  const days = Number((document.getElementById('mfBulkDays') || {}).value) || 3;
+  const reason = String((document.getElementById('mfBulkReason') || {}).value || '');
+  if (mode === 'lost' && !reason) { toast('เลือกเหตุผลที่ไม่ได้งานก่อน'); return; }
+  const lbl = mode === 'snooze' ? 'ตามแล้ว รอต่อ ' + days + ' วัน' : mode === 'done' ? 'ปิดงานแล้ว' : mode === 'lost' ? 'ไม่ได้งาน — ' + reason + '\n(จะหายจากแท็บติดตามใบเสนอด้วย)' : 'ยกเลิกสถานะ กลับไปรอตาม';
+  if (!confirm('เปลี่ยน ' + ids.length + ' งานเป็น: ' + lbl + '?')) return;
+  try {
+    const out = await call({ action:'pk_mfUpdateBulk', ids:ids, mode:mode, days:days, reason:reason, note:note });
+    if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกไม่สำเร็จ');
+    toast('บันทึกแล้ว ' + out.done + ' งาน');
+    _mfChecked = {};
+    await mfLoad();
+  } catch(e){ toast('❌ ' + e.message); }
+}
 function mfRender(){
   const host = document.getElementById('mfList'); if (!host) return;
   const c = { all:_mfItems.length, od:0, wait:0, done:0, lost:0 };
@@ -22181,14 +22239,19 @@ function mfRender(){
   if (!rows.length) { host.innerHTML = '<div class="empty-section">' + (_mfItems.length ? 'ไม่มีงานในหมวดนี้' : '✅ ยังไม่มีงานวัดที่ต้องตาม') + '</div>'; mfPanel_(); return; }
   const th = 'padding:10px 8px;font-weight:700;font-size:12.5px;color:var(--mu);text-align:left;white-space:nowrap;';
   const td = 'padding:10px 8px;vertical-align:top;border-top:1px solid var(--bdr);';
-  host.innerHTML = '<div class="card" style="padding:0;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13.5px;min-width:820px;"><thead><tr>'
+  host.innerHTML = (_mfMulti ? mfBulkBar_(rows.map(function(x){ return x.id; })) : '')
+    + '<div class="card" style="padding:0;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13.5px;min-width:820px;"><thead><tr>'
+    + (_mfMulti ? '<th style="' + th + 'width:34px;"></th>' : '')
     + ['วันวัด','งาน / ลูกค้า','คนวัด','ใบเสนอราคา','สถานะ','ตามล่าสุด / ครั้งถัดไป','หมายเหตุ / เหตุผล'].map(function(h){ return '<th style="' + th + '">' + h + '</th>'; }).join('')
     + '</tr></thead><tbody>' + rows.map(function(it){
       const due = mfDue_(it), sel = it.id === _mfSel;
       const kind = it.kind === 'install' ? '<span style="font-size:11px;padding:1px 7px;border-radius:6px;background:#F3E8FD;color:#6B2FA8;">ติดตั้ง · นับเป็นวัด</span>' : '';
       const sub = it.auto ? 'อัตโนมัติ · ลงคิว ' + escHtml(it.installId) + (it.installDate ? ' (' + escHtml(mfDate_(it.installDate)) + ')' : '')
         : it.status === 'lost' ? escHtml(it.reason) : (it.count ? 'ตามแล้ว ' + it.count + ' ครั้ง' : 'ยังไม่เคยตาม');
-      return '<tr onclick="mfPick(\'' + escAttr(it.id) + '\')" style="cursor:pointer;' + (sel ? 'background:rgba(36,87,197,.08);' : '') + '">'
+      const chk = _mfMulti && !!_mfChecked[it.id];
+      return '<tr onclick="mfRowClick(\'' + escAttr(it.id) + '\')" style="cursor:pointer;' + ((sel && !_mfMulti) || chk ? 'background:rgba(36,87,197,.08);' : '') + '">'
+        + (_mfMulti ? '<td style="' + td + '">' + (it.auto ? '<span title="ลงคิวติดตั้งแล้ว — ปิดงานอัตโนมัติ" style="color:var(--mu);">—</span>'
+            : '<input type="checkbox" aria-label="เลือก ' + escAttr(it.id) + '" style="width:20px;height:20px;" ' + (chk ? 'checked' : '') + ' onclick="event.stopPropagation();mfCheck(\'' + escAttr(it.id) + '\',this.checked)">') + '</td>' : '')
         + '<td style="' + td + 'white-space:nowrap;"><b>' + escHtml(mfDate_(it.date)) + '</b><div style="font-size:11.5px;color:var(--mu);">ผ่านมา ' + mfAge_(it.date) + ' วัน</div></td>'
         + '<td style="' + td + '"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><b>' + escHtml(it.name || '-') + '</b>' + kind + '</div>'
         + '<div style="font-size:11.5px;color:var(--mu);">' + escHtml(it.id) + (it.address ? ' · ' + escHtml(it.address.slice(0, 40)) : '') + (it.phone ? ' · ' + escHtml(telFmt(it.phone)) : '') + '</div></td>'
