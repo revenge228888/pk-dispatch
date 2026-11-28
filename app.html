@@ -12822,16 +12822,18 @@ function prdColorTag_(c, cls){
 function prdCutKey_(pc, color){ return [pc.rail, color, pc.setNo, pc.len, pc.pidx].join('|'); }
 // จัดเส้นแบบเดียวกับ pkpCutDocHTML ทุกขั้น (ลำดับกลุ่ม ราง→หน้าตัดบานเลื่อน · สีเรียงตามชื่อ · FFD ต่อ ชนิด×สี) — ใช้ตอนบันทึกล็อต
 //  ⚠ แก้ลำดับ/การจัดกลุ่มใน pkpCutDocHTML ต้องแก้ที่นี่ด้วย (เทส prodrole_test เทียบสองฝั่ง)
-function prdCutBuild_(pieces, scut, set){
+function prdCutBuild_(pieces, scut, set, ffd){
+  ffd=ffd||pkpCutFFD;
   var groups=[], out=[];
   ['handle','side','topbot','low'].forEach(function(r){ groups.push({title:PRD_RAIL_NAME[r], list:(pieces||[]).filter(function(p){ return p.rail===r; })}); });
   PKP_SCUT_ORDER.forEach(function(p){ groups.push({title:p, list:(scut||[]).filter(function(x){ return x.profile===p; })}); });
   groups.forEach(function(g){
     var byC={}; g.list.forEach(function(p){ (byC[p.color]||(byC[p.color]=[])).push(p); });
     Object.keys(byC).sort().forEach(function(c){
-      var res=pkpCutFFD(byC[c], set.stock, set.kerf);
+      var res=ffd(byC[c], set.stock, set.kerf, g.title, c);
       res.bars.forEach(function(b,i){
-        out.push({ title:g.title, color:c, no:i+1, of:res.bars.length, used:Math.round(b.used*100)/100, over:!!b.over, stock:set.stock,
+        out.push({ title:g.title, color:c, no:i+1, of:res.bars.length, used:Math.round(b.used*100)/100, over:!!b.over, stock:b.cap||set.stock,
+          ...(b.offcutId?{offcutId:b.offcutId, offcutLen:b.offcutLen}:{}),
           pieces:b.pieces.map(function(pc){ return { wo:pc.wo, name:pc.name, setNo:pc.setNo, len:pc.len, pidx:pc.pidx, ptot:pc.ptot, rail:pc.rail, key:prdCutKey_(pc,c) }; }) });
       });
     });
@@ -13006,10 +13008,13 @@ var _prdCutExt={}, _prdExtQ=[], _prdExtT=null, OFFCUT_MIN=50;
 function prdCutExtKey_(pc){ return pc.wo+'|'+pc.key; }
 function prdCutIsExt_(pc){ return !!_prdCutExt[prdCutExtKey_(pc)]; }
 // ความยาวที่ใช้จริงของเส้น (ไม่นับชิ้นจากเศษนอกระบบ) · คำนวณล้วน เทสได้
-function prdCutBarUse_(b, isExt, kerf){
+function prdCutBarCap_(b, lot){
+  return (lot.barMode||{})[(lot.bars||[]).indexOf(b)]==='new'?lot.stock:(b.stock||lot.stock);
+}
+function prdCutBarUse_(b, isExt, kerf, cap){
   var used=0, n=0; (b.pieces||[]).forEach(function(pc){ if(isExt(pc)) return; used+=Number(pc.len)+(Number(kerf)||0); n++; });
   used=Math.round(used*100)/100;
-  return { used:used, waste:Math.max(0, Math.round((Number(b.stock)-used)*100)/100), cutPieces:n };
+  return { used:used, waste:Math.max(0, Math.round((Number(cap==null?b.stock:cap)-used)*100)/100), cutPieces:n };
 }
 function prdCutExtTap(i){
   var b=_prdCutBars[_prdCutIdx], pc=b&&b.pieces[i]; if(!pc||!_prdLot) return;
@@ -13118,18 +13123,36 @@ async function ocSet(id, to){
   try{ var r=await call({ action:'pk_offcutSetStatus', id:id, to:to }); if(!(r&&r.ok)) throw new Error((r&&r.error)||'บันทึกไม่สำเร็จ'); toast('บันทึกแล้ว'); _ocData=null; ocLoad(); }
   catch(e){ toast('❌ '+(e&&e.message||e)); }
 }
+function prdCutOffcutBanner_(b, mode){
+  if(!b.offcutId) return '';
+  var id=escHtml(b.offcutId);
+  if(mode==='found') return '<div class="prd-banner" style="background:#d8f4e2;color:#145b33;">ใช้เศษ '+id+'</div>';
+  if(mode==='new') return '<div class="prd-banner" style="background:#fff0d6;color:#894b00;">เปลี่ยนเป็นรางเต็มเส้นแล้ว · '+id+' ติดป้ายหาไม่เจอ <button class="prd-btn" onclick="prdCutBarMode(\'found\')">↩ เจอแล้ว ใช้เศษ</button></div>';
+  return '<div class="prd-banner" style="background:#deedff;color:#174477;"><b style="display:block;font-size:32px;border:2px dashed;padding:12px;">'+id+'</b>หยิบเศษ '+id+' · ยาว '+b.offcutLen+' ซม. <button class="prd-btn" onclick="prdCutBarMode(\'found\')">เจอแล้ว เริ่มตัด</button> <button class="prd-btn ghost" onclick="prdCutBarMode(\'new\')">หาไม่เจอ → เปิดเส้นใหม่ ('+_prdLot.stock+' ซม.)</button></div>';
+}
+async function prdCutBarMode(mode){
+  var lot=_prdLot, b=_prdCutBars[_prdCutIdx]; if(!lot||!b||!b.offcutId||lot._barModePending) return;
+  if(mode==='new' && !confirm('หาไม่เจอ → เปิดเส้นใหม่ ('+lot.stock+' ซม.) ?')) return;
+  var idx=lot.bars.indexOf(b), modes=lot.barMode||(lot.barMode={}), old=modes[idx];
+  modes[idx]=mode; lot._barModePending=true; prdRenderCutBar();
+  try{ var r=await prdSave_({action:'pk_cutLotBarMode',lotId:lot.lotId,barIdx:idx,mode:mode}); if(!(r&&r.ok)) throw new Error((r&&r.error)||'บันทึกไม่สำเร็จ'); }
+  catch(e){ if(old===undefined) delete modes[idx]; else modes[idx]=old; toast('⚠ '+(e.message||e)); }
+  finally{ delete lot._barModePending; if(_prdLot===lot) prdRenderCutBar(); }
+}
 function prdRenderCutBar(){
   var b=_prdCutBars[_prdCutIdx], cnt=prdCutCount_(); if(!b || !_prdLot) return;
-  var SEG=['#f0c84a','#7fd6ab','#8fc1f0','#ec9ec5','#b9a7e8','#f2a25c'], use=prdCutBarUse_(b, prdCutIsExt_, _prdLot.kerf), waste=use.waste;
+  var SEG=['#f0c84a','#7fd6ab','#8fc1f0','#ec9ec5','#b9a7e8','#f2a25c'], use=prdCutBarUse_(b, prdCutIsExt_, _prdLot.kerf, prdCutBarCap_(b,_prdLot)), waste=use.waste;
+  var cap=prdCutBarCap_(b,_prdLot), bm=(_prdLot.barMode||{})[_prdLot.bars.indexOf(b)];
   var nExt=b.pieces.filter(prdCutIsExt_).length;
   var h=prdCutSteps_(2)+'<div class="prd-cut"><div class="prd-cuth"><button class="prd-btn ghost sm" onclick="prdCutExit()">◀ เลือกชนิดราง</button><span class="t">🪚 '+escHtml(_prdCutCat)+'</span><span class="prd-wo">'+escHtml(_prdLot.lotId)+'</span>'
     +'<div class="prd-prog"><i style="width:'+(cnt.total?cnt.done/cnt.total*100:0)+'%"></i></div><b style="font-family:var(--mono);">'+cnt.done+'/'+cnt.total+' ชิ้น</b></div>'
+    +prdCutOffcutBanner_(b,bm)
     +prdCutGroupsHtml_(prdCutGroups_(_prdCutBars, prdCutIsDone_), _prdCutIdx, _prdLot.lotId)
-    +'<div class="prd-line"><span style="font-size:20px;font-weight:800;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">'+escHtml(b.title)+' · สีอลู '+prdColorTag_(b.color,'big')+' · เส้นที่ <b>'+b.no+'</b>/'+b.of+'</span>'
-    +'<span>รางเต็ม <b>'+b.stock+'</b> cm · ใช้ <b>'+use.used+'</b> · เศษ <b>'+waste+'</b> cm'+(nExt?' <span style="color:var(--blu,#2f6fb0);font-weight:700;">· จากเศษนอกระบบ '+nExt+' ชิ้น</span>':'')+'</span></div>'
+    +'<div class="prd-line"><span style="font-size:20px;font-weight:800;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">'+escHtml(b.title)+' · สีอลู '+prdColorTag_(b.color,'big')+' · เส้นที่ <b>'+b.no+'</b>/'+b.of+(b.offcutId?' · '+(bm==='new'?'รางเต็มเส้นใหม่':'♻ ใช้เศษ '+escHtml(b.offcutId)):'')+'</span>'
+    +'<span>รางเต็ม <b>'+cap+'</b> cm · ใช้ <b>'+use.used+'</b> · เศษ <b>'+waste+'</b> cm'+(nExt?' <span style="color:var(--blu,#2f6fb0);font-weight:700;">· จากเศษนอกระบบ '+nExt+' ชิ้น</span>':'')+'</span></div>'
     +(b.over?'<div class="prd-banner" style="color:var(--rd);">⚠ ชิ้นนี้ยาวเกินรางเต็มเส้น — เช็คขนาดกับผู้จัดการ</div>':'')
-    +'<div class="prd-vbar'+(b.over?' over':'')+'">'+b.pieces.map(function(pc,i){ if(prdCutIsExt_(pc)) return ''; return '<div class="s'+(prdCutIsDone_(pc)?' cut':'')+'" style="width:'+Math.max(2,pc.len/b.stock*100)+'%;background:'+SEG[i%SEG.length]+';">'+(i+1)+'</div>'; }).join('')
-    +(waste>0.05&&!b.over?'<div class="w" style="width:'+(waste/b.stock*100)+'%;">เศษ '+Math.floor(waste)+'</div>':'')+'</div>'
+    +'<div class="prd-vbar'+(b.over?' over':'')+'">'+b.pieces.map(function(pc,i){ if(prdCutIsExt_(pc)) return ''; return '<div class="s'+(prdCutIsDone_(pc)?' cut':'')+'" style="width:'+Math.max(2,pc.len/cap*100)+'%;background:'+SEG[i%SEG.length]+';">'+(i+1)+'</div>'; }).join('')
+    +(waste>0.05&&!b.over?'<div class="w" style="width:'+(waste/cap*100)+'%;">เศษ '+Math.floor(waste)+'</div>':'')+'</div>'
     +(nExt?'<div style="font-size:13px;color:var(--mu);margin:-4px 0 8px;">ชิ้นที่กด "จากเศษนอกระบบ" ไม่นับในเส้นนี้ — เศษเส้นนี้ยาวขึ้นเอง</div>':'')
     +'<div class="prd-pcs">';
   b.pieces.forEach(function(pc,i){
@@ -13231,15 +13254,25 @@ function prdCutCheckAuto_(){
     if(!setDone[id] && j && !prdIsDone_(j) && !prdSt_(j,'rail')) prdDeptSet(id,'working');
   });
 }
-function prdCutTap(i){ var b=_prdCutBars[_prdCutIdx], pc=b&&b.pieces[i]; if(!pc) return; prdCutMark_(pc, !prdCutIsDone_(pc)); prdRenderCutBar(); prdCutCheckAuto_(); }
+function prdCutTap(i){ var b=_prdCutBars[_prdCutIdx], pc=b&&b.pieces[i]; if(!pc) return; prdCutMark_(pc, !prdCutIsDone_(pc)); prdRenderCutBar(); prdCutCheckAuto_(); prdCutOffcutUsedIfDone_(b); }
+// [OFFCUT รอบ 2 · ตรวจโดย Claude] ติ๊กทีละชิ้นจนครบเส้นที่มาจากเศษ (ไม่ได้กด "ตัดเส้นนี้ครบ") → ตั้งเศษเป็น "ใช้แล้ว" ด้วย ไม่งั้นค้าง "จอง" ตลอดไป · server เรียกซ้ำได้
+function prdCutOffcutUsedIfDone_(b){
+  if(!_prdLot || !b || !b.offcutId || (_prdLot.barMode||{})[_prdLot.bars.indexOf(b)]==='new') return;
+  if(!b.pieces.every(prdCutIsDone_)) return;
+  prdSave_({action:'pk_offcutUse',lotId:_prdLot.lotId,barIdx:_prdLot.bars.indexOf(b)}).then(function(r){ if(!(r&&r.ok)) toast('⚠ '+((r&&r.error)||'บันทึกใช้เศษไม่สำเร็จ')); }).catch(function(e){ toast('⚠ '+(e.message||e)); });
+}
 function prdCutGo(dir){ var t=_prdCutIdx+dir; if(t<0||t>=_prdCutBars.length) return; _prdCutIdx=t; prdRenderCutBar(); window.scrollTo(0,0); }
 function prdCutBarDone(){
+  if(_prdLot && _prdLot._barModePending){ toast('กำลังบันทึกชนิดเส้น กรุณารอสักครู่'); return; }
   var b=_prdCutBars[_prdCutIdx]; if(!b) return;
   b.pieces.forEach(function(pc){ if(!prdCutIsDone_(pc)) prdCutMark_(pc, true); });
+  if(_prdLot && b.offcutId && (_prdLot.barMode||{})[_prdLot.bars.indexOf(b)]!=='new'){
+    prdSave_({action:'pk_offcutUse',lotId:_prdLot.lotId,barIdx:_prdLot.bars.indexOf(b)}).then(function(r){ if(!(r&&r.ok)) toast('⚠ '+((r&&r.error)||'บันทึกใช้เศษไม่สำเร็จ')); }).catch(function(e){ toast('⚠ '+(e.message||e)); });
+  }
   var go=function(){ if(_prdCutIdx<_prdCutBars.length-1){ _prdCutIdx++; window.scrollTo(0,0); } prdRenderCutBar(); };
   // [OFFCUT] เศษ ≥ 50 ซม. → ถามเก็บก่อนไปเส้นถัดไป · ทุกชิ้นจากเศษนอกระบบ = ไม่ได้เปิดเส้นนี้ → ไม่ถาม
   //  ตรวจ "ตัดครบทั้งใบ → ตั้งส่วนรางเสร็จ" ทันทีหลังติ๊ก (ไม่รอคำตอบเก็บเศษ — localtest ui-prodrole จับได้ว่าเคยเลื่อนไป)
-  var u=_prdLot?prdCutBarUse_(b, prdCutIsExt_, _prdLot.kerf):null;
+  var u=_prdLot?prdCutBarUse_(b, prdCutIsExt_, _prdLot.kerf, prdCutBarCap_(b,_prdLot)):null;
   if(u && u.cutPieces>0 && !b.over && u.waste>=OFFCUT_MIN){ prdRenderCutBar(); prdCutCheckAuto_(); prdOffcutAsk_(b, u.waste, go); return; }
   go(); prdCutCheckAuto_();
 }
@@ -13288,8 +13321,10 @@ async function prdCutSelected(){
     if(legacy.length){ done(); alert('ใบ '+legacy.join(', ')+' ใช้ชุดค้าง stock แบบเก่า\nให้ผู้จัดการสร้างใบจัดตัดจากหน้าใบผลิต (ระบบจะหักเส้นจากชุดค้างให้) — หรือเอาใบนี้ออกจากที่เลือก'); return; }
     if(!use.length){ done(); toast('งานที่เลือกไม่มีรางให้ตัด'); return; }
     var set=_pkCutSetSrv&&_pkCutSetSrv.stock>0 ? { stock:Number(_pkCutSetSrv.stock), kerf:Number(_pkCutSetSrv.kerf)||0 } : { stock:600, kerf:0.3 };
+    var snap; try{ snap=await getOffcutsFast(); }catch(e){ snap={items:[]}; }
+    var offFfd=pkpCutOffcutFFD_(snap);
     var payload={action:'pk_cutLotSave', woIds:use, lotInfo:'ฝ่ายรางเลือก '+use.length+' งาน', stock:set.stock, kerf:set.kerf,
-      bars:prdCutBuild_(pieces, scut, set), need:prdCutNeed_(pieces.concat(scut), use)};
+      bars:prdCutBuild_(pieces, scut, set, offFfd), need:prdCutNeed_(pieces.concat(scut), use)};
     var s=await call(payload);
     // WO ซ้ำกับใบจัดตัดเดิม → ต้องยกเลิกใบเดิมก่อน · ชิ้นที่ติ๊กแล้วยังอยู่ (เก็บต่อใบผลิต ไม่ใช่ต่อล็อต)
     if(s && s.code==='dup'){
@@ -13318,9 +13353,9 @@ function prdLotDocHTML_(lot){
   var r2=function(x){ return Math.round(x*100)/100; };
   var ffd=function(list, stock){
     var p0=list[0], bs=groups[(PRD_RAIL_NAME[p0.rail]||p0.profile||p0.rail)+'|'+p0.color]||[], tl=0, ws=0, n=0;
-    var bars=bs.map(function(b){ if(!b.over) ws+=Math.max(0, stock-b.used);
-      return { used:b.used, over:!!b.over, pieces:b.pieces.map(function(pc){ n++; tl+=pc.len; return { len:pc.len, wo:pc.wo, name:pc.name, setNo:pc.setNo, rail:pc.rail, pidx:pc.pidx, ptot:pc.ptot }; }) }; });
-    return { bars:bars, stockLen:stock, count:n, usedStock:bars.length, totalLen:r2(tl), waste:r2(ws) };
+    var bars=bs.map(function(b){ var cap=prdCutBarCap_(b,lot), offcutId=(lot.barMode||{})[(lot.bars||[]).indexOf(b)]==='new'?undefined:b.offcutId; if(!b.over) ws+=Math.max(0, cap-b.used);
+      return { used:b.used, over:!!b.over, cap:cap, offcutId:offcutId, offcutLen:b.offcutLen, pieces:b.pieces.map(function(pc){ n++; tl+=pc.len; return { len:pc.len, wo:pc.wo, name:pc.name, setNo:pc.setNo, rail:pc.rail, pidx:pc.pidx, ptot:pc.ptot }; }) }; });
+    return { bars:bars, stockLen:stock, count:n, usedStock:bars.filter(function(b){ return !b.offcutId; }).length, usedOffcuts:bars.filter(function(b){ return !!b.offcutId; }).length, totalLen:r2(tl), waste:r2(ws) };
   };
   return pkpCutDocHTML(pieces, Object.keys(ids), { stock:lot.stock, kerf:lot.kerf }, 'rail', scut, 'ล็อต '+lot.lotId+(lot.lotInfo?' · '+lot.lotInfo:''), ffd);
 }
@@ -19045,6 +19080,32 @@ function pkpCutFFD(pieces, stockLen, kerf){
   var waste=bars.reduce(function(s,b){return s+(b.over?0:Math.max(0,stockLen-b.used));},0);
   return { bars:bars, stockLen:stockLen, count:items.length, usedStock:bars.length, totalLen:Math.round(totalLen*100)/100, waste:Math.round(waste*100)/100 };
 }
+function pkpCutFFDOffcut_(pieces, stockLen, kerf, pool){
+  var items=[]; pieces.forEach(function(p){ for(var k=0;k<p.qty;k++) items.push({len:p.len, wo:p.wo, name:p.name, setNo:p.setNo, rail:p.rail, type:p.type, pidx:k+1, ptot:p.qty}); });
+  items.sort(function(a,b){return b.len-a.len;});
+  var bars=[], available=(pool||[]).filter(function(x){ return x && Number(x.lenCm)>0; }).slice().sort(function(a,b){ return Number(a.lenCm)-Number(b.lenCm) || (a.id<b.id?-1:a.id>b.id?1:0); });
+  items.forEach(function(it){
+    if(it.len>stockLen){ bars.push({used:it.len, pieces:[it], over:true, cap:stockLen}); return; }
+    var placed=false;
+    for(var i=0;i<bars.length;i++){ var bar=bars[i]; if(bar.over) continue;
+      var add=it.len+(bar.pieces.length>0?kerf:0);
+      if(bar.used+add<=bar.cap+1e-9){ bar.used+=add; bar.pieces.push(it); placed=true; break; } }
+    if(!placed){
+      var oi=available.findIndex(function(x){ return it.len<=Number(x.lenCm)+1e-9; });
+      if(oi>=0){ var oc=available.splice(oi,1)[0]; bars.push({used:it.len, pieces:[it], cap:Number(oc.lenCm), offcutId:oc.id, offcutLen:Number(oc.lenCm)}); }
+      else bars.push({used:it.len, pieces:[it], cap:stockLen});
+    }
+  });
+  var totalLen=items.reduce(function(s,i){return s+i.len;},0);
+  var waste=bars.reduce(function(s,b){return s+(b.over?0:Math.max(0,b.cap-b.used));},0);
+  return { bars:bars, stockLen:stockLen, count:items.length, usedStock:bars.filter(function(b){ return !b.offcutId; }).length, usedOffcuts:bars.filter(function(b){ return !!b.offcutId; }).length, totalLen:Math.round(totalLen*100)/100, waste:Math.round(waste*100)/100 };
+}
+function pkpCutOffcutFFD_(snapshot){
+  var items=((snapshot||{}).items||[]).filter(function(x){ return x.status==='ok'; }).map(function(x){ return Object.assign({},x); });
+  return function(list, stock, kerf, title, color){
+    return pkpCutFFDOffcut_(list, stock, kerf, items.filter(function(x){ return x.railType===title && x.color===color; }));
+  };
+}
 function pkpCutSet_(){ var d={stock:600,kerf:0.3};
   try{ var s=JSON.parse(localStorage.getItem('pkp_cut_set')||'{}');
     if(s.stock!=null&&!isNaN(s.stock)) d.stock=Number(s.stock); else if(s.stock_side!=null&&!isNaN(s.stock_side)) d.stock=Number(s.stock_side);   // migrate ค่าเดิม
@@ -19249,11 +19310,13 @@ async function pkpCutGenerate_(){
   // [PRODROLE] บันทึก "ล็อตตัดราง" = ผลจัดเส้นชุดเดียวกับกระดาษ → แท็บเล็ตฝ่ายรางเปิดล็อตนี้ (เลขล็อตพิมพ์บนหัวกระดาษ)
   var w=window.open('','_blank');   // เปิดก่อน await — กัน popup blocker
   var wos={}; filtered.concat(filteredScut).forEach(function(p){ if(p.wo) wos[p.wo]=1; });
-  var lotId='';
+  var lotId='', snap, offFfd;
   showLoad('กำลังบันทึกล็อตตัดราง...');
   try{
     // need = ชิ้นทั้งใบ (ไม่กรองตามที่เลือก) → แท็บเล็ตตั้ง "ส่วนรางเสร็จ" ได้เมื่อตัดครบทั้งใบจริง ไม่ใช่แค่ครบล็อต
-    var payload={action:'pk_cutLotSave', woIds:Object.keys(wos), lotInfo:lotInfo, stock:set.stock, kerf:set.kerf, bars:prdCutBuild_(filtered, filteredScut, set),
+    try{ snap=await getOffcutsFast(); }catch(e){ snap={items:[]}; }
+    offFfd=pkpCutOffcutFFD_(snap);
+    var payload={action:'pk_cutLotSave', woIds:Object.keys(wos), lotInfo:lotInfo, stock:set.stock, kerf:set.kerf, bars:prdCutBuild_(filtered, filteredScut, set, offFfd),
       need:prdCutNeed_(pkpCutPieces.concat(pkpCutScut), Object.keys(wos))};
     var r=await call(payload);
     // WO ซ้ำกับใบจัดตัดเดิม → ต้องยกเลิกใบเดิมก่อน (เจ้าของสั่ง 30 ต.ค.) · ไม่ยืนยัน = ไม่สร้าง ไม่พิมพ์
@@ -19264,11 +19327,13 @@ async function pkpCutGenerate_(){
       payload.replace=(r.lots||[]).map(function(l){ return l.lotId; });
       r=await call(payload);
     }
+    if(r && r.code==='offcut'){ if(w) w.close(); toast(r.error); return; }
     if(r&&r.ok){ lotId=r.lotId; if((r.cancelled||[]).length) toast('ยกเลิกใบจัดตัดเดิม '+r.cancelled.join(', ')+' แล้ว'); }
     else toast('⚠ บันทึกล็อตไม่สำเร็จ — แท็บเล็ตฝ่ายรางจะไม่เห็นใบนี้: '+((r&&r.error)||''));
   }catch(e){ toast('⚠ บันทึกล็อตไม่สำเร็จ — แท็บเล็ตฝ่ายรางจะไม่เห็นใบนี้: '+(e&&e.message||e)); }
   finally{ hideLoad(); }
-  pkpReqOpenDoc_(pkpCutDocHTML(filtered, pkpCutIds, set, mode, filteredScut, lotId?('ล็อต '+lotId+(lotInfo?' · '+lotInfo:'')):lotInfo), w);
+  if(!lotId && payload && payload.bars.some(function(b){ return !!b.offcutId; })){ if(w) w.close(); return; }
+  pkpReqOpenDoc_(pkpCutDocHTML(filtered, pkpCutIds, set, mode, filteredScut, lotId?('ล็อต '+lotId+(lotInfo?' · '+lotInfo:'')):lotInfo, offFfd), w);
 }
 function pkpCutDocHTML(pieces, ids, set, mode, scutPieces, lotInfo, ffd){
   scutPieces=scutPieces||[];   // ชิ้นตัดมุ้งบานเลื่อน/บานเปิด (จาก pkpScutCollect) — จัดตัดในเอกสารเดียวกับรางมุ้งจีบ
@@ -19279,18 +19344,18 @@ function pkpCutDocHTML(pieces, ids, set, mode, scutPieces, lotInfo, ffd){
   var RN={handle:'รางมือจับ',side:'รางข้าง',topbot:'รางบน-ล่าง',low:'รางเตี้ย'}, ORDER=['handle','side','topbot','low'];
   var byColor={};
   pieces.forEach(function(p){ var c=byColor[p.color]||(byColor[p.color]={}); (c[p.rail]||(c[p.rail]=[])).push(p); });
-  var colors=Object.keys(byColor).sort(), gBars=0,gWaste=0,gPieces=0,body='';
+  var colors=Object.keys(byColor).sort(), gBars=0,gOffcuts=0,gWaste=0,gPieces=0,body='';
   var SEGC={handle:'#f0c84a',side:'#7fd6ab',topbot:'#8fc1f0',low:'#ec9ec5'};
   PKP_SCUT_ORDER.forEach(function(p,i){ SEGC[p]=PKP_SCUT_SEGC[i%PKP_SCUT_SEGC.length]; });   // สี segment ของหน้าตัดบานเลื่อน (piece.rail=ชื่อหน้าตัด)
   var stock=set.stock||600, kerf=set.kerf||0, first=true;
   mode=(mode==='both')?'both':'rail';
   function renderBars(res){
     return res.bars.map(function(b,i){
-      var lo=Math.max(0,stock-b.used), lpct=lo/stock*100;
-      var segs=b.pieces.map(function(pc,si){ var pct=Math.max(1.5,pc.len/stock*100); return '<div class="seg" style="width:'+pct+'%;background:'+(SEGC[pc.rail]||'#bbb')+';">'+(si+1)+'</div>'; }).join('');
+      var cap=b.cap||b.stock||stock, lo=Math.max(0,cap-b.used), lpct=lo/cap*100;
+      var segs=b.pieces.map(function(pc,si){ var pct=Math.max(1.5,pc.len/cap*100); return '<div class="seg" style="width:'+pct+'%;background:'+(SEGC[pc.rail]||'#bbb')+';">'+(si+1)+'</div>'; }).join('');
       var waste=lo>0.05?'<div class="wseg" style="width:'+lpct+'%;">เศษ</div>':'';
       var rows=b.pieces.map(function(pc,si){ return '<tr><td class="c">'+(si+1)+'</td><td class="job"><b>'+esc(pc.name||pc.wo||'-')+'</b>'+(pc.name&&pc.wo?'<span>'+esc(pc.wo)+'</span>':'')+'</td><td class="c">'+pc.setNo+'</td><td class="c">'+(pc.ptot>1?pc.pidx+'/'+pc.ptot:'–')+'</td><td class="n">'+pc.len+'</td></tr>'; }).join('');
-      return '<div class="bk"><div class="bh"><span><b>เส้นที่ '+(i+1)+'</b>'+(b.over?' ⚠ ยาวเกินราง':'')+'</span><span>ใช้ '+r2(b.used)+' / '+stock+' · เศษ '+r2(lo)+' cm</span></div>'
+      return '<div class="bk"><div class="bh"><span><b>เส้นที่ '+(i+1)+'</b>'+(b.offcutId?' ♻ ใช้เศษ '+esc(b.offcutId)+' ('+cap+' cm)':'')+(b.over?' ⚠ ยาวเกินราง':'')+'</span><span>ใช้ '+r2(b.used)+' / '+cap+' · เศษ '+r2(lo)+' cm</span></div>'
         +'<div class="vbar'+(b.over?' over':'')+'">'+segs+waste+'</div>'
         +'<table class="ct"><thead><tr><th class="c">#</th><th>ชื่องาน</th><th class="c">ชุด</th><th class="c">ชิ้นที่</th><th class="n">ยาว(cm)</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
     }).join('');
@@ -19301,21 +19366,21 @@ function pkpCutDocHTML(pieces, ids, set, mode, scutPieces, lotInfo, ffd){
     if(!colsWith.length) return;
     if(mode==='both'){
       colsWith.forEach(function(color){
-        var res=ffd(getList(color), stock, kerf);
-        gBars+=res.usedStock; gWaste+=res.waste; gPieces+=res.count;
-        var util=res.usedStock?r2(res.totalLen/(res.usedStock*stock)*100):0;
-        body+='<div class="railpage'+(first?' first':'')+'"><div class="rhd"><span class="rt">'+esc(title)+'</span><span class="rc"><span class="dot" style="background:'+dot(color)+'"></span>สีอลู: '+esc(color)+'</span><span class="meta">ใช้ '+res.usedStock+' เส้น · เศษ '+r2(res.waste)+' cm · ใช้จริง '+util+'%</span></div><div class="bars">'+renderBars(res)+'</div></div>';
+        var res=ffd(getList(color), stock, kerf, title, color);
+        gBars+=res.usedStock; gOffcuts+=res.usedOffcuts||0; gWaste+=res.waste; gPieces+=res.count;
+        var capacity=res.bars.reduce(function(n,b){ return n+(b.cap||b.stock||stock); },0), util=capacity?r2(res.totalLen/capacity*100):0;
+        body+='<div class="railpage'+(first?' first':'')+'"><div class="rhd"><span class="rt">'+esc(title)+'</span><span class="rc"><span class="dot" style="background:'+dot(color)+'"></span>สีอลู: '+esc(color)+'</span><span class="meta">ใช้ '+res.usedStock+' เส้น'+(res.usedOffcuts?' · ใช้เศษ '+res.usedOffcuts+' ชิ้น':'')+' · เศษ '+r2(res.waste)+' cm · ใช้จริง '+util+'%</span></div><div class="bars">'+renderBars(res)+'</div></div>';
         first=false;
       });
     } else {
-      var inner='', secBars=0, secWaste=0;
+      var inner='', secBars=0, secOffcuts=0, secWaste=0;
       colsWith.forEach(function(color){
-        var res=ffd(getList(color), stock, kerf);
-        gBars+=res.usedStock; gWaste+=res.waste; gPieces+=res.count; secBars+=res.usedStock; secWaste+=res.waste;
-        var util=res.usedStock?r2(res.totalLen/(res.usedStock*stock)*100):0;
-        inner+='<div class="csec"><div class="cht"><span class="dot" style="background:'+dot(color)+'"></span>สีอลู: '+esc(color)+' <span class="meta">ใช้ '+res.usedStock+' เส้น · เศษ '+r2(res.waste)+' cm · ใช้จริง '+util+'%</span></div><div class="bars">'+renderBars(res)+'</div></div>';
+        var res=ffd(getList(color), stock, kerf, title, color);
+        gBars+=res.usedStock; gOffcuts+=res.usedOffcuts||0; gWaste+=res.waste; gPieces+=res.count; secBars+=res.usedStock; secOffcuts+=res.usedOffcuts||0; secWaste+=res.waste;
+        var capacity=res.bars.reduce(function(n,b){ return n+(b.cap||b.stock||stock); },0), util=capacity?r2(res.totalLen/capacity*100):0;
+        inner+='<div class="csec"><div class="cht"><span class="dot" style="background:'+dot(color)+'"></span>สีอลู: '+esc(color)+' <span class="meta">ใช้ '+res.usedStock+' เส้น'+(res.usedOffcuts?' · ใช้เศษ '+res.usedOffcuts+' ชิ้น':'')+' · เศษ '+r2(res.waste)+' cm · ใช้จริง '+util+'%</span></div><div class="bars">'+renderBars(res)+'</div></div>';
       });
-      body+='<div class="railpage'+(first?' first':'')+'"><div class="rhd"><span class="rt">'+esc(title)+'</span><span class="meta">รวมทุกสี · ใช้ '+secBars+' เส้น · เศษรวม '+r2(secWaste)+' cm</span></div>'+inner+'</div>';
+      body+='<div class="railpage'+(first?' first':'')+'"><div class="rhd"><span class="rt">'+esc(title)+'</span><span class="meta">รวมทุกสี · ใช้ '+secBars+' เส้น'+(secOffcuts?' · ใช้เศษ '+secOffcuts+' ชิ้น':'')+' · เศษรวม '+r2(secWaste)+' cm</span></div>'+inner+'</div>';
       first=false;
     }
   }
@@ -19329,7 +19394,7 @@ function pkpCutDocHTML(pieces, ids, set, mode, scutPieces, lotInfo, ffd){
   var refWos={};
   pieces.concat(scutPieces).forEach(function(p){ if(p.wo) refWos[p.wo]=p.name||''; });
   var refList=Object.keys(refWos);
-  var head='<div class="head"><div class="brand">PK มุ้งจีบ<small>CUTTING PLAN · ใบจัดตัดราง</small></div><div class="sumc"><div>รางเต็มเส้น <b>'+stock+'</b> cm · ใบตัด '+kerf+' cm</div><div>ใช้รางรวม <b>'+gBars+'</b> เส้น · เศษรวม <b>'+r2(gWaste)+'</b> cm</div>'+(lotInfo?'<div style="font-weight:800;color:#111a25;">'+esc(lotInfo)+'</div>':'')+'</div></div>'
+  var head='<div class="head"><div class="brand">PK มุ้งจีบ<small>CUTTING PLAN · ใบจัดตัดราง</small></div><div class="sumc"><div>รางเต็มเส้น <b>'+stock+'</b> cm · ใบตัด '+kerf+' cm</div><div>ใช้รางรวม <b>'+gBars+'</b> เส้น'+(gOffcuts?' · ใช้เศษ '+gOffcuts+' ชิ้น':'')+' · เศษรวม <b>'+r2(gWaste)+'</b> cm</div>'+(lotInfo?'<div style="font-weight:800;color:#111a25;">'+esc(lotInfo)+'</div>':'')+'</div></div>'
     +'<div class="jobs">'+(refList.length?refList:ids).map(function(id){ return '<div class="jb"><b>'+esc(refWos[id]||'-')+'</b><span>'+esc(id)+'</span></div>'; }).join('')+'</div><div class="info">ชิ้นทั้งหมด '+gPieces+' ชิ้น &nbsp;·&nbsp; แยกตัดตามสีอลู (สีต่างกันไม่ตัดรวมเส้น)</div>';
   var CSS='@import url(https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap);'
     +'*{box-sizing:border-box;margin:0;padding:0}body{font-family:Sarabun,sans-serif;background:#eef1f4;color:#111a25;padding:14px;line-height:1.3}'
