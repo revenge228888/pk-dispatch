@@ -2013,7 +2013,7 @@ function enterApp(){
   else                                      c.innerHTML = '<div class="empty-section"><h2>ไม่รู้จัก role</h2></div>';
 
   if (CURRENT_USER.role !== 'prod') pkRefreshMyTaskDot();   // จุดแดงงานของฉันบน sidebar (ทุก role ยกเว้นฝ่ายผลิต — ไม่มีเมนูงานของฉัน)
-  qtBadgeRefresh();       // badge งานวัดเสร็จแล้วยังไม่มีใบเสนอ
+  // [28 พ.ย.] แท็บติดตามใบเสนอซ่อนแล้ว — ไม่โหลดป้าย (qtBadgeRefresh ข้ามเองถ้าไม่มี #qtBadge)
 
   // deep-link: เปิดหน้าด้วย #tab=xxx (คลิกขวาเมนู → เปิดแท็บใหม่) → เข้าแท็บนั้นเลยหลัง shell พร้อม
   try{ pkApplyHashTab_(); }catch(e){}
@@ -2077,8 +2077,8 @@ function renderOfficeShell(){
           <a class="sidebar-item" data-tab="quotes" href="#tab=quotes" onclick="return pkNavTab(event,'quotes',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2"/></svg></span><span class="sidebar-label">คำนวณราคา</span></a>
           <!-- [CATALOG] -->
           <a class="sidebar-item" data-tab="catalog" href="#tab=catalog" onclick="return pkNavTab(event,'catalog',this,setTab)"><span class="sidebar-ico">📘</span><span class="sidebar-label">แคตตาล็อก</span></a>
-          <a class="sidebar-item" data-tab="qtrack" href="#tab=qtrack" onclick="return pkNavTab(event,'qtrack',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M15 3v4h4M9 12l2 2 4-5M9 18h6"/></svg></span><span class="sidebar-label">ติดตามใบเสนอ</span><span id="qtBadge" class="exp-badge"></span></a>
-          <a class="sidebar-item" data-tab="followup" href="#tab=followup" onclick="return pkNavTab(event,'followup',this,setTab)"><span class="sidebar-ico">📋</span><span class="sidebar-label">ตามใบเสนอ</span><span id="fuBadge" class="exp-badge"></span></a>
+          <!-- [28 พ.ย. 2026 เจ้าของสั่งซ่อน] แท็บเก่า "ติดตามใบเสนอ" รวมเข้า "ติดตามลูกค้า" แล้ว · โค้ดแท็บยังอยู่ (เปิดคืน = ใส่ลิงก์เมนูกลับ) · #tab=qtrack เด้งไป mf -->
+          <!-- [28 พ.ย. 2026 เจ้าของสั่งซ่อน] แท็บเก่า "ตามใบเสนอ" รวมเข้า "ติดตามลูกค้า" แล้ว · โค้ดแท็บยังอยู่ (เปิดคืน = ใส่ลิงก์เมนูกลับ) · #tab=followup เด้งไป mf -->
           <a class="sidebar-item" data-tab="mf" href="#tab=mf" onclick="return pkNavTab(event,'mf',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg></span><span class="sidebar-label">ติดตามลูกค้า</span><span id="mfBadge" class="exp-badge"></span></a>
           ${CURRENT_USER.role === 'manager' ? `<a class="sidebar-item" data-tab="quoteprice" href="#tab=quoteprice" onclick="return pkNavTab(event,'quoteprice',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M3 11l8-8 9 9-8 8z"/><circle cx="9" cy="9" r="1.5"/></svg></span><span class="sidebar-label">แก้ราคาขาย</span></a>
           <a class="sidebar-item" data-tab="quoteheader" href="#tab=quoteheader" onclick="return pkNavTab(event,'quoteheader',this,setTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg></span><span class="sidebar-label">หัวใบเสนอราคา</span></a>` : ''}
@@ -3215,8 +3215,7 @@ function officeInit(){
   expenseBadgeRefresh();
   cfBadgeRefresh();   // badge จำนวนงานรอยืนยัน (รอ CF)
   tmgrBadgeRefresh(); // badge งานมอบหมายที่รอตรวจ
-  qtBadgeRefresh();   // badge งานวัดเสร็จแล้วยังไม่มีใบเสนอ
-  fuLoad();           // badge ใบเสนอราคาค้าง (Worker-first)
+  // [28 พ.ย.] แท็บติดตามใบเสนอ/ตามใบเสนอ ซ่อนแล้ว (รวมใน ติดตามลูกค้า) — ไม่โหลดป้ายเดิมตอน login
   esMissBadgeLoad();  // badge ใบผลิตที่ติดตั้งแล้วแต่ยังไม่หักอุปกรณ์ (กันสต็อกเพี้ยนสะสม)
 }
 
@@ -5518,7 +5517,8 @@ function pkNavTab(ev, t, btn, fn){
 }
 function pkTabFromHash_(){
   const m = String(location.hash || '').match(/^#tab=([A-Za-z]+)$/);
-  return m ? m[1] : '';
+  const t = m ? m[1] : '';
+  return (t === 'qtrack' || t === 'followup') ? 'mf' : t;   // [28 พ.ย.] แท็บเก่าที่ซ่อน → ติดตามลูกค้า
 }
 function pkApplyHashTab_(){
   const t = pkTabFromHash_(); if (!t || !CURRENT_USER) return;
@@ -6764,6 +6764,7 @@ async function cfConfirmIds(ids){
 let _qtItems = [];
 function qtSetBadge(n){ const el = document.getElementById('qtBadge'); if (el) el.textContent = (n > 0) ? n : ''; }
 async function qtBadgeRefresh(){
+  if (!document.getElementById('qtBadge')) return;   // [28 พ.ย.] เมนูถูกซ่อน → ไม่ต้องยิง worker
   if (!CURRENT_USER || !['sales','office','manager'].includes(CURRENT_USER.role)) return;
   try { const r = await getQuoteTrackFast(); if (r && r.ok) qtSetBadge((r.items || []).length); } catch(e){}
 }
@@ -7740,7 +7741,7 @@ function renderSalesStub(){
           <a class="sidebar-item" data-tab="quotes" href="#tab=quotes" onclick="return pkNavTab(event,'quotes',this,setSalesTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2"/></svg></span><span class="sidebar-label">คำนวณราคา</span></a>
           <!-- [CATALOG] -->
           <a class="sidebar-item" data-tab="catalog" href="#tab=catalog" onclick="return pkNavTab(event,'catalog',this,setSalesTab)"><span class="sidebar-ico">📘</span><span class="sidebar-label">แคตตาล็อก</span></a>
-          <a class="sidebar-item" data-tab="qtrack" href="#tab=qtrack" onclick="return pkNavTab(event,'qtrack',this,setSalesTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M15 3v4h4M9 12l2 2 4-5M9 18h6"/></svg></span><span class="sidebar-label">ติดตามใบเสนอ</span><span id="qtBadge" class="exp-badge"></span></a>
+          <!-- [28 พ.ย. 2026 เจ้าของสั่งซ่อน] แท็บเก่า "ติดตามใบเสนอ (เซลล์)" รวมเข้า "ติดตามลูกค้า" แล้ว · โค้ดแท็บยังอยู่ (เปิดคืน = ใส่ลิงก์เมนูกลับ) · #tab=qtrack เด้งไป mf -->
           <a class="sidebar-item" data-tab="mf" href="#tab=mf" onclick="return pkNavTab(event,'mf',this,setSalesTab)"><span class="sidebar-ico"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg></span><span class="sidebar-label">ติดตามลูกค้า</span><span id="mfBadge" class="exp-badge"></span></a>
         </div>
         <div class="sidebar-bottom">
@@ -11130,7 +11131,7 @@ function jobMarkMeasBtn_(j){
     : '<button class="btn btn-g btn-sm" style="margin-top:9px;color:var(--blu);border-color:var(--blu);" onclick="qtMarkMeasure(\'' + j.id + '\',true)">📐 ระบุเป็นงานวัด</button> ';
 }
 async function qtMarkMeasure(id, mark){
-  if (mark && !confirm('ระบุงานติดตั้ง ' + id + ' เป็นงานวัด?\n\nจะเข้าแท็บติดตามใบเสนอราคาเพื่อตามการออกใบเสนอ')) return;
+  if (mark && !confirm('ระบุงานติดตั้ง ' + id + ' เป็นงานวัด?\n\nจะเข้าแท็บ "ติดตามลูกค้า" เพื่อตามการออกใบเสนอและผลงาน')) return;
   if (!mark && !confirm('ยกเลิกการระบุงานวัดของ ' + id + ' ?')) return;
   showLoad('กำลังบันทึก...');
   try {
@@ -11153,7 +11154,7 @@ function jobMeasDoneBtn_(j){
     : '<button class="btn btn-g btn-sm" style="margin-top:9px;color:var(--grn);border-color:var(--grn);" onclick="officeMeasureToggle(\'' + j.id + '\',true)">✅ จบงานวัด</button> ';
 }
 async function officeMeasureToggle(id, markDone){
-  if (markDone && !confirm('✅ ยืนยันจบงานวัด ' + id + ' ?\n\nงานนี้จะขึ้นสถานะวัดเสร็จและเข้าแท็บติดตามใบเสนอราคา')) return;
+  if (markDone && !confirm('✅ ยืนยันจบงานวัด ' + id + ' ?\n\nงานนี้จะขึ้นสถานะวัดเสร็จและเข้าแท็บ "ติดตามลูกค้า"')) return;
   if (!markDone && !confirm('↩️ ยกเลิกสถานะจบงานวัด ' + id + ' ?')) return;
   showLoad('กำลังบันทึก...');
   try {
@@ -22175,21 +22176,37 @@ function mfTabHtml_(){
     +     '<button class="btn btn-g btn-sm" id="mfMultiBtn" onclick="mfMultiToggle()">☑ เลือกหลายงาน</button>'
     +     '<button class="btn btn-g btn-sm" onclick="mfLoad(true)">↻ โหลดใหม่</button></div></div>'
     + '<div id="mfSum"></div><div id="mfTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0;align-items:center;"></div>'
-    + '<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;">'
-    +   '<div id="mfList" style="flex:999 1 620px;min-width:0;"><div class="loading-row">กำลังโหลด...</div></div>'
-    +   '<div id="mfPanel" class="card" style="flex:1 1 300px;max-width:400px;padding:14px;"><div style="color:var(--mu);font-size:13px;">กดแถวในตารางเพื่อดู/บันทึก</div></div>'
-    + '</div></div>';
+    + '<div id="mfList"><div class="loading-row">กำลังโหลด...</div></div>'   // [28 พ.ย.] แผงรายละเอียดย้ายไปหน้าต่างกลางจอ (mfModalOpen_) — เจ้าของขอ: งานแถวล่างไม่ต้องเลื่อนขึ้น
+    + '</div>';
 }
+// ── [28 พ.ย. 2026 เจ้าของขอ] กดแถว → หน้าต่างกลางจอ (เดิมแผงขวาบน ต้องเลื่อนขึ้นไปหา) · ปิด: ✕ / แตะพื้นหลัง / Esc · บันทึกสำเร็จ = ปิดเอง ──
+let _mfEscBound = false;
+function mfModalOpen_(){
+  let bg = document.getElementById('mfModal');
+  if (!bg) {
+    bg = document.createElement('div'); bg.id = 'mfModal'; bg.className = 'modal-bg';
+    bg.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-label="รายละเอียดลูกค้า" style="max-width:480px;padding:16px;position:relative;">'
+      + '<button type="button" aria-label="ปิด" onclick="mfModalClose()" style="position:absolute;top:8px;right:8px;width:44px;height:44px;border:0;background:transparent;font-size:20px;cursor:pointer;color:var(--mu);">✕</button>'
+      + '<div id="mfPanel"></div></div>';
+    bg.addEventListener('click', function(e){ if (e.target === bg) mfModalClose(); });
+    document.body.appendChild(bg);
+  }
+  if (!_mfEscBound) { _mfEscBound = true; document.addEventListener('keydown', function(e){ if (e.key === 'Escape') { const m = document.getElementById('mfModal'); if (m && m.classList.contains('on')) mfModalClose(); } }); }
+  bg.classList.add('on');
+}
+function mfModalClose(){ const bg = document.getElementById('mfModal'); if (bg) bg.classList.remove('on'); }
+function mfModalIsOpen_(){ const bg = document.getElementById('mfModal'); return !!(bg && bg.classList.contains('on')); }
 // ขั้น 1: ทำใบเสนอ (ใช้ทางเดิมของแท็บติดตามใบเสนอ) — มีใบคำนวณแล้ว = เปิดใบคำนวณไปออกเลข QT
 function mfMakeQuote(id){
   const it = _mfItems.find(function(x){ return x.id === id; }); if (!it) return;
+  mfModalClose();   // ปิดหน้าต่างกลางจอก่อนเปิดฟอร์มใบเสนอ (กันซ้อน)
   if (it.calcId) { quoteOpenEdit(it.calcId); return; }
   if (it.kind !== 'quote') salesMeasureQuote({ id:it.id, name:it.name || '', address:it.address || '', rawAddr:it.rawAddr || '', job:it.job || '' });
 }
 // ── [MFOLLOW 28 พ.ย. 2026 เจ้าของขอ] เลือกหลายงาน → เปลี่ยนสถานะพร้อมกัน (pk_mfUpdateBulk) · งานที่ลงคิวติดตั้งแล้ว (ปิดอัตโนมัติ) เลือกไม่ได้ ──
 let _mfMulti = false, _mfChecked = {};
 function mfMultiToggle(){ _mfMulti = !_mfMulti; _mfChecked = {}; const b = document.getElementById('mfMultiBtn'); if (b) b.textContent = _mfMulti ? '✕ เลิกเลือกหลายงาน' : '☑ เลือกหลายงาน';
-  const p = document.getElementById('mfPanel'); if (p) p.style.display = _mfMulti ? 'none' : '';   // โหมดเลือกหลายงาน: ตารางกว้างขึ้น
+  mfModalClose();
   mfRender(); }
 function mfCheck(id, on){ const it = _mfItems.find(function(x){ return x.id === id; }); if (!it || it.auto) return; if (on) _mfChecked[id] = 1; else delete _mfChecked[id]; mfRender(); }
 function mfCheckAll(ids, on){ ids.forEach(function(id){ const it = _mfItems.find(function(x){ return x.id === id; }); if (!it || it.auto) return; if (on) _mfChecked[id] = 1; else delete _mfChecked[id]; }); mfRender(); }
@@ -22292,14 +22309,12 @@ function mfRender(){
   mfPanel_();
 }
 function mfPick(id){
-  _mfSel = id; mfRender();
-  const p = document.getElementById('mfPanel');
-  if (p && window.innerWidth < 900) try { p.scrollIntoView({ behavior:'smooth', block:'start' }); } catch(e){}
+  _mfSel = id; mfModalOpen_(); mfRender();
 }
 function mfPanel_(){
-  const p = document.getElementById('mfPanel'); if (!p) return;
+  const p = document.getElementById('mfPanel'); if (!p || !mfModalIsOpen_()) return;
   const it = _mfItems.find(function(x){ return x.id === _mfSel; });
-  if (!it) { p.innerHTML = '<div style="color:var(--mu);font-size:13px;">กดแถวในตารางเพื่อบันทึกการตาม</div>'; return; }
+  if (!it) { mfModalClose(); return; }   // งานหายจากรายการ (เช่นโหลดใหม่) → ปิดหน้าต่าง
   const phone = telNorm(it.phone);
   const btn = 'flex:1;min-height:44px;border-radius:10px;font-weight:700;font-size:13.5px;cursor:pointer;';
   const log = (it.log || []).slice().reverse().map(function(l){ return '<div style="display:flex;gap:8px;font-size:12.5px;padding:3px 0;"><span style="color:var(--mu);white-space:nowrap;">' + escHtml(mfWhen_(l.at)) + '</span><span>' + escHtml(l.text || '') + (l.by ? ' <span style="color:var(--mu);">(' + escHtml(l.by) + ')</span>' : '') + '</span></div>'; }).join('');
@@ -22312,12 +22327,12 @@ function mfPanel_(){
     + '<button class="btn btn-g" style="width:100%;min-height:40px;margin-top:6px;" onclick="mfAct(\'skipq\')">⏭ ข้ามขั้นใบเสนอ → ไปตามผลเลย</button>'
     + '<div style="font-size:11.5px;color:var(--mu);margin-top:6px;">ออกเลข QT แล้ว งานเลื่อนไปขั้น 2 เอง (กด ↻ โหลดใหม่)</div></div>';
   const unskip = (st === 'follow' && !it.quoteId && !it.auto) ? '<button class="btn btn-g btn-sm" style="margin-top:8px;" onclick="mfAct(\'unskipq\')">↩ กลับไปขั้นทำใบเสนอ</button>' : '';
-  p.innerHTML = '<div style="font-size:18px;font-weight:800;">' + escHtml(it.name || '-') + '</div>'
+  p.innerHTML = '<div style="font-size:18px;font-weight:800;padding-right:40px;">' + escHtml(it.name || '-') + '</div>'
     + '<div style="font-size:12.5px;color:var(--mu);margin:2px 0 8px;">' + escHtml(it.id) + ' · ' + (it.kind === 'quote' ? 'ออกใบ ' : 'วัด ') + escHtml(mfDate_(it.date)) + (it.by ? ' · ' + escHtml(it.by) : '') + '</div>'
     + mfChip_(st) + ' ' + mfSrcTag_(it) + (it.auto ? ' <span style="font-size:12px;color:var(--mu);">ลงคิวติดตั้ง ' + escHtml(it.installId) + ' แล้ว</span>' : '')
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;">'
     + (phone ? '<a class="btn btn-g btn-sm" href="tel:' + escAttr(phone) + '">📞 ' + escHtml(telFmt(phone)) + '</a>' : '')
-    + (it.quoteId ? '<button class="btn btn-g btn-sm" onclick="quoteOpenView(\'' + escAttr(it.quoteId) + '\')">👁 ใบเสนอราคา</button>' : '') + '</div>'
+    + (it.quoteId ? '<button class="btn btn-g btn-sm" onclick="mfModalClose();quoteOpenView(\'' + escAttr(it.quoteId) + '\')">👁 ใบเสนอราคา</button>' : '') + '</div>'
     + stage1
     + (it.auto ? '' :
       (st === 'quote' ? '<div style="font-size:12.5px;font-weight:700;margin-bottom:4px;">หรือบันทึกผลเลย</div>' : '')
@@ -22346,6 +22361,7 @@ async function mfAct(mode){
     const out = await call({ action:'pk_mfUpdate', id:it.id, mode:mode, days:days, reason:reason, note:note });
     if (!out || !out.ok) throw new Error((out && out.error) || 'บันทึกไม่สำเร็จ');
     toast('บันทึกแล้ว');
+    mfModalClose();
     await mfLoad();
   } catch(e){ toast('❌ ' + e.message); }
 }
